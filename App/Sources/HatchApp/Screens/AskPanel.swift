@@ -154,8 +154,9 @@ struct AskPanel: View {
             }
             do {
                 let answer = try await HXAskAdapter.ask(prompt: prompt, claudePath: path)
-                messages.append(Message(fromOwner: false, text: answer))
-                save(ticket: ticket, question: question, answer: answer)
+                messages.append(Message(fromOwner: false, text: answer.text))
+                save(ticket: ticket, question: question, answer: answer.text)
+                recordCost(ticket: ticket, answer: answer)
             } catch {
                 errorText = "\(error)"
             }
@@ -168,6 +169,13 @@ struct AskPanel: View {
         state.perform("Save to thread") {
             try state.store.addNote(ticket.id, kind: .note, author: "owner", body: "Asked Claude: " + question)
             try state.store.addNote(ticket.id, kind: .agent, author: "Claude", body: answer)
+        }
+    }
+
+    private func recordCost(ticket: Ticket?, answer: HXAskAdapter.Answer) {
+        state.perform("Record cost") {
+            let runId = try state.store.startRun(ticketId: ticket?.id, agent: "ask", step: "ask")
+            try state.store.endRun(runId, tokensIn: answer.tokensIn, tokensOut: answer.tokensOut, outcome: "ok")
         }
     }
 }

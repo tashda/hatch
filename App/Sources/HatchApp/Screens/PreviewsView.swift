@@ -385,18 +385,12 @@ struct PreviewsView: View {
 
     // MARK: Merge plan (J5, J6, I6)
 
-    private func numbers(_ list: [Ticket]) -> String { list.map { $0.displayNumber }.joined(separator: ", ") }
-
     private var planSteps: [String] {
-        let list = approved
-        let nums = numbers(list)
         var steps: [String] = []
-        let dsTickets = list.filter { hasWorkspace($0, in: designRepo) }
-        if let ds = designRepo, !dsTickets.isEmpty {
-            steps.append("Design system: merge \(numbers(dsTickets)) into \(ds.defaultBranch), then tag it.")
+        if let project = state.hxProject {
+            steps = HXMergeAdapter.planLines(store: state.store, project: project, tickets: approved)
         }
         let base = appRepo?.defaultBranch ?? "dev"
-        steps.append("App: bump the design system tag if it changed, merge \(nums) into the \(integrationBranch) branch.")
         steps.append("CI on \(integrationBranch): \(ciText.isEmpty ? "not checked yet" : ciText).")
         steps.append("When CI is green, promote \(integrationBranch) to \(base).")
         return steps
@@ -435,6 +429,9 @@ struct PreviewsView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(approved.isEmpty || merging)
             Button("Check CI") { refreshCI() }
+            Button("Promote") { promote() }
+                .disabled(ciText != "passing")
+                .help("Moves the integration branch into the base branch when CI is green.")
             if let p = latestPreview {
                 Button("Discard \(p.name)") { discardPreview(p) }
             }
@@ -452,35 +449,16 @@ struct PreviewsView: View {
         }
     }
 
-    private func branches(for list: [Ticket], in repo: Repo) -> [String] {
-        var out: [String] = []
-        for t in list {
-            let ws: Workspace? = try? state.store.workspace(ticketId: t.id, repoId: repo.id)
-            if let ws { out.append(ws.branch) }
-        }
-        return out
-    }
-
     private func mergeApproved() {
-        guard let app = appRepo else { return }
+        guard let project = state.hxProject else { return }
         let list = approved
-        let ds = designRepo
-        let dsBranches: [String] = ds.map { branches(for: list.filter { hasWorkspace($0, in: ds) }, in: $0) } ?? []
-        let appBranches = branches(for: list, in: app)
+        let store = state.store
         let integration = integrationBranch
         let previewName = latestPreview?.name ?? "Preview"
         merging = true
         mergeSteps = []
         Task {
-            let steps: [HXMergeAdapter.Step] = await Task.detached { () -> [HXMergeAdapter.Step] in
-                var all: [HXMergeAdapter.Step] = []
-                if let ds, !dsBranches.isEmpty {
-                    all += HXMergeAdapter.merge(repo: ds, branches: dsBranches, target: ds.defaultBranch, base: ds.defaultBranch)
-                    if all.contains(where: { !$0.ok }) { return all }
-                }
-                all += HXMergeAdapter.merge(repo: app, branches: appBranches, target: integration, base: app.defaultBranch)
-                return all
-            }.value
+            let steps: [HXMergeAdapter.Step] = await Task.detached { HXMergeAdapter.run(store: store, project: project, tickets: list) }.value
             mergeSteps = steps
             merging = false
             if !steps.contains(where: { !$0.ok }) {
@@ -491,6 +469,17 @@ struct PreviewsView: View {
                 }
             }
             refreshCI()
+        }
+    }
+
+    private func promote() {
+        guard let repo = appRepo else { return }
+        let store = state.store
+        let integration = integrationBranch
+        let green = ciText == "passing"
+        Task {
+            let step = await Task.detached { HXMergeAdapter.promote(store: store, repo: repo, integration: integration, ciPassed: green) }.value
+            mergeSteps.append(step)
         }
     }
 

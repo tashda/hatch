@@ -3,6 +3,8 @@ import AppKit
 import HatchCore
 import HatchGit
 import HatchSync
+import HatchAgent
+import HatchImport
 
 // Shared helpers and thin adapters around the modules other agents are still writing.
 // If a module's API changes, only this file should need to change.
@@ -210,7 +212,7 @@ enum HXPreviewAdapter {
     }
 }
 
-// MARK: Merge into the integration branch (J5)
+// MARK: Merge into the integration branch (J5), using HatchGit.MergePlan and MergeExecutor
 
 enum HXMergeAdapter {
     struct Step: Sendable {
@@ -219,42 +221,40 @@ enum HXMergeAdapter {
         var detail: String
     }
 
-    /// Merges each approved ticket branch into `target` using a throwaway worktree, then pushes it.
-    /// The owner's own checkout is never touched.
-    static func merge(repo: Repo, branches: [String], target: String, base: String) -> [Step] {
-        guard let local = repo.localPath, !local.isEmpty else {
-            return [Step(title: "\(repo.remote)", ok: false, detail: "No local path is set for this repository.")]
-        }
-        let git = ProcessGit()
-        var steps: [Step] = []
-        let scratch: String = NSTemporaryDirectory() + "hatch-merge-" + String(UUID().uuidString.prefix(8))
+    /// The plan as plain lines: design system first (merge, tag), then the app into the integration branch.
+    static func planLines(store: HatchStore, project: Project, tickets: [Ticket]) -> [String] {
         do {
-            let hasTarget = (try? git.run(["rev-parse", "--verify", "--quiet", target], in: local))?.ok ?? false
-            if hasTarget {
-                _ = try git.run(["worktree", "add", scratch, target], in: local)
-            } else {
-                _ = try git.run(["worktree", "add", "-b", target, scratch, base], in: local)
-            }
-            defer {
-                _ = try? git.run(["worktree", "remove", "--force", scratch], in: local)
-                _ = try? git.run(["worktree", "prune"], in: local)
-            }
-            for b in branches {
-                let r = try git.run(["merge", "--no-ff", "--no-edit", b], in: scratch)
-                if r.ok {
-                    steps.append(Step(title: "Merged \(b)", ok: true, detail: "into \(target)"))
-                } else {
-                    _ = try? git.run(["merge", "--abort"], in: scratch)
-                    steps.append(Step(title: "Could not merge \(b)", ok: false, detail: r.stderr))
-                    return steps
-                }
-            }
-            let push = try git.run(["push", "origin", target], in: scratch)
-            steps.append(Step(title: "Pushed \(target)", ok: push.ok, detail: push.ok ? "" : push.stderr))
+            let plan = try MergePlan.build(project: project, tickets: tickets, store: store)
+            return plan.steps.map { $0.description }
         } catch {
-            steps.append(Step(title: "Merge failed", ok: false, detail: "\(error)"))
+            return ["Could not build the merge plan: \(error)"]
         }
-        return steps
+    }
+
+    /// Runs the plan. The owner's own checkout is never touched (Hatch uses its own worktree).
+    static func run(store: HatchStore, project: Project, tickets: [Ticket]) -> [Step] {
+        do {
+            let plan = try MergePlan.build(project: project, tickets: tickets, store: store)
+            if plan.isEmpty { return [Step(title: "Nothing to merge", ok: false, detail: "None of the approved tickets has a workspace.")] }
+            let executor = MergeExecutor(workspaces: WorkspaceManager(store: store))
+            let run = try executor.run(plan)
+            return run.results.map { r in
+                Step(title: r.step.description, ok: r.ok, detail: r.ok ? "" : String(r.output.suffix(600)))
+            }
+        } catch {
+            return [Step(title: "Merge failed", ok: false, detail: "\(error)")]
+        }
+    }
+
+    /// Moves the integration branch into the base branch once CI is green.
+    static func promote(store: HatchStore, repo: Repo, integration: String, ciPassed: Bool) -> Step {
+        do {
+            let executor = MergeExecutor(workspaces: WorkspaceManager(store: store))
+            let result = try executor.promote(repo: repo, integration: integration, into: repo.defaultBranch, ciPassed: ciPassed)
+            return Step(title: "Promoted \(integration) to \(repo.defaultBranch)", ok: true, detail: String(result.sha.prefix(8)))
+        } catch {
+            return Step(title: "Could not promote \(integration)", ok: false, detail: "\(error)")
+        }
     }
 }
 
@@ -311,29 +311,42 @@ enum HXAskAdapter {
         return nil
     }
 
-    static func ask(prompt: String, claudePath: String) async throws -> String {
-        let result: Result<String, Failure> = await Task.detached(priority: .userInitiated) { () -> Result<String, Failure> in
-            guard let out = HXShell.run(claudePath, ["-p", prompt], cwd: NSHomeDirectory(), mergeStderr: false) else {
-                return .failure(.notFound)
+    struct Answer: Sendable {
+        var text: String
+        var tokensIn: Int
+        var tokensOut: Int
+    }
+
+    /// Runs HatchAgent's ClaudeCLIRunner off the main thread.
+    static func ask(prompt: String, claudePath: String) async throws -> Answer {
+        let result: Result<Answer, Failure> = await Task.detached(priority: .userInitiated) { () -> Result<Answer, Failure> in
+            let runner = ClaudeCLIRunner(executable: claudePath, workingDirectory: URL(fileURLWithPath: NSHomeDirectory()), timeout: 180)
+            do {
+                let out = try runner.run(prompt: prompt, options: AgentOptions())
+                let text = out.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if text.isEmpty { return .failure(.failed("claude returned an empty answer.")) }
+                return .success(Answer(text: text, tokensIn: out.tokensIn, tokensOut: out.tokensOut))
+            } catch {
+                return .failure(.failed("\(error)"))
             }
-            let text = out.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if out.status != 0 {
-                return .failure(.failed(text.isEmpty ? "claude exited with status \(out.status)." : text))
-            }
-            if text.isEmpty { return .failure(.failed("claude returned an empty answer.")) }
-            return .success(text)
         }.value
         switch result {
-        case .success(let text): return text
+        case .success(let answer): return answer
         case .failure(let f): throw f
         }
     }
 }
 
-// MARK: Area scan (L2). Used until HatchImport has its own scanner.
+// MARK: Area scan (L2): HatchImport first, a simple folder scan as fallback.
 
 enum HXAreasAdapter {
     static func suggestAreas(repoPath: String) -> [AreaConfig] {
+        let fromModule = ProjectBootstrap.suggestAreas(repoRoot: URL(fileURLWithPath: repoPath))
+        if !fromModule.isEmpty { return fromModule }
+        return fallbackScan(repoPath: repoPath)
+    }
+
+    private static func fallbackScan(repoPath: String) -> [AreaConfig] {
         let fm = FileManager.default
         let root = URL(fileURLWithPath: repoPath)
 

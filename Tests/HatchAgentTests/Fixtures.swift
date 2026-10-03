@@ -31,7 +31,7 @@ enum Fixture {
     @discardableResult
     static func ticket(_ store: HatchStore, _ p: Project, type: TicketType = .proposal, title: String = "Toast spacing in dark mode",
                        body: String = "Toasts feel cramped in dark mode.", area: String? = "Notifications", status: Status = .draft) throws -> Ticket {
-        let t = try store.createTicket(projectId: p.id, type: type, title: title, body: body, area: area, ghNumber: 151)
+        let t = try store.createTicket(projectId: p.id, type: type, title: title, body: body, area: area, ghNumber: 151 + (try store.tickets().count))
         let path: [(Status, Actor)] = [(.checking, .owner), (.ready, .hatch)]
         for (s, a) in path {
             if status == .draft { break }
