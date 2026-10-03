@@ -24,12 +24,14 @@
 <header class="hero">
   <h1>Hatch</h1>
   <p class="sub">The design for the new Labs. Every screen, state, workflow and name, with sample data. Where there is a choice to make, you will find the options, my recommendation and the reason, and a place to answer.</p>
+  <details class="about"><summary>How this page works, and the three rules behind it</summary>
   <div class="rules">
     <div class="rule"><b>The app does the bookkeeping</b>Statuses, GitHub labels, SQLite and the sync record change in one app function. Agents call <code>hatch</code>, they never edit state.</div>
     <div class="rule"><b>Every status says whose turn it is</b>You, an agent, or Hatch itself. The Desk shows only what waits for you.</div>
     <div class="rule"><b>Look first, build later</b>Sketches are HTML and cost seconds. Swift specimens come once a direction is picked.</div>
   </div>
   <p class="howto"><b>How to use this page.</b> Each card is a decision. Pick an option, or press <b>Use recommendation</b>. Add a <b>note</b> for context, or <b>ask a question</b> when you need more before deciding. Everything saves as you go. Tell me in the chat when you have left notes or questions and I will read them, answer them here under your question, and change the options if you ask for it. The sample tickets and numbers are invented.</p>
+  </details>
   <div class="banner" id="dbBanner"></div>
 </header>
 
@@ -56,11 +58,10 @@
     <li><b>Your answers on E8, I6 and O1.</b> All three match my recommendations: the agent's rewrite goes through Accept, Edit or Keep mine; tickets merge into a <code>hatch</code> branch that CI checks; and the first thing to build is the Stage spike.</li>
     <li><b>Your note on E8: the agent also checks the type.</b> Yes. I added E9: Tally (or whatever name you pick in V1) suggests a type change with its reason, in the same review as the rewrite, and you decide.</li>
     <li><b>A name for the vetting agent.</b> V1 has five options. I recommend Tally.</li>
-    <li><b>Still open:</b> H22 (mixing options in the Stage) and L5 (the Specs section), plus the two new ones above. They are in the list at the top of this section. None of them blocks the Stage spike.</li>
     <li><b>E7 and C5 stay as you chose them.</b> E7 works because you chose A on E8. On C5, pressing A on a Proposal accepts all my recommended answers at once, which is only wise after reading the recommendation in the brief pane. Tell me if you want A limited to tickets with a single question.</li>
     <li><b>Not measured yet.</b> S1 assumes a Stage app per round builds quickly. Your 10 to 15 seconds is for the whole lab, so a round-only build should be well under that, but nobody has timed it. That is what the spike is for.</li>
     <li><b>What this design changes outside Hatch, when we start.</b> A hatch trigger in <code>ci-light.yml</code> (I6). A DEBUG-only "Preview" banner in Echo (J4). EchoDesignSystem moves to its own repo. Four new repos: <code>hatch</code>, <code>hatch-tickets</code> (private), <code>echo-specimens</code>, <code>echo-design-system</code>. Please check those names.</li>
-    <li><b>Nothing has been built.</b> The next step is step 0 (tidy) and the Stage spike from the build order. Say go and I start there.</li>
+    <li><b>What is built.</b> The core, the CLI, the app and the Stage compile and pass their tests. See STATUS.md in the repository. This page now only collects the decisions still open, listed first.</li>
   </ul>
   <h3 class="sub">My replies to your notes</h3>
   <div id="rv-replies"></div>

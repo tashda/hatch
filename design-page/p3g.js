@@ -111,7 +111,7 @@ VS.forEach(v=>{const e=document.createElement('div');e.className='lk-opt'+(v.rec
 })();
 
 DECISIONS.push(
-{id:'L1',sec:'lookchips',title:'How should a status look?',
+{id:'LK1',sec:'lookchips',title:'How should a status look?',
  q:'You do not like the chips. The status appears in the Tickets table, the Board cards, the Desk and the ticket header, so one choice here sets the look everywhere. The colour must still show whose turn it is.',
  opts:[
   {k:'A',n:'Dot and plain text',d:'The quietest. A coloured dot, the name in normal text. Easy to build, but the colour is small, so a column of amber rows is harder to find at a glance.'},
@@ -119,7 +119,7 @@ DECISIONS.push(
   {k:'C',n:'Phase glyph and name',d:'A round symbol that fills as the ticket moves from Draft to Done (dashed, question mark, half, three quarters, check, pause), coloured by turn, followed by the name in normal text. Uses SF Symbols, so it matches Reminders and Xcode.'},
   {k:'D',n:'Phase meter and name',d:'Five small segments instead of a symbol. Shows progress in one look, but it is a custom control.'}],
  rec:'C',why:'It says two things without a box: how far along the ticket is (the shape) and whose turn it is (the colour). It is the pattern Apple uses for task status, it needs no custom drawing beyond SF Symbols, and in a dense table plain text with a small coloured symbol is calmer than any tag. The same glyph works in the Board cards and the ticket header.'},
-{id:'L2',sec:'lookproj',title:'How should the project appear in the sidebar?',
+{id:'LK2',sec:'lookproj',title:'How should the project appear in the sidebar?',
  q:'You asked for the project to look better and not be just a switcher. The sidebar is the first thing you see, and the project decides which tickets, repositories and branch you work in.',
  opts:[
   {k:'A',n:'Pop-up button (today)',d:'Small and neutral. Nothing about it says which project you are in.'},
@@ -127,7 +127,7 @@ DECISIONS.push(
   {k:'C',n:'Projects as a sidebar section',d:'Every project is a row with its count, above Work. One click to switch, always visible. Takes more height with many projects.'},
   {k:'D',n:'Title menu in the toolbar',d:'The project name sits in the toolbar like the scheme in Xcode. Frees the sidebar, but is easy to miss.'}],
  rec:'B',why:'It makes the project part of the window\'s identity: a colour and letter you learn to recognise, with the branch visible so you know where a preview will build. It scales from two projects to ten, which a section does not. And it reuses the pattern from the Echo server card, so the two apps feel related. Option C is the better choice only if you will always have two or three projects.'},
-{id:'L3',sec:'lookdock',title:'Should the Echo dock, with text, be our section switcher?',
+{id:'LK3',sec:'lookdock',title:'Should the Echo dock, with text, be our section switcher?',
  q:'Echo\'s dock is an icon capsule. For Hatch the sections have names (Overview, Options, Thread, Work, History), so the labels are text. It would replace the system segmented control for switching sections inside one pane: ticket tabs, project settings sections, and the Specs and Decisions sub-views. View modes in the toolbar (List / Board) stay with the system segmented control.',
  opts:[
   {k:'A',n:'Text dock, up to five slots',d:'Glass capsule with equal slots, current in accent colour with a soft fill, counts after the name, hover grows slightly. Six or more sections become a pull-down menu, as in Echo\'s TabSectionPicker. Right-click a slot for its actions.'},
@@ -135,42 +135,42 @@ DECISIONS.push(
   {k:'C',n:'Icon for others, icon and name for the current',d:'Compact, but every section needs a good icon, and names are hidden for most.'},
   {k:'D',n:'Underlined tabs',d:'Web style. Not recommended on the Mac.'}],
  rec:'A',why:'It gives Hatch and Echo one recognisable control, uses the same glass-for-controls rule, and fits counts such as "Thread 5" that segmented controls cannot show well. The limit of five slots with a pull-down above that is already Echo\'s rule, so it is proven. It is one small component (HXDock) written once and used everywhere, which also saves work later.'},
-{id:'L4',sec:'lookrules',title:'Which design principles does Hatch follow?',
+{id:'LK4',sec:'lookrules',title:'Which design principles does Hatch follow?',
  q:'Echo already has written principles (native first, glass for controls and never content, no glass on glass, tokens, motion explains change, accessibility). Hatch should feel like the same family.',
  opts:[
   {k:'A',n:'Adopt Echo\'s principles, plus Hatch\'s own',d:'Copy the six rules above into Hatch\'s DESIGN.md. Add the Hatch rules: colour means whose turn it is, one prominent action per screen, status is a glyph and a name, every suggestion shows its recommendation and reason.'},
   {k:'B',n:'Write a separate set for Hatch',d:'Free to differ, but two sets will drift apart.'},
   {k:'C',n:'No written rules, decide per screen',d:'Fast now, expensive later: every new screen reopens the same questions.'}],
  rec:'A',why:'Echo\'s rules are already tested against a real app and answer most questions in advance. Adding only the Hatch-specific ones keeps the document short enough for an agent to read in full every time, which costs fewer tokens than discussing each screen.'},
-{id:'L5',sec:'lookrules',title:'What may use colour?',
+{id:'LK5',sec:'lookrules',title:'What may use colour?',
  q:'Today colour is used for turns (amber you, teal agent, slate Hatch, green finished, grey paused), and ticket types are neutral. A strict rule prevents the app from becoming colourful by accident.',
  opts:[
   {k:'A',n:'Colour only for turn and for real problems',d:'Amber, teal, slate, green and grey mean turn. Red means something is broken or failed. The system accent colour is for selection and the one prominent button. Types, areas and projects are neutral (a project has its own tile colour, only in the project card).'},
   {k:'B',n:'Also colour the ticket types',d:'Six more colours. Easier to tell types apart, but then colour no longer means one thing.'},
   {k:'C',n:'Almost monochrome, only amber for you',d:'Very calm. Agents and finished work become hard to tell apart.'}],
  rec:'A',why:'When colour has one meaning you can scan the Desk and see what needs you without reading. Types are already told apart by their symbol and name, so colouring them adds noise and not information. The project tile is the one deliberate exception, because it helps you know where you are.'},
-{id:'L6',sec:'lookrules',title:'Adopt the component map as the rule?',
+{id:'LK6',sec:'lookrules',title:'Adopt the component map as the rule?',
  q:'The table above says which element to use for each job: Table for records, List with sections for the Desk, the text dock for sections, a pull-down for six or more, the system segmented control for view modes in the toolbar, ContentUnavailableView for empty states, and so on.',
  opts:[
   {k:'A',n:'Adopt it. Agents must use it and extend it',d:'Anything not on the map gets the nearest native control and a new row in the map, in the same change. You review the map and not each screen.'},
   {k:'B',n:'Use it as a guide only',d:'Agents may choose differently when it seems better. More variety, more rework.'},
   {k:'C',n:'Decide each new element with you',d:'Most control, and the most tokens spent.'}],
  rec:'A',why:'This is the part that saves the most effort. Most "make it look better" requests are really "use a different element here". With one agreed map, a new screen is assembled from known parts and arrives looking right the first time. When you do want a change, you change one row and every screen follows.'},
-{id:'L7',sec:'lookrules',title:'Where may glass and cards be used?',
+{id:'LK7',sec:'lookrules',title:'Where may glass and cards be used?',
  q:'Echo uses Liquid Glass for floating controls and keeps content opaque. Cards (a bordered, filled box) separate objects but become heavy if used everywhere.',
  opts:[
   {k:'A',n:'Glass only for floating controls; cards only for grouped facts',d:'Glass: the dock, toasts, the Ask panel header, the Stage toolbar. Content (lists, tables, text) is on plain window background. Cards: the details card, the turn banner, board cards, proposal options. No card inside a card.'},
   {k:'B',n:'No glass at all',d:'Simpler and fully flat. Looks less like Echo.'},
   {k:'C',n:'Glass and cards wherever they look good',d:'Quickly becomes inconsistent.'}],
  rec:'A',why:'It is the same rule that Echo already works by, and it keeps text readable. It also gives a clear test for a new element: is it a control that floats over content (glass), a group of facts (card), or content (plain)?'},
-{id:'L8',sec:'lookrules',title:'Text and density',
+{id:'LK8',sec:'lookrules',title:'Text and density',
  q:'Sizes affect how native the app feels. Mac apps use the system text styles and a fairly tight row height.',
  opts:[
   {k:'A',n:'System font and text styles only',d:'San Francisco everywhere, from the system text styles (body 13, caption 11, title 3 for headings). Monospaced only for ticket numbers and code. Table rows at the standard Mac height. Sizes never typed as numbers in views.'},
   {k:'B',n:'A custom display font for headings',d:'More character, less native, and one more thing to keep in step with the Echo family.'},
   {k:'C',n:'Larger, airier by default',d:'Friendly, but you see fewer tickets at once.'}],
  rec:'A',why:'It is the most Mac-like result and it follows the user\'s system settings. It also leaves nothing to decide per screen. A Tickets table showing the standard number of rows is what makes the app useful as a working tool.'},
-{id:'L9',sec:'lookrules',title:'How do we keep new screens on track and spend few tokens?',
+{id:'LK9',sec:'lookrules',title:'How do we keep new screens on track and spend few tokens?',
  q:'The goal is that you stop adjusting element by element. Three things can enforce the rules: a tokens file, a written DESIGN.md that agents read first, and automatic screenshots on every build.',
  opts:[
   {k:'A',n:'Tokens file, DESIGN.md, and screenshots, reviewed in one pass',d:'One Swift file (HX) holds spacing, radii, colours and motion; the shared components (HXDock, HXStatus, HXProjectCard, HXToast) live next to it. DESIGN.md holds the principles and the component map, and CLAUDE.md points to it. CI already renders every screen in light and dark; you review the set once per round, and your comments become changes to the rules or tokens, not to single screens.'},
@@ -180,7 +180,7 @@ DECISIONS.push(
 );
 
 DECISIONS.push(
-{id:'L10',sec:'lookbuttons',title:'What do buttons like Park, Drop and Open look like?',
+{id:'LK10',sec:'lookbuttons',title:'What do buttons like Park, Drop and Open look like?',
  q:'You prefer the buttons on Echo\'s server page and the Activity Monitor over the plain bordered ones. On those pages every action is a glass capsule with an icon and a label, the first one is prominent, and the others are quiet.',
  opts:[
   {k:'A',n:'Glass capsules with icon and label',d:'Exactly the Echo server page: one prominent capsule first (Open, Submit for check, Accept), then quiet glass capsules (Park, Ask), and a "More" capsule menu holding the rare ones such as Drop. Large control size on pages, regular in sheets.'},
@@ -188,7 +188,7 @@ DECISIONS.push(
   {k:'C',n:'Icon-only glass',d:'Smallest. Needs tooltips and clear icons, so it suits the toolbar more than a ticket page.'},
   {k:'D',n:'Text links',d:'Lightest. The main action does not stand out.'}],
  rec:'A',why:'It is the style you already chose for Echo, so Hatch and Echo look related. The icon and the word together make each button understandable without a tooltip, and one prominent button at the front shows what to do next. It is also the least custom: the system provides both glass styles, so the only thing we write is the rule for which button gets which style.'},
-{id:'L11',sec:'lookbuttons',title:'Adopt the "which buttons where" table as the rule?',
+{id:'LK11',sec:'lookbuttons',title:'Adopt the "which buttons where" table as the rule?',
  q:'The table above sets the style for each place: pages, rows and cards, sheets, the toolbar, and risky actions. Without it every new screen would reopen the question.',
  opts:[
   {k:'A',n:'Adopt it',d:'One prominent button per screen, always first. Quiet glass for other actions. Rare or risky actions in a "More" menu, with a confirmation sheet for destructive ones. Small bordered buttons only inside rows, cards and toasts. Toolbar stays icon-only with tooltips. Sheets: a default button that is never silently disabled.'},

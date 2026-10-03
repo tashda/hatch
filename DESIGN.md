@@ -1,6 +1,6 @@
 # Hatch design rules (draft)
 
-Status: **proposed**. These are the recommendations on the design page (decisions L1 to L9). They become rules when the owner answers; change this file to match the answers. Agents read this file before they add or change any UI.
+Status: **proposed**. These are the recommendations on the design page (decisions LK1 to LK9). They become rules when the owner answers; change this file to match the answers. Agents read this file before they add or change any UI.
 
 ## Principles
 
@@ -45,7 +45,7 @@ Status: **proposed**. These are the recommendations on the design page (decision
 4. Colour only for turn or a real problem.
 5. Check the CI screenshots (light and dark) before marking the work ready.
 
-## Which buttons where (proposed, decisions L10 and L11)
+## Which buttons where (proposed, decisions LK10 and LK11)
 
 The style is the one on Echo's server page and Activity Monitor: Liquid Glass capsules with an icon and a label.
 
