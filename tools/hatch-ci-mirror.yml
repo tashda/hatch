@@ -1,6 +1,6 @@
 name: "Hatch CI (mirror)"
 
-# Temporary: compiles the mirror of tashda/hatch in .hatch-ci-mirror/ (see tools/mirror-to-echo.sh in that repository).
+# Temporary: compiles the mirror of tashda/hatch in .hatch-ci-mirror/hatch (see tools/mirror-to-echo.sh in that repository).
 on:
   push:
     branches: [ "claude/echo-labs-features-wmwnbv" ]
@@ -12,47 +12,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  macos:
-    name: "Core, App and Stage (macOS)"
+  tests:
+    name: "Core tests (macOS)"
+    runs-on: xcode-27
+    steps:
+    - uses: actions/checkout@v4
+    - name: Core tests and CLI smoke test
+      working-directory: .hatch-ci-mirror/hatch
+      run: |
+        git config --global user.email ci@hatch.local && git config --global user.name ci
+        set -o pipefail
+        swift test 2>&1 | tee /tmp/test.log | grep -E "error:|: failed|Executed [0-9]+ tests" | tail -30
+        swift build --product hatch && tools/smoke.sh .build/debug/hatch
+
+  app:
+    name: "App (macOS)"
     runs-on: xcode-27
     steps:
     - uses: actions/checkout@v4
     - name: Versions
-      run: swift --version && xcodebuild -version
-    - name: Core tests
-      id: tests
-      continue-on-error: true
-      working-directory: .hatch-ci-mirror
-      run: |
-        git config --global user.email ci@hatch.local && git config --global user.name ci
-        set -o pipefail
-        swift test 2>&1 | tee /tmp/test.log | grep -E "error:|: failed|Executed [0-9]+ tests" | tail -40
+      run: swift --version
     - name: Build the app
-      id: app
-      continue-on-error: true
-      if: hashFiles('.hatch-ci-mirror/App/Package.swift') != ''
-      working-directory: .hatch-ci-mirror/App
+      working-directory: .hatch-ci-mirror/hatch/App
       run: |
         set -o pipefail
-        swift build 2>&1 | tee /tmp/app-build.log | grep -E "error:|Compiling|Build complete" | grep -vE "^\[.*Compiling" | head -120
-    - name: Build the Stage
-      id: stage
-      continue-on-error: true
-      if: hashFiles('.hatch-ci-mirror/Stage/Package.swift') != ''
-      working-directory: .hatch-ci-mirror/Stage
+        swift build 2>&1 | tee /tmp/app-build.log | grep -E "error:|Build complete" | sort -u | head -150
+
+  stage:
+    name: "Stage and spike timing (macOS)"
+    runs-on: xcode-27
+    steps:
+    - uses: actions/checkout@v4
+    - name: Stage tests
+      working-directory: .hatch-ci-mirror/hatch/Stage
       run: |
         set -o pipefail
         swift test 2>&1 | grep -E "error:|: failed|Executed [0-9]+ tests" | tail -10
-        swift build 2>&1 | tee /tmp/stage-build.log | grep -E "error:|Build complete" | head -120
+    - name: Build StageKit and the toast round
+      working-directory: .hatch-ci-mirror/hatch/Stage
+      run: |
+        set -o pipefail
+        swift build 2>&1 | tee /tmp/stage-build.log | grep -E "error:|Build complete" | sort -u | head -150
     - name: Spike timing (round only, StageKit cached)
-      id: spike
-      continue-on-error: true
-      if: steps.stage.outcome == 'success'
-      working-directory: .hatch-ci-mirror/Stage
+      working-directory: .hatch-ci-mirror/hatch/Stage
       run: |
         touch Sources/Rounds/ToastR18/*.swift
-        /usr/bin/time -p swift build --product HatchStageToast 2>&1 | tail -6
-    - name: Result
-      run: |
-        echo "tests=${{ steps.tests.outcome }} app=${{ steps.app.outcome }} stage=${{ steps.stage.outcome }} spike=${{ steps.spike.outcome }}"
-        [ "${{ steps.tests.outcome }}" = "success" ] && [ "${{ steps.app.outcome }}" = "success" ] && [ "${{ steps.stage.outcome }}" = "success" ]
+        start=$(date +%s); swift build --product HatchStageToast 2>&1 | tail -3; end=$(date +%s)
+        echo "SPIKE round-only build seconds: $((end-start))"
