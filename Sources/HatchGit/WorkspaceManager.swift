@@ -56,7 +56,7 @@ public final class WorkspaceManager: @unchecked Sendable {
         return p
     }
 
-    public func workspaceRoot(for repo: Repo) throws -> String { root ?? Self.defaultRoot(forRepoPath: try repoPath(repo)) }
+    public func workspaceRoot(for repo: Repo) throws -> String { if let root { return root }; return Self.defaultRoot(forRepoPath: try repoPath(repo)) }
 
     public func path(for ticket: Ticket, repo: Repo) throws -> String {
         let name = URL(fileURLWithPath: try repoPath(repo)).lastPathComponent
