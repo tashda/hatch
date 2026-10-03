@@ -28,7 +28,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 | Status of a ticket | Phase glyph and name | `HXStatus` (`Label` with symbol) |
 | Project | Title menu in the toolbar: tile, name, pull-down of projects | `ProjectTitleMenu` |
 | Facts about the selection | Details card | `LabeledContent` in `Form` |
-| Settings | Grouped form | `Form` `.formStyle(.grouped)` |
+| Settings | Navigation sidebar with focused grouped forms | `NavigationSplitView`; detail `Form` `.formStyle(.grouped)` |
 | Main action | One prominent glass capsule, first in the row | `.glassProminent`, `.controlSize(.large)` |
 | Other actions | Quiet glass capsules with icon and label; rare ones in a More menu | `.glass`, `Menu` |
 | Destructive action | Menu item then confirmation sheet | `role: .destructive` |
