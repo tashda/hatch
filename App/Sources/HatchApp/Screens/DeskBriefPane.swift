@@ -148,27 +148,17 @@ struct DeskBriefPane: View {
 
     private var actions: some View {
         HStack(spacing: 8) {
-            Button(action: onOpen) {
-                Label("Open", systemImage: "return")
-            }
-            .buttonStyle(.glassProminent)
-            Button(action: onPark) {
-                Label("Park", systemImage: "pause")
-            }
-            .buttonStyle(.glass)
-            .help("Park (P)")
-            Button(action: onAsk) {
-                Label("Ask", systemImage: "sparkles")
-            }
-            .buttonStyle(.glass)
-            .help("Ask (\u{2325}\u{2318}A)")
             if canAccept {
-                Button(action: onAccept) {
-                    Label("Accept recommendation", systemImage: "checkmark")
-                }
-                .buttonStyle(.glass)
-                .help("Accept (A)")
+                Button(action: onAccept) { Label("Accept", systemImage: "checkmark") }
+                    .buttonStyle(.glassProminent)
+                    .help("Accept Hatch's recommendation (A)")
             }
+            Button(action: onPark) { Label("Park", systemImage: "pause") }
+                .buttonStyle(.glass)
+                .help("Park (P)")
+            Button(action: onAsk) { Label("Ask", systemImage: "sparkles") }
+                .buttonStyle(.glass)
+                .help("Ask (\u{2325}\u{2318}A)")
         }
         .controlSize(.large)
     }

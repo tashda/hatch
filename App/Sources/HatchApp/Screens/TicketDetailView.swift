@@ -112,10 +112,14 @@ struct TicketDetailView: View {
 
     @ViewBuilder private func headerButtons(_ t: Ticket) -> some View {
         HStack(spacing: 8) {
+            if embedded {
+                // In the Desk the ticket opens to its own page from here; Park lives in the inspector.
+                Button { state.open(t) } label: { Label("Open", systemImage: "arrow.up.forward") }.buttonStyle(.glassProminent)
+            }
             // Parked and Dropped already offer Resume and Reopen as the banner's main action (F2), so the header does not repeat them.
             if t.status == .blocked {
                 Button { resume() } label: { Label("Resume", systemImage: "play") }.buttonStyle(.glass)
-            } else if canMove(t, to: .parked) {
+            } else if !embedded && canMove(t, to: .parked) {
                 Button { move(to: .parked) } label: { Label("Park", systemImage: "pause") }.buttonStyle(.glass)
             }
             if t.status == .done {

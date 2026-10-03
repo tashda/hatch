@@ -4,6 +4,8 @@ import HatchCore
 /// The window: sidebar, content, and the Ask panel on the right (decisions B1, B4).
 struct RootView: View {
     @EnvironmentObject var state: AppState
+    @AppStorage("hatch.sidebarWidth") private var sidebarWidth = 232.0
+    @AppStorage("hatch.irisWidth") private var irisWidth = 344.0
 
     var body: some View {
         Group {
@@ -34,7 +36,10 @@ struct RootView: View {
                 if state.showSidebar {
                     SidebarView()
                         .floatingCard()
-                        .frame(width: 232)
+                        .frame(width: sidebarWidth)
+                        .overlay(alignment: .trailing) {
+                            PanelResizer(width: $sidebarWidth, range: 190...340).offset(x: 11)
+                        }
                         .padding(.init(top: 6, leading: 8, bottom: 0, trailing: 0))
                         .transition(.move(edge: .leading).combined(with: .opacity))
                 }
@@ -47,7 +52,7 @@ struct RootView: View {
         .navigationTitle(state.route.title)
         .toolbar(removing: .title)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        .toolbar { MainToolbar(showsSidebarToggle: true) }
+        .toolbar { LiveToolbar() }
     }
 
     /// Pages that lay out several panels themselves; the others get one card.
@@ -68,7 +73,10 @@ struct RootView: View {
                 pageCard
                 if state.showAskPanel {
                     IrisPanel()
-                        .frame(width: 344)
+                        .frame(width: irisWidth)
+                        .overlay(alignment: .leading) {
+                            PanelResizer(width: $irisWidth, range: 300...560, growsLeft: true).offset(x: -11)
+                        }
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
@@ -136,49 +144,60 @@ struct RootView: View {
     }
 }
 
-struct MainToolbar: ToolbarContent {
+/// The three buttons on the right of the toolbar.
+private struct ToolbarActions: View {
     @EnvironmentObject var state: AppState
-    var showsSidebarToggle = false
+
+    var body: some View {
+        Button { state.showPalette = true } label: { Label("Search", systemImage: "magnifyingglass") }
+            .help("Search (\u{2318}K)")
+        Button { state.navigate(to: .newTicket) } label: { Label("New Ticket", systemImage: "plus") }
+            .help("New ticket (\u{2318}N)")
+        Button { state.showAskPanel.toggle() } label: { Label("Iris", systemImage: "sparkles") }
+            .help(state.showAskPanel ? "Hide Iris (\u{2325}\u{2318}A)" : "Show Iris (\u{2325}\u{2318}A)")
+            .accessibilityLabel(state.showAskPanel ? "Hide Iris" : "Show Iris")
+    }
+}
+
+/// Snapshot runs: the same buttons inside NavigationSplitView, which supplies its own sidebar button.
+struct MainToolbar: ToolbarContent {
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .navigation) { ProjectTitleMenu() }
+        ToolbarItemGroup(placement: .primaryAction) { ToolbarActions() }
+    }
+}
+
+/// The live window's toolbar. Plain system buttons: the sidebar button, Back and Forward, and the project
+/// each sit in their own group; the actions stay on the right edge.
+struct LiveToolbar: ToolbarContent {
+    @EnvironmentObject var state: AppState
 
     var body: some ToolbarContent {
-        if showsSidebarToggle {
-            ToolbarItem(placement: .navigation) {
-                Button { state.showSidebar.toggle() } label: { Label("Sidebar", systemImage: "sidebar.leading") }
-                    .help("Show or hide the sidebar (\u{2303}\u{2318}S)")
-            }
+        ToolbarItem(placement: .navigation) {
+            Button { state.showSidebar.toggle() } label: { Label("Sidebar", systemImage: "sidebar.leading") }
+                .help("Show or hide the sidebar (\u{2303}\u{2318}S)")
         }
-        if showsSidebarToggle {
-            ToolbarSpacer(.fixed, placement: .navigation)
-            ToolbarItem(placement: .navigation) {
-                HStack(spacing: 0) {
-                    Button { state.goBack() } label: { Image(systemName: "chevron.left").frame(width: 30, height: 28) }
-                        .disabled(!state.canGoBack)
-                        .help(state.backTitle.map { "Back to \($0) (\u{2318}[)" } ?? "Back")
-                    Button { state.goForward() } label: { Image(systemName: "chevron.right").frame(width: 30, height: 28) }
-                        .disabled(!state.canGoForward)
-                        .help("Forward (\u{2318}])")
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 4)
-                .glassEffect(.regular, in: .capsule)
+        ToolbarSpacer(.fixed, placement: .navigation)
+        ToolbarItem(placement: .navigation) {
+            // Its own glass pill, so Back and Forward read as one group apart from the project.
+            HStack(spacing: 0) {
+                Button { state.goBack() } label: { Image(systemName: "chevron.left").frame(width: 30, height: 28) }
+                    .disabled(!state.canGoBack)
+                    .help(state.backTitle.map { "Back to \($0) (\u{2318}[)" } ?? "Back")
+                Button { state.goForward() } label: { Image(systemName: "chevron.right").frame(width: 30, height: 28) }
+                    .disabled(!state.canGoForward)
+                    .help("Forward (\u{2318}])")
             }
-            .sharedBackgroundVisibility(.hidden)
-            ToolbarSpacer(.fixed, placement: .navigation)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 4)
+            .glassEffect(.regular, in: .capsule)
         }
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarSpacer(.fixed, placement: .navigation)
         ToolbarItem(placement: .navigation) { ProjectTitleMenu().padding(.horizontal, 6).glassEffect(.regular, in: .capsule) }
             .sharedBackgroundVisibility(.hidden)
         ToolbarSpacer(.flexible, placement: .primaryAction)
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button { state.showPalette = true } label: { Label("Search", systemImage: "magnifyingglass") }
-                .help("Search (⌘K)")
-            Button { state.navigate(to: .newTicket) } label: { Label("New Ticket", systemImage: "plus") }
-                .help("New ticket (⌘N)")
-            Button { state.showAskPanel.toggle() } label: {
-                Label("Iris", systemImage: "sparkles")
-            }
-                .help(state.showAskPanel ? "Hide Iris (⌥⌘A)" : "Show Iris (⌥⌘A)")
-                .accessibilityLabel(state.showAskPanel ? "Hide Iris" : "Show Iris")
-        }
+        ToolbarItemGroup(placement: .primaryAction) { ToolbarActions() }
     }
 }
 

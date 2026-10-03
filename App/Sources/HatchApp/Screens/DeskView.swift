@@ -31,7 +31,8 @@ struct DeskView: View {
     @State private var infos: [Int: ProposalInfo] = [:]
     @State private var questions: [Int: [Question]] = [:]
     @State private var selection: Int?
-    @State private var showWaiting = false
+    @State private var collapsed: Set<String> = []
+    @AppStorage("hatch.deskListWidth") private var listWidth = 380.0
     @State private var plan: AcceptPlan?
     @State private var notice: String?
     @State private var loaded = false
@@ -75,7 +76,10 @@ struct DeskView: View {
     private var splitContent: some View {
         HStack(spacing: 8) {
             listPane
-                .frame(minWidth: 320, idealWidth: 360, maxWidth: 420)
+                .frame(width: listWidth)
+                .overlay(alignment: .trailing) {
+                    PanelResizer(width: $listWidth, range: 300...560).offset(x: 11)
+                }
             ticketPane
                 .floatingCard()
         }
@@ -85,10 +89,10 @@ struct DeskView: View {
         ScrollView {
             LazyVStack(spacing: 8) {
                 ForEach(groups) { group in
-                    statusCard(title: group.status.displayName, count: group.tickets.count, color: Theme.you, collapsed: nil) {
+                    statusCard(title: group.status.displayName, count: group.tickets.count, color: Theme.you) {
                         ForEach(Array(group.tickets.enumerated()), id: \.element.id) { index, ticket in
-                            if index > 0 { Divider().padding(.horizontal, 10) }
-                            selectableRow(ticket.id) {
+                            if index > 0 { Divider().padding(.horizontal, 14) }
+                            DeskSelectable(selected: selection == ticket.id, select: { selection = ticket.id }) {
                                 DeskRow(ticket: ticket,
                                         copy: copy(for: ticket),
                                         recommendation: recommendationText(for: ticket),
@@ -101,13 +105,14 @@ struct DeskView: View {
                     }
                 }
                 if !waiting.isEmpty {
-                    statusCard(title: "Waiting on agents", count: waiting.count, color: Theme.agent, collapsed: !showWaiting) {
-                        if showWaiting {
-                            ForEach(waiting) { ticket in
-                                selectableRow(ticket.id) { DeskWaitingRow(ticket: ticket) }
+                    statusCard(title: "Waiting on agents", count: waiting.count, color: Theme.agent, startsCollapsed: true) {
+                        ForEach(Array(waiting.enumerated()), id: \.element.id) { index, ticket in
+                            if index > 0 { Divider().padding(.horizontal, 14) }
+                            DeskSelectable(selected: selection == ticket.id, select: { selection = ticket.id }) {
+                                DeskWaitingRow(ticket: ticket)
                             }
                         }
-                    } toggle: { showWaiting.toggle() }
+                    }
                 }
             }
             .padding(.horizontal, 3)
@@ -117,39 +122,49 @@ struct DeskView: View {
         .onChange(of: allQueued.map { $0.id }) { _, _ in fixSelection() }
     }
 
-    /// One card per status, so the groups read apart at a glance.
-    private func statusCard<C: View>(title: String, count: Int, color: Color, collapsed: Bool?,
-                                     @ViewBuilder _ content: () -> C, toggle: (() -> Void)? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Button { toggle?() } label: {
-                HStack(spacing: 7) {
-                    Circle().fill(color).frame(width: 8, height: 8)
-                    Text(title).font(.subheadline.weight(.semibold))
-                    Text("\(count)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Spacer()
-                    if let collapsed {
-                        Image(systemName: collapsed ? "chevron.right" : "chevron.down").font(.caption2).foregroundStyle(.secondary)
+    /// One card per status, so the groups read apart at a glance. Every card folds away from its header.
+    private func statusCard<C: View>(title: String, count: Int, color: Color, startsCollapsed: Bool = false,
+                                     @ViewBuilder _ content: () -> C) -> some View {
+        let key = title
+        let isCollapsed = startsCollapsed ? !collapsed.contains("open:" + key) : collapsed.contains(key)
+        return VStack(alignment: .leading, spacing: 2) {
+            Button {
+                withAnimation(.snappy(duration: 0.22)) {
+                    if startsCollapsed {
+                        if collapsed.contains("open:" + key) { collapsed.remove("open:" + key) } else { collapsed.insert("open:" + key) }
+                    } else {
+                        if collapsed.contains(key) { collapsed.remove(key) } else { collapsed.insert(key) }
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
+            } label: {
+                HStack(spacing: 8) {
+                    Circle().fill(color).frame(width: 8, height: 8)
+                    Text(title).font(.subheadline.weight(.semibold))
+                    Text("\(count)")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            content()
+            if !isCollapsed {
+                content()
+                    .transition(.opacity)
+            }
         }
-        .padding(.bottom, 6)
+        .padding(.bottom, isCollapsed ? 0 : 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .floatingCard()
-    }
-
-    private func selectableRow<R: View>(_ id: Int, @ViewBuilder _ row: () -> R) -> some View {
-        row()
-            .padding(.horizontal, 6)
-            .background(selection == id ? Color.accentColor.opacity(0.13) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-            .padding(.horizontal, 4)
-            .contentShape(Rectangle())
-            .onTapGesture { selection = id }
+        .clipped()
     }
 
     /// The selected ticket itself; the decision brief (accept, park, ask) lives at the top of the Iris inspector.
@@ -282,7 +297,8 @@ struct DeskView: View {
     }
 
     private func moveSelection(by delta: Int) {
-        let ids: [Int] = allQueued.map { $0.id } + (showWaiting ? waiting.map { $0.id } : [])
+        let ids: [Int] = groups.filter { !collapsed.contains($0.status.displayName) }.flatMap { $0.tickets.map { $0.id } }
+            + (collapsed.contains("open:Waiting on agents") ? waiting.map { $0.id } : [])
         guard !ids.isEmpty else { return }
         guard let current = selection, let index = ids.firstIndex(of: current) else {
             selection = ids.first
@@ -406,6 +422,33 @@ struct DeskView: View {
     }
 }
 
+/// A row's selected and hover looks. The row's size never depends on either, so nothing shifts when you click.
+struct DeskSelectable<Content: View>: View {
+    let selected: Bool
+    let select: () -> Void
+    @ViewBuilder let content: () -> Content
+    @State private var hovering = false
+
+    var body: some View {
+        content()
+            .padding(.horizontal, 10)
+            .background {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(selected ? Color.accentColor.opacity(0.12) : (hovering ? Color.primary.opacity(0.045) : Color.clear))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .strokeBorder(Color.accentColor.opacity(selected ? 0.38 : 0), lineWidth: 1)
+                    }
+            }
+            .padding(.horizontal, 6)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+            .onTapGesture(perform: select)
+            .animation(.easeOut(duration: 0.12), value: selected)
+            .animation(.easeOut(duration: 0.1), value: hovering)
+    }
+}
+
 struct DeskRow: View {
     let ticket: Ticket
     let copy: DeskCopy
@@ -415,11 +458,18 @@ struct DeskRow: View {
     /// Set only on the selected row when Hatch has a recommendation to accept from the list.
     var onAccept: (() -> Void)? = nil
 
+    private var subtitle: String {
+        var parts = [copy.line]
+        if showProject { parts.append(projectName) }
+        if let recommendation { parts.append(recommendation) }
+        return parts.joined(separator: " · ")
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(spacing: 11) {
             TypeBadge(type: ticket.type, showName: false)
-                .frame(width: 18)
-                .padding(.top, 2)
+                .frame(width: 30, height: 30)
+                .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(ticket.displayNumber)
@@ -428,35 +478,31 @@ struct DeskRow: View {
                     Text(ticket.title)
                         .font(.body.weight(.medium))
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                HStack(spacing: 6) {
-                    Text(copy.line)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(Theme.you)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // One fixed slot: the time, or the Accept button on the selected row. Same size either way.
+            ZStack(alignment: .trailing) {
+                if let onAccept {
+                    Button(action: onAccept) { Label("Accept", systemImage: "checkmark") }
+                        .buttonStyle(.glassProminent)
+                        .controlSize(.small)
+                        .help("Accept Hatch's recommendation (A)")
+                } else {
+                    Text(Format.relative(ticket.updatedAt))
                         .font(.caption)
-                        .foregroundStyle(Theme.you)
-                    if let recommendation {
-                        Text("· \(recommendation)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                        .foregroundStyle(.secondary)
                 }
             }
-            Spacer(minLength: 8)
-            if let onAccept {
-                Button(action: onAccept) { Label("Accept", systemImage: "checkmark") }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help("Accept Hatch's recommendation (A)")
-            }
-            if showProject {
-                PlainChip(text: projectName)
-            }
-            Text(Format.relative(ticket.updatedAt))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(minWidth: 28, alignment: .trailing)
+            .frame(width: 86, alignment: .trailing)
         }
-        .padding(.vertical, 3)
+        .frame(height: 54)
     }
 }
 
@@ -464,23 +510,22 @@ struct DeskWaitingRow: View {
     let ticket: Ticket
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 11) {
             TypeBadge(type: ticket.type, showName: false)
-                .frame(width: 18)
-            Text(ticket.displayNumber)
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
-            Text(ticket.title)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            if let who = ticket.takenBy {
-                Text(who)
-                    .font(.caption)
+                .frame(width: 30, height: 30)
+                .background(Color.secondary.opacity(0.09), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            HStack(spacing: 6) {
+                Text(ticket.displayNumber)
+                    .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
+                Text(ticket.title).lineLimit(1).truncationMode(.tail)
             }
-            StatusChip(status: ticket.status)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let who = ticket.takenBy {
+                Text(who).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
         }
-        .padding(.vertical, 2)
+        .frame(height: 46)
     }
 }
 
