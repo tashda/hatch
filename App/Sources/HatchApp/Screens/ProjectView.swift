@@ -63,6 +63,7 @@ struct ProjectForm: View {
     @State private var name = ""
     @State private var ticketsRepo = ""
     @State private var showRepositorySheet = false
+    @State private var editingArea: HXAreaDraft?
     @StateObject private var account = GitHubAccountModel()
     @State private var maxAgents = 3
     @State private var integrationBranch = "hatch"
@@ -89,12 +90,12 @@ struct ProjectForm: View {
         // section, rows are label on the left and value on the right.
         Form {
             identitySection
-            generalSection
-            agentsSection
             repositoriesSection
-            ForEach($repos.filter { $0.wrappedValue.role != .tickets }) { $repo in repoSection($repo) }
+            foldersSection
+            agentsSection
             areasSection
             docsSection
+            advancedSection
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
@@ -107,6 +108,11 @@ struct ProjectForm: View {
             account.refresh()
         }
         .sheet(isPresented: $showAdd) { AddProjectSheet() }
+        .sheet(item: $editingArea) { draft in
+            HXAreaEditSheet(draft: draft) { saved in
+                if let index = areas.firstIndex(where: { $0.id == saved.id }) { areas[index] = saved } else { areas.append(saved) }
+            }
+        }
         .sheet(isPresented: $showRepositorySheet) {
             HXRepositorySelectionSheet(account: account, projectName: project.name,
                                        initial: selectedRepositoryNames,
@@ -125,14 +131,17 @@ struct ProjectForm: View {
 
     // MARK: Sections
 
-    /// Who this is: the project's tile and name, and where its config file lives.
+    /// Who this is: the tile, an editable name, and where the config file lives.
     private var identitySection: some View {
         Section {
             HStack(spacing: 14) {
-                ProjectTile(name: project.name, key: project.key, size: 46)
+                ProjectTile(name: name.isEmpty ? project.name : name, key: project.key, size: 46)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(project.name).font(.title2.weight(.semibold))
-                    Text(configURL.map { $0.path } ?? "Config file: set the app repository's local folder to write .hatch/project.json")
+                    TextField("Name", text: $name)
+                        .labelsHidden()
+                        .textFieldStyle(.plain)
+                        .font(.title2.weight(.semibold))
+                    Text(configURL.map { $0.path } ?? "Choose the app's folder on this Mac to write .hatch/project.json")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -147,26 +156,137 @@ struct ProjectForm: View {
         }
     }
 
-    private var generalSection: some View {
+    // MARK: Repositories: chosen from GitHub, never typed
+
+    private var githubReady: Bool { account.user != nil || Snapshots.demoMode }
+
+    private var choices: [GitHubRepoSummary] {
+        if Snapshots.demoMode {
+            return [GitHubRepoSummary(fullName: "acme/hatch-tickets", isPrivate: true),
+                    GitHubRepoSummary(fullName: "acme/app", isPrivate: true),
+                    GitHubRepoSummary(fullName: "acme/design-system", isPrivate: true),
+                    GitHubRepoSummary(fullName: "acme/specimens", isPrivate: true),
+                    GitHubRepoSummary(fullName: "acme/public-site", isPrivate: false)]
+        }
+        return account.repos
+    }
+
+    private func current(_ role: RepoRole) -> String? {
+        if role == .tickets { return ticketsRepo.isEmpty ? nil : ticketsRepo }
+        let remote = repos.first { $0.role == role }?.remote ?? ""
+        return remote.isEmpty ? nil : remote
+    }
+
+    private func summary(_ name: String?) -> GitHubRepoSummary? {
+        guard let name else { return nil }
+        return choices.first { $0.fullName == name } ?? GitHubRepoSummary(fullName: name, isPrivate: true)
+    }
+
+    /// One pick from the menu. Tickets, App and Design go through the same save as before; Specimens edits the draft.
+    private func pick(_ role: RepoRole, _ name: String?) {
+        guard name != current(role) else { return }
+        if role == .specimens {
+            if let name, let repo = summary(name) {
+                if let index = repos.firstIndex(where: { $0.role == .specimens }) {
+                    repos[index].remote = repo.fullName; repos[index].branch = repo.defaultBranch
+                } else {
+                    repos.append(HXRepoDraft(role: .specimens, remote: repo.fullName, branch: repo.defaultBranch, localPath: "", build: "", plans: ""))
+                }
+            } else {
+                repos.removeAll { $0.role == .specimens }
+            }
+            return
+        }
+        guard let tickets = summary(role == .tickets ? name : current(.tickets)), tickets.isPrivate else {
+            message = "Tickets need a private repository."
+            return
+        }
+        let assignments = HXRepositoryAssignments(
+            tickets: tickets,
+            project: summary(role == .app ? name : current(.app)),
+            design: summary(role == .designSystem ? name : current(.designSystem)))
+        if state.saveRepositoryAssignments(projectId: project.id, assignments) {
+            ticketsRepo = assignments.tickets.fullName
+            updateRepo(.app, with: assignments.project)
+            updateRepo(.designSystem, with: assignments.design)
+            message = "Repositories saved."
+        }
+    }
+
+    private func repoRow(_ role: RepoRole, _ title: String, _ detail: String) -> some View {
+        LabeledContent {
+            if role == .tickets && state.hasTickets(projectId: project.id) {
+                Label(current(role) ?? "Not selected", systemImage: "lock.fill").foregroundStyle(.secondary)
+            } else {
+                Picker(title, selection: Binding<String?>(get: { current(role) }, set: { pick(role, $0) })) {
+                    if role != .tickets || current(role) == nil { Text(role == .tickets ? "Choose…" : "None").tag(String?.none) }
+                    if let name = current(role), !choices.contains(where: { $0.fullName == name }) {
+                        Text("\(name) (unavailable)").tag(String?.some(name))
+                    }
+                    ForEach(role == .tickets ? choices.filter { $0.isPrivate } : choices, id: \.fullName) { repo in
+                        Text(repo.isPrivate ? repo.fullName : "\(repo.fullName) (public)").tag(String?.some(repo.fullName))
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var repositoriesSection: some View {
         Section {
-            LabeledContent("Name") {
-                TextField("Name", text: $name).labelsHidden().multilineTextAlignment(.trailing)
-            }
-            LabeledContent("Integration branch") {
-                TextField("hatch", text: $integrationBranch).labelsHidden().multilineTextAlignment(.trailing)
-            }
-            LabeledContent("Tickets repository") {
-                HStack(spacing: 8) {
-                    Text(ticketsRepo.isEmpty ? "Not selected" : ticketsRepo)
-                        .foregroundStyle(ticketsRepo.isEmpty ? .secondary : .primary)
-                        .textSelection(.enabled)
-                    Button("Choose…") { showRepositorySheet = true }
+            if githubReady {
+                repoRow(.tickets, "Tickets", "Issues and attachments")
+                repoRow(.app, "App", "Source code and Specs")
+                repoRow(.designSystem, "Design System", "Design assets")
+                repoRow(.specimens, "Specimens", "Sample material for design rounds")
+            } else {
+                LabeledContent {
+                    Button("Connect GitHub…") { showRepositorySheet = true }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("GitHub is not connected")
+                        Text("Repositories are chosen from your account.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
         } header: {
-            Text("General")
+            HStack {
+                Text("GitHub Repositories")
+                Spacer()
+                if githubReady && !Snapshots.demoMode {
+                    Button { account.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                        .labelStyle(.iconOnly).buttonStyle(.borderless).help("Reload the list from GitHub")
+                }
+            }
         } footer: {
-            Text("Agents merge finished work into the integration branch. Tickets live as issues in the tickets repository.")
+            Text("Only repositories your GitHub account can reach appear here. Each branch follows the repository's default.")
+        }
+    }
+
+    /// Where each repository lives on this Mac: the one thing that has to be picked from the file system.
+    private var foldersSection: some View {
+        Section {
+            ForEach($repos.filter { $0.wrappedValue.role != .tickets && !$0.wrappedValue.remote.isEmpty }) { $repo in
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Text(repo.localPath.isEmpty ? "Not set" : repo.localPath)
+                            .foregroundStyle(repo.localPath.isEmpty ? .secondary : .primary)
+                            .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
+                        Button("Choose…") { chooseFolder($repo) }
+                    }
+                } label: { Text(hxRoleName(repo.role)) }
+            }
+        } header: {
+            Text("On This Mac")
+        } footer: {
+            Text("Agents work in these folders. Choose the clone of each repository.")
         }
     }
 
@@ -196,87 +316,33 @@ struct ProjectForm: View {
         }
     }
 
-    private var repositoriesSection: some View {
-        Section {
-            LabeledContent("GitHub") {
-                HStack(spacing: 8) {
-                    Button("Choose GitHub Repositories…") { showRepositorySheet = true }
-                    if !repos.contains(where: { $0.role == .specimens }) {
-                        Button { addRepo() } label: { Label("Add Specimens", systemImage: "plus") }
-                    }
-                }
-            }
-        } header: {
-            Text("Repositories")
-        } footer: {
-            Text("Choose the app and design system repositories from your GitHub account. Each one then gets its own local folder and build settings below.")
-        }
-    }
-
-    /// One repository: its name and branch, where it is on this Mac, and how to build and test it.
-    private func repoSection(_ repo: Binding<HXRepoDraft>) -> some View {
-        let value = repo.wrappedValue
-        return Section {
-            LabeledContent("Repository") {
-                HStack(spacing: 8) {
-                    Text(value.remote.isEmpty ? "Not selected" : value.remote)
-                        .foregroundStyle(value.remote.isEmpty ? .secondary : .primary)
-                        .textSelection(.enabled)
-                    if value.role == .specimens {
-                        HXRepoPickerMenu(account: account) { pick in
-                            repo.wrappedValue.remote = pick.fullName
-                            repo.wrappedValue.branch = pick.defaultBranch
-                        }
-                    }
-                }
-            }
-            LabeledContent("Branch") {
-                TextField("main", text: repo.branch).labelsHidden().multilineTextAlignment(.trailing)
-            }
-            LabeledContent("Local folder") {
-                HStack(spacing: 8) {
-                    Text(value.localPath.isEmpty ? "Not set" : value.localPath)
-                        .foregroundStyle(value.localPath.isEmpty ? .secondary : .primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                    Button("Choose…") { chooseFolder(repo) }
-                }
-            }
-            LabeledContent("Build command") {
-                TextField("swift build", text: repo.build).labelsHidden().multilineTextAlignment(.trailing)
-            }
-            LabeledContent("Test plans") {
-                TextField("Comma separated", text: repo.plans).labelsHidden().multilineTextAlignment(.trailing)
-            }
-        } header: {
-            HStack {
-                Text(hxRoleName(value.role))
-                Spacer()
-                if value.role == .specimens {
-                    Button { removeRepo(value.id) } label: { Label("Remove", systemImage: "minus.circle") }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.borderless)
-                        .help("Remove this repository")
-                }
-            }
-        }
-    }
+    // MARK: Areas and docs: lists, not rows of fields
 
     private var areasSection: some View {
         Section {
             if areas.isEmpty {
-                Text("No areas yet. An area index saves the most tokens per ticket.").foregroundStyle(.secondary)
-            } else {
+                Text("No areas yet. Re-scan finds them from the app's folders.").foregroundStyle(.secondary)
+            }
+            ForEach(areas) { area in
                 HStack(spacing: 10) {
-                    Text("Name").frame(width: 150, alignment: .leading)
-                    Text("Paths").frame(maxWidth: .infinity, alignment: .leading)
-                    Text("Spec prefix").frame(width: 80, alignment: .leading)
-                    Color.clear.frame(width: 22, height: 1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(area.name.isEmpty ? "Untitled" : area.name)
+                        Text(area.globs.isEmpty ? "No paths" : area.globs)
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    }
+                    Spacer()
+                    if !area.prefix.isEmpty {
+                        Text(area.prefix).font(.caption.monospaced()).foregroundStyle(.secondary)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.12), in: Capsule())
+                    }
+                    Button { editingArea = area } label: { Image(systemName: "pencil") }
+                        .buttonStyle(.borderless).help("Edit this area")
+                    Button { areas.removeAll { $0.id == area.id } } label: { Image(systemName: "minus.circle") }
+                        .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove this area")
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                ForEach($areas) { $area in areaRow($area) }
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { editingArea = area }
             }
         } header: {
             HStack {
@@ -285,55 +351,71 @@ struct ProjectForm: View {
                 Button("Re-scan") { rescan() }
                     .buttonStyle(.borderless)
                     .disabled(appLocalPath == nil)
-                    .help(appLocalPath == nil ? "Set the app repository's local folder first." : "Look for new folders and add them as areas.")
-                Button { areas.append(HXAreaDraft(name: "", globs: "", prefix: "")) } label: { Label("Add Area", systemImage: "plus") }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.borderless)
-                    .help("Add an area")
+                    .help(appLocalPath == nil ? "Choose the app's folder on this Mac first." : "Look for new folders and add them as areas.")
+                Button { editingArea = HXAreaDraft(name: "", globs: "", prefix: "") } label: { Label("Add Area", systemImage: "plus") }
+                    .labelStyle(.iconOnly).buttonStyle(.borderless).help("Add an area")
             }
         } footer: {
-            Text("An area maps a part of the code to a name and a Spec prefix, so agents read only what a ticket touches.")
-        }
-    }
-
-    private func areaRow(_ area: Binding<HXAreaDraft>) -> some View {
-        HStack(spacing: 10) {
-            TextField("Name", text: area.name).labelsHidden().frame(width: 150)
-            TextField("Sources/Name/**", text: area.globs).labelsHidden().frame(maxWidth: .infinity)
-            TextField("ABC", text: area.prefix).labelsHidden().frame(width: 80)
-            Button { areas.removeAll { $0.id == area.wrappedValue.id } } label: { Image(systemName: "minus.circle") }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .frame(width: 22)
-                .help("Remove this area")
+            Text("An area maps part of the code to a name and a Spec prefix, so agents read only what a ticket touches.")
         }
     }
 
     private var docsSection: some View {
         Section {
-            if docs.isEmpty {
-                Text("No docs listed.").foregroundStyle(.secondary)
-            }
-            ForEach($docs) { $doc in
-                HStack(spacing: 10) {
-                    TextField("CLAUDE.md", text: $doc.path).labelsHidden()
+            if docs.isEmpty { Text("No docs listed.").foregroundStyle(.secondary) }
+            ForEach(docs) { doc in
+                HStack {
+                    Label(doc.path, systemImage: "doc.text").lineLimit(1).truncationMode(.middle)
+                    Spacer()
                     Button { docs.removeAll { $0.id == doc.id } } label: { Image(systemName: "minus.circle") }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(.secondary)
-                        .help("Remove this doc")
+                        .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove this doc")
                 }
             }
         } header: {
             HStack {
                 Text("Docs for Agents")
                 Spacer()
-                Button { docs.append(HXDocDraft(path: "")) } label: { Label("Add Doc", systemImage: "plus") }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.borderless)
-                    .help("Add a doc")
+                Button { addDoc() } label: { Label("Add Doc", systemImage: "plus") }
+                    .labelStyle(.iconOnly).buttonStyle(.borderless)
+                    .disabled(appLocalPath == nil)
+                    .help(appLocalPath == nil ? "Choose the app's folder on this Mac first." : "Pick a file in the app repository")
             }
         } footer: {
-            Text("Files in the app repository that every agent reads first, such as CLAUDE.md.")
+            Text("Files every agent reads first, such as CLAUDE.md.")
+        }
+    }
+
+    /// Everything you rarely touch, folded away.
+    private var advancedSection: some View {
+        Section {
+            DisclosureGroup("Advanced") {
+                LabeledContent("Merge into branch") {
+                    TextField("hatch", text: $integrationBranch).labelsHidden().multilineTextAlignment(.trailing)
+                }
+                ForEach($repos.filter { $0.wrappedValue.role != .tickets && !$0.wrappedValue.remote.isEmpty }) { $repo in
+                    LabeledContent("\(hxRoleName(repo.role)) build") {
+                        TextField("swift build", text: $repo.build).labelsHidden().multilineTextAlignment(.trailing)
+                    }
+                    LabeledContent("\(hxRoleName(repo.role)) test plans") {
+                        TextField("Comma separated", text: $repo.plans).labelsHidden().multilineTextAlignment(.trailing)
+                    }
+                }
+            }
+        }
+    }
+
+    private func addDoc() {
+        guard let base = appLocalPath else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.directoryURL = URL(fileURLWithPath: base)
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            var path = url.path
+            if path.hasPrefix(base + "/") { path = String(path.dropFirst(base.count + 1)) }
+            if !docs.contains(where: { $0.path == path }) { docs.append(HXDocDraft(path: path)) }
         }
     }
 
@@ -607,5 +689,44 @@ struct AddProjectSheet: View {
             state.navigate(to: .projects)
             dismiss()
         }
+    }
+}
+
+
+/// Add or edit one area. Three fields, in their own small sheet instead of rows of text fields on the page.
+struct HXAreaEditSheet: View {
+    @State var draft: HXAreaDraft
+    let onSave: (HXAreaDraft) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(draft.name.isEmpty ? "New Area" : "Edit Area")
+                .font(.title3.weight(.semibold))
+                .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 4)
+            Form {
+                Section {
+                    LabeledContent("Name") { TextField("Connections", text: $draft.name).labelsHidden().multilineTextAlignment(.trailing) }
+                    LabeledContent("Paths") { TextField("Sources/Connections/**", text: $draft.globs).labelsHidden().multilineTextAlignment(.trailing) }
+                    LabeledContent("Spec prefix") { TextField("CONN", text: $draft.prefix).labelsHidden().multilineTextAlignment(.trailing) }
+                } footer: {
+                    Text("Separate several paths with commas.")
+                }
+            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .scrollDisabled(true)
+            .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") { onSave(draft); dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 20)
+        }
+        .frame(width: 480)
     }
 }
