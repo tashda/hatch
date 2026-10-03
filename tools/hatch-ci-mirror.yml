@@ -37,6 +37,22 @@ jobs:
       run: |
         set -o pipefail
         swift build 2>&1 | tee /tmp/app-build.log | grep -E "error:|Build complete" | sort -u | head -150
+    - name: Screenshots of every screen (made-up data)
+      working-directory: .hatch-ci-mirror/hatch/App
+      continue-on-error: true
+      run: |
+        mkdir -p /tmp/shots
+        .build/debug/HatchApp --snapshots /tmp/shots &
+        pid=$!
+        for i in $(seq 1 90); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+        kill $pid 2>/dev/null || true
+        ls -la /tmp/shots
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: hatch-screens
+        path: /tmp/shots/*.png
+        if-no-files-found: warn
 
   stage:
     name: "Stage and spike timing (macOS)"
