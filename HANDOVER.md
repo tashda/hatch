@@ -4,7 +4,7 @@
 
 Written 2026-10-03 for whoever continues (another AI assistant or a person). Read this first, then `CLAUDE.md`, `DESIGN.md`, `STATUS.md`. It says what exists, what is verified, what is not, and what to do next, in order.
 
-**Local Mac follow-up, 2026-10-03:** The root tests, CLI smoke test, Stage tests and build, and Xcode app build have now passed on the owner's Mac. The live app was reviewed in light and dark mode. GitHub live tests remain blocked because Settings reports no token; see `STATUS.md`. XcodeGen is not installed here, but the checked-in `Hatch.xcodeproj` builds successfully.
+**Local Mac follow-up, 2026-10-03:** Root tests, CLI smoke test, Stage tests and build, toast check, and Xcode app build pass locally. The live app was reviewed in light and dark mode. The owner already has a private `tashda/hatch-tickets` repo and GitHub CLI credentials. Repo listing, selection, and immediate plus 60-second app sync were verified using a disposable test database. A stale-account refresh bug was fixed in the Project settings screen. The Keychain flow using a pasted classic token, repository creation, public-repo refusal, and end-to-end Stage flow remain unverified. See `STATUS.md`. XcodeGen is not installed here, but the checked-in `Hatch.xcodeproj` builds successfully.
 
 ## 1. What Hatch is
 
@@ -40,7 +40,7 @@ All in this repo (`main`). Linux tests: 341 core tests (16 skip because they nee
 1. **Local verification is done for this checkout:** `swift test`, `tools/smoke.sh`, `cd Stage && swift test`, `cd Stage && swift build`, `Stage/.build/debug/HatchStageToast --check`, and the Xcode app build pass. See `STATUS.md` for warnings and skipped tests. No mirror job was started.
 2. **The Xcode project is checked in and builds locally** (`Hatch.xcodeproj`, `App/Info.plist`), generated from `project.yml`. Launch the app from `Hatch.xcodeproj`, scheme **Hatch**, My Mac. Local ad-hoc signing was enough to run it. After changing `project.yml`, regenerate with `xcodegen generate`; XcodeGen is not installed on the owner's Mac at this check.
 3. **Visual review is done for current empty states and sample data.** The live app in light and dark mode shows the selected sidebar row as a normal gray selection and renders the toolbar/glass controls. Bitmap snapshot mode still shows black sidebar/banner regions, so do not use those regions to judge the live appearance. There are no UI tests.
-4. **GitHub integration still needs a real authorized account:** Settings > GitHub currently reports Not connected. No token or tickets repository was available, so token validation, repo selection/creation, privacy refusal against a public repo, and the app sync loop remain unverified. See section 5 and `STATUS.md`.
+4. **GitHub integration:** Settings can use the existing `gh` credential. Repository listing, selection of the private `tashda/hatch-tickets` repo, and the app's initial and 60-second pull sync passed against a disposable database. Pasting a classic token into Keychain, creating a private repo, and confirming that a public repo is refused still need a dedicated run. Do not create a repository until the owner confirms its name.
 
 ## 5. Open work
 

@@ -39,6 +39,10 @@ enum HXGitHub {
     static func client() -> GitHubClient { GitHubClient(token: HXKeychain.read()) }
 }
 
+extension Notification.Name {
+    static let hxGitHubAccountChanged = Notification.Name("Hatch.GitHubAccountChanged")
+}
+
 /// Who Hatch is signed in as, which repositories it can see, and the actions that link or create the tickets repository.
 @MainActor
 final class GitHubAccountModel: ObservableObject {
@@ -82,11 +86,13 @@ final class GitHubAccountModel: ObservableObject {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         if !HXKeychain.write(trimmed) { error = "The Keychain would not store the token."; return }
+        NotificationCenter.default.post(name: .hxGitHubAccountChanged, object: nil)
         refresh()
     }
 
     func signOut() {
         HXKeychain.delete()
+        NotificationCenter.default.post(name: .hxGitHubAccountChanged, object: nil)
         refresh()
     }
 

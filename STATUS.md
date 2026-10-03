@@ -10,8 +10,11 @@ Updated 2026-10-03 after a local run on the owner's Mac with Xcode 27. "Verified
 - `cd Stage && swift build` passed, including StageKit and the toast round executable.
 - `Stage/.build/debug/HatchStageToast --check` passed: 15 specimens checked, no failures.
 - `xcodebuild -project Hatch.xcodeproj -scheme Hatch -destination 'platform=macOS' build` passed on Apple silicon with local ad-hoc signing.
+- The follow-up GitHub account refresh fix in `GitHubAccount.swift` and `ProjectView.swift` also passed the Xcode app build.
 - Launched the app and inspected the live Desk, Tickets, Board, Previews, Specs, Decisions, Agents, Log, Project settings, and new-ticket views in light and dark appearance. Used the app's in-memory snapshot mode for populated ticket and board views. The black sidebar and banner in bitmap snapshots are capture artifacts: the live selected row is a gray native selection, and the live app displays the glass controls correctly.
-- Settings > GitHub opens and reports **Not connected**. No GitHub token was available, so listing repositories, creating a private tickets repo, linking it, and exercising the 60-second/manual sync loop against GitHub remain unverified. No token was entered or repo created.
+- GitHub was tested with the owner's existing `gh` credential. Settings listed repositories; the picker showed `tashda/hatch-tickets` as private (lock icon), and it was selected in a disposable test database. App sync logged successful pulls at startup and after the 60-second interval, with zero waiting or failed operations. The test database was not the owner's working data.
+- Fixed a stale GitHub account model in Project settings: it refreshes when the view appears and when the account changes in Settings. The app rebuilt successfully after this change.
+- Not verified: entering a classic token through the Settings Keychain field, creating a private repository, refusing a public tickets repo, the manual sync shortcut in a confirmed run, or end-to-end Stage launch/API flow. No repository was created. Ask the owner to enter any token directly in Settings; never request it in chat. Confirm the exact repository name before creating a new one.
 - StageKit and its toast round compile, but the app-to-Stage launch and API flow have not been exercised end to end.
 
 ## Environment facts

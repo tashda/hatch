@@ -99,7 +99,13 @@ struct ProjectForm: View {
             .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .onAppear { if !loaded { load(); loaded = true } }
+        .onAppear {
+            account.refresh()
+            if !loaded { load(); loaded = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .hxGitHubAccountChanged)) { _ in
+            account.refresh()
+        }
         .sheet(isPresented: $showAdd) { AddProjectSheet() }
         .sheet(isPresented: $showCreateTickets) {
             HXCreateTicketsRepoSheet(account: account, projectName: project.name) { full in
