@@ -1,6 +1,18 @@
 # Hatch: build status
 
-Updated whenever work lands. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
+Updated 2026-10-03 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
+
+## Local verification (macOS, 2026-10-03)
+
+- `swift test` at the repo root passed. The Echo-checkout tests skipped because `HATCH_ECHO_CHECKOUT` is not set. The run emitted two harmless unnecessary-`try` warnings and one unhandled fixture warning.
+- `tools/smoke.sh` passed (`smoke ok`). Its first attempt was started before the root build had produced `.build/debug/hatch`; rerunning after `swift test` passed.
+- `cd Stage && swift test` passed: 73 StageCore tests.
+- `cd Stage && swift build` passed, including StageKit and the toast round executable.
+- `Stage/.build/debug/HatchStageToast --check` passed: 15 specimens checked, no failures.
+- `xcodebuild -project Hatch.xcodeproj -scheme Hatch -destination 'platform=macOS' build` passed on Apple silicon with local ad-hoc signing.
+- Launched the app and inspected the live Desk, Tickets, Board, Previews, Specs, Decisions, Agents, Log, Project settings, and new-ticket views in light and dark appearance. Used the app's in-memory snapshot mode for populated ticket and board views. The black sidebar and banner in bitmap snapshots are capture artifacts: the live selected row is a gray native selection, and the live app displays the glass controls correctly.
+- Settings > GitHub opens and reports **Not connected**. No GitHub token was available, so listing repositories, creating a private tickets repo, linking it, and exercising the 60-second/manual sync loop against GitHub remain unverified. No token was entered or repo created.
+- StageKit and its toast round compile, but the app-to-Stage launch and API flow have not been exercised end to end.
 
 ## Environment facts
 
@@ -26,7 +38,7 @@ Total: 334 package tests plus the CLI smoke test, all green.
 
 All core tests (a few Echo-checkout tests skip there) and the CLI smoke test pass on macOS; the macOS run takes about 4 minutes because the git and sync suites are slow there. One real macOS-only bug was found and fixed: the Stage API reset the connection on an oversized body, so the client never saw the 413.
 
-- `App/`: the SwiftUI app (shell, Desk, Tickets, Board, ticket view, composer with Iris review, Previews, Agents, Project, Specs, Decisions, Log, Ask panel, command palette, Sketch board, Stage launcher, settings) **builds**. It has not been run or looked at by a person yet; there are no UI tests.
+- `App/`: the SwiftUI app (shell, Desk, Tickets, Board, ticket view, composer with Iris review, Previews, Agents, Project, Specs, Decisions, Log, Ask panel, command palette, Sketch board, Stage launcher, settings) **builds**. The local visual review above covers current empty states and in-memory sample views; there are no UI tests.
 - `Stage/`: StageCore tests pass, StageKit and the toast round (`HatchStageToast`) **build**.
 - Spike (decision S1/O1): a round-only incremental rebuild with StageKit cached took about **2 s** (build log: "Build complete! (1.24 sec)"). Well under the 10-15 s target.
 

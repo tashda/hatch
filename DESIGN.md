@@ -1,6 +1,6 @@
 # Hatch design rules (draft)
 
-Status: **proposed**. These are the recommendations on the design page (decisions LK1 to LK9). They become rules when the owner answers; change this file to match the answers. Agents read this file before they add or change any UI.
+Status: **accepted**. These rules reflect the owner's answers on the design page (LK1 to LK11). Agents read this file before they add or change any UI.
 
 ## Principles
 

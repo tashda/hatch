@@ -1,4 +1,4 @@
-> **Start with `HANDOVER.md`.** It is newer than the rest of this file.
+> **Start with `HANDOVER.md`.** It is the current handover and supersedes this historical continuation note.
 
 # Hatch: how to continue
 
