@@ -490,10 +490,16 @@ struct DeskRow: View {
             // One fixed slot: the time, or the Accept button on the selected row. Same size either way.
             ZStack(alignment: .trailing) {
                 if let onAccept {
-                    Button(action: onAccept) { Label("Accept", systemImage: "checkmark") }
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.small)
-                        .help("Accept Hatch's recommendation (A)")
+                    Button(action: onAccept) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .help("Accept Hatch's recommendation (A)")
+                    .accessibilityLabel("Accept")
                 } else {
                     Text(Format.relative(ticket.updatedAt))
                         .font(.caption)

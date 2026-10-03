@@ -50,8 +50,6 @@ struct RootView: View {
         .background(Color(nsColor: .underPageBackgroundColor))
         .animation(.snappy(duration: 0.25), value: state.showSidebar)
         .navigationTitle(state.route.title)
-        .toolbar(removing: .title)
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar { LiveToolbar() }
     }
 
@@ -150,10 +148,13 @@ private struct ToolbarActions: View {
 
     var body: some View {
         Button { state.showPalette = true } label: { Label("Search", systemImage: "magnifyingglass") }
+            .labelStyle(.iconOnly)
             .help("Search (\u{2318}K)")
         Button { state.navigate(to: .newTicket) } label: { Label("New Ticket", systemImage: "plus") }
+            .labelStyle(.iconOnly)
             .help("New ticket (\u{2318}N)")
         Button { state.showAskPanel.toggle() } label: { Label("Iris", systemImage: "sparkles") }
+            .labelStyle(.iconOnly)
             .help(state.showAskPanel ? "Hide Iris (\u{2325}\u{2318}A)" : "Show Iris (\u{2325}\u{2318}A)")
             .accessibilityLabel(state.showAskPanel ? "Hide Iris" : "Show Iris")
     }
@@ -167,36 +168,49 @@ struct MainToolbar: ToolbarContent {
     }
 }
 
-/// The live window's toolbar. Plain system buttons: the sidebar button, Back and Forward, and the project
-/// each sit in their own group; the actions stay on the right edge.
+/// The live window's toolbar, built like Echo's: the sidebar button on its own glass, then native groups for
+/// Back and Forward and for the project, each apart by a fixed spacer. A zero-size principal item keeps the
+/// leading and trailing groups from sliding together when the window resizes.
 struct LiveToolbar: ToolbarContent {
     @EnvironmentObject var state: AppState
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             Button { state.showSidebar.toggle() } label: { Label("Sidebar", systemImage: "sidebar.leading") }
+                .labelStyle(.iconOnly)
                 .help("Show or hide the sidebar (\u{2303}\u{2318}S)")
-        }
-        ToolbarSpacer(.fixed, placement: .navigation)
-        ToolbarItem(placement: .navigation) {
-            // Its own glass pill, so Back and Forward read as one group apart from the project.
-            HStack(spacing: 0) {
-                Button { state.goBack() } label: { Image(systemName: "chevron.left").frame(width: 30, height: 28) }
-                    .disabled(!state.canGoBack)
-                    .help(state.backTitle.map { "Back to \($0) (\u{2318}[)" } ?? "Back")
-                Button { state.goForward() } label: { Image(systemName: "chevron.right").frame(width: 30, height: 28) }
-                    .disabled(!state.canGoForward)
-                    .help("Forward (\u{2318}])")
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 4)
-            .glassEffect(.regular, in: .capsule)
+                .glassEffect(.regular.interactive())
         }
         .sharedBackgroundVisibility(.hidden)
-        ToolbarSpacer(.fixed, placement: .navigation)
-        ToolbarItem(placement: .navigation) { ProjectTitleMenu().padding(.horizontal, 6).glassEffect(.regular, in: .capsule) }
-            .sharedBackgroundVisibility(.hidden)
-        ToolbarSpacer(.flexible, placement: .primaryAction)
+
+        ToolbarSpacer(.fixed)
+
+        ToolbarItem(placement: .navigation) {
+            // The same control Echo's Settings uses for Back and Forward.
+            ControlGroup {
+                Button { state.goBack() } label: { Label("Back", systemImage: "chevron.left") }
+                    .disabled(!state.canGoBack)
+                    .help(state.backTitle.map { "Back to \($0) (\u{2318}[)" } ?? "Go Back")
+                Button { state.goForward() } label: { Label("Forward", systemImage: "chevron.right") }
+                    .disabled(!state.canGoForward)
+                    .help("Go Forward (\u{2318}])")
+            }
+            .controlGroupStyle(.navigation)
+        }
+
+        ToolbarSpacer(.fixed)
+
+        ToolbarItem(placement: .navigation) {
+            ProjectTitleMenu()
+                .padding(.horizontal, 6)
+                .glassEffect(.regular.interactive())
+        }
+        .sharedBackgroundVisibility(.hidden)
+
+        ToolbarItem(placement: .principal) {
+            Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
+        }
+
         ToolbarItemGroup(placement: .primaryAction) { ToolbarActions() }
     }
 }

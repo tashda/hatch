@@ -22,6 +22,7 @@ struct HatchApp: App {
                     state.stopServices()
                 }
         }
+        .windowToolbarStyle(.unified(showsTitle: false))
         .defaultSize(width: 1500, height: 920)
         .commands {
             HatchCommands(state: state)
