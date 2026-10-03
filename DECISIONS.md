@@ -1256,3 +1256,20 @@ Nothing has been built yet. The order matters because the biggest assumption is 
 
 **My recommendation and reason:** Spike the Stage first, then the foundation. S1 is what the rest of the design leans on, and it is also the part you most want to try. The spike needs no GitHub and no database, only the existing toast round and the design system, so it is small. If the build time disappoints, S1 changes, and that is far cheaper to learn before the core is built on top of it.
 
+
+
+## Q. Look and feel (answered 2026-10-03, ids LK1 to LK11)
+
+| Id | Question | Choice |
+|---|---|---|
+| LK1 | How a status looks | C: phase glyph (SF Symbol) coloured by turn, plus the name in normal text. No filled pills. |
+| LK2 | The project in the window | D: a title control in the toolbar (tile, name, popover of projects). Not the recommended sidebar card. |
+| LK3 | Section switcher | A: text dock (Echo's glass capsule with words), up to 5 slots, pull-down from 6. |
+| LK4 | Principles | A: Echo's principles plus Hatch's own. |
+| LK5 | Colour | A: only turn and real problems (the project tile is the one exception). |
+| LK6 | Component map | A: adopt it; new elements extend it. |
+| LK7 | Glass and cards | A: glass only for floating controls; cards only for grouped facts. |
+| LK8 | Text | A: system font and text styles only. |
+| LK9 | Keeping screens on track | A: tokens file, DESIGN.md, CI screenshots reviewed in one pass. |
+| LK10 | Button style | A: glass capsules with icon and label, as on Echo's server page. |
+| LK11 | Which buttons where | A: adopt the table in DESIGN.md. Drop sits behind a More menu. |

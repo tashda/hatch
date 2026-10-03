@@ -35,6 +35,7 @@ Open Settings, paste a token (a classic token with the `repo` scope; the link in
 - `SUMMARY.md`: what Hatch is and everything decided.
 - `DECISIONS.md`: every design decision with the options, the choice and the reason.
 - `DESIGN.md`: the rules for how the app looks.
+- `HANDOVER.md`: where things stand and what to do next.
 - `STATUS.md`: what is built and verified.
 - `CLAUDE.md`: instructions for AI coding agents working on this repository.
 - `examples/project.json`: a sample project file (`.hatch/project.json`).

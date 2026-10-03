@@ -1,3 +1,5 @@
+> **Start with `HANDOVER.md`.** It is newer than the rest of this file.
+
 # Hatch: how to continue
 
 Written so a fresh session (or a person) can pick up without this conversation. Read `SUMMARY.md` first, then `STATUS.md`.
