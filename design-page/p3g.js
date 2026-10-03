@@ -88,6 +88,28 @@ DV.forEach(p=>{const e=document.createElement('div');e.className='lk-opt'+(p.rec
   e.append(p.e());const sw=document.createElement('div');sw.className='swift';sw.textContent=p.sw;e.append(sw);dk.append(e)});
 })();
 
+
+/* buttons */
+(function(){
+const I={open:'<path d="M3 8h9M8 4l4 4-4 4"/>',park:'<path d="M5 3v10M11 3v10"/>',ask:'<path d="M8 2l1.5 4.5L14 8l-4.5 1.5L8 14l-1.5-4.5L2 8l4.5-1.5z"/>',more:'<path d="M3 8h.01M8 8h.01M13 8h.01"/>',drop:'<path d="M4 4l8 8M12 4l-8 8"/>'};
+const ic=k=>`<svg viewBox="0 0 16 16">${I[k]}</svg>`;
+const ACT=[['Open','open',1],['Park','park'],['Ask','ask'],['More','more']];
+const VS=[
+ {n:'A · Glass capsules, as on the Echo server page',sub:'Icon and label. One prominent capsule first, the rest quiet glass. "More" is a menu capsule with Drop inside. The row wraps when it is narrow.',rec:true,
+  f:()=>ACT.map(a=>`<span class="lk-b glass${a[2]?' pro':''}">${ic(a[1])}${a[0]}${a[1]==='more'?' <span style="opacity:.6">⌄</span>':''}</span>`).join(''),
+  sw:'.buttonStyle(.glassProminent) for the first; .buttonStyle(.glass) for the rest; Menu { } .menuStyle(.button) .menuIndicator(.hidden); .controlSize(.large)'},
+ {n:'B · Bordered rectangles (today)',sub:'The standard AppKit-looking button. Familiar, but flat, and it does not match the Echo server page.',
+  f:()=>ACT.map(a=>`<span class="lk-b bord${a[2]?' pro':''}">${a[0]}${a[1]==='more'?' ⌄':''}</span>`).join(''),sw:'.buttonStyle(.bordered) and .borderedProminent'},
+ {n:'C · Icon-only glass',sub:'Compact, like the toolbar. Fine when the icon is universal; here Park and Ask need a tooltip to be understood.',
+  f:()=>ACT.map(a=>`<span class="lk-b icon${a[2]?' pro':''}" title="${a[0]}">${ic(a[1])}</span>`).join(''),sw:'Button { Image(systemName:) }.buttonStyle(.glass) with .help("Park")'},
+ {n:'D · Text links',sub:'Quiet and light. Nothing says these are buttons, and the main action does not stand out.',
+  f:()=>ACT.map(a=>`<span class="lk-b txt${a[2]?' pro':''}">${a[0]}</span>`).join(''),sw:'.buttonStyle(.link)'}];
+const host=document.getElementById('lkBtns');
+VS.forEach(v=>{const e=document.createElement('div');e.className='lk-opt'+(v.rec?' rec':'');
+ e.innerHTML=`<h4>${v.n}${v.rec?' <span class="chip app" style="margin-left:6px">recommended</span>':''}</h4><div class="sub">${v.sub}</div>
+ <div class="lk-bcard stage"><div class="hd">#151 Notification toast spacing<small>Your turn: judge 3 options.</small></div><div class="lk-brow">${v.f()}</div></div><div class="swift">${v.sw}</div>`;host.append(e)});
+})();
+
 DECISIONS.push(
 {id:'L1',sec:'lookchips',title:'How should a status look?',
  q:'You do not like the chips. The status appears in the Tickets table, the Board cards, the Desk and the ticket header, so one choice here sets the look everywhere. The colour must still show whose turn it is.',
@@ -155,4 +177,22 @@ DECISIONS.push(
   {k:'B',n:'DESIGN.md only',d:'Cheaper to set up, but nothing stops a literal number or colour from slipping in.'},
   {k:'C',n:'Review every screen as it is built',d:'Highest control, highest cost.'}],
  rec:'A',why:'Rules in a document are followed only when they are also in the code. Tokens and shared components make the right thing the easy thing, and the screenshots let you judge the whole app in minutes. Then "I do not like the pills" becomes one edit in HXStatus that changes every screen, and that is the cheapest way to iterate.'}
+);
+
+DECISIONS.push(
+{id:'L10',sec:'lookbuttons',title:'What do buttons like Park, Drop and Open look like?',
+ q:'You prefer the buttons on Echo\'s server page and the Activity Monitor over the plain bordered ones. On those pages every action is a glass capsule with an icon and a label, the first one is prominent, and the others are quiet.',
+ opts:[
+  {k:'A',n:'Glass capsules with icon and label',d:'Exactly the Echo server page: one prominent capsule first (Open, Submit for check, Accept), then quiet glass capsules (Park, Ask), and a "More" capsule menu holding the rare ones such as Drop. Large control size on pages, regular in sheets.'},
+  {k:'B',n:'Keep bordered rectangles',d:'What the app has now.'},
+  {k:'C',n:'Icon-only glass',d:'Smallest. Needs tooltips and clear icons, so it suits the toolbar more than a ticket page.'},
+  {k:'D',n:'Text links',d:'Lightest. The main action does not stand out.'}],
+ rec:'A',why:'It is the style you already chose for Echo, so Hatch and Echo look related. The icon and the word together make each button understandable without a tooltip, and one prominent button at the front shows what to do next. It is also the least custom: the system provides both glass styles, so the only thing we write is the rule for which button gets which style.'},
+{id:'L11',sec:'lookbuttons',title:'Adopt the "which buttons where" table as the rule?',
+ q:'The table above sets the style for each place: pages, rows and cards, sheets, the toolbar, and risky actions. Without it every new screen would reopen the question.',
+ opts:[
+  {k:'A',n:'Adopt it',d:'One prominent button per screen, always first. Quiet glass for other actions. Rare or risky actions in a "More" menu, with a confirmation sheet for destructive ones. Small bordered buttons only inside rows, cards and toasts. Toolbar stays icon-only with tooltips. Sheets: a default button that is never silently disabled.'},
+  {k:'B',n:'Adopt it, but Drop is always visible',d:'Drop sits next to Park as a red glass capsule. Faster, easier to hit by mistake.'},
+  {k:'C',n:'Decide per screen',d:'No rule.'}],
+ rec:'A',why:'Dropping a ticket takes it off the Desk and the Board, so it should not sit one click from Open. Putting it in the More menu, with a confirmation, costs a second when you mean it and avoids a mistaken drop when you do not. Fixing the table once is also the cheapest way to keep every new screen consistent.'}
 );

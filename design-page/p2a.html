@@ -167,6 +167,23 @@
 .lk-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 .lk-list{margin:0;padding-left:1.1em;display:grid;gap:5px}
 .lk-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+
+/* buttons */
+.lk-brow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lk-b{all:unset;box-sizing:border-box;cursor:default;display:inline-flex;align-items:center;gap:6px;font:500 13px var(--f-ui);color:var(--ink);white-space:nowrap}
+.lk-b svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.lk-b.glass{padding:7px 14px;border-radius:999px;background:var(--lk-glass);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border:1px solid color-mix(in srgb,var(--ink) 12%,transparent);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.lk-b.glass.pro{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.lk-b.glass.crit{color:var(--crit)}
+.lk-b.glass:hover{filter:brightness(1.04)}
+.lk-b.bord{padding:4px 11px;border-radius:6px;background:var(--surface);border:1px solid var(--line)}
+.lk-b.bord.pro{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.lk-b.icon{width:30px;height:30px;justify-content:center;border-radius:50%;background:var(--lk-glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid color-mix(in srgb,var(--ink) 12%,transparent)}
+.lk-b.icon.pro{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.lk-b.txt{color:var(--accent);padding:2px 4px}.lk-b.txt.pro{font-weight:600}
+.lk-bcard{background:var(--win);border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:10px;font-family:var(--f-ui)}
+.lk-bcard .hd{font-weight:600;font-size:13px}.lk-bcard .hd small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.lk-bcard.stage{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 14%,var(--win)),color-mix(in srgb,var(--agent) 10%,var(--win)))}
 </style>
 
 <section class="sec lk" id="s-lookchips" data-title="Look: status chips">
@@ -190,6 +207,26 @@
   <div class="decs" data-sec="lookdock"></div>
 </section>
 
+<section class="sec lk" id="s-lookbuttons" data-title="Look: buttons">
+  <h2>Buttons: style and where they go</h2>
+  <p class="lead">On Echo's server page and in the Activity Monitor the buttons are Liquid Glass capsules: an icon and a label, one prominent button first (New Query), the rest quiet glass, and a menu inside the same capsule when a tool needs a choice. The row wraps when the window is narrow. Here is that style on a Hatch ticket, against the alternatives.</p>
+  <div class="lk-grid" id="lkBtns"></div>
+  <h3 style="font-size:15px;margin:18px 0 8px">Which buttons where (proposed)</h3>
+  <div class="lk-wrap"><table class="lk-map">
+    <tr><th>Place</th><th>Button</th><th>SwiftUI</th><th>Example</th></tr>
+    <tr><td>The main action of a screen or ticket</td><td>One prominent glass capsule, large, first in the row. Never two.</td><td><code>.glassProminent</code>, <code>.controlSize(.large)</code></td><td>Open, Submit for check, Accept</td></tr>
+    <tr><td>Other actions on the same object</td><td>Quiet glass capsules with icon and label, in the same row. The row wraps.</td><td><code>.glass</code>, <code>ViewThatFits</code> + flow layout</td><td>Park, Ask, Open in Previews</td></tr>
+    <tr><td>An action that needs a choice</td><td>A glass capsule that is a menu, no arrow</td><td><code>Menu</code> <code>.menuStyle(.button)</code> <code>.menuIndicator(.hidden)</code></td><td>Park until…, Move to project</td></tr>
+    <tr><td>Rare or risky actions</td><td>Behind a "More" capsule menu, then a confirmation sheet</td><td><code>role: .destructive</code></td><td>Drop, Re-run vetting</td></tr>
+    <tr><td>The toolbar</td><td>Icon-only system toolbar items with a tooltip that shows the shortcut</td><td><code>ToolbarItem</code>, <code>.help</code></td><td>Search, New ticket, Ask</td></tr>
+    <tr><td>Inside a row, card or toast</td><td>Small bordered buttons, shown on hover or selection</td><td><code>.bordered</code>, <code>.controlSize(.small)</code></td><td>Copy, Open Tab, Retry</td></tr>
+    <tr><td>Sheets and dialogs</td><td>Prominent default button; Cancel is quiet glass. The default is never silently disabled: say what is missing and focus it.</td><td><code>.keyboardShortcut(.defaultAction)</code></td><td>Create project, Build Preview</td></tr>
+    <tr><td>A run that can be stopped</td><td>One button that swaps in place, turning red while running</td><td>own component, as Echo's Run</td><td>Build, Vetting</td></tr>
+    <tr><td>Shortcuts</td><td>In the tooltip and menus, not in the label</td><td><code>.keyboardShortcut</code></td><td>⌘↩ Submit</td></tr>
+  </table></div>
+  <div class="decs" data-sec="lookbuttons"></div>
+</section>
+
 <section class="sec lk" id="s-lookrules" data-title="Design rules">
   <h2>Design rules, so new screens need no rework</h2>
   <p class="lead">Instead of adjusting screen by screen, we agree the rules once. They go into <code>DESIGN.md</code> in the repository and into one tokens file in the app. Agents read them before they add anything, and every CI build produces screenshots of all screens, so you review rules and not elements. The first draft follows. The component map is what an agent looks up when it needs a new control.</p>
@@ -207,8 +244,8 @@
     <tr><td>Whose turn</td><td>Colour on the glyph, and the Desk section</td><td><code>.foregroundStyle(HX.turn)</code></td><td>A second badge</td></tr>
     <tr><td>Facts about the selection</td><td>Details card with labelled values</td><td><code>LabeledContent</code> in a <code>Form</code></td><td>Free text with bold labels</td></tr>
     <tr><td>Edit settings</td><td>Grouped form, one section per topic</td><td><code>Form</code> + <code>.formStyle(.grouped)</code></td><td>Hand-spaced stacks</td></tr>
-    <tr><td>The main action of a screen</td><td>One prominent button, in the turn banner or toolbar</td><td><code>.borderedProminent</code></td><td>Two prominent buttons together</td></tr>
-    <tr><td>Other actions</td><td>Bordered buttons, rest in a menu</td><td><code>.bordered</code>, <code>Menu</code></td><td>Icon-only buttons without a tooltip</td></tr>
+    <tr><td>The main action of a screen</td><td>One prominent glass capsule, first in the row</td><td><code>.glassProminent</code></td><td>Two prominent buttons together</td></tr>
+    <tr><td>Other actions</td><td>Quiet glass capsules with icon and label, rare ones in a menu</td><td><code>.glass</code>, <code>Menu</code></td><td>Icon-only buttons without a tooltip, rectangular bordered buttons</td></tr>
     <tr><td>Destructive action</td><td>Menu item, then a confirmation sheet</td><td><code>role: .destructive</code></td><td>A red button in the open</td></tr>
     <tr><td>Filter or search</td><td>Search field with tokens, saved views in a menu</td><td><code>.searchable</code> + tokens</td><td>A row of filter dropdowns</td></tr>
     <tr><td>Nothing to show</td><td>Empty state with the next step</td><td><code>ContentUnavailableView</code></td><td>A blank pane</td></tr>

@@ -29,8 +29,8 @@ Status: **proposed**. These are the recommendations on the design page (decision
 | Project | Project card at the top of the sidebar | `HXProjectCard` |
 | Facts about the selection | Details card | `LabeledContent` in `Form` |
 | Settings | Grouped form | `Form` `.formStyle(.grouped)` |
-| Main action | One prominent button | `.borderedProminent` |
-| Other actions | Bordered buttons, rest in a menu | `.bordered`, `Menu` |
+| Main action | One prominent glass capsule, first in the row | `.glassProminent`, `.controlSize(.large)` |
+| Other actions | Quiet glass capsules with icon and label; rare ones in a More menu | `.glass`, `Menu` |
 | Destructive action | Menu item then confirmation sheet | `role: .destructive` |
 | Filter or search | Search field with tokens, saved views | `.searchable` |
 | Nothing to show | Empty state with next step | `ContentUnavailableView` |
@@ -44,3 +44,19 @@ Status: **proposed**. These are the recommendations on the design page (decision
 3. Take sizes, colours and spacing from the tokens file. If one is missing, add the token first.
 4. Colour only for turn or a real problem.
 5. Check the CI screenshots (light and dark) before marking the work ready.
+
+## Which buttons where (proposed, decisions L10 and L11)
+
+The style is the one on Echo's server page and Activity Monitor: Liquid Glass capsules with an icon and a label.
+
+| Place | Button |
+|---|---|
+| Main action of a screen or ticket | One `.glassProminent` capsule, large, first in the row. Never two. |
+| Other actions on the object | `.glass` capsules with icon and label in the same row; the row wraps (`ViewThatFits` and a flow layout). |
+| An action that needs a choice | A `Menu` styled as a glass button: `.menuStyle(.button)`, `.menuIndicator(.hidden)`. |
+| Rare or risky actions (Drop) | Inside a More menu, then a confirmation sheet (`role: .destructive`). |
+| Toolbar | Icon-only system items with a tooltip that shows the shortcut. |
+| Inside a row, card or toast | Small bordered buttons (`.bordered`, `.controlSize(.small)`), on hover or selection. |
+| Sheets and dialogs | Prominent default button; Cancel quiet. The default is never silently disabled: say what is missing and focus it. |
+| A run that can be stopped | One button that swaps in place and turns red while running. |
+| Shortcuts | In the tooltip and menus, not in the label. |
