@@ -46,7 +46,9 @@ public final class StageClient: @unchecked Sendable {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = timeout
         config.timeoutIntervalForResource = timeout * 2
+        #if !canImport(FoundationNetworking)
         config.waitsForConnectivity = false
+        #endif
         self.session = URLSession(configuration: config)
     }
 
@@ -132,12 +134,18 @@ public final class StageClient: @unchecked Sendable {
             } catch StageClientError.unreachable {
                 try append(entry)
                 return .queued
+            } catch StageClientError.server(let status, _, _) where Self.isTransient(status) {
+                try append(entry)
+                return .queued
             }
         }
         try append(entry)
         _ = try? flush()
         return try outboxEntries().contains { $0.key == entry.key } ? .queued : .delivered
     }
+
+    /// Statuses that mean "try again later" rather than "no": a wrong token (Hatch restarted), timeouts, throttling, server faults.
+    static func isTransient(_ status: Int) -> Bool { status == 401 || status == 408 || status == 429 || status >= 500 }
 
     /// Number of requests waiting for Hatch.
     public var pendingCount: Int { (try? outboxEntries().count) ?? 0 }
@@ -154,7 +162,7 @@ public final class StageClient: @unchecked Sendable {
                 _ = try request(entry.method, entry.path, entry.body, key: entry.key)
                 try remove(key: entry.key)
                 delivered += 1
-            } catch StageClientError.server(let status, let code, let message) where status != 401 && status != 408 && status != 429 && status < 500 {
+            } catch StageClientError.server(let status, let code, let message) where !Self.isTransient(status) {
                 try reject(entry, status: status, code: code, message: message)
                 try remove(key: entry.key)
             } catch StageClientError.server {
@@ -184,7 +192,7 @@ public final class StageClient: @unchecked Sendable {
         var line = try encoder.encode(value)
         line.append(10)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if !FileManager.default.fileExists(atPath: url.path) { FileManager.default.createFile(atPath: url.path, contents: nil) }
+        if !FileManager.default.fileExists(atPath: url.path) { _ = FileManager.default.createFile(atPath: url.path, contents: nil) }
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
         try handle.seekToEnd()

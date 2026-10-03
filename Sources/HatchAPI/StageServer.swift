@@ -169,11 +169,14 @@ public final class StageServer: @unchecked Sendable {
             setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &yes, socklen_t(MemoryLayout<Int32>.size))
             #endif
             inflight.enter()
-            DispatchQueue.global().async { [self] in
+            // A thread per connection: an idle connection blocks in recv and must not starve the shared Dispatch pool.
+            let worker = Thread { [self] in
                 defer { inflight.leave() }
                 serve(client)
                 close(client)
             }
+            worker.name = "hatch.stage-conn"
+            worker.start()
         }
     }
 
@@ -334,7 +337,7 @@ public final class StageServer: @unchecked Sendable {
             case "verdict": try need("POST"); return try mutate(req) { try self.verdict(ref, Body(req)) }
             case "pin": try need("POST"); return try mutate(req) { try self.pin(ref, Body(req)) }
             case "note": try need("POST"); return try mutate(req) { try self.note(ref, Body(req)) }
-            case "accept": try need("POST"); return try mutate(req) { try self.accept(ref, Body(req)) }
+            case "accept": try need("POST"); return try mutate(req) { try self.acceptTicket(ref, Body(req)) }
             case "send-back": try need("POST"); return try mutate(req) { try self.sendBack(ref, Body(req)) }
             default: break
             }
@@ -349,7 +352,8 @@ public final class StageServer: @unchecked Sendable {
         mutationLock.lock()
         defer { mutationLock.unlock() }
         if let key {
-            if let hit = keyCache[key] ?? (try store.storedResponse(forKey: key)).map({ ($0.status, $0.body) }) {
+            let stored = try store.storedResponse(forKey: key)
+            if let hit = keyCache[key] ?? stored.map({ ($0.status, $0.body) }) {
                 return (hit.0, JSONValue.parse(hit.1), true)
             }
         }
@@ -450,7 +454,7 @@ public final class StageServer: @unchecked Sendable {
                 StageEvent(kind: .note, ticketId: t.id))
     }
 
-    private func accept(_ ref: String, _ b: Body) throws -> (JSONValue, StageEvent?) {
+    private func acceptTicket(_ ref: String, _ b: Body) throws -> (JSONValue, StageEvent?) {
         let t = try ticket(ref)
         var choices: [String: String] = [:]
         if let raw = b.object["choices"], raw != .null {
@@ -461,6 +465,9 @@ public final class StageServer: @unchecked Sendable {
                 }
                 choices[topic] = c
             }
+        }
+        guard t.status == .yourCall else {
+            throw APIError(status: 409, code: "illegal_move", message: "\(t.displayNumber) is \(t.status.displayName); only a Proposal in Your call can be accepted.")
         }
         let r = try store.acceptProposal(ticketId: t.id, choices: choices)
         return (["ok": true, "ticket": summary(r.ticket), "decisionId": .int(r.decisionId), "summary": .string(r.summary)], StageEvent(kind: .accept, ticketId: t.id))
@@ -473,6 +480,9 @@ public final class StageServer: @unchecked Sendable {
             throw APIError(status: 400, code: "bad_request", message: "reason must be needs-more-options, change-option or different-direction.")
         }
         let note = try b.string("note", max: 20_000)
+        guard t.status == .yourCall else {
+            throw APIError(status: 409, code: "illegal_move", message: "\(t.displayNumber) is \(t.status.displayName); only a Proposal in Your call can be sent back.")
+        }
         let moved = try store.sendBackProposal(ticketId: t.id, reason: reason, note: note)
         return (["ok": true, "ticket": summary(moved)], StageEvent(kind: .sendBack, ticketId: t.id))
     }

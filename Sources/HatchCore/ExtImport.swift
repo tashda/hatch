@@ -43,3 +43,28 @@ public extension HatchStore {
         }
     }
 }
+
+public extension HatchStore {
+    /// Deletes a ticket's history. Why: the normal write functions (notes, picks, revisions) each stamp an event with the
+    /// current time; the importer drops those and writes the real, dated history with `recordEvent(at:)` instead.
+    func clearEvents(ticketId: Int) throws {
+        try db.execute("DELETE FROM event WHERE ticket_id = ?", [.int(ticketId)])
+    }
+
+    /// Moves the timestamps of picks, verdicts, pins and decisions that were written during an import back to `at`.
+    func backdateImported(ticketId: Int, to at: Date) throws {
+        for table in ["pick", "verdict", "decision", "pinned_note"] {
+            try db.execute("UPDATE \(table) SET at = ? WHERE ticket_id = ?", [.date(at), .int(ticketId)])
+        }
+    }
+
+    /// Sets the original time of one revision (`recordRevision` stamps "now").
+    func setRevisionTime(ticketId: Int, n: Int, at: Date) throws {
+        try db.execute("UPDATE revision SET at = ? WHERE ticket_id = ? AND n = ?", [.date(at), .int(ticketId), .int(n)])
+    }
+
+    /// The number of the revision a ticket is on, written straight (an imported page keeps its Echo Labs revision number).
+    func setRevisionNumber(ticketId: Int, _ n: Int) throws {
+        try db.execute("UPDATE ticket SET revision = ? WHERE id = ?", [.int(n), .int(ticketId)])
+    }
+}
