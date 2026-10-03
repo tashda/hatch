@@ -295,10 +295,8 @@ struct DecisionCard: View {
     private var noteField: some View {
         TextField(
             "Note on this question (Return to send)",
-            text: model.binding({ $0.topicNotes[decision.id] ?? "" }, { StageAction.setTopicNote(topic: decision.id, text: $0) }),
-            axis: .vertical
+            text: model.binding({ $0.topicNotes[decision.id] ?? "" }, { StageAction.setTopicNote(topic: decision.id, text: $0) })
         )
-        .lineLimit(1...4)
         .textFieldStyle(.roundedBorder)
         .font(.caption)
         .onSubmit { model.send(.commitTopicNote(topic: decision.id)) }
