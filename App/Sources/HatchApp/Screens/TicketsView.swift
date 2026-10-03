@@ -87,6 +87,7 @@ struct TicketsView: View {
     @State private var showSave = false
     @State private var newViewName = ""
     @State private var themeTitles: [Int: Ticket] = [:]
+    @State private var projectNames: [Int: String] = [:]
 
     private static let defaultViews: [SavedView] = [
         SavedView(name: "Waiting for me", query: "turn:you"),
@@ -234,7 +235,7 @@ struct TicketsView: View {
             }
             .width(min: 80, ideal: 100, max: 120)
             TableColumn("Project") { ticket in
-                Text(state.project(id: ticket.projectId)?.name ?? "")
+                Text(projectNames[ticket.projectId] ?? "")
                     .foregroundStyle(.secondary)
             }
             .width(min: 60, ideal: 80, max: 120)
@@ -286,7 +287,7 @@ struct TicketsView: View {
             ForEach(groups) { group in
                 Section {
                     ForEach(group.children) { ticket in
-                        TicketLine(ticket: ticket, projectName: state.project(id: ticket.projectId)?.name ?? "")
+                        TicketLine(ticket: ticket, projectName: projectNames[ticket.projectId] ?? "")
                             .contentShape(Rectangle())
                             .onTapGesture { state.open(ticket) }
                     }
@@ -317,6 +318,9 @@ struct TicketsView: View {
 
     private func load() {
         let q = TicketQuery.parse(queryText)
+        var names: [Int: String] = [:]
+        for project in state.projects { names[project.id] = project.name }
+        projectNames = names
         var projectId: Int? = state.projectFilterId
         if let key = q.projectKey {
             let match = state.projects.first { TicketQuery.normalize($0.key) == key || TicketQuery.normalize($0.name) == key }

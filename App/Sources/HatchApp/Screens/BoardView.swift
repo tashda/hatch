@@ -6,6 +6,7 @@ struct BoardView: View {
     @EnvironmentObject var state: AppState
     @State private var tickets: [Ticket] = []
     @State private var themes: [Ticket] = []
+    @State private var projectNames: [Int: String] = [:]
     @State private var typeFilter: TicketType?
     @State private var themeId: Int?
     @State private var progress: (done: Int, total: Int) = (0, 0)
@@ -28,7 +29,8 @@ struct BoardView: View {
                     ForEach(Phase.allCases, id: \.self) { phase in
                         BoardColumn(phase: phase,
                                     tickets: column(phase),
-                                    showProject: state.selectedProjectKey == nil && state.projects.count > 1)
+                                    projectNames: projectNames,
+                                    showProject: state.selectedProjectKey == nil && projectNames.count > 1)
                     }
                 }
                 .padding(14)
@@ -73,6 +75,9 @@ struct BoardView: View {
 
     private func load() {
         let pid = state.projectFilterId
+        var names: [Int: String] = [:]
+        for project in state.projects { names[project.id] = project.name }
+        projectNames = names
         let filter = TicketFilter(projectId: pid, types: typeFilter.map { [$0] }, parentId: themeId)
         let all: [Ticket] = (try? state.store.tickets(filter)) ?? []
         tickets = all.filter { $0.type != .theme }
@@ -86,6 +91,7 @@ struct BoardView: View {
 struct BoardColumn: View {
     let phase: Phase
     let tickets: [Ticket]
+    let projectNames: [Int: String]
     let showProject: Bool
 
     var body: some View {
@@ -101,7 +107,7 @@ struct BoardColumn: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(tickets) { ticket in
-                        BoardCard(ticket: ticket, showProject: showProject)
+                        BoardCard(ticket: ticket, projectName: projectNames[ticket.projectId] ?? "", showProject: showProject)
                     }
                 }
             }
@@ -114,6 +120,7 @@ struct BoardColumn: View {
 struct BoardCard: View {
     @EnvironmentObject var state: AppState
     let ticket: Ticket
+    let projectName: String
     let showProject: Bool
 
     var body: some View {
@@ -138,8 +145,8 @@ struct BoardCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 6) {
                     StatusChip(status: ticket.status)
-                    if showProject, let name = state.project(id: ticket.projectId)?.name {
-                        PlainChip(text: name)
+                    if showProject && !projectName.isEmpty {
+                        PlainChip(text: projectName)
                     }
                 }
             }

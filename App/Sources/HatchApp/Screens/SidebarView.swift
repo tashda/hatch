@@ -27,17 +27,17 @@ struct SidebarView: View {
         List(selection: selection) {
             Section("Work") {
                 deskRow
-                SidebarRow(route: .tickets)
-                SidebarRow(route: .board)
-                SidebarRow(route: .previews)
+                SidebarRow(route: .tickets).tag(Route.tickets)
+                SidebarRow(route: .board).tag(Route.board)
+                SidebarRow(route: .previews).tag(Route.previews)
             }
             Section("Reference") {
-                SidebarRow(route: .specs)
-                SidebarRow(route: .decisions)
+                SidebarRow(route: .specs).tag(Route.specs)
+                SidebarRow(route: .decisions).tag(Route.decisions)
             }
             Section("Machine") {
-                SidebarRow(route: .agents)
-                SidebarRow(route: .log)
+                SidebarRow(route: .agents).tag(Route.agents)
+                SidebarRow(route: .log).tag(Route.log)
             }
         }
         .listStyle(.sidebar)

@@ -378,6 +378,16 @@ final class ReducerTests: XCTestCase {
         XCTAssertFalse(t.playing)
     }
 
+    func testTransportIsEngagedOnlyAfterTheOwnerUsesIt() {
+        var t = StageTransport()
+        XCTAssertFalse(t.engaged)
+        t.togglePlay(duration: 6)
+        XCTAssertTrue(t.engaged)
+        var u = StageTransport()
+        u.scrub(to: 0, duration: 6)
+        XCTAssertTrue(u.engaged)
+    }
+
     func testTransportSpeedScrubAndStep() {
         var t = StageTransport(playing: true, time: 0, speed: 0.25, loop: true)
         t.advance(by: 2, duration: 6)

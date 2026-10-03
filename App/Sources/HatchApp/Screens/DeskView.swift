@@ -35,6 +35,7 @@ struct DeskView: View {
     @State private var plan: AcceptPlan?
     @State private var notice: String?
     @State private var loaded = false
+    @State private var projectNames: [Int: String] = [:]
 
     private var allQueued: [Ticket] { groups.flatMap { $0.tickets } }
     private var selectedTicket: Ticket? {
@@ -80,8 +81,8 @@ struct DeskView: View {
                         DeskRow(ticket: ticket,
                                 copy: copy(for: ticket),
                                 recommendation: recommendationText(for: ticket),
-                                showProject: state.selectedProjectKey == nil && state.projects.count > 1,
-                                projectName: state.project(id: ticket.projectId)?.name ?? "")
+                                showProject: state.selectedProjectKey == nil && projectNames.count > 1,
+                                projectName: projectNames[ticket.projectId] ?? "")
                             .tag(ticket.id)
                             .contextMenu { rowMenu(ticket) }
                     }
@@ -225,6 +226,9 @@ struct DeskView: View {
 
     private func load() {
         let pid = state.projectFilterId
+        var names: [Int: String] = [:]
+        for project in state.projects { names[project.id] = project.name }
+        projectNames = names
         let queue = (try? state.store.deskQueue(projectId: pid)) ?? []
         var newGroups: [DeskGroup] = []
         for item in queue {

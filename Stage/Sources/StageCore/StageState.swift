@@ -132,9 +132,11 @@ public struct StageTransport: Codable, Equatable {
     public var time: Double
     public var speed: Double
     public var loop: Bool
+    /// false until the owner first plays, scrubs or steps. Until then a motion specimen shows its steady state instead of frame 0.
+    public var engaged: Bool
 
-    public init(playing: Bool = false, time: Double = 0, speed: Double = 1, loop: Bool = true) {
-        self.playing = playing; self.time = time; self.speed = speed; self.loop = loop
+    public init(playing: Bool = false, time: Double = 0, speed: Double = 1, loop: Bool = true, engaged: Bool = false) {
+        self.playing = playing; self.time = time; self.speed = speed; self.loop = loop; self.engaged = engaged
     }
 
     /// Moves the playhead by `dt` real seconds. At the end it loops or stops.
@@ -148,6 +150,7 @@ public struct StageTransport: Codable, Equatable {
     }
 
     public mutating func scrub(to seconds: Double, duration: Double) {
+        engaged = true
         time = min(max(seconds, 0), max(duration, 0))
     }
 
@@ -158,6 +161,7 @@ public struct StageTransport: Codable, Equatable {
     }
 
     public mutating func togglePlay(duration: Double) {
+        engaged = true
         if !playing && time >= duration && duration > 0 { time = 0 }
         playing.toggle()
     }
