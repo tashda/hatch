@@ -161,30 +161,44 @@ struct RedlinesOverlay: View {
 
     @ViewBuilder
     private func redline(_ line: StageRedline) -> some View {
+        let outlined: Bool = line.kind == .padding
+        // A padding label sits on the top edge of its box so it does not cover the content; gaps and sizes label their own centre.
         let cx: CGFloat = CGFloat(line.x + line.width / 2)
         let cy: CGFloat = CGFloat(line.y + line.height / 2)
-        ZStack {
-            switch line.kind {
-            case .padding:
-                Rectangle()
-                    .strokeBorder(Color.red, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-                    .frame(width: CGFloat(line.width), height: CGFloat(line.height))
-            case .gap:
-                Rectangle()
-                    .fill(Color.red.opacity(0.25))
-                    .frame(width: CGFloat(line.width), height: CGFloat(line.height))
-            case .size:
-                Rectangle()
-                    .strokeBorder(Color.red.opacity(0.7), lineWidth: 1)
-                    .frame(width: CGFloat(line.width), height: CGFloat(line.height))
-            }
-            Text(line.label)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(Color.red)
-                .padding(.horizontal, 2)
-                .background(Color.white.opacity(0.75))
+        let lx: CGFloat = outlined ? CGFloat(line.x) + 10 : 0
+        let ly: CGFloat = outlined ? CGFloat(line.y) - 6 : 0
+        ZStack(alignment: .topLeading) {
+            shape(line)
+                .position(x: cx, y: cy)
+            label(line)
+                .position(x: outlined ? lx : cx, y: outlined ? ly : cy)
         }
-        .position(x: cx, y: cy)
+    }
+
+    @ViewBuilder
+    private func shape(_ line: StageRedline) -> some View {
+        switch line.kind {
+        case .padding:
+            Rectangle()
+                .strokeBorder(Color.red, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                .frame(width: CGFloat(line.width), height: CGFloat(line.height))
+        case .gap:
+            Rectangle()
+                .fill(Color.red.opacity(0.25))
+                .frame(width: CGFloat(line.width), height: CGFloat(line.height))
+        case .size:
+            Rectangle()
+                .strokeBorder(Color.red.opacity(0.7), lineWidth: 1)
+                .frame(width: CGFloat(line.width), height: CGFloat(line.height))
+        }
+    }
+
+    private func label(_ line: StageRedline) -> some View {
+        Text(line.label)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(Color.red)
+            .padding(.horizontal, 2)
+            .background(Color.white.opacity(0.75))
     }
 }
 
