@@ -160,7 +160,18 @@ struct DeskBriefPane: View {
                 Text("Ask")
             }
             .help("Ask (\u{2325}\u{2318}A)")
+            if canAccept {
+                Button(action: onAccept) {
+                    Text("Accept recommendation")
+                }
+                .help("Accept (A)")
+            }
         }
+    }
+
+    private var canAccept: Bool {
+        if ticket.status == .yourCall && ticket.type == .proposal { return !info.recommendations.isEmpty }
+        return ticket.status == .needsAnswers && !questions.isEmpty
     }
 
     private var hint: some View {

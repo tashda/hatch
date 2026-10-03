@@ -3,10 +3,8 @@ import HatchCore
 
 // Placeholders so the package compiles while each screen is built. Each screen replaces its stub in its own file
 // (delete the stub from this file when you create the real one).
-struct SidebarView: View { var body: some View { List { Text("Sidebar") } } }
 struct CommandPalette: View { var body: some View { Text("Search").padding(40) } }
 struct AskPanel: View { var body: some View { Text("Ask") } }
-struct DeskView: View { var body: some View { Text("Desk") } }
 struct TicketsView: View { var body: some View { Text("Tickets") } }
 struct BoardView: View { var body: some View { Text("Board") } }
 struct PreviewsView: View { var body: some View { Text("Previews") } }
