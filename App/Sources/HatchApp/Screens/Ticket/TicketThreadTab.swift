@@ -41,9 +41,7 @@ struct TicketThreadTab: View {
     var body: some View {
         VStack(spacing: 0) {
             filterRow
-            Divider()
             timeline
-            Divider()
             composer
         }
         .autoReload(every: 4) { load() }
@@ -51,28 +49,32 @@ struct TicketThreadTab: View {
     }
 
     private var filterRow: some View {
-        HStack(spacing: 16) {
-            Toggle("Messages", isOn: $showMessages)
-            Toggle("Questions", isOn: $showQuestions)
-            Toggle("Events", isOn: $showEvents)
+        HStack(spacing: 6) {
+            ThreadFilterChip(title: "Messages", isOn: $showMessages)
+            ThreadFilterChip(title: "Questions", isOn: $showQuestions)
+            ThreadFilterChip(title: "Events", isOn: $showEvents)
             Spacer()
             Text(Format.count(visible.count, "entry").replacingOccurrences(of: "entrys", with: "entries"))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.tertiary)
         }
-        .toggleStyle(.checkbox)
         .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
     }
 
     private var timeline: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: 14) {
                     if visible.isEmpty {
-                        Text("Nothing here yet. Add a note, ask a question or give an instruction below.")
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 20)
+                        VStack(spacing: 6) {
+                            Image(systemName: "bubble.left.and.bubble.right").font(.title2).foregroundStyle(.tertiary)
+                            Text("Nothing here yet").font(.callout.weight(.semibold))
+                            Text("Add a note, ask a question or give an instruction below.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
                     }
                     ForEach(visible) { item in
                         ThreadRow(item: item)
@@ -80,8 +82,9 @@ struct TicketThreadTab: View {
                     }
                     Color.clear.frame(height: 1).id("end")
                 }
-                .padding(20)
-                .frame(maxWidth: 760, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .frame(maxWidth: 780)
                 .frame(maxWidth: .infinity)
             }
             .onChange(of: visible.count) { _, _ in
@@ -105,43 +108,52 @@ struct TicketThreadTab: View {
 
     private var kindHelp: String {
         switch kind {
-        case .ask: return "Ask expects an answer and moves the turn to the agent."
-        case .instruction: return "Instruction changes the work. On a Proposal it sends it back for a new revision."
-        default: return "Note adds context. Nobody has to act on it."
+        case .ask: return "Expects an answer and moves the turn to the agent."
+        case .instruction: return "Changes the work. On a Proposal it asks for a new revision."
+        default: return "Adds context. Nobody has to act on it."
         }
     }
 
+    private var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// A floating glass composer: kind chips on top, a plain growing text field, and a round send button.
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                Picker("Kind", selection: $kind) {
-                    ForEach(Self.kinds, id: \.self) { k in
-                        Text(kindTitle(k)).tag(k)
-                    }
+            HStack(spacing: 6) {
+                ForEach(Self.kinds, id: \.self) { k in
+                    ThreadKindChip(title: kindTitle(k), selected: kind == k) { kind = k }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 260)
                 Text(kindHelp)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer()
+                    .lineLimit(1)
+                    .padding(.leading, 6)
+                Spacer(minLength: 0)
             }
             HStack(alignment: .bottom, spacing: 10) {
-                TextEditor(text: $draft)
+                TextField("Write a \(kindTitle(kind).lowercased())…", text: $draft, axis: .vertical)
+                    .textFieldStyle(.plain)
                     .font(.body)
-                    .frame(height: 70)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
-                Button { send() } label: { Label("Send \(kindTitle(kind))", systemImage: "paperplane") }
-                    .buttonStyle(.glass)
-                    .controlSize(.large)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .lineLimit(1...8)
+                    .padding(.vertical, 6)
+                Button { send() } label: {
+                    Image(systemName: "arrow.up").font(.system(size: 13, weight: .bold)).foregroundStyle(canSend ? Color.white : Color.secondary)
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
+                .tint(canSend ? .accentColor : .gray)
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(!canSend)
+                .help("Send \(kindTitle(kind)) (\u{2318}\u{21A9})")
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+        .padding(.top, 4)
     }
 
     private func send() {
@@ -189,41 +201,112 @@ struct ThreadRow: View {
     }
 }
 
+/// A rounded toggle for the thread filter: glass when off, tinted when on.
+struct ThreadFilterChip: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Button { isOn.toggle() } label: {
+            Text(title).font(.callout.weight(isOn ? .semibold : .regular)).padding(.horizontal, 6)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(isOn ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08), in: Capsule())
+        .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+        .animation(.easeOut(duration: 0.12), value: isOn)
+    }
+}
+
+struct ThreadKindChip: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title).font(.callout.weight(selected ? .semibold : .regular)).padding(.horizontal, 6)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(selected ? Color.primary.opacity(0.1) : Color.clear, in: Capsule())
+        .foregroundStyle(selected ? Color.primary : Color.secondary)
+        .animation(.easeOut(duration: 0.12), value: selected)
+    }
+}
+
+/// A small round avatar for the author of a thread entry.
+struct ThreadAvatar: View {
+    let fromOwner: Bool
+    var symbol: String? = nil
+
+    var body: some View {
+        Image(systemName: symbol ?? (fromOwner ? "person.fill" : "sparkles"))
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(fromOwner ? Theme.you : Theme.agent)
+            .frame(width: 28, height: 28)
+            .background((fromOwner ? Theme.youBackground : Theme.agentBackground), in: Circle())
+    }
+}
+
+/// One message: an avatar and a soft bubble. Yours sit on the right, the agents' on the left.
+private struct ThreadBubble<Body: View>: View {
+    let fromOwner: Bool
+    let name: String
+    let detail: String?
+    let at: Date?
+    var symbol: String? = nil
+    var tinted = false
+    @ViewBuilder let content: () -> Body
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            if fromOwner { Spacer(minLength: 60) } else { ThreadAvatar(fromOwner: false, symbol: symbol) }
+            VStack(alignment: fromOwner ? .trailing : .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(name).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    if let detail { Text(detail).font(.caption).foregroundStyle(.tertiary) }
+                    if let at { Text(Format.ago(at)).font(.caption).foregroundStyle(.tertiary) }
+                }
+                content()
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(bubbleFill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay {
+                        if tinted { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.agent.opacity(0.25)) }
+                    }
+            }
+            .frame(maxWidth: 560, alignment: fromOwner ? .trailing : .leading)
+            if fromOwner { ThreadAvatar(fromOwner: true) } else { Spacer(minLength: 60) }
+        }
+    }
+
+    private var bubbleFill: AnyShapeStyle {
+        if fromOwner { return AnyShapeStyle(Color.accentColor.opacity(0.14)) }
+        if tinted { return AnyShapeStyle(Theme.agentBackground.opacity(0.7)) }
+        return AnyShapeStyle(Color.secondary.opacity(0.09))
+    }
+}
+
 struct NoteBubble: View {
     let note: Note
 
     private var fromOwner: Bool { note.author == "owner" }
 
-    private var kindLabel: String {
+    private var kindLabel: String? {
         switch note.kind {
         case .ask: return "Ask"
         case .instruction: return "Instruction"
-        case .agent: return "Agent"
+        case .agent: return nil
         case .system: return "System"
         case .comment: return "Comment"
-        case .note: return "Note"
+        case .note: return nil
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text(fromOwner ? "You" : note.author)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(fromOwner ? Theme.you : Theme.agent)
-                PlainChip(text: kindLabel)
-                Spacer()
-                Text(Format.ago(note.at))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            Text(note.body)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+        ThreadBubble(fromOwner: fromOwner, name: fromOwner ? "You" : note.author, detail: kindLabel, at: note.at) {
+            Text(note.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background((fromOwner ? Theme.youBackground : Theme.agentBackground).opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -231,24 +314,10 @@ struct QuestionBubble: View {
     let question: Question
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: "questionmark.bubble").foregroundStyle(Theme.agent)
-                Text("\(question.askedBy) asks")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(Theme.agent)
-                if question.isOpen { PlainChip(text: "Open") }
-                Spacer()
-                Text(Format.ago(question.at))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            Text(question.text)
-                .fixedSize(horizontal: false, vertical: true)
+        ThreadBubble(fromOwner: false, name: "\(question.askedBy) asks", detail: question.isOpen ? "Open" : nil,
+                     at: question.at, symbol: "questionmark", tinted: true) {
+            Text(question.text).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.agentBackground.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -256,49 +325,26 @@ struct AnswerBubble: View {
     let question: Question
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text("You answered")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(Theme.you)
-                Spacer()
-                if let at = question.answeredAt {
-                    Text(Format.ago(at))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            Text(question.answer ?? "")
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+        ThreadBubble(fromOwner: true, name: "You answered", detail: nil, at: question.answeredAt) {
+            Text(question.answer ?? "").textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.youBackground.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
+/// An event is a quiet centred line, not a message.
 struct EventLine: View {
     let event: Event
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: EventText.symbol(event))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-            Text(event.actor)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(EventText.describe(event))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-            Spacer()
-            Text(Format.ago(event.at))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+        HStack(spacing: 6) {
+            Image(systemName: EventText.symbol(event)).font(.caption2)
+            Text(event.actor).font(.caption.weight(.semibold))
+            Text(EventText.describe(event)).font(.caption).lineLimit(1)
+            Text(Format.ago(event.at)).font(.caption).foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 4)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10).padding(.vertical, 4)
+        .background(Color.secondary.opacity(0.07), in: Capsule())
+        .frame(maxWidth: .infinity)
     }
 }

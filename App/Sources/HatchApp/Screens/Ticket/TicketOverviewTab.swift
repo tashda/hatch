@@ -39,7 +39,8 @@ struct TicketOverviewTab: View {
 
     private var mainColumn: some View {
         VStack(alignment: .leading, spacing: 20) {
-            IrisReviewView(ticketId: ticket.id)
+            // In the Desk the Iris inspector already shows this review; showing it twice only adds noise.
+            if split || !state.showAskPanel { IrisReviewView(ticketId: ticket.id) }
             if ticket.type == .theme { themeSection }
             descriptionSection
             attachmentSection
@@ -133,9 +134,7 @@ struct TicketOverviewTab: View {
                 Text("No description.")
                     .foregroundStyle(.secondary)
             } else {
-                Text(ticket.body)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
+                DescriptionBody(text: ticket.body)
             }
             originalDisclosure
         }
@@ -193,13 +192,15 @@ struct TicketOverviewTab: View {
             HStack {
                 Text(attachments.isEmpty ? "Screenshots" : "Screenshots (\(attachments.count))")
                     .font(.headline)
+                if attachments.isEmpty { Text("None").font(.callout).foregroundStyle(.tertiary) }
                 Spacer()
-                Button("Add screenshot…") { addScreenshot() }
-                    .controlSize(.small)
+                Button { addScreenshot() } label: { Label("Add screenshot", systemImage: "plus") }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .help("Add a screenshot")
             }
             if attachments.isEmpty {
-                Text("None yet.")
-                    .foregroundStyle(.secondary)
+                EmptyView()
             } else {
                 FlowLayout(spacing: 8) {
                     ForEach(attachments) { attachment in
@@ -249,9 +250,9 @@ struct TicketOverviewTab: View {
                     .popover(isPresented: $showAddLink, arrowEdge: .bottom) { addLinkPopover }
             }
             if linkEntries.isEmpty {
-                Text("Nothing linked yet.")
+                Text("Nothing linked yet")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
             }
             ForEach(linkEntries) { entry in
                 VStack(alignment: .leading, spacing: 3) {
@@ -330,6 +331,7 @@ struct TicketOverviewTab: View {
     private var detailsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Details").font(.headline)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 16, alignment: .topLeading)], alignment: .leading, spacing: 14) {
             MetaRow(label: "Type") { Text(ticket.type.displayName) }
             MetaRow(label: "Project") { Text(projectLine) }
             if let parentTheme {
@@ -362,6 +364,7 @@ struct TicketOverviewTab: View {
             MetaRow(label: "Cost so far") { Text(costLine) }
             MetaRow(label: "Created") { Text(Format.clock(ticket.createdAt)) }
             MetaRow(label: "Changed") { Text(Format.ago(ticket.updatedAt)) }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -443,6 +446,47 @@ struct MetaRow<Content: View>: View {
                 .foregroundStyle(.secondary)
             content
                 .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+
+/// A description written as "What / Why / Scope / Done when" lines is shown as labelled rows; anything else stays plain text.
+struct DescriptionBody: View {
+    let text: String
+
+    private static let labels = ["What", "Why", "Scope", "Done when"]
+
+    private var rows: [(label: String, text: String)]? {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+        var out: [(String, String)] = []
+        for line in lines {
+            guard let label = Self.labels.first(where: { line.hasPrefix($0 + ":") }) else { return nil }
+            out.append((label, String(line.dropFirst(label.count + 1)).trimmingCharacters(in: .whitespaces)))
+        }
+        return out.isEmpty ? nil : out
+    }
+
+    var body: some View {
+        if let rows {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(row.label.uppercased())
+                            .font(.caption2.weight(.semibold))
+                            .tracking(0.6)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 72, alignment: .leading)
+                        Text(row.text)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        } else {
+            Text(text)
+                .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import HatchCore
 
 enum TicketTab: String, CaseIterable, Identifiable {
@@ -110,29 +111,43 @@ struct TicketDetailView: View {
         }
     }
 
+    /// Open (in the Desk only) and one round "…" glass menu: everything else about the ticket lives in the menu,
+    /// with Drop last, set apart and confirmed (LK11).
     @ViewBuilder private func headerButtons(_ t: Ticket) -> some View {
         HStack(spacing: 8) {
             if embedded {
                 // In the Desk the ticket opens to its own page from here; Park lives in the inspector.
-                Button { state.open(t) } label: { Label("Open", systemImage: "arrow.up.forward") }.buttonStyle(.glassProminent)
+                Button { state.open(t) } label: { Label("Open", systemImage: "arrow.up.forward") }
+                    .buttonStyle(.glassProminent)
+                    .controlSize(.large)
             }
-            // Parked and Dropped already offer Resume and Reopen as the banner's main action (F2), so the header does not repeat them.
-            if t.status == .blocked {
-                Button { resume() } label: { Label("Resume", systemImage: "play") }.buttonStyle(.glass)
-            } else if !embedded && canMove(t, to: .parked) {
-                Button { move(to: .parked) } label: { Label("Park", systemImage: "pause") }.buttonStyle(.glass)
-            }
-            if t.status == .done {
-                Button { move(to: .draft) } label: { Label("Reopen", systemImage: "arrow.uturn.backward") }.buttonStyle(.glass)
-            }
-            if canMove(t, to: .dropped) {
-                // Rare and hard to undo: behind More, then a confirmation (LK11).
-                HXMenuButton(title: "More", symbol: "ellipsis") {
-                    Button("Drop", role: .destructive) { confirmDrop = true }
+            Menu {
+                if t.status == .blocked {
+                    Button { resume() } label: { Label("Resume", systemImage: "play") }
+                } else if !embedded && canMove(t, to: .parked) {
+                    Button { move(to: .parked) } label: { Label("Park", systemImage: "pause") }
                 }
+                if t.status == .done {
+                    Button { move(to: .draft) } label: { Label("Reopen", systemImage: "arrow.uturn.backward") }
+                }
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("\(t.displayNumber) \(t.title)", forType: .string)
+                } label: { Label("Copy Number and Title", systemImage: "doc.on.doc") }
+                if canMove(t, to: .dropped) {
+                    Divider()
+                    Button(role: .destructive) { confirmDrop = true } label: { Label("Drop Ticket…", systemImage: "trash") }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
             }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
+            .help("More actions")
         }
-        .controlSize(.large)
     }
 
     private func canMove(_ t: Ticket, to target: Status) -> Bool {
