@@ -179,7 +179,7 @@ public final class StageModel: ObservableObject {
         let all = columns
         switch state.mode {
         case .side:
-            if StageColumns.usesFilmstrip(columnCount: all.count) {
+            if StageColumns.usesFilmstrip(columns: all) {
                 var out: [StageColumn] = []
                 if let t = all.first(where: { $0.isToday }) { out.append(t) }
                 if let s = selectedColumn { out.append(s) }

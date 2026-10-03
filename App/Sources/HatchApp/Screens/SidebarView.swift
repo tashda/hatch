@@ -120,12 +120,14 @@ struct SidebarFooter: View {
     private var summary: AppState.SyncSummary { state.syncSummary }
 
     private var text: String {
+        if let message = summary.message, !message.isEmpty { return message }
         if summary.failed > 0 {
             return "\(summary.failed) failed to sync · \(summary.pending) pending"
         }
         if summary.pending > 0 {
-            return "Synced with GitHub · \(summary.pending) pending"
+            return "Syncing with GitHub · \(summary.pending) pending"
         }
+        if summary.lastOK == nil { return "Not synced yet" }
         return "Synced with GitHub"
     }
 
@@ -136,14 +138,14 @@ struct SidebarFooter: View {
                 state.route = .log
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: summary.failed > 0 ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath")
+                    Image(systemName: (summary.failed > 0 || summary.message != nil) ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath")
                         .font(.caption)
                     Text(text)
                         .font(.caption)
                         .lineLimit(1)
                     Spacer()
                 }
-                .foregroundStyle(summary.failed > 0 ? Theme.critical : Color.secondary)
+                .foregroundStyle((summary.failed > 0 || summary.message != nil) ? Theme.critical : Color.secondary)
             }
             .buttonStyle(.plain)
             .help("Open the Log")
