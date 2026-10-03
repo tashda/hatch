@@ -490,7 +490,15 @@ struct DeskRow: View {
             // One fixed slot: the time, or the Accept button on the selected row. Same size either way.
             ZStack(alignment: .trailing) {
                 if let onAccept {
-                    GlassCheckButton(action: onAccept)
+                    // The system's round glass button, as in a toolbar: black icon, native hover and press.
+                    Button(action: onAccept) {
+                        Image(systemName: "checkmark").foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .help("Accept Hatch's recommendation (A)")
+                    .accessibilityLabel("Accept")
                 } else {
                     Text(Format.relative(ticket.updatedAt))
                         .font(.caption)
@@ -572,33 +580,5 @@ struct AcceptPlanSheet: View {
         case .answers:
             return "These suggested answers are sent as your answers. Questions without a suggestion stay open."
         }
-    }
-}
-
-/// A round glass button with a checkmark: neutral colour, and it lifts, brightens and gains a shadow under the pointer.
-struct GlassCheckButton: View {
-    let action: () -> Void
-    @State private var hovering = false
-    @State private var pressed = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(hovering ? Color.primary : Color.primary.opacity(0.72))
-                .frame(width: 32, height: 32)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
-        .overlay(Circle().strokeBorder(Color.white.opacity(hovering ? 0.55 : 0.25), lineWidth: 0.8))
-        .shadow(color: .black.opacity(hovering ? 0.22 : 0.08), radius: hovering ? 7 : 2, y: hovering ? 3 : 1)
-        .scaleEffect(pressed ? 0.94 : (hovering ? 1.08 : 1))
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: hovering)
-        .animation(.easeOut(duration: 0.08), value: pressed)
-        .onHover { hovering = $0 }
-        .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in pressed = true }.onEnded { _ in pressed = false })
-        .help("Accept Hatch's recommendation (A)")
-        .accessibilityLabel("Accept")
     }
 }
