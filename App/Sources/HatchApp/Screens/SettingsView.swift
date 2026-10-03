@@ -7,25 +7,24 @@ import HatchSync
 struct SettingsView: View {
     @EnvironmentObject var state: AppState
     @State private var selection: SettingsPage? = .workspace
+    @State private var searchText = ""
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
-                Section("Workspace") {
-                    settingsLink(.workspace)
+            VStack(spacing: 0) {
+                TextField("Search Settings", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
+                List(selection: $selection) {
+                    if matches(.workspace) { settingsLink(.workspace) }
+                    if matches(.github) { settingsLink(.github) }
+                    if matches(.agents) { settingsLink(.agents) }
+                    if matches(.apps) { settingsLink(.apps) }
                 }
-                Section("Services") {
-                    settingsLink(.github)
-                }
-                Section("Automation") {
-                    settingsLink(.agents)
-                }
-                Section("Applications") {
-                    settingsLink(.apps)
-                }
+                .listStyle(.sidebar)
             }
-            .listStyle(.sidebar)
-            .navigationTitle("Settings")
             .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
         } detail: {
             Group {
@@ -46,6 +45,10 @@ struct SettingsView: View {
         NavigationLink(value: page) {
             Label(page.title, systemImage: page.symbol)
         }
+    }
+
+    private func matches(_ page: SettingsPage) -> Bool {
+        searchText.isEmpty || page.title.localizedCaseInsensitiveContains(searchText)
     }
 }
 
@@ -70,8 +73,8 @@ private enum SettingsPage: Hashable {
 }
 
 private struct SettingsPageForm<Content: View>: View {
-    let title: String
-    let subtitle: String
+    let section: String
+    let footer: String?
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -79,16 +82,13 @@ private struct SettingsPageForm<Content: View>: View {
             Section {
                 content
             } header: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.title2.weight(.semibold))
-                    Text(subtitle).font(.callout).foregroundStyle(.secondary)
-                }
-                .padding(.bottom, 6)
+                Text(section)
+            } footer: {
+                if let footer { Text(footer) }
             }
         }
         .formStyle(.grouped)
-        .padding(.horizontal, 22)
-        .padding(.top, 12)
+        .scrollContentBackground(.hidden)
     }
 }
 
@@ -99,7 +99,7 @@ private struct AgentSettingsPage: View {
     @State private var loaded = false
 
     var body: some View {
-        SettingsPageForm(title: "Agents", subtitle: "Choose how Hatch runs local agent work.") {
+        SettingsPageForm(section: "Agent work", footer: "Choose how Hatch runs local agent work.") {
             Stepper(value: $maxAgents, in: 1...12) { Text("Max agents at once: \(maxAgents)") }
                 .onChange(of: maxAgents) { _, newValue in
                     if loaded { state.hxSaveSetting("max_agents", String(newValue)) }
@@ -107,7 +107,6 @@ private struct AgentSettingsPage: View {
             LabeledContent("Claude CLI", value: claudeStatus)
             HXPathRow(title: "Claude CLI path", key: "claude_path", placeholder: "Found automatically", chooseApp: false)
         }
-        .navigationTitle("Agents")
         .onAppear(perform: load)
     }
 
@@ -123,81 +122,178 @@ private struct AgentSettingsPage: View {
 }
 
 private struct GitHubSettingsPage: View {
+    @EnvironmentObject private var state: AppState
     @StateObject private var account = GitHubAccountModel()
     @StateObject private var deviceFlow = GitHubDeviceFlow()
+    @State private var selectedProjectForRepositories: Project?
 
     var body: some View {
-        SettingsPageForm(title: "GitHub", subtitle: "Connect Hatch to a private tickets repository.") {
-            LabeledContent("Account") { Text(accountLine).textSelection(.enabled) }
-            if let error = account.error { Text(error).font(.callout).foregroundStyle(Theme.critical) }
-            Button { deviceFlow.start { _ in account.refresh() } } label: {
-                Label(deviceFlow.busy ? "Waiting for GitHub…" : (account.user == nil ? "Connect with GitHub" : "Reconnect with GitHub"), systemImage: "person.crop.circle.badge.checkmark")
-            }
-            .buttonStyle(.glassProminent)
-            .disabled(deviceFlow.busy)
-            .controlSize(.large)
-            if let code = deviceFlow.userCode {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Enter this one-time code on GitHub").font(.callout)
+        Form {
+            Section {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(accountTitle)
+                            .font(.body.weight(.medium))
+                        Text(accountDetail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 12)
+                    Button {
+                        deviceFlow.start { _ in account.refresh() }
+                    } label: {
+                        Text(deviceFlow.busy ? "Waiting for GitHub…" : (account.user == nil ? "Connect with GitHub" : "Reconnect"))
+                    }
+                    .buttonStyle(.glassProminent)
+                    .disabled(deviceFlow.busy)
+                    if account.user != nil {
+                        Button { account.refresh() } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Refresh GitHub account")
+                    }
+                }
+                .padding(.vertical, 4)
+
+                if let error = account.error { Text(error).font(.callout).foregroundStyle(Theme.critical) }
+                if let code = deviceFlow.userCode {
                     HStack {
-                        Text(code).font(.title2.monospaced().weight(.semibold)).textSelection(.enabled)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Enter this code on GitHub").font(.callout)
+                            Text(code).font(.title3.monospaced().weight(.semibold)).textSelection(.enabled)
+                        }
                         Spacer()
                         if let url = deviceFlow.verificationURL {
-                            Button("Open GitHub") { NSWorkspace.shared.open(url) }.buttonStyle(.glass)
+                            Button("Open GitHub") { NSWorkspace.shared.open(url) }
                         }
                     }
                 }
-            }
-            if let message = deviceFlow.message { Text(message).font(.callout).foregroundStyle(.secondary) }
-            if let error = deviceFlow.error { Text(error).font(.callout).foregroundStyle(Theme.critical) }
-            HStack {
-                if deviceFlow.busy { Button("Cancel") { deviceFlow.cancel() }.buttonStyle(.glass) }
-                Spacer()
-                if account.source == .stored {
-                    Button { account.signOut() } label: { Label("Disconnect", systemImage: "xmark") }.buttonStyle(.glass)
+                if let message = deviceFlow.message { Text(message).font(.callout).foregroundStyle(.secondary) }
+                if let error = deviceFlow.error { Text(error).font(.callout).foregroundStyle(Theme.critical) }
+                if deviceFlow.busy || account.source == .stored {
+                    HStack {
+                        Spacer()
+                        if deviceFlow.busy { Button("Cancel") { deviceFlow.cancel() } }
+                        if account.source == .stored { Button("Disconnect") { account.signOut() } }
+                    }
                 }
-                Button { account.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }.buttonStyle(.glass)
+            } header: {
+                Text("GitHub account")
+            } footer: {
+                Text("Authorization is stored in the macOS Keychain. Hatch can access repositories where its GitHub App is installed.")
             }
-            Text("Approve Hatch in your browser. The authorization is stored in the macOS Keychain. Hatch requests access only to repositories where its GitHub App is installed. Tickets repositories must be private.")
-                .font(.caption).foregroundStyle(.secondary)
+
+            if state.projects.isEmpty {
+                Section("Project repositories") {
+                    Text("No projects yet. Add a project to choose its repositories.")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ForEach(orderedProjects) { project in
+                    Section {
+                        repositoryRow("Tickets", detail: "Issues and attachments", remote: repository(project, role: .tickets))
+                        repositoryRow("Project", detail: "App source and Specs", remote: repository(project, role: .app))
+                        repositoryRow("Design", detail: "Design system", remote: repository(project, role: .designSystem))
+                        HStack {
+                            Spacer()
+                            Button("Choose repositories…") { selectedProjectForRepositories = project }
+                        }
+                    } header: {
+                        Text("\(project.name) repositories")
+                    } footer: {
+                        Text("These are the repositories selected in Hatch for \(project.name). Tickets repositories must be private.")
+                    }
+                }
+            }
         }
-        .navigationTitle("GitHub")
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .onAppear { if !Snapshots.demoMode { account.refresh() } }
+        .sheet(item: $selectedProjectForRepositories) { project in
+            HXRepositorySelectionSheet(account: account, projectName: project.name,
+                                       initial: selectedRepositoryNames(for: project),
+                                       ticketsLocked: state.hasTickets(projectId: project.id)) { assignments in
+                state.saveRepositoryAssignments(projectId: project.id, assignments)
+            }
+        }
     }
 
-    private var accountLine: String {
-        if account.busy && account.user == nil { return "Checking…" }
-        guard let user = account.user else { return account.source == .none ? "Not connected" : "Authorization not accepted" }
-        let source: String
+    private var accountTitle: String {
+        guard let user = account.user else { return "Not connected" }
+        return "Connected as @\(user.login)"
+    }
+
+    private var accountDetail: String {
+        if account.busy && account.user == nil { return "Checking authorization…" }
+        guard account.user != nil else { return "Connect to choose repositories from GitHub and sync tickets." }
         switch account.source {
-        case .stored: source = "Connected securely in Keychain"
-        case .environment: source = "GITHUB_TOKEN environment variable"
-        case .ghTool: source = "GitHub CLI"
-        case .none: source = ""
+        case .stored: return "Authorization saved in Keychain"
+        case .environment: return "Using GITHUB_TOKEN"
+        case .ghTool: return "Using GitHub CLI"
+        case .none: return ""
         }
-        return "@\(user.login) · \(source)"
+    }
+
+    private var orderedProjects: [Project] {
+        state.projects.sorted { lhs, rhs in
+            if lhs.key == state.selectedProjectKey { return true }
+            if rhs.key == state.selectedProjectKey { return false }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    private func repository(_ project: Project, role: RepoRole) -> String? {
+        let remote: String?
+        if let config = project.config {
+            remote = role == .tickets ? config.ticketsRepo : config.repo(role)?.remote
+        } else {
+            remote = (try? state.store.repo(projectId: project.id, role: role))?.remote
+        }
+        let trimmed = remote?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    private func selectedRepositoryNames(for project: Project) -> [RepoRole: String] {
+        var names: [RepoRole: String] = [:]
+        for role in [RepoRole.tickets, .app, .designSystem] {
+            if let remote = repository(project, role: role) { names[role] = remote }
+        }
+        return names
+    }
+
+    private func repositoryRow(_ title: String, detail: String, remote: String?) -> some View {
+        LabeledContent {
+            Text(remote ?? "Not selected")
+                .foregroundStyle(remote == nil ? .secondary : .primary)
+                .textSelection(.enabled)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).foregroundStyle(.primary)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 
 private struct AppPathSettingsPage: View {
     var body: some View {
-        SettingsPageForm(title: "Apps", subtitle: "Choose the applications Hatch opens for project work.") {
+        SettingsPageForm(section: "Applications", footer: "Choose the applications Hatch opens for project work.") {
             HXPathRow(title: "Preview app copy", key: "preview_app_path", placeholder: "Path to Echo (Preview).app", chooseApp: true)
             HXPathRow(title: "Hatch Stage", key: "stage_executable", placeholder: "Path to the Stage executable", chooseApp: false)
             HXPathRow(title: "Spec app", key: "spec_app_path", placeholder: "Optional: the project's Spec app", chooseApp: true)
         }
-        .navigationTitle("Apps")
     }
 }
 
 private struct FileSettingsPage: View {
     @EnvironmentObject var state: AppState
     var body: some View {
-        SettingsPageForm(title: "Local data", subtitle: "Hatch's database and working files stay on this Mac.") {
+        SettingsPageForm(section: "Local data", footer: "Hatch's database and working files stay on this Mac.") {
             LabeledContent("Hatch home") { Text(state.paths.root.path).textSelection(.enabled) }
             LabeledContent("Database") { Text(state.paths.database.path).textSelection(.enabled) }
         }
-        .navigationTitle("Local data")
     }
 }
 

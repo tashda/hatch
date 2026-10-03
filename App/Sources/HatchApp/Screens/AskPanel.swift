@@ -5,6 +5,8 @@ import HatchCore
 /// The exchange is also saved to the ticket thread. Claude runs in a background Task, never on the main thread.
 struct AskPanel: View {
     @EnvironmentObject var state: AppState
+    /// Inside the Iris panel: no header, no suggested questions, no extra padding.
+    var embedded = false
 
     struct Message: Identifiable {
         let id = UUID()
@@ -24,17 +26,21 @@ struct AskPanel: View {
             let t: Ticket? = try? state.store.ticket(id: id)
             return t
         }
+        if state.route == .desk {
+            let t: Ticket? = try? state.store.ticket(id: id)
+            return t
+        }
         return nil
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
+        VStack(spacing: 12) {
+            if !embedded { header }
             conversation
-            Divider()
             composer
         }
+        .padding(embedded ? 0 : 12)
+        .background(embedded ? Color.clear : Color.secondary.opacity(0.045))
         .onChange(of: currentTicket?.id) { _, newValue in
             if newValue != messagesTicketId {
                 messages = []
@@ -47,14 +53,18 @@ struct AskPanel: View {
     // MARK: Parts
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Image(systemName: "sparkles")
-            VStack(alignment: .leading, spacing: 1) {
+                .font(.headline)
+                .foregroundStyle(Theme.agent)
+                .frame(width: 34, height: 34)
+                .background(Theme.agentBackground, in: RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Ask Hatch").font(.headline)
                 if let t = currentTicket {
-                    Text("About \(t.displayNumber) \(t.title)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text("With \(t.displayNumber) · \(t.title)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 } else {
-                    Text("No ticket open. Answers are not saved.").font(.caption).foregroundStyle(.secondary)
+                    Text("An agent beside your work").font(.caption).foregroundStyle(.secondary)
                 }
             }
             Spacer()
@@ -62,35 +72,79 @@ struct AskPanel: View {
                 .buttonStyle(.borderless)
                 .help("Close (\u{2325}\u{2318}A)")
         }
-        .padding(10)
     }
 
     private var conversation: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                if messages.isEmpty && !running && errorText == nil {
-                    Text("Ask about this ticket, its options, or what to do next.")
-                        .font(.callout).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 14) {
+                if messages.isEmpty && !running && errorText == nil && !embedded {
+                    emptyState
                 }
                 ForEach(messages) { m in bubble(m) }
                 if running {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text("Claude is thinking...").font(.callout).foregroundStyle(.secondary)
+                        Text("Hatch is thinking…").font(.callout).foregroundStyle(.secondary)
                     }
                 }
                 if let e = errorText { errorView(e) }
             }
-            .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(currentTicket == nil ? "Ready when you are" : "Ask about this ticket")
+                .font(.headline)
+            Text(currentTicket == nil
+                 ? "Ask what to work on next, or open a ticket to give Hatch its context. Questions without a ticket are not saved."
+                 : "Explore an option, clarify a decision, or ask what should happen next. This exchange is saved to the ticket thread.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider().padding(.vertical, 3)
+            Text("Suggested questions")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(suggestedQuestions, id: \.self) { question in
+                Button {
+                    input = question
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(question)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "arrow.up.left")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator.opacity(0.35)))
+    }
+
+    private var suggestedQuestions: [String] {
+        currentTicket == nil
+            ? ["What needs my attention?", "What are agents working on?"]
+            : ["What should I do next?", "What decisions are still open?"]
+    }
+
     private func bubble(_ m: Message) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(m.fromOwner ? "You" : "Claude").font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(m.fromOwner ? "You" : "Hatch")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(m.fromOwner ? Color.secondary : Theme.agent)
             Text(m.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(m.fromOwner ? Color.secondary.opacity(0.08) : Theme.agentBackground,
+                    in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func errorView(_ text: String) -> some View {
@@ -102,15 +156,17 @@ struct AskPanel: View {
 
     private var composer: some View {
         VStack(alignment: .trailing, spacing: 6) {
-            TextField("Ask a question", text: $input, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
+            TextField("Ask Hatch a question", text: $input, axis: .vertical)
+                .textFieldStyle(.plain)
                 .lineLimit(1...6)
                 .onSubmit { send() }
             Button { send() } label: { Label(running ? "Waiting..." : "Send", systemImage: "paperplane") }
                 .buttonStyle(.glassProminent)
                 .disabled(running || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .padding(10)
+        .padding(12)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator.opacity(0.5)))
     }
 
     // MARK: Sending

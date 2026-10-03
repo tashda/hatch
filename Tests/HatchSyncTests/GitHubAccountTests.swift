@@ -26,6 +26,17 @@ final class GitHubAccountTests: XCTestCase {
         XCTAssertTrue(transport.requests[0].url.absoluteString.contains("per_page=100"))
     }
 
+    func testListRepositoriesIncludesLaterPages() throws {
+        let firstPage = (0..<100).map { #"{"full_name":"ada/repo\#($0)","private":true}"# }.joined(separator: ",")
+        transport.responses = [json("[\(firstPage)]"), json(#"[{"full_name":"ada/last","private":true}]"#)]
+
+        let repos = try client.listRepositories()
+
+        XCTAssertEqual(repos.count, 101)
+        XCTAssertEqual(repos.last?.fullName, "ada/last")
+        XCTAssertTrue(transport.requests[1].url.absoluteString.contains("page=2"))
+    }
+
     func testMissingRepositoryIsNil() throws {
         transport.responses = [json(#"{"message":"Not Found"}"#, status: 404)]
         XCTAssertNil(try client.repository("ada/none"))

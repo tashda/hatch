@@ -23,12 +23,34 @@ public final class HatchStore: @unchecked Sendable {
         let json = try config.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) } ?? "{}"
         try db.transaction {
             if let existing = try project(key: key) {
+                if let config, let prior = existing.config,
+                   prior.ticketsRepo != config.ticketsRepo {
+                    let hasTickets = try !db.query("SELECT 1 FROM ticket WHERE project_id = ? LIMIT 1", [.int(existing.id)]) { _ in true }.isEmpty
+                    if hasTickets {
+                        throw StoreError.invalid("Tickets repository cannot change after this project has tickets.")
+                    }
+                }
                 try db.execute("UPDATE project SET name = ?, config_json = ? WHERE id = ?", [.text(name), .text(config == nil ? (try configJSON(existing.id)) : json), .int(existing.id)])
             } else {
                 try db.execute("INSERT INTO project(key, name, config_json, created_at) VALUES(?,?,?,?)",
                                [.text(key), .text(name), .text(json), .date(now())])
             }
             if let config, let p = try project(key: key) {
+                let selectedRoles = Set(config.repos.map(\.role))
+                for existing in try repos(projectId: p.id) {
+                    let replacement = config.repos.first { $0.role == existing.role }
+                    let changed = replacement == nil || replacement?.remote != existing.remote
+                    if changed {
+                        let hasWorkspace = try !db.query("SELECT 1 FROM workspace WHERE repo_id = ? LIMIT 1", [.int(existing.id)]) { _ in true }.isEmpty
+                        let hasClaim = try !db.query("SELECT 1 FROM claim WHERE repo_id = ? LIMIT 1", [.int(existing.id)]) { _ in true }.isEmpty
+                        if hasWorkspace || hasClaim {
+                            throw StoreError.invalid("\(existing.role.rawValue) repository has existing work and cannot be changed yet.")
+                        }
+                    }
+                    if !selectedRoles.contains(existing.role) {
+                        try db.execute("DELETE FROM repo WHERE id = ?", [.int(existing.id)])
+                    }
+                }
                 for r in config.repos { try upsertRepo(projectId: p.id, repo: r) }
             }
         }
@@ -49,6 +71,10 @@ public final class HatchStore: @unchecked Sendable {
 
     public func projects() throws -> [Project] {
         try db.query("SELECT * FROM project ORDER BY name", map: Self.project)
+    }
+
+    public func hasTickets(projectId: Int) throws -> Bool {
+        try !db.query("SELECT 1 FROM ticket WHERE project_id = ? LIMIT 1", [.int(projectId)]) { _ in true }.isEmpty
     }
 
     private static func project(_ r: Row) throws -> Project {

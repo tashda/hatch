@@ -1,0 +1,179 @@
+<div id="hatch-native-repo-sheet" class="viz-dotted-background">
+  <style>
+    #hatch-native-repo-sheet { color-scheme: light dark; padding: 18px 0 28px; }
+    #hatch-native-repo-sheet * { box-sizing: border-box; }
+    #hatch-native-repo-sheet .sheet {
+      --background: light-dark(#fafafa, #242427);
+      --group: light-dark(#f1f1f3, #303034);
+      --hover: light-dark(#e8e8eb, #3b3b40);
+      --text: light-dark(#242427, #f4f4f6);
+      --secondary: light-dark(#717178, #aaaab2);
+      --line: light-dark(#dfe0e4, #49494e);
+      --accent: light-dark(#086bd9, #70aeff);
+      --accent-fill: light-dark(#eaf2ff, #294261);
+      width: min(100%, 690px);
+      margin: 0 auto;
+      border-radius: 18px;
+      overflow: visible;
+      border: 1px solid var(--line);
+      background: var(--background);
+      color: var(--text);
+      box-shadow: 0 22px 50px light-dark(#1b1c2630, #0009);
+      font: 14px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    }
+    #hatch-native-repo-sheet .header { display: flex; align-items: center; gap: 14px; padding: 26px 30px 21px; }
+    #hatch-native-repo-sheet .github-mark { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 13px; background: var(--text); color: var(--background); }
+    #hatch-native-repo-sheet .github-mark svg { width: 27px; height: 27px; fill: currentColor; }
+    #hatch-native-repo-sheet h2 { margin: 0 0 3px; font-size: 20px; letter-spacing: -.35px; font-weight: 650; }
+    #hatch-native-repo-sheet .subtitle { margin: 0; color: var(--secondary); font-size: 13px; }
+    #hatch-native-repo-sheet .connected { margin-left: auto; flex: none; display: flex; align-items: center; gap: 7px; color: var(--secondary); font-size: 12px; white-space: nowrap; }
+    #hatch-native-repo-sheet .connected-dot { width: 7px; height: 7px; border-radius: 50%; background: light-dark(#26b961, #39d276); }
+    #hatch-native-repo-sheet .content { padding: 5px 30px 25px; }
+    #hatch-native-repo-sheet .section-title { font-size: 13px; font-weight: 650; margin: 0 0 10px 2px; }
+    #hatch-native-repo-sheet .group { border-radius: 12px; background: var(--group); overflow: visible; }
+    #hatch-native-repo-sheet .row { position: relative; display: flex; align-items: center; gap: 16px; min-height: 78px; padding: 13px 16px; }
+    #hatch-native-repo-sheet .row + .row::before { content: ""; position: absolute; left: 16px; right: 16px; top: 0; height: 1px; background: var(--line); }
+    #hatch-native-repo-sheet .row-icon { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: light-dark(#fff, #46464c); color: var(--accent); font-size: 18px; }
+    #hatch-native-repo-sheet .row-copy { flex: 1; min-width: 0; }
+    #hatch-native-repo-sheet .row-copy strong { display: block; font-weight: 600; }
+    #hatch-native-repo-sheet .row-copy small { display: block; color: var(--secondary); font-size: 12px; margin-top: 2px; }
+    #hatch-native-repo-sheet .picker { flex: none; min-width: 218px; max-width: 265px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 11px; border-radius: 8px; border: 1px solid var(--line); background: light-dark(#fff, #3b3b40); color: var(--text); font: inherit; cursor: pointer; text-align: left; box-shadow: 0 1px 1px light-dark(#0000000b, #0000); }
+    #hatch-native-repo-sheet .picker:hover, #hatch-native-repo-sheet .picker[aria-expanded="true"] { background: var(--hover); }
+    #hatch-native-repo-sheet .picker .value { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #hatch-native-repo-sheet .chevron { flex: none; font-size: 12px; color: var(--secondary); }
+    #hatch-native-repo-sheet .hint { color: var(--secondary); font-size: 12px; margin: 12px 2px 0; }
+    #hatch-native-repo-sheet .footer { display: flex; align-items: center; gap: 10px; padding: 16px 30px 20px; border-top: 1px solid var(--line); }
+    #hatch-native-repo-sheet .footer-copy { color: var(--secondary); font-size: 12px; margin-right: auto; max-width: 280px; }
+    #hatch-native-repo-sheet .action { border: 1px solid var(--line); border-radius: 8px; padding: 7px 16px; background: var(--group); color: var(--text); font: inherit; font-weight: 550; cursor: pointer; white-space: nowrap; }
+    #hatch-native-repo-sheet .action:hover { background: var(--hover); }
+    #hatch-native-repo-sheet .action.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    #hatch-native-repo-sheet .popover { position: absolute; z-index: 5; top: 64px; right: 16px; width: min(390px, calc(100vw - 36px)); padding: 11px; border-radius: 13px; border: 1px solid var(--line); background: light-dark(#fff, #333337); box-shadow: 0 17px 42px light-dark(#1f203545, #000b); }
+    #hatch-native-repo-sheet .popover[hidden] { display: none; }
+    #hatch-native-repo-sheet .popover-title { font-size: 12px; color: var(--secondary); font-weight: 600; margin: 3px 4px 9px; }
+    #hatch-native-repo-sheet .search { width: 100%; border-radius: 8px; border: 1px solid var(--line); background: var(--group); color: var(--text); padding: 8px 10px; font: inherit; }
+    #hatch-native-repo-sheet .search::placeholder { color: var(--secondary); }
+    #hatch-native-repo-sheet .repo-list { margin-top: 7px; max-height: 225px; overflow-y: auto; }
+    #hatch-native-repo-sheet .repo-option { width: 100%; display: flex; align-items: center; gap: 11px; border: 0; border-radius: 8px; padding: 9px 8px; text-align: left; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+    #hatch-native-repo-sheet .repo-option:hover:not(:disabled), #hatch-native-repo-sheet .repo-option.is-selected { background: var(--accent-fill); }
+    #hatch-native-repo-sheet .repo-option:disabled { opacity: .46; cursor: not-allowed; }
+    #hatch-native-repo-sheet .repo-icon { width: 23px; flex: none; text-align: center; color: var(--secondary); font-size: 17px; }
+    #hatch-native-repo-sheet .repo-label { flex: 1; min-width: 0; }
+    #hatch-native-repo-sheet .repo-label b { display: block; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #hatch-native-repo-sheet .repo-label small { display: block; color: var(--secondary); font-size: 12px; margin-top: 1px; }
+    #hatch-native-repo-sheet .check { width: 17px; color: var(--accent); font-weight: 700; }
+    #hatch-native-repo-sheet .popover-foot { border-top: 1px solid var(--line); margin-top: 8px; padding: 10px 5px 2px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    #hatch-native-repo-sheet .popover-foot span { color: var(--secondary); font-size: 11px; }
+    #hatch-native-repo-sheet .refresh { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
+    #hatch-native-repo-sheet button:focus-visible, #hatch-native-repo-sheet input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (max-width: 620px) {
+      #hatch-native-repo-sheet .header { flex-wrap: wrap; padding: 20px; }
+      #hatch-native-repo-sheet .connected { margin-left: 60px; width: calc(100% - 60px); }
+      #hatch-native-repo-sheet .content { padding: 4px 18px 20px; }
+      #hatch-native-repo-sheet .row { flex-wrap: wrap; gap: 9px; }
+      #hatch-native-repo-sheet .row-copy { flex-basis: calc(100% - 52px); }
+      #hatch-native-repo-sheet .picker { margin-left: 43px; min-width: 0; max-width: none; width: calc(100% - 43px); }
+      #hatch-native-repo-sheet .popover { top: 103px; right: 7px; width: calc(100% - 14px); }
+      #hatch-native-repo-sheet .footer { flex-wrap: wrap; padding: 16px 18px 20px; }
+      #hatch-native-repo-sheet .footer-copy { flex-basis: 100%; max-width: none; }
+    }
+  </style>
+  <div class="sheet">
+    <header class="header">
+      <div class="github-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 .3a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.05c-3.34.73-4.04-1.41-4.04-1.41-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.21.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.1-.77.42-1.3.76-1.6-2.66-.31-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23A11.5 11.5 0 0 1 12 6.32a11.5 11.5 0 0 1 3 .4c2.3-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.28c0 .32.22.7.83.58A12 12 0 0 0 12 .3Z"/></svg></div>
+      <div><h2>Choose GitHub repositories</h2><p class="subtitle">Select where Acme keeps its work.</p></div>
+      <div class="connected"><span class="connected-dot"></span> Connected as @karen</div>
+    </header>
+    <main class="content">
+      <div class="section-title">Repository assignments</div>
+      <div class="group">
+        <div class="row" data-role="tickets">
+          <div class="row-icon" aria-hidden="true">◫</div>
+          <div class="row-copy"><strong>Tickets</strong><small>Issues and attachments · private only</small></div>
+          <button type="button" class="picker" aria-label="Choose tickets repository" aria-expanded="false"><span class="value">acme/hatch-tickets</span><span class="chevron">⌄</span></button>
+          <div class="popover" hidden><div class="popover-title">Choose tickets repository</div><input class="search" type="search" aria-label="Filter available repositories" placeholder="Filter repositories" /><div class="repo-list" role="listbox" aria-label="Available repositories"></div><div class="popover-foot"><span>Only available repositories are listed</span><button class="refresh" type="button">Refresh list</button></div></div>
+        </div>
+        <div class="row" data-role="project">
+          <div class="row-icon" aria-hidden="true">⌘</div>
+          <div class="row-copy"><strong>Project</strong><small>App source and Specs</small></div>
+          <button type="button" class="picker" aria-label="Choose project repository" aria-expanded="false"><span class="value">acme/app</span><span class="chevron">⌄</span></button>
+          <div class="popover" hidden><div class="popover-title">Choose project repository</div><input class="search" type="search" aria-label="Filter available repositories" placeholder="Filter repositories" /><div class="repo-list" role="listbox" aria-label="Available repositories"></div><div class="popover-foot"><span>Only available repositories are listed</span><button class="refresh" type="button">Refresh list</button></div></div>
+        </div>
+        <div class="row" data-role="design">
+          <div class="row-icon" aria-hidden="true">◈</div>
+          <div class="row-copy"><strong>Design</strong><small>Design system assets</small></div>
+          <button type="button" class="picker" aria-label="Choose design repository" aria-expanded="false"><span class="value">acme/design-system</span><span class="chevron">⌄</span></button>
+          <div class="popover" hidden><div class="popover-title">Choose design repository</div><input class="search" type="search" aria-label="Filter available repositories" placeholder="Filter repositories" /><div class="repo-list" role="listbox" aria-label="Available repositories"></div><div class="popover-foot"><span>Only available repositories are listed</span><button class="refresh" type="button">Refresh list</button></div></div>
+        </div>
+      </div>
+      <p class="hint">Hatch shows repositories granted to this GitHub account. Search filters the list; repository names cannot be typed here.</p>
+    </main>
+    <footer class="footer"><span class="footer-copy">Your choices can be changed later in Project settings.</span><button type="button" class="action">Cancel</button><button type="button" class="action primary">Save repositories</button></footer>
+  </div>
+  <script>
+    (() => {
+      const root = document.getElementById('hatch-native-repo-sheet');
+      const repos = [
+        { name: 'acme/hatch-tickets', detail: 'Private · Issues enabled', private: true },
+        { name: 'acme/app', detail: 'Private · main branch', private: true },
+        { name: 'acme/design-system', detail: 'Private · main branch', private: true },
+        { name: 'acme/public-site', detail: 'Public · unavailable for Tickets', private: false }
+      ];
+      let openRow = null;
+      function closeAll() {
+        root.querySelectorAll('.row').forEach(row => {
+          row.querySelector('.popover').hidden = true;
+          row.querySelector('.picker').setAttribute('aria-expanded', 'false');
+        });
+        openRow = null;
+      }
+      function render(row) {
+        const role = row.dataset.role;
+        const current = row.querySelector('.value').textContent;
+        const query = row.querySelector('.search').value.toLowerCase();
+        const list = row.querySelector('.repo-list');
+        list.replaceChildren();
+        if (role !== 'tickets') {
+          const none = document.createElement('button');
+          none.type = 'button';
+          none.className = 'repo-option';
+          none.textContent = 'No repository';
+          none.addEventListener('click', () => { row.querySelector('.value').textContent = 'Not selected'; closeAll(); });
+          if (!query || 'no repository'.includes(query)) list.appendChild(none);
+        }
+        repos.filter(repo => repo.name.toLowerCase().includes(query)).forEach(repo => {
+          const option = document.createElement('button');
+          option.type = 'button';
+          option.className = 'repo-option' + (repo.name === current ? ' is-selected' : '');
+          option.disabled = role === 'tickets' && !repo.private;
+          option.setAttribute('role', 'option');
+          option.setAttribute('aria-selected', repo.name === current ? 'true' : 'false');
+          option.innerHTML = '<span class="repo-icon"></span><span class="repo-label"><b></b><small></small></span><span class="check"></span>';
+          option.querySelector('.repo-icon').textContent = repo.private ? '◧' : '◎';
+          option.querySelector('b').textContent = repo.name;
+          option.querySelector('small').textContent = repo.detail;
+          option.querySelector('.check').textContent = repo.name === current ? '✓' : '';
+          option.addEventListener('click', () => { row.querySelector('.value').textContent = repo.name; closeAll(); });
+          list.appendChild(option);
+        });
+      }
+      root.querySelectorAll('.row').forEach(row => {
+        const picker = row.querySelector('.picker');
+        picker.addEventListener('click', () => {
+          const wasOpen = openRow === row;
+          closeAll();
+          if (wasOpen) return;
+          row.querySelector('.popover').hidden = false;
+          picker.setAttribute('aria-expanded', 'true');
+          openRow = row;
+          render(row);
+          row.querySelector('.search').focus();
+        });
+        row.querySelector('.search').addEventListener('input', () => render(row));
+        row.querySelector('.refresh').addEventListener('click', () => render(row));
+      });
+      root.addEventListener('keydown', event => { if (event.key === 'Escape') closeAll(); });
+      root.addEventListener('click', event => { if (openRow && !openRow.contains(event.target)) closeAll(); });
+      root.querySelector('.row[data-role="tickets"] .picker').click();
+    })();
+  </script>
+</div>

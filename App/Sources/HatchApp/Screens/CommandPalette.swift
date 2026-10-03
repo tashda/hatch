@@ -29,12 +29,12 @@ struct CommandPalette: View {
             ("Go to Agents", "cpu", .agents), ("Go to Log", "list.bullet.rectangle", .log), ("Go to Project", "gearshape", .projects),
         ]
         var hits: [Hit] = [
-            Hit(id: "cmd-new", title: "New ticket", subtitle: "Command", symbol: "plus", run: { state.route = .newTicket }),
-            Hit(id: "cmd-ask", title: "Ask Hatch", subtitle: "Command", symbol: "sparkles", run: { state.showAskPanel.toggle() }),
+            Hit(id: "cmd-new", title: "New ticket", subtitle: "Command", symbol: "plus", run: { state.navigate(to: .newTicket) }),
+            Hit(id: "cmd-ask", title: "Iris", subtitle: "Command", symbol: "sparkles", run: { state.showAskPanel.toggle() }),
         ]
         for entry in list {
             let route = entry.2
-            hits.append(Hit(id: "cmd-" + entry.0, title: entry.0, subtitle: "Command", symbol: entry.1, run: { state.route = route }))
+            hits.append(Hit(id: "cmd-" + entry.0, title: entry.0, subtitle: "Command", symbol: entry.1, run: { state.navigate(to: route) }))
         }
         return hits
     }
@@ -54,7 +54,7 @@ struct CommandPalette: View {
             let specs = (try? state.store.searchSpec(projectId: pid, query: q, limit: 5)) ?? []
             for s in specs {
                 out.append(Hit(id: "s\(s.id)", title: "\(s.code)  \(s.text)", subtitle: "Spec" + (s.area.map { " · \($0)" } ?? ""), symbol: "doc.text",
-                               run: { state.route = .specs }))
+                               run: { state.navigate(to: .specs) }))
             }
         }
         let lower = q.lowercased()

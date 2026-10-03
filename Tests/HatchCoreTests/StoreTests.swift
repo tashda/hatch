@@ -18,6 +18,30 @@ final class StoreTests: XCTestCase {
 
     func testDatabaseHasFTS5() { XCTAssertTrue(store.db.hasFTS5) }
 
+    func testRemovingRepositorySelectionRemovesStoredRole() throws {
+        XCTAssertNotNil(try store.repo(projectId: project.id, role: .app))
+        _ = try store.upsertProject(key: project.key, name: project.name,
+                                    config: ProjectConfig(name: project.name, ticketsRepo: "acme/tickets"))
+        XCTAssertNil(try store.repo(projectId: project.id, role: .app))
+    }
+
+    func testRepositoryWithWorkspaceCannotBeReassigned() throws {
+        let repo = try XCTUnwrap(store.repo(projectId: project.id, role: .app))
+        let workTicket = try ticket()
+        _ = try store.saveWorkspace(ticketId: workTicket.id, repoId: repo.id,
+                                    path: "/tmp/echo-work", branch: "work", baseSha: nil)
+        XCTAssertThrowsError(try store.upsertProject(key: project.key, name: project.name,
+                                                     config: ProjectConfig(name: project.name, ticketsRepo: "acme/tickets")))
+        XCTAssertEqual(try store.repo(projectId: project.id, role: .app)?.remote, "acme/app")
+    }
+
+    func testTicketsRepositoryCannotChangeAfterTicketsExist() throws {
+        _ = try ticket()
+        XCTAssertThrowsError(try store.upsertProject(key: project.key, name: project.name,
+                                                     config: ProjectConfig(name: project.name, ticketsRepo: "acme/other")))
+        XCTAssertEqual(try store.project(id: project.id)?.config?.ticketsRepo, "acme/tickets")
+    }
+
     func testDraftsStayLocalUntilSubmitted() throws {
         let t = try ticket()
         XCTAssertEqual(t.status, .draft)

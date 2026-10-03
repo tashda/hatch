@@ -216,10 +216,10 @@ enum Snapshots {
                 save(window, name: "add-project", mode: mode, into: folder)
             }
 
-            state.snapshotPresentation = .createTicketsRepo
+            state.snapshotPresentation = .repositorySelector
             try? await Task.sleep(nanoseconds: 700_000_000)
             if let window = NSApp.windows.first(where: { $0.isVisible }) {
-                save(window, name: "create-tickets-repo", mode: mode, into: folder)
+                save(window, name: "repository-selector", mode: mode, into: folder)
             }
             state.snapshotPresentation = nil
             try? await Task.sleep(nanoseconds: 250_000_000)

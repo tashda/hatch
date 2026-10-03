@@ -7,7 +7,7 @@ import HatchAPI
 /// change, and holds navigation and panel state. Screens never write SQL; they call store methods inside `perform`.
 @MainActor
 final class AppState: ObservableObject {
-    enum SnapshotPresentation { case settings, palette, addProject, createTicketsRepo }
+    enum SnapshotPresentation { case settings, palette, addProject, repositorySelector }
 
     let store: HatchStore
     let paths: AppPaths
@@ -17,11 +17,22 @@ final class AppState: ObservableObject {
     private var syncDebounce: DispatchWorkItem?
 
     @Published var route: Route = .desk
+    @Published private(set) var backStack: [Route] = []
+    @Published private(set) var forwardStack: [Route] = []
+    /// A card the current page asks the Iris inspector to show at its top (the Desk's decision brief).
+    @Published var inspectorTop: AnyView?
     @Published var selectedProjectKey: String?          // nil means "All projects" (decision B2, B3)
     @Published var selectedTicketId: Int?
     @Published var revision = 0                          // bumped after any change so views reload
     @Published var errorMessage: String?
-    @Published var showAskPanel = false
+    /// Hatch check results from New ticket, shown in the Iris inspector while that page is open.
+    @Published var hatchCheck: HatchCheckState?
+    @Published var showSidebar = UserDefaults.standard.object(forKey: "hatch.showSidebar") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showSidebar, forKey: "hatch.showSidebar") }
+    }
+    @Published var showAskPanel = UserDefaults.standard.bool(forKey: "hatch.showAskPanel") {
+        didSet { UserDefaults.standard.set(showAskPanel, forKey: "hatch.showAskPanel") }
+    }
     @Published var showPalette = false
     @Published var searchText = ""
     @Published var syncSummary = SyncSummary()
@@ -143,6 +154,23 @@ final class AppState: ObservableObject {
     var projectFilterId: Int? { selectedProject?.id }
 
     func project(id: Int) -> Project? { projects.first { $0.id == id } }
+    func hasTickets(projectId: Int) -> Bool { (try? store.hasTickets(projectId: projectId)) ?? false }
+
+    /// Apply repository choices without silently saving unrelated edits in the Project form.
+    @discardableResult
+    func saveRepositoryAssignments(projectId: Int, _ assignments: HXRepositoryAssignments) -> Bool {
+        guard let project = project(id: projectId) else { return false }
+        var config = project.config ?? ProjectConfig(name: project.name, ticketsRepo: "")
+        assignments.apply(to: &config)
+        let configURL = config.repo(.app)?.localPath.map {
+            URL(fileURLWithPath: $0).appendingPathComponent(".hatch/project.json")
+        }
+        return perform("Save repositories") {
+            try store.upsertProject(key: project.key, name: project.name, config: config)
+            if let configURL { try config.save(to: configURL) }
+            return true
+        } ?? false
+    }
 
     /// Tickets waiting for the owner, for the Dock badge and the sidebar (decision B6).
     var yourTurnCount: Int { ((try? store.countByTurn(projectId: projectFilterId)) ?? [:])[.you] ?? 0 }
@@ -177,7 +205,31 @@ final class AppState: ObservableObject {
 
     func open(_ ticket: Ticket) {
         selectedTicketId = ticket.id
-        route = .ticket(ticket.id)
+        navigate(to: .ticket(ticket.id))
+    }
+
+    /// Every page change goes through here, so Back and Forward always return to where you were.
+    func navigate(to destination: Route) {
+        guard destination != route else { return }
+        backStack.append(route)
+        forwardStack.removeAll()
+        route = destination
+    }
+
+    var canGoBack: Bool { !backStack.isEmpty }
+    var canGoForward: Bool { !forwardStack.isEmpty }
+    var backTitle: String? { backStack.last?.title }
+
+    func goBack() {
+        guard let previous = backStack.popLast() else { return }
+        forwardStack.append(route)
+        route = previous
+    }
+
+    func goForward() {
+        guard let next = forwardStack.popLast() else { return }
+        backStack.append(route)
+        route = next
     }
 }
 

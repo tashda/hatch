@@ -60,19 +60,16 @@ struct ComposerView: View {
             if let submitted {
                 submittedView(submitted)
             } else {
-                header
-                Divider()
                 HStack(spacing: 0) {
-                    ScrollView {
-                        form
-                            .padding(20)
-                            .frame(maxWidth: 720, alignment: .leading)
-                            .frame(maxWidth: .infinity)
+                    form
+                        .frame(minWidth: 400, maxWidth: .infinity)
+                    if !state.showAskPanel {
+                        Divider()
+                        HatchCheckPanel(similar: similar, specs: specs, hasInput: hasInput, onLink: addLink)
+                            .frame(width: 320)
                     }
-                    Divider()
-                    HatchCheckPanel(similar: similar, specs: specs, hasInput: hasInput, onLink: addLink)
-                        .frame(width: 300)
                 }
+                actionBar
             }
         }
         .navigationTitle("New ticket")
@@ -85,26 +82,32 @@ struct ComposerView: View {
                 area = "Editor"
             }
         }
+        .onChange(of: similar.map(\.ticket.id)) { _, _ in publishCheck() }
+        .onChange(of: specs.map(\.code)) { _, _ in publishCheck() }
+        .onChange(of: hasInput) { _, _ in publishCheck() }
+        .onDisappear { state.hatchCheck = nil }
         .onChange(of: title) { _, _ in scheduleHints() }
         .onChange(of: bodyText) { _, _ in scheduleHints() }
         .onChange(of: projectId) { _, _ in projectChanged() }
+    }
+
+    private func publishCheck() {
+        state.hatchCheck = HatchCheckState(similar: similar, specs: specs, hasInput: hasInput, onLink: addLink)
     }
 
     private var hasInput: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    // MARK: Header
+    // MARK: Actions
 
-    private var header: some View {
+    private var actionBar: some View {
         HStack(spacing: 10) {
-            Text("New ticket")
-                .font(.title3.weight(.semibold))
-            Text("Draft")
-                .font(.caption)
+            Text("A new ticket starts as a draft.")
+                .font(.callout)
                 .foregroundStyle(.secondary)
             Spacer()
-            Button { state.route = .desk } label: { Label("Cancel", systemImage: "xmark") }
+            Button { state.navigate(to: .desk) } label: { Label("Cancel", systemImage: "xmark") }
                 .buttonStyle(.glass)
                 .keyboardShortcut(.cancelAction)
             Button { create(submit: false) } label: { Label("Save as draft", systemImage: "square.and.arrow.down") }
@@ -118,33 +121,102 @@ struct ComposerView: View {
             .disabled(!canSubmit)
         }
         .controlSize(.large)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 12)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
     }
 
     // MARK: Form
 
     private var form: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            typePicker
-            TextField("Title", text: $title)
-                .textFieldStyle(.roundedBorder)
-                .font(.title3)
-            pickers
-            bodyEditor
-            screenshotArea
-            linkArea
-            branchLine
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 0) {
+                narrativeForm
+                    .frame(minWidth: 500, maxWidth: .infinity)
+                detailsForm
+                    .frame(width: 280)
+            }
+            compactForm
         }
     }
 
-    private var typePicker: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HXDock(items: TicketType.allCases.map { HXDock.Item(id: $0, title: $0.displayName) }, selection: $type)
-            Text(Self.typeHelp(type))
-                .font(.callout)
-                .foregroundStyle(.secondary)
+    private var narrativeForm: some View {
+        Form {
+            Section("Ticket") { titleField }
+            Section("Description") { bodyEditor }
+            Section("Screenshots") { screenshotArea }
+            Section("Links") { linkArea }
+            if !branchText().isEmpty {
+                Section("Branches") { branchLine }
+            }
         }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var detailsForm: some View {
+        Form {
+            Section {
+                typePicker
+                pickers
+            } header: {
+                Text("Details")
+            } footer: {
+                Text(Self.typeHelp(type))
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var compactForm: some View {
+        Form {
+            Section {
+                typePicker
+                titleField
+                pickers
+            } header: {
+                Text("Ticket")
+            } footer: {
+                Text(Self.typeHelp(type))
+            }
+            Section("Description") {
+                bodyEditor
+            }
+            Section("Screenshots") {
+                screenshotArea
+            }
+            Section("Links") {
+                linkArea
+            }
+            if !branchText().isEmpty {
+                Section("Branches") { branchLine }
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var titleField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Title").font(.callout.weight(.medium))
+            TextField("Title", text: $title, prompt: Text("What needs to change?"))
+                .textFieldStyle(.roundedBorder)
+                .labelsHidden()
+                .multilineTextAlignment(.leading)
+                .font(.title3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var typePicker: some View {
+        Picker("Type", selection: $type) {
+            ForEach(TicketType.allCases, id: \.self) { kind in
+                Text(kind.displayName).tag(kind)
+            }
+        }
+        .pickerStyle(.menu)
     }
 
     static func typeHelp(_ type: TicketType) -> String {
@@ -159,27 +231,24 @@ struct ComposerView: View {
     }
 
     private var pickers: some View {
-        HStack(spacing: 12) {
+        Group {
             Picker("Project", selection: $projectId) {
                 ForEach(state.projects) { p in
                     Text(p.name).tag(Optional(p.id))
                 }
             }
-            .frame(maxWidth: 220)
             Picker("Area", selection: $area) {
                 Text("No area").tag("")
                 ForEach(areaNames, id: \.self) { name in
                     Text(name).tag(name)
                 }
             }
-            .frame(maxWidth: 240)
             Picker("Theme", selection: $themeId) {
                 Text("No theme").tag(Int?.none)
                 ForEach(themes) { theme in
                     Text(theme.title).tag(Optional(theme.id))
                 }
             }
-            .frame(maxWidth: 260)
             .disabled(type == .theme)
         }
     }
@@ -190,7 +259,7 @@ struct ComposerView: View {
                 TextEditor(text: $bodyText)
                     .font(.body)
                     .scrollContentBackground(.hidden)
-                    .padding(6)
+                    .padding(4)
                 if bodyText.isEmpty {
                     Text("What should change, and why. Write what you like; Iris will help structure it.")
                         .foregroundStyle(.tertiary)
@@ -199,9 +268,7 @@ struct ComposerView: View {
                         .allowsHitTesting(false)
                 }
             }
-            .frame(minHeight: 180)
-            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
+            .frame(minHeight: 220)
             if type == .proposal {
                 Text("Useful for a Proposal: what, why, scope, constraints.")
                     .font(.caption)
@@ -245,10 +312,9 @@ struct ComposerView: View {
                 }
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(dropTargeted ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
+        .padding(.vertical, 8)
+        .background(dropTargeted ? Color.accentColor.opacity(0.12) : .clear)
         .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in
             handleDrop(providers)
         }
@@ -348,9 +414,6 @@ struct ComposerView: View {
 
     private var linkArea: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Links")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
             ForEach(links) { link in
                 HStack(spacing: 8) {
                     Text(LinkText.name(link.kind))
@@ -375,6 +438,7 @@ struct ComposerView: View {
                 .frame(width: 130)
                 TextField("#118", text: $linkRef)
                     .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
                     .frame(width: 120)
                     .onSubmit { addLinkFromField() }
                 Button("Add link") { addLinkFromField() }
@@ -587,6 +651,14 @@ struct ShotThumb: View {
     }
 }
 
+/// What the Iris inspector shows on the New ticket page.
+struct HatchCheckState {
+    let similar: [SimilarHit]
+    let specs: [SpecItem]
+    let hasInput: Bool
+    let onLink: (Ticket, LinkKind) -> Void
+}
+
 /// The right-hand panel: related tickets and Spec items found locally while typing, and what happens after Submit (decision E2).
 struct HatchCheckPanel: View {
     let similar: [SimilarHit]
@@ -626,7 +698,9 @@ struct HatchCheckPanel: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Related tickets")
                 .font(.subheadline.weight(.semibold))
-            ForEach(similar) { hit in
+            VStack(spacing: 0) {
+            ForEach(similar.indices, id: \.self) { index in
+                let hit = similar[index]
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(hit.ticket.displayNumber)
@@ -644,7 +718,12 @@ struct HatchCheckPanel: View {
                             .controlSize(.small)
                     }
                 }
+                .padding(.vertical, 9)
+                if index < similar.count - 1 { Divider() }
             }
+            }
+            .padding(.horizontal, 12)
+            .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -652,7 +731,9 @@ struct HatchCheckPanel: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Spec")
                 .font(.subheadline.weight(.semibold))
-            ForEach(specs) { item in
+            VStack(spacing: 0) {
+            ForEach(specs.indices, id: \.self) { index in
+                let item = specs[index]
                 HStack(alignment: .top, spacing: 6) {
                     Text(item.code)
                         .font(.caption.monospaced())
@@ -661,7 +742,13 @@ struct HatchCheckPanel: View {
                         .font(.callout)
                         .lineLimit(2)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 9)
+                if index < specs.count - 1 { Divider() }
             }
+            }
+            .padding(.horizontal, 12)
+            .background(Color.secondary.opacity(0.065), in: RoundedRectangle(cornerRadius: 12))
         }
     }
 

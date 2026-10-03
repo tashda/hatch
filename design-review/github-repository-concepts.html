@@ -1,0 +1,196 @@
+<div id="hatch-repo-concepts" class="viz-dotted-background">
+  <style>
+    #hatch-repo-concepts { padding: 18px 6px 28px; color-scheme: light dark; }
+    #hatch-repo-concepts * { box-sizing: border-box; }
+    #hatch-repo-concepts .viz-carousel > section { min-height: 700px; }
+    #hatch-repo-concepts .h-sheet {
+      --h-bg: light-dark(#fafafa, #222225);
+      --h-surface: light-dark(#f1f1f3, #2c2c30);
+      --h-hover: light-dark(#e9e9ec, #35353a);
+      --h-text: light-dark(#202024, #f3f3f5);
+      --h-secondary: light-dark(#717178, #aaaab2);
+      --h-line: light-dark(#dedee2, #434349);
+      --h-blue: light-dark(#0869d8, #6aa9ff);
+      --h-blue-surface: light-dark(#e8f1ff, #253b59);
+      --h-white: #fff;
+      width: min(100%, 720px);
+      margin: 0 auto;
+      overflow: hidden;
+      border: 1px solid var(--h-line);
+      border-radius: 18px;
+      background: var(--h-bg);
+      color: var(--h-text);
+      box-shadow: 0 18px 48px light-dark(#2526312b, #0009);
+      font: 14px/1.36 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    }
+    #hatch-repo-concepts .h-top { padding: 24px 28px 20px; display: flex; align-items: center; gap: 14px; }
+    #hatch-repo-concepts .h-gh { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; background: var(--h-text); color: var(--h-bg); flex: none; }
+    #hatch-repo-concepts .h-gh svg { width: 25px; height: 25px; fill: currentColor; }
+    #hatch-repo-concepts .h-title { font-size: 19px; font-weight: 650; letter-spacing: -.3px; margin: 0 0 2px; }
+    #hatch-repo-concepts .h-sub { color: var(--h-secondary); margin: 0; }
+    #hatch-repo-concepts .h-account { margin-left: auto; padding: 6px 10px; border-radius: 999px; background: var(--h-surface); color: var(--h-secondary); white-space: nowrap; font-size: 12px; }
+    #hatch-repo-concepts .h-account b { color: var(--h-text); font-weight: 600; }
+    #hatch-repo-concepts .h-body { border-top: 1px solid var(--h-line); display: grid; grid-template-columns: 245px minmax(0, 1fr); min-height: 398px; }
+    #hatch-repo-concepts .h-roles { background: var(--h-surface); padding: 20px 12px; border-right: 1px solid var(--h-line); }
+    #hatch-repo-concepts .h-eyebrow { display: block; color: var(--h-secondary); font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; padding: 0 12px 10px; }
+    #hatch-repo-concepts .h-role { width: 100%; display: flex; align-items: center; gap: 11px; border: 0; background: transparent; text-align: left; color: var(--h-text); padding: 10px 11px; border-radius: 9px; font: inherit; margin: 0 0 4px; cursor: pointer; }
+    #hatch-repo-concepts .h-role:hover { background: var(--h-hover); }
+    #hatch-repo-concepts .h-role.is-active { background: var(--h-blue-surface); }
+    #hatch-repo-concepts .h-role-icon { width: 27px; height: 27px; flex: none; display: grid; place-items: center; border-radius: 7px; background: light-dark(#fff, #43434a); font-size: 15px; }
+    #hatch-repo-concepts .h-role.is-active .h-role-icon { color: var(--h-blue); }
+    #hatch-repo-concepts .h-role-name { display: block; font-weight: 600; }
+    #hatch-repo-concepts .h-role-repo { display: block; color: var(--h-secondary); font-size: 12px; max-width: 160px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    #hatch-repo-concepts .h-chooser { padding: 20px 20px 12px; min-width: 0; }
+    #hatch-repo-concepts .h-choose-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 13px; }
+    #hatch-repo-concepts .h-choose-head strong { font-size: 14px; }
+    #hatch-repo-concepts .h-choose-head span { color: var(--h-secondary); font-size: 12px; }
+    #hatch-repo-concepts .h-search { width: 100%; border: 1px solid var(--h-line); background: var(--h-surface); color: var(--h-text); padding: 9px 12px; border-radius: 9px; font: inherit; margin-bottom: 12px; }
+    #hatch-repo-concepts .h-search::placeholder { color: var(--h-secondary); }
+    #hatch-repo-concepts .h-repo-list { display: grid; gap: 3px; }
+    #hatch-repo-concepts .h-repo { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 9px; background: transparent; color: var(--h-text); padding: 9px 10px; text-align: left; font: inherit; cursor: pointer; }
+    #hatch-repo-concepts .h-repo:hover:not(:disabled) { background: var(--h-hover); }
+    #hatch-repo-concepts .h-repo.is-selected { background: var(--h-blue-surface); }
+    #hatch-repo-concepts .h-repo:disabled { opacity: .48; cursor: not-allowed; }
+    #hatch-repo-concepts .h-repo-symbol { width: 21px; text-align: center; flex: none; font-size: 16px; color: var(--h-secondary); }
+    #hatch-repo-concepts .h-repo.is-selected .h-repo-symbol, #hatch-repo-concepts .h-check { color: var(--h-blue); }
+    #hatch-repo-concepts .h-repo-main { min-width: 0; flex: 1; }
+    #hatch-repo-concepts .h-repo-main b { display: block; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #hatch-repo-concepts .h-repo-main small { display: block; color: var(--h-secondary); font-size: 12px; margin-top: 1px; }
+    #hatch-repo-concepts .h-check { font-size: 16px; font-weight: 700; }
+    #hatch-repo-concepts .h-note { min-height: 27px; padding: 14px 28px 0; color: var(--h-secondary); font-size: 12px; }
+    #hatch-repo-concepts .h-footer { padding: 18px 28px 22px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+    #hatch-repo-concepts .h-button { border: 1px solid var(--h-line); border-radius: 8px; padding: 7px 16px; background: var(--h-surface); color: var(--h-text); font: inherit; font-weight: 550; cursor: pointer; }
+    #hatch-repo-concepts .h-button:hover { background: var(--h-hover); }
+    #hatch-repo-concepts .h-button.h-primary { background: var(--h-blue); border-color: var(--h-blue); color: var(--h-white); }
+    #hatch-repo-concepts .h-compact { width: min(100%, 600px); }
+    #hatch-repo-concepts .h-compact .h-top { padding: 27px 28px 17px; align-items: flex-start; }
+    #hatch-repo-concepts .h-compact .h-gh { width: 47px; height: 47px; }
+    #hatch-repo-concepts .h-compact .h-account { margin-top: 4px; }
+    #hatch-repo-concepts .h-compact-content { padding: 5px 28px 0; }
+    #hatch-repo-concepts .h-compact-hint { color: var(--h-secondary); font-size: 12px; margin: 3px 0 18px; }
+    #hatch-repo-concepts .h-slot-list { border-radius: 11px; overflow: hidden; background: var(--h-surface); }
+    #hatch-repo-concepts .h-slot { display: flex; align-items: center; gap: 12px; padding: 14px 16px; width: 100%; border: 0; border-bottom: 1px solid var(--h-line); background: transparent; color: var(--h-text); text-align: left; font: inherit; cursor: pointer; }
+    #hatch-repo-concepts .h-slot:last-child { border-bottom: 0; }
+    #hatch-repo-concepts .h-slot:hover, #hatch-repo-concepts .h-slot.is-active { background: var(--h-hover); }
+    #hatch-repo-concepts .h-slot-icon { font-size: 20px; color: var(--h-blue); width: 25px; flex: none; }
+    #hatch-repo-concepts .h-slot-label { flex: 1; }
+    #hatch-repo-concepts .h-slot-label b { display: block; font-weight: 600; }
+    #hatch-repo-concepts .h-slot-label small { display: block; font-size: 12px; color: var(--h-secondary); margin-top: 2px; }
+    #hatch-repo-concepts .h-slot-value { font-size: 12px; max-width: 175px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    #hatch-repo-concepts .h-slot-chevron { color: var(--h-secondary); }
+    #hatch-repo-concepts .h-compact-picker { margin-top: 17px; }
+    #hatch-repo-concepts .h-compact-picker .h-search { margin-bottom: 6px; }
+    #hatch-repo-concepts .h-compact-picker .h-repo-list { max-height: 180px; overflow-y: auto; }
+    #hatch-repo-concepts .h-compact .h-footer { padding-top: 14px; }
+    @media (max-width: 590px) {
+      #hatch-repo-concepts .viz-carousel > section { min-height: 800px; }
+      #hatch-repo-concepts .h-top { flex-wrap: wrap; padding: 18px; }
+      #hatch-repo-concepts .h-account { margin-left: 0; }
+      #hatch-repo-concepts .h-body { display: block; }
+      #hatch-repo-concepts .h-roles { border-right: 0; border-bottom: 1px solid var(--h-line); display: flex; gap: 4px; overflow-x: auto; padding: 12px; }
+      #hatch-repo-concepts .h-roles .h-eyebrow { display: none; }
+      #hatch-repo-concepts .h-role { min-width: 135px; margin: 0; padding: 7px; }
+      #hatch-repo-concepts .h-role-repo { max-width: 90px; }
+      #hatch-repo-concepts .h-chooser { padding: 16px; }
+      #hatch-repo-concepts .h-note { padding-left: 18px; padding-right: 18px; }
+      #hatch-repo-concepts .h-footer { padding-left: 18px; padding-right: 18px; }
+      #hatch-repo-concepts .h-slot { padding: 12px; }
+      #hatch-repo-concepts .h-slot-value { max-width: 110px; }
+      #hatch-repo-concepts .h-compact-content { padding-left: 18px; padding-right: 18px; }
+    }
+  </style>
+  <div class="viz-carousel" aria-label="Hatch GitHub repository selector designs">
+    <section data-variant="Guided picker" aria-label="Guided repository picker">
+      <div class="h-sheet" data-concept="guided">
+        <div class="h-top">
+          <div class="h-gh" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 .3a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.05c-3.34.73-4.04-1.41-4.04-1.41-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.21.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.1-.77.42-1.3.76-1.6-2.66-.31-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23A11.5 11.5 0 0 1 12 6.32a11.5 11.5 0 0 1 3 .4c2.3-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.28c0 .32.22.7.83.58A12 12 0 0 0 12 .3Z"/></svg></div>
+          <div><h2 class="h-title">Choose repositories</h2><p class="h-sub">Connect Acme to the right GitHub work.</p></div>
+          <div class="h-account">Connected as <b>@karen</b></div>
+        </div>
+        <div class="h-body">
+          <nav class="h-roles" aria-label="Repository roles">
+            <span class="h-eyebrow">For Acme</span>
+            <button type="button" class="h-role is-active" data-role="tickets"><span class="h-role-icon">◫</span><span><span class="h-role-name">Tickets</span><span class="h-role-repo" data-role-value="tickets">acme/hatch-tickets</span></span></button>
+            <button type="button" class="h-role" data-role="project"><span class="h-role-icon">⌘</span><span><span class="h-role-name">Project</span><span class="h-role-repo" data-role-value="project">acme/app</span></span></button>
+            <button type="button" class="h-role" data-role="design"><span class="h-role-icon">◈</span><span><span class="h-role-name">Design</span><span class="h-role-repo" data-role-value="design">acme/design-system</span></span></button>
+          </nav>
+          <div class="h-chooser">
+            <div class="h-choose-head"><strong data-role-heading>Tickets repository</strong><span data-role-guidance>Private repository required</span></div>
+            <input class="h-search" type="search" aria-label="Search available repositories" placeholder="Search available repositories" />
+            <div class="h-repo-list" role="listbox" aria-label="Available GitHub repositories"></div>
+          </div>
+        </div>
+        <div class="h-note">Only repositories this GitHub account has granted to Hatch are listed.</div>
+        <div class="h-footer"><button class="h-button" type="button">Cancel</button><button class="h-button h-primary" type="button">Save repositories</button></div>
+      </div>
+    </section>
+    <section data-variant="Compact selector" aria-label="Compact repository selector" hidden>
+      <div class="h-sheet h-compact" data-concept="compact">
+        <div class="h-top">
+          <div class="h-gh" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 .3a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.05c-3.34.73-4.04-1.41-4.04-1.41-.55-1.39-1.34-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.21.09 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.1-.77.42-1.3.76-1.6-2.66-.31-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23A11.5 11.5 0 0 1 12 6.32a11.5 11.5 0 0 1 3 .4c2.3-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.28c0 .32.22.7.83.58A12 12 0 0 0 12 .3Z"/></svg></div>
+          <div><h2 class="h-title">Connect Acme to GitHub</h2><p class="h-sub">Select the repositories Hatch should use.</p></div>
+          <div class="h-account"><b>@karen</b></div>
+        </div>
+        <div class="h-compact-content">
+          <p class="h-compact-hint">Choose from repositories already available to Hatch.</p>
+          <div class="h-slot-list">
+            <button type="button" class="h-slot is-active" data-role="tickets"><span class="h-slot-icon">◫</span><span class="h-slot-label"><b>Tickets</b><small>Issues and attachments · private only</small></span><span class="h-slot-value" data-role-value="tickets">acme/hatch-tickets</span><span class="h-slot-chevron">⌄</span></button>
+            <button type="button" class="h-slot" data-role="project"><span class="h-slot-icon">⌘</span><span class="h-slot-label"><b>Project</b><small>Source code and Specs</small></span><span class="h-slot-value" data-role-value="project">acme/app</span><span class="h-slot-chevron">⌄</span></button>
+            <button type="button" class="h-slot" data-role="design"><span class="h-slot-icon">◈</span><span class="h-slot-label"><b>Design</b><small>Design system assets</small></span><span class="h-slot-value" data-role-value="design">acme/design-system</span><span class="h-slot-chevron">⌄</span></button>
+          </div>
+          <div class="h-compact-picker">
+            <input class="h-search" type="search" aria-label="Search available repositories" placeholder="Search available repositories" />
+            <div class="h-repo-list" role="listbox" aria-label="Available GitHub repositories"></div>
+          </div>
+        </div>
+        <div class="h-note">Public repositories cannot hold Hatch tickets.</div>
+        <div class="h-footer"><button class="h-button" type="button">Cancel</button><button class="h-button h-primary" type="button">Save repositories</button></div>
+      </div>
+    </section>
+  </div>
+  <script>
+    (() => {
+      const root = document.getElementById('hatch-repo-concepts');
+      const available = [
+        { name: 'acme/hatch-tickets', detail: 'Private · Issues enabled', private: true },
+        { name: 'acme/app', detail: 'Private · main branch', private: true },
+        { name: 'acme/design-system', detail: 'Private · main branch', private: true },
+        { name: 'acme/public-site', detail: 'Public · not available for tickets', private: false }
+      ];
+      const labels = { tickets: 'Tickets repository', project: 'Project repository', design: 'Design repository' };
+      root.querySelectorAll('[data-concept]').forEach(sheet => {
+        const selections = { tickets: 'acme/hatch-tickets', project: 'acme/app', design: 'acme/design-system' };
+        let role = 'tickets';
+        const search = sheet.querySelector('.h-search');
+        const list = sheet.querySelector('.h-repo-list');
+        function render() {
+          sheet.querySelectorAll('[data-role]').forEach(button => button.classList.toggle('is-active', button.dataset.role === role));
+          sheet.querySelectorAll('[data-role-value]').forEach(value => { value.textContent = selections[value.dataset.roleValue] || 'Not selected'; });
+          const heading = sheet.querySelector('[data-role-heading]');
+          if (heading) heading.textContent = labels[role];
+          const guidance = sheet.querySelector('[data-role-guidance]');
+          if (guidance) guidance.textContent = role === 'tickets' ? 'Private repository required' : 'Choose one repository';
+          const matches = available.filter(repo => repo.name.toLowerCase().includes(search.value.toLowerCase()));
+          list.replaceChildren();
+          matches.forEach(repo => {
+            const disabled = role === 'tickets' && !repo.private;
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'h-repo' + (selections[role] === repo.name ? ' is-selected' : '');
+            item.disabled = disabled;
+            item.setAttribute('role', 'option');
+            item.setAttribute('aria-selected', selections[role] === repo.name ? 'true' : 'false');
+            item.innerHTML = `<span class="h-repo-symbol">${repo.private ? '◧' : '◎'}</span><span class="h-repo-main"><b></b><small></small></span><span class="h-check">${selections[role] === repo.name ? '✓' : ''}</span>`;
+            item.querySelector('b').textContent = repo.name;
+            item.querySelector('small').textContent = repo.detail;
+            item.addEventListener('click', () => { selections[role] = repo.name; render(); });
+            list.appendChild(item);
+          });
+        }
+        sheet.querySelectorAll('[data-role]').forEach(button => button.addEventListener('click', () => { role = button.dataset.role; search.value = ''; render(); }));
+        search.addEventListener('input', render);
+        render();
+      });
+    })();
+  </script>
+</div>

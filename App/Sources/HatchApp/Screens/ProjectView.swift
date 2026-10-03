@@ -62,8 +62,7 @@ struct ProjectForm: View {
 
     @State private var name = ""
     @State private var ticketsRepo = ""
-    @State private var ticketsRepoPublic = false
-    @State private var showCreateTickets = false
+    @State private var showRepositorySheet = false
     @StateObject private var account = GitHubAccountModel()
     @State private var maxAgents = 3
     @State private var integrationBranch = "hatch"
@@ -100,17 +99,25 @@ struct ProjectForm: View {
             .frame(maxWidth: .infinity)
         }
         .onAppear {
-            account.refresh()
+            if !Snapshots.demoMode { account.refresh() }
             if !loaded { load(); loaded = true }
         }
         .onReceive(NotificationCenter.default.publisher(for: .hxGitHubAccountChanged)) { _ in
             account.refresh()
         }
         .sheet(isPresented: $showAdd) { AddProjectSheet() }
-        .sheet(isPresented: $showCreateTickets) {
-            HXCreateTicketsRepoSheet(account: account, projectName: project.name) { full in
-                ticketsRepo = full
-                ticketsRepoPublic = false
+        .sheet(isPresented: $showRepositorySheet) {
+            HXRepositorySelectionSheet(account: account, projectName: project.name,
+                                       initial: selectedRepositoryNames,
+                                       ticketsLocked: state.hasTickets(projectId: project.id)) { assignments in
+                let saved = state.saveRepositoryAssignments(projectId: project.id, assignments)
+                if saved {
+                    ticketsRepo = assignments.tickets.fullName
+                    updateRepo(.app, with: assignments.project)
+                    updateRepo(.designSystem, with: assignments.design)
+                    message = "Repositories saved."
+                }
+                return saved
             }
         }
     }
@@ -132,23 +139,9 @@ struct ProjectForm: View {
                 VStack(alignment: .leading, spacing: 8) {
                     labeled("Name") { TextField("Name", text: $name).textFieldStyle(.roundedBorder) }
                     labeled("Tickets repo") {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                TextField("owner/name", text: $ticketsRepo).textFieldStyle(.roundedBorder)
-                                HXRepoPickerMenu(account: account) { pick in
-                                    ticketsRepo = pick.fullName
-                                    ticketsRepoPublic = !pick.isPrivate
-                                }
-                                Button { showCreateTickets = true } label: { Label("Create private", systemImage: "plus") }
-                                    .disabled(account.user == nil)
-                            }
-                            if ticketsRepoPublic {
-                                Text("This repository is public, so your tickets would be visible to everyone. Choose or create a private one.")
-                                    .font(.caption).foregroundStyle(Theme.critical)
-                            } else if account.user == nil {
-                                Text("Connect GitHub in Settings to choose or create the repository.").font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
+                        Text(ticketsRepo.isEmpty ? "Not selected" : ticketsRepo)
+                            .foregroundStyle(ticketsRepo.isEmpty ? .secondary : .primary)
+                            .textSelection(.enabled)
                     }
                     labeled("Integration branch") { TextField("hatch", text: $integrationBranch).textFieldStyle(.roundedBorder) }
                     labeled("Max agents") { Stepper(value: $maxAgents, in: 1...12) { Text("\(maxAgents)") } }
@@ -173,12 +166,17 @@ struct ProjectForm: View {
             HStack {
                 Text("Repositories").font(.headline)
                 Spacer()
-                Button { addRepo() } label: { Label("Add repository", systemImage: "plus") }.buttonStyle(.glass)
+                Button("Choose GitHub repositories…") { showRepositorySheet = true }
+                    .buttonStyle(.glass)
+                if !repos.contains(where: { $0.role == .specimens }) {
+                    Button { addRepo() } label: { Label("Add specimens repo", systemImage: "plus") }
+                        .buttonStyle(.glass)
+                }
             }
             HXCard {
                 VStack(alignment: .leading, spacing: 12) {
                     if repos.isEmpty { Text("No repositories yet.").foregroundStyle(.secondary) }
-                    ForEach($repos) { $repo in repoRow($repo) }
+                    ForEach($repos.filter { $0.wrappedValue.role != .tickets }) { $repo in repoRow($repo) }
                 }
             }
         }
@@ -187,15 +185,17 @@ struct ProjectForm: View {
     private func repoRow(_ repo: Binding<HXRepoDraft>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Picker("Role", selection: repo.role) {
-                    ForEach(RepoRole.allCases, id: \.self) { r in Text(hxRoleName(r)).tag(r) }
-                }
-                .labelsHidden()
-                .frame(width: 140)
-                TextField("owner/repo", text: repo.remote).textFieldStyle(.roundedBorder)
-                HXRepoPickerMenu(account: account) { pick in
-                    repo.wrappedValue.remote = pick.fullName
-                    repo.wrappedValue.branch = pick.defaultBranch
+                Text(hxRoleName(repo.wrappedValue.role))
+                    .frame(width: 140, alignment: .leading)
+                Text(repo.wrappedValue.remote.isEmpty ? "Not selected" : repo.wrappedValue.remote)
+                    .foregroundStyle(repo.wrappedValue.remote.isEmpty ? .secondary : .primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                if repo.wrappedValue.role == .specimens {
+                    HXRepoPickerMenu(account: account) { pick in
+                        repo.wrappedValue.remote = pick.fullName
+                        repo.wrappedValue.branch = pick.defaultBranch
+                    }
                 }
                 TextField("Branch", text: repo.branch).textFieldStyle(.roundedBorder).frame(width: 90)
                 Button { removeRepo(repo.wrappedValue.id) } label: { Image(systemName: "minus.circle") }
@@ -266,7 +266,7 @@ struct ProjectForm: View {
 
     private var saveRow: some View {
         HStack {
-            Button { save() } label: { Label("Save", systemImage: "checkmark") }.buttonStyle(.glassProminent).disabled(ticketsRepoPublic)
+            Button { save() } label: { Label("Save", systemImage: "checkmark") }.buttonStyle(.glassProminent)
             Button("Revert") { load() }
             if !message.isEmpty { Text(message).font(.callout).foregroundStyle(.secondary) }
         }
@@ -333,9 +333,32 @@ struct ProjectForm: View {
     }
 
     private func addRepo() {
-        let used = Set(repos.map { $0.role })
-        let role = RepoRole.allCases.first { !used.contains($0) } ?? .app
-        repos.append(HXRepoDraft(role: role, remote: "", branch: "main", localPath: "", build: "", plans: ""))
+        guard !repos.contains(where: { $0.role == .specimens }) else { return }
+        repos.append(HXRepoDraft(role: .specimens, remote: "", branch: "main", localPath: "", build: "", plans: ""))
+    }
+
+    private var selectedRepositoryNames: [RepoRole: String] {
+        var names: [RepoRole: String] = [:]
+        if !ticketsRepo.isEmpty { names[.tickets] = ticketsRepo }
+        for role in [RepoRole.app, .designSystem] {
+            if let remote = repos.first(where: { $0.role == role })?.remote, !remote.isEmpty { names[role] = remote }
+        }
+        return names
+    }
+
+    private func updateRepo(_ role: RepoRole, with selected: GitHubRepoSummary?) {
+        if let index = repos.firstIndex(where: { $0.role == role }) {
+            if let selected {
+                if repos[index].remote != selected.fullName { repos[index].localPath = "" }
+                repos[index].remote = selected.fullName
+                repos[index].branch = selected.defaultBranch
+            } else {
+                repos.remove(at: index)
+            }
+        } else if let selected {
+            repos.append(HXRepoDraft(role: role, remote: selected.fullName,
+                                     branch: selected.defaultBranch, localPath: "", build: "", plans: ""))
+        }
     }
 
     private func removeRepo(_ id: UUID) { repos.removeAll { $0.id == id } }
@@ -370,45 +393,103 @@ struct AddProjectSheet: View {
     @State private var name = ""
     @State private var ticketsRepo = ""
     @State private var appRemote = ""
+    @State private var designRemote = ""
     @State private var appPath = ""
     @State private var branch = "dev"
-    @State private var ticketsPublic = false
+    @State private var designBranch = "main"
+    @State private var showRepositorySheet = false
     @StateObject private var account = GitHubAccountModel()
 
     private var canAdd: Bool {
-        !ticketsPublic && !key.trimmingCharacters(in: .whitespaces).isEmpty && !name.trimmingCharacters(in: .whitespaces).isEmpty
+        !ticketsRepo.isEmpty && !key.trimmingCharacters(in: .whitespaces).isEmpty && !name.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Add project").font(.title3.weight(.semibold))
-            TextField("Key (for labels, such as echo)", text: $key).textFieldStyle(.roundedBorder)
-            TextField("Name", text: $name).textFieldStyle(.roundedBorder)
+        VStack(spacing: 0) {
             HStack {
-                TextField("Tickets repo (owner/name, private)", text: $ticketsRepo).textFieldStyle(.roundedBorder)
-                HXRepoPickerMenu(account: account) { ticketsRepo = $0.fullName; ticketsPublic = !$0.isPrivate }
+                Text("Add project").font(.title3.weight(.semibold))
+                Spacer()
             }
-            if ticketsPublic {
-                Text("This repository is public, so tickets would be visible to everyone. Choose a private one.")
-                    .font(.caption).foregroundStyle(Theme.critical)
+            .padding(.horizontal, 26)
+            .padding(.top, 22)
+            .padding(.bottom, 10)
+
+            Form {
+                Section("Project") {
+                    LabeledContent("Name") {
+                        TextField("Project name", text: $name)
+                            .textFieldStyle(.roundedBorder)
+                            .labelsHidden()
+                    }
+                    LabeledContent("Key") {
+                        TextField("For labels, such as echo", text: $key)
+                            .textFieldStyle(.roundedBorder)
+                            .labelsHidden()
+                    }
+                }
+                Section {
+                    LabeledContent("Tickets", value: ticketsRepo.isEmpty ? "Not selected" : ticketsRepo)
+                    LabeledContent("Project", value: appRemote.isEmpty ? "Not selected" : appRemote)
+                    LabeledContent("Design", value: designRemote.isEmpty ? "Not selected" : designRemote)
+                    HStack {
+                        Spacer()
+                        Button("Choose repositories…") { showRepositorySheet = true }
+                    }
+                } header: {
+                    Text("GitHub repositories")
+                } footer: {
+                    Text("Tickets must use a private repository. Choose from repositories available to Hatch.")
+                }
+                Section("Local checkout") {
+                    LabeledContent("App folder") {
+                        HStack {
+                            Text(appPath.isEmpty ? "Not selected" : appPath)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            Button("Choose…") { choose() }
+                        }
+                    }
+                    LabeledContent("Base branch") {
+                        TextField("dev", text: $branch)
+                            .textFieldStyle(.roundedBorder)
+                            .labelsHidden()
+                    }
+                }
             }
-            HStack {
-                TextField("App repo (owner/app)", text: $appRemote).textFieldStyle(.roundedBorder)
-                HXRepoPickerMenu(account: account) { appRemote = $0.fullName; branch = $0.defaultBranch }
-            }
-            HStack {
-                TextField("App repo local path", text: $appPath).textFieldStyle(.roundedBorder)
-                Button("Choose...") { choose() }
-            }
-            TextField("App base branch", text: $branch).textFieldStyle(.roundedBorder)
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .frame(minHeight: 500)
+
+            Divider()
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
                 Button("Add") { add() }.buttonStyle(.glassProminent).disabled(!canAdd)
             }
+            .padding(.horizontal, 26)
+            .padding(.vertical, 16)
         }
-        .padding(20)
-        .frame(width: 460)
+        .frame(width: 600)
+        .onAppear { if !Snapshots.demoMode { account.refresh() } }
+        .sheet(isPresented: $showRepositorySheet) {
+            HXRepositorySelectionSheet(account: account, projectName: name.isEmpty ? "this project" : name,
+                                       initial: selectedRepositoryNames) { assignments in
+                ticketsRepo = assignments.tickets.fullName
+                appRemote = assignments.project?.fullName ?? ""
+                branch = assignments.project?.defaultBranch ?? "dev"
+                designRemote = assignments.design?.fullName ?? ""
+                designBranch = assignments.design?.defaultBranch ?? "main"
+                return true
+            }
+        }
+    }
+
+    private var selectedRepositoryNames: [RepoRole: String] {
+        var names: [RepoRole: String] = [:]
+        if !ticketsRepo.isEmpty { names[.tickets] = ticketsRepo }
+        if !appRemote.isEmpty { names[.app] = appRemote }
+        if !designRemote.isEmpty { names[.designSystem] = designRemote }
+        return names
     }
 
     private func choose() {
@@ -424,6 +505,9 @@ struct AddProjectSheet: View {
         if !appRemote.isEmpty {
             repos.append(RepoConfig(role: .app, remote: appRemote, branch: branch.isEmpty ? "dev" : branch, localPath: appPath.isEmpty ? nil : appPath))
         }
+        if !designRemote.isEmpty {
+            repos.append(RepoConfig(role: .designSystem, remote: designRemote, branch: designBranch))
+        }
         if !ticketsRepo.isEmpty {
             repos.append(RepoConfig(role: .tickets, remote: ticketsRepo, branch: "main"))
         }
@@ -433,7 +517,7 @@ struct AddProjectSheet: View {
         }
         if let created {
             state.selectedProjectKey = created.key
-            state.route = .projects
+            state.navigate(to: .projects)
             dismiss()
         }
     }

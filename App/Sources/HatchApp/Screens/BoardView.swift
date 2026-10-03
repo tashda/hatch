@@ -64,7 +64,7 @@ struct BoardView: View {
             .frame(width: 200)
             Spacer()
             Button {
-                state.route = .tickets
+                state.navigate(to: .tickets)
             } label: {
                 Label("List", systemImage: "list.bullet")
             }

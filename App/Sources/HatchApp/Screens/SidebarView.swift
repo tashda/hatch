@@ -14,7 +14,7 @@ struct SidebarView: View {
         Binding<Route?>(
             get: { Self.sidebarRoute(for: state.route) },
             set: { newValue in
-                if let newValue { state.route = newValue }
+                if let newValue { state.navigate(to: newValue) }
             }
         )
     }
@@ -40,7 +40,7 @@ struct SidebarView: View {
                     ForEach(views) { view in
                         Button {
                             pendingQuery = view.query
-                            state.route = .tickets
+                            state.navigate(to: .tickets)
                         } label: {
                             Label(view.name, systemImage: "bookmark")
                         }
@@ -59,9 +59,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            SidebarFooter()
-        }
+        .scrollContentBackground(.hidden)
         .autoReload(every: 5) { reloadCounts() }
         .onAppear { reloadViews() }
     }
@@ -113,9 +111,11 @@ struct SidebarRow: View {
     }
 }
 
-/// "Synced with GitHub · 2 pending". Red when something failed. Click opens the Log (decision B5).
-struct SidebarFooter: View {
+/// The window footer, across the whole window: agent slots on the left (filled = running, outline = free),
+/// GitHub sync on the right. "Synced with GitHub · 2 pending"; red when something failed. Click opens the Log (decision B5).
+struct WindowFooter: View {
     @EnvironmentObject var state: AppState
+    @State private var slots: (used: Int, max: Int) = (0, 3)
 
     private var summary: AppState.SyncSummary { state.syncSummary }
 
@@ -132,34 +132,43 @@ struct SidebarFooter: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Divider()
-            Button {
-                state.route = .log
-            } label: {
+        HStack(spacing: 14) {
+            Button { state.navigate(to: .agents) } label: {
+                HStack(spacing: 7) {
+                    ForEach(0..<max(slots.max, 1), id: \.self) { i in
+                        let running = i < slots.used
+                        Circle()
+                            .fill(running
+                                  ? AnyShapeStyle(LinearGradient(colors: [Theme.agent.opacity(0.75), Theme.agent], startPoint: .top, endPoint: .bottom))
+                                  : AnyShapeStyle(Color.secondary.opacity(0.08)))
+                            .overlay(Circle().strokeBorder(running ? Theme.agent.opacity(0.35) : Color.secondary.opacity(0.4), lineWidth: running ? 3 : 1))
+                            .shadow(color: running ? Theme.agent.opacity(0.45) : .clear, radius: 3)
+                            .frame(width: 11, height: 11)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .help(slots.used == 0 ? "No agents running. Open Agents" : "\(slots.used) of \(slots.max) agents running. Open Agents")
+            Spacer()
+            Button { state.navigate(to: .log) } label: {
                 HStack(spacing: 6) {
                     Image(systemName: (summary.failed > 0 || summary.message != nil) ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath")
                         .font(.caption)
-                    Text(text)
-                        .font(.caption)
-                        .lineLimit(1)
-                    Spacer()
+                    Text(text).font(.caption).lineLimit(1)
                 }
                 .foregroundStyle((summary.failed > 0 || summary.message != nil) ? Theme.critical : Color.secondary)
             }
             .buttonStyle(.plain)
             .help("Open the Log")
-            Button {
-                state.route = .projects
-            } label: {
-                Label("Project settings", systemImage: Route.projects.symbol)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-        .background(.bar)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 7)
+        .autoReload(every: 4) { load() }
+    }
+
+    private func load() {
+        let used = (try? state.store.activeAgentCount()) ?? 0
+        let maxAgents = (try? state.store.maxAgents(projectId: state.projectFilterId)) ?? 3
+        if slots.used != used || slots.max != maxAgents { slots = (used, maxAgents) }
     }
 }

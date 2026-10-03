@@ -28,6 +28,8 @@ struct BannerSpec {
 /// The page for one ticket, whatever its type: header, banner with the main action, then tabs (decisions F1 to F5).
 struct TicketDetailView: View {
     let ticketId: Int
+    /// Inside the Desk: one flat page in the Desk's card, no back link. On its own page the sections are separate panels.
+    var embedded = false
     @EnvironmentObject var state: AppState
     @State private var ticket: Ticket?
     @State private var tab: TicketTab = .overview
@@ -71,7 +73,9 @@ struct TicketDetailView: View {
 
     // MARK: Page
 
-    private func page(_ t: Ticket) -> some View {
+    private func page(_ t: Ticket) -> some View { flatPage(t) }
+
+    private func flatPage(_ t: Ticket) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 header(t)
@@ -80,7 +84,6 @@ struct TicketDetailView: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 14)
-            .padding(.bottom, 10)
             Divider()
             tabContent(t)
         }
@@ -88,13 +91,6 @@ struct TicketDetailView: View {
 
     private func header(_ t: Ticket) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button {
-                state.route = .desk
-            } label: {
-                Label("Desk", systemImage: "chevron.left")
-                    .font(.callout)
-            }
-            .buttonStyle(.link)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(t.displayNumber)
                     .font(.title2.monospacedDigit())
@@ -228,7 +224,7 @@ struct TicketDetailView: View {
             let moved: Ticket? = state.perform("Could not submit the ticket") { try state.store.move(id, to: .checking, actor: .owner, reason: "submitted for check") }
             if moved != nil { VettingBridge.start(ticketId: id, state: state) }
         case .previews:
-            state.route = .previews
+            state.navigate(to: .previews)
         case .closeAsAnswered:
             move(to: .done)
         case .resume:
@@ -269,15 +265,31 @@ struct TicketDetailView: View {
         }
     }
 
+    /// Plain underlined tabs that sit on the divider under the header.
     private func tabBar(_ t: Ticket) -> some View {
-        HXDock(items: visibleTabs(t).map { HXDock.Item(id: $0, title: tabTitle($0, t)) }, selection: $tab)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: 24) {
+            ForEach(visibleTabs(t)) { id in
+                let selected = id == tab
+                Button { tab = id } label: {
+                    VStack(spacing: 7) {
+                        Text(tabTitle(id, t))
+                            .font(.callout.weight(selected ? .semibold : .regular))
+                            .foregroundStyle(selected ? Color.primary : Color.secondary)
+                        Capsule().fill(selected ? Color.accentColor : Color.clear).frame(height: 2.5)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.top, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private func tabContent(_ t: Ticket) -> some View {
         let current: TicketTab = visibleTabs(t).contains(tab) ? tab : .overview
         switch current {
-        case .overview: TicketOverviewTab(ticket: t)
+        case .overview: TicketOverviewTab(ticket: t, split: !embedded)
         case .options: TicketOptionsTab(ticket: t, info: info)
         case .thread: TicketThreadTab(ticket: t, startKind: threadKind)
         case .work:

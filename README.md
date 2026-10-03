@@ -10,7 +10,7 @@ Hatch is a Mac app and a command-line tool for running design and code changes w
 - **A vetting agent (Iris)** that checks a new ticket against the others and your specification, asks questions, suggests a clearer text and the right type. You accept, edit or keep your own.
 - **Visual decisions.** Sketches are HTML. Proposals open a separate Stage app that shows options next to the current app, with controls and scenarios.
 - **Agents that cannot trample each other.** File claims, a limit on agents at once, one git worktree per ticket, previews that combine several tickets, and a merge plan that promotes only on green CI.
-- **Your tickets stay private.** Hatch creates the tickets repository private and refuses a public one.
+- **Your tickets stay private.** Choose an existing private tickets repository from GitHub; Hatch refuses a public one.
 
 ## Requirements
 

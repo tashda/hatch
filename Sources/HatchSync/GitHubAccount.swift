@@ -47,12 +47,22 @@ extension GitHubClient {
         return GitHubUser(login: login, name: j["name"]?.stringValue)
     }
 
-    /// Repositories the token can use, most recently pushed first. Only the first `limit`, to keep the list quick.
-    public func listRepositories(limit: Int = 100) throws -> [GitHubRepoSummary] {
-        let r = try perform("GET", url("/user/repos", [("per_page", String(min(limit, 100))), ("sort", "pushed"),
-                                                        ("affiliation", "owner,collaborator,organization_member")]))
-        let arr = JSONValue.parse(String(decoding: r.body, as: UTF8.self)).arrayValue ?? []
-        return arr.compactMap(Self.summary)
+    /// Repositories the token can use, most recently pushed first. Fetch enough pages for the selector.
+    public func listRepositories(limit: Int = 300) throws -> [GitHubRepoSummary] {
+        guard limit > 0 else { return [] }
+        var results: [GitHubRepoSummary] = []
+        var page = 1
+        while results.count < limit {
+            let pageSize = min(limit - results.count, 100)
+            let r = try perform("GET", url("/user/repos", [("per_page", String(pageSize)), ("page", String(page)),
+                                                            ("sort", "pushed"),
+                                                            ("affiliation", "owner,collaborator,organization_member")]))
+            let batch = JSONValue.parse(String(decoding: r.body, as: UTF8.self)).arrayValue ?? []
+            results.append(contentsOf: batch.compactMap(Self.summary))
+            if batch.count < pageSize { break }
+            page += 1
+        }
+        return Array(results.prefix(limit))
     }
 
     /// nil when the repository does not exist or the token cannot see it.

@@ -15,6 +15,8 @@ struct LinkEntry: Identifiable {
 /// Overview: description, screenshots, links, and the facts on the right (decision F1).
 struct TicketOverviewTab: View {
     let ticket: Ticket
+    /// Description and details as two separate panels (the ticket's own page); false stacks them in one scroll.
+    var split = false
     @EnvironmentObject var state: AppState
 
     @State private var attachments: [Attachment] = []
@@ -31,24 +33,48 @@ struct TicketOverviewTab: View {
     @State private var editing = false
     @State private var editTitle = ""
     @State private var editBody = ""
+    @State private var showAddLink = false
     @State private var linkRef = ""
     @State private var linkKind: LinkKind = .related
 
+    private var mainColumn: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            IrisReviewView(ticketId: ticket.id)
+            if ticket.type == .theme { themeSection }
+            descriptionSection
+            attachmentSection
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Facts and links as one quiet property rail: no boxes, just labelled rows and hairlines.
+    private var rail: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            detailsCard
+            Divider()
+            linkSection
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     var body: some View {
-        ScrollView {
-            HStack(alignment: .top, spacing: 20) {
-                VStack(alignment: .leading, spacing: 18) {
-                    IrisReviewView(ticketId: ticket.id)
-                    if ticket.type == .theme { themeSection }
-                    descriptionSection
-                    attachmentSection
-                    linkSection
+        Group {
+            if split {
+                HStack(alignment: .top, spacing: 0) {
+                    ScrollView { mainColumn.padding(22) }
+                    Divider()
+                    ScrollView { rail.padding(18) }.frame(width: 310)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                detailsCard
-                    .frame(width: 270)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        mainColumn
+                        Divider()
+                        rail
+                    }
+                    .padding(20)
+                }
             }
-            .padding(20)
         }
         .id(ticket.id)
         .autoReload(every: 5) { load() }
@@ -212,53 +238,72 @@ struct TicketOverviewTab: View {
     // MARK: Links
 
     private var linkSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Links")
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Links").font(.headline)
+                Spacer()
+                Button { showAddLink = true } label: { Label("Add link", systemImage: "plus") }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .help("Link another ticket")
+                    .popover(isPresented: $showAddLink, arrowEdge: .bottom) { addLinkPopover }
+            }
             if linkEntries.isEmpty {
-                Text("No links.")
+                Text("Nothing linked yet.")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
             ForEach(linkEntries) { entry in
-                HStack(spacing: 8) {
-                    Text(LinkText.label(kind: entry.link.kind, outgoing: entry.outgoing))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 90, alignment: .leading)
-                    Button {
-                        state.open(entry.other)
-                    } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Text(LinkText.label(kind: entry.link.kind, outgoing: entry.outgoing))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button { remove(entry) } label: { Image(systemName: "xmark") }
+                            .buttonStyle(.plain)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .help("Remove this link")
+                    }
+                    Button { state.open(entry.other) } label: {
                         HStack(spacing: 6) {
                             Text(entry.other.displayNumber).foregroundStyle(.secondary)
-                            Text(entry.other.title).lineLimit(1)
+                            Text(entry.other.title).lineLimit(2).multilineTextAlignment(.leading)
                         }
+                        .font(.callout)
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.plain)
                     StatusChip(status: entry.other.status)
-                    Spacer()
-                    Button { remove(entry) } label: { Image(systemName: "xmark.circle") }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .help("Remove this link")
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+
+    private var addLinkPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Link a ticket").font(.headline)
+            Picker("Kind", selection: $linkKind) {
+                ForEach(LinkKind.allCases.filter { $0 != .parent }, id: \.self) { kind in
+                    Text(LinkText.name(kind)).tag(kind)
                 }
             }
-            HStack(spacing: 8) {
-                Picker("Kind", selection: $linkKind) {
-                    ForEach(LinkKind.allCases.filter { $0 != .parent }, id: \.self) { kind in
-                        Text(LinkText.name(kind)).tag(kind)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 130)
-                TextField("#118", text: $linkRef)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 110)
-                    .onSubmit { addLink() }
-                Button("Add link") { addLink() }
+            .labelsHidden()
+            TextField("#118", text: $linkRef)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { addLink(); showAddLink = false }
+            HStack {
+                Spacer()
+                Button("Add") { addLink(); showAddLink = false }
+                    .buttonStyle(.borderedProminent)
                     .disabled(linkRef.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .controlSize(.small)
         }
+        .padding(14)
+        .frame(width: 240)
     }
 
     private func addLink() {
@@ -284,9 +329,7 @@ struct TicketOverviewTab: View {
 
     private var detailsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Details")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
+            Text("Details").font(.headline)
             MetaRow(label: "Type") { Text(ticket.type.displayName) }
             MetaRow(label: "Project") { Text(projectLine) }
             if let parentTheme {
@@ -320,9 +363,7 @@ struct TicketOverviewTab: View {
             MetaRow(label: "Created") { Text(Format.clock(ticket.createdAt)) }
             MetaRow(label: "Changed") { Text(Format.ago(ticket.updatedAt)) }
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var projectLine: String {

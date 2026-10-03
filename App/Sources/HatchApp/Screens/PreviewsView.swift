@@ -71,17 +71,27 @@ struct PreviewsView: View {
     // MARK: Body
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HXHeader(title: "Previews", subtitle: "Verify several finished tickets in one build. You decide per ticket.")
-                chooser
-                resultSection
-                verificationSection
-                mergeSection
+        HStack(spacing: 8) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HXHeader(title: "Previews", subtitle: "Verify several finished tickets in one build. You decide per ticket.")
+                    chooser
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(20)
-            .frame(maxWidth: 820, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .floatingCard()
+            .frame(minWidth: 340, idealWidth: 420, maxWidth: 480)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    resultSection
+                    verificationSection
+                    mergeSection
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .floatingCard()
         }
         .onAppear { refreshCI() }
     }

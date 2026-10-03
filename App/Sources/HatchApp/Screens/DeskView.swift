@@ -46,12 +46,20 @@ struct DeskView: View {
     var body: some View {
         Group {
             if loaded && groups.isEmpty {
-                allClear
+                allClear.floatingCard()
             } else {
                 splitContent
             }
         }
         .navigationTitle("Desk")
+        .onChange(of: selection) { _, selected in state.selectedTicketId = selected; publishBrief() }
+        .onChange(of: notice) { _, _ in publishBrief() }
+        .onChange(of: groups.count) { _, _ in publishBrief() }
+        .onAppear {
+            if selection == nil { selection = state.selectedTicketId }
+            publishBrief()
+        }
+        .onDisappear { state.inspectorTop = nil }
         .autoReload(every: 4) { load() }
         .sheet(item: $plan) { item in
             AcceptPlanSheet(plan: item) { confirmed in
@@ -65,56 +73,109 @@ struct DeskView: View {
     // MARK: Layout
 
     private var splitContent: some View {
-        HSplitView {
+        HStack(spacing: 8) {
             listPane
-                .frame(minWidth: 400)
-            briefPane
-                .frame(minWidth: 300, idealWidth: 360, maxWidth: 480)
+                .frame(minWidth: 320, idealWidth: 360, maxWidth: 420)
+            ticketPane
+                .floatingCard()
         }
     }
 
     private var listPane: some View {
-        List(selection: $selection) {
-            ForEach(groups) { group in
-                Section {
-                    ForEach(group.tickets) { ticket in
-                        DeskRow(ticket: ticket,
-                                copy: copy(for: ticket),
-                                recommendation: recommendationText(for: ticket),
-                                showProject: state.selectedProjectKey == nil && projectNames.count > 1,
-                                projectName: projectNames[ticket.projectId] ?? "",
-                                onAccept: selection == ticket.id && canAccept(ticket) ? { prepareAccept(ticket) } : nil)
-                            .tag(ticket.id)
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                ForEach(groups) { group in
+                    statusCard(title: group.status.displayName, count: group.tickets.count, color: Theme.you, collapsed: nil) {
+                        ForEach(Array(group.tickets.enumerated()), id: \.element.id) { index, ticket in
+                            if index > 0 { Divider().padding(.horizontal, 10) }
+                            selectableRow(ticket.id) {
+                                DeskRow(ticket: ticket,
+                                        copy: copy(for: ticket),
+                                        recommendation: recommendationText(for: ticket),
+                                        showProject: state.selectedProjectKey == nil && projectNames.count > 1,
+                                        projectName: projectNames[ticket.projectId] ?? "",
+                                        onAccept: selection == ticket.id && canAccept(ticket) ? { prepareAccept(ticket) } : nil)
+                            }
                             .contextMenu { rowMenu(ticket) }
+                        }
                     }
-                } header: {
-                    groupHeader(title: group.status.displayName, count: group.tickets.count, color: Theme.you)
+                }
+                if !waiting.isEmpty {
+                    statusCard(title: "Waiting on agents", count: waiting.count, color: Theme.agent, collapsed: !showWaiting) {
+                        if showWaiting {
+                            ForEach(waiting) { ticket in
+                                selectableRow(ticket.id) { DeskWaitingRow(ticket: ticket) }
+                            }
+                        }
+                    } toggle: { showWaiting.toggle() }
                 }
             }
-            if !waiting.isEmpty {
-                Section {
-                    if showWaiting {
-                        ForEach(waiting) { ticket in
-                            DeskWaitingRow(ticket: ticket)
-                                .tag(ticket.id)
-                        }
+            .padding(.horizontal, 3)
+            .padding(.vertical, 3)
+        }
+        .scrollClipDisabled()
+        .onChange(of: allQueued.map { $0.id }) { _, _ in fixSelection() }
+    }
+
+    /// One card per status, so the groups read apart at a glance.
+    private func statusCard<C: View>(title: String, count: Int, color: Color, collapsed: Bool?,
+                                     @ViewBuilder _ content: () -> C, toggle: (() -> Void)? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button { toggle?() } label: {
+                HStack(spacing: 7) {
+                    Circle().fill(color).frame(width: 8, height: 8)
+                    Text(title).font(.subheadline.weight(.semibold))
+                    Text("\(count)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Spacer()
+                    if let collapsed {
+                        Image(systemName: collapsed ? "chevron.right" : "chevron.down").font(.caption2).foregroundStyle(.secondary)
                     }
-                } header: {
-                    Button {
-                        showWaiting.toggle()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: showWaiting ? "chevron.down" : "chevron.right")
-                                .font(.caption2)
-                            groupHeader(title: "Waiting on agents", count: waiting.count, color: Theme.agent)
-                        }
-                    }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            content()
+        }
+        .padding(.bottom, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .floatingCard()
+    }
+
+    private func selectableRow<R: View>(_ id: Int, @ViewBuilder _ row: () -> R) -> some View {
+        row()
+            .padding(.horizontal, 6)
+            .background(selection == id ? Color.accentColor.opacity(0.13) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
+            .onTapGesture { selection = id }
+    }
+
+    /// The selected ticket itself; the decision brief (accept, park, ask) lives at the top of the Iris inspector.
+    private var ticketPane: some View {
+        Group {
+            if let ticket = selectedTicket {
+                TicketDetailView(ticketId: ticket.id, embedded: true)
+            } else {
+                ContentUnavailableView("Select a ticket", systemImage: "tray", description: Text("Move with J and K. Return opens it."))
             }
         }
-        .listStyle(.inset)
-        .onChange(of: allQueued.map { $0.id }) { _, _ in fixSelection() }
+    }
+
+    private func publishBrief() {
+        guard let ticket = selectedTicket else { state.inspectorTop = nil; return }
+        state.inspectorTop = AnyView(
+            DeskBriefPane(ticket: ticket,
+                          info: infos[ticket.id] ?? ProposalInfo(),
+                          questions: questions[ticket.id] ?? [],
+                          notice: notice,
+                          onOpen: { open(ticket) },
+                          onPark: { park(ticket) },
+                          onAsk: { ask(ticket) },
+                          onAccept: { prepareAccept(ticket) })
+                .frame(maxHeight: 460)
+        )
     }
 
     private var briefPane: some View {

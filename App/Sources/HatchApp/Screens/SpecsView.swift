@@ -55,17 +55,18 @@ struct SpecsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            topBar
-            Divider()
+            topBar.floatingCard()
+            Spacer().frame(height: 8)
             if projectId == nil {
                 ContentUnavailableView("No project", systemImage: "doc.text", description: Text("Add a project to see its Spec."))
+                    .floatingCard()
             } else if areaNames.isEmpty {
-                emptyState
+                emptyState.floatingCard()
             } else {
-                HSplitView {
-                    areaList.frame(minWidth: 160, idealWidth: 180, maxWidth: 240)
-                    itemList.frame(minWidth: 300)
-                    detail.frame(minWidth: 280, idealWidth: 340)
+                HStack(spacing: 8) {
+                    areaList.floatingCard().frame(width: 200)
+                    itemList.floatingCard().frame(minWidth: 300)
+                    detail.floatingCard().frame(width: 360)
                 }
             }
         }

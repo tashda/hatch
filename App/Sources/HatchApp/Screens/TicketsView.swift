@@ -99,6 +99,18 @@ struct TicketsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // In the page, not in the toolbar: a toolbar search field would run across the Iris inspector.
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("type:bug status:to-verify project:echo turn:you, or words", text: $queryText)
+                    .textFieldStyle(.plain)
+                if !queryText.isEmpty {
+                    Button { queryText = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            Divider()
             filterBar
             Divider()
             if tickets.isEmpty {
@@ -110,13 +122,13 @@ struct TicketsView: View {
                 table
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("Tickets")
         .autoReload(every: 6) { load() }
         .onChange(of: queryText) { _, _ in load() }
         .onChange(of: sort) { _, _ in load() }
         .onAppear { loadViews(); takePendingQuery() }
         .onChange(of: pendingQuery) { _, _ in takePendingQuery() }
-        .searchable(text: $queryText, prompt: "type:bug status:to-verify project:echo turn:you, or words")
         .alert("Save this view", isPresented: $showSave) {
             TextField("Name", text: $newViewName)
             Button("Save") { saveCurrentView() }

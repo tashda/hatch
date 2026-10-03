@@ -6,14 +6,16 @@ struct RootView: View {
     @EnvironmentObject var state: AppState
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
-        } detail: {
+        Group {
             if Snapshots.folder == nil {
-                liveDetail
+                liveShell
             } else {
-                detailContent
+                NavigationSplitView {
+                    SidebarView()
+                        .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
+                } detail: {
+                    detailContent
+                }
             }
         }
         .sheet(isPresented: $state.showPalette) { CommandPalette() }
@@ -22,13 +24,57 @@ struct RootView: View {
         } message: { Text(state.errorMessage ?? "") }
     }
 
-    private var liveDetail: some View {
-        detailContent
-            .inspector(isPresented: $state.showAskPanel) {
-                AskPanel()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .inspectorColumnWidth(min: 280, ideal: 320, max: 420)
+    /// Iris is a column beside the page, not the native inspector: the cards float on the window
+    /// background under the toolbar, as in Echo. It lives above the routed content, so it stays open across pages.
+    /// The window as floating panels on the window background, as in Echo: sidebar, page and Iris are
+    /// separate cards; the footer sits under the page and Iris, not under the sidebar.
+    private var liveShell: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                if state.showSidebar {
+                    SidebarView()
+                        .floatingCard()
+                        .frame(width: 232)
+                        .padding(.init(top: 6, leading: 8, bottom: 0, trailing: 0))
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+                liveDetail
             }
+            WindowFooter()
+        }
+        .background(Color(nsColor: .underPageBackgroundColor))
+        .animation(.snappy(duration: 0.25), value: state.showSidebar)
+        .navigationTitle(state.route.title)
+        .toolbar(removing: .title)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .toolbar { MainToolbar(showsSidebarToggle: true) }
+    }
+
+    /// Pages that lay out several panels themselves; the others get one card.
+    private var ownsPanels: Bool {
+        switch state.route {
+        case .desk, .specs, .previews: true
+        default: false
+        }
+    }
+
+    @ViewBuilder private var pageCard: some View {
+        if ownsPanels { detailContent } else { detailContent.floatingCard() }
+    }
+
+    private var liveDetail: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                pageCard
+                if state.showAskPanel {
+                    IrisPanel()
+                        .frame(width: 344)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .padding(.init(top: 6, leading: 8, bottom: 0, trailing: 8))
+        }
+        .animation(.snappy(duration: 0.25), value: state.showAskPanel)
     }
 
     private var detailContent: some View {
@@ -39,13 +85,15 @@ struct RootView: View {
                 CommandPalette()
             } else if state.snapshotPresentation == .addProject {
                 AddProjectSheet()
-            } else if state.snapshotPresentation == .createTicketsRepo {
-                HXCreateTicketsRepoSheet(account: GitHubAccountModel(), projectName: "Acme") { _ in }
+            } else if state.snapshotPresentation == .repositorySelector {
+                HXRepositorySelectionSheet(account: GitHubAccountModel(), projectName: "Acme",
+                                           initial: [.tickets: "acme/hatch-tickets", .app: "acme/app",
+                                                     .designSystem: "acme/design-system"]) { _ in true }
             } else if Snapshots.folder != nil && state.showAskPanel {
                 HSplitView {
                     content
                         .frame(minWidth: 500, maxWidth: .infinity, maxHeight: .infinity)
-                    AskPanel()
+                    IrisPanel()
                         .frame(minWidth: 280, idealWidth: 320, maxWidth: 420, maxHeight: .infinity)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -57,7 +105,7 @@ struct RootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle(snapshotTitle)
         .toolbar {
-            if state.snapshotPresentation == nil { MainToolbar() }
+            if state.snapshotPresentation == nil && Snapshots.folder != nil { MainToolbar() }
         }
     }
 
@@ -66,7 +114,7 @@ struct RootView: View {
         case .settings: "Settings"
         case .palette: "Search"
         case .addProject: "Add project"
-        case .createTicketsRepo: "Create private repository"
+        case .repositorySelector: "Choose repositories"
         case nil: state.route.title
         }
     }
@@ -90,19 +138,46 @@ struct RootView: View {
 
 struct MainToolbar: ToolbarContent {
     @EnvironmentObject var state: AppState
+    var showsSidebarToggle = false
 
     var body: some ToolbarContent {
-        ToolbarItem(placement: .navigation) { ProjectTitleMenu() }
+        if showsSidebarToggle {
+            ToolbarItem(placement: .navigation) {
+                Button { state.showSidebar.toggle() } label: { Label("Sidebar", systemImage: "sidebar.leading") }
+                    .help("Show or hide the sidebar (\u{2303}\u{2318}S)")
+            }
+        }
+        if showsSidebarToggle {
+            ToolbarSpacer(.fixed, placement: .navigation)
+            ToolbarItem(placement: .navigation) {
+                HStack(spacing: 0) {
+                    Button { state.goBack() } label: { Image(systemName: "chevron.left").frame(width: 30, height: 28) }
+                        .disabled(!state.canGoBack)
+                        .help(state.backTitle.map { "Back to \($0) (\u{2318}[)" } ?? "Back")
+                    Button { state.goForward() } label: { Image(systemName: "chevron.right").frame(width: 30, height: 28) }
+                        .disabled(!state.canGoForward)
+                        .help("Forward (\u{2318}])")
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 4)
+                .glassEffect(.regular, in: .capsule)
+            }
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarSpacer(.fixed, placement: .navigation)
+        }
+        ToolbarItem(placement: .navigation) { ProjectTitleMenu().padding(.horizontal, 6).glassEffect(.regular, in: .capsule) }
+            .sharedBackgroundVisibility(.hidden)
+        ToolbarSpacer(.flexible, placement: .primaryAction)
         ToolbarItemGroup(placement: .primaryAction) {
             Button { state.showPalette = true } label: { Label("Search", systemImage: "magnifyingglass") }
                 .help("Search (⌘K)")
-            Button { state.route = .newTicket } label: { Label("New Ticket", systemImage: "plus") }
+            Button { state.navigate(to: .newTicket) } label: { Label("New Ticket", systemImage: "plus") }
                 .help("New ticket (⌘N)")
             Button { state.showAskPanel.toggle() } label: {
-                Label("Ask", systemImage: state.showAskPanel ? "sidebar.trailing" : "sparkles")
+                Label("Iris", systemImage: "sparkles")
             }
-                .help(state.showAskPanel ? "Hide Ask inspector (⌥⌘A)" : "Show Ask inspector (⌥⌘A)")
-                .accessibilityLabel(state.showAskPanel ? "Hide Ask inspector" : "Show Ask inspector")
+                .help(state.showAskPanel ? "Hide Iris (⌥⌘A)" : "Show Iris (⌥⌘A)")
+                .accessibilityLabel(state.showAskPanel ? "Hide Iris" : "Show Iris")
         }
     }
 }
@@ -135,7 +210,7 @@ struct ProjectTitleMenu: View {
                 }
             }
             if !state.projects.isEmpty { Divider() }
-            Button("Project settings…", systemImage: "gearshape") { state.route = .projects }
+            Button("Project settings…", systemImage: "gearshape") { state.navigate(to: .projects) }
         } label: {
             HStack(spacing: 6) {
                 if let p = current {
@@ -151,5 +226,16 @@ struct ProjectTitleMenu: View {
         .menuStyle(.button)
         .menuIndicator(.hidden)
         .help("Switch project")
+    }
+}
+
+extension View {
+    /// A panel that floats on the window background: rounded, softly shadowed, with a gutter around it (as in Echo).
+    func floatingCard() -> some View {
+        self
+            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.separator.opacity(0.3)))
+            .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
     }
 }
