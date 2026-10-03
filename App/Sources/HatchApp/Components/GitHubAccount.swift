@@ -6,14 +6,17 @@ import HatchSync
 /// The GitHub token Hatch stores, in the macOS Keychain. Nothing else is written to disk.
 enum HXKeychain {
     private static let service = "app.hatch.github"
-    private static let account = "token"
 
-    private static var query: [String: Any] {
+    private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
     }
 
     static func read() -> String? {
-        var q = query
+        read("token")
+    }
+
+    private static func read(_ account: String) -> String? {
+        var q = query(account)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?
@@ -25,18 +28,74 @@ enum HXKeychain {
     @discardableResult
     static func write(_ token: String) -> Bool {
         delete()
-        var q = query
-        q[kSecValueData as String] = Data(token.utf8)
+        return writeItem("token", token)
+    }
+
+    @discardableResult
+    static func writeOAuth(accessToken: String, refreshToken: String?, expiresIn: Int?) -> Bool {
+        delete()
+        guard writeItem("token", accessToken) else { return false }
+        if let refreshToken, !writeItem("refresh", refreshToken) { delete(); return false }
+        if let expiresIn, !writeItem("expiry", String(Date().addingTimeInterval(TimeInterval(expiresIn)).timeIntervalSince1970)) {
+            delete(); return false
+        }
+        return true
+    }
+
+    static func refreshToken() -> String? { read("refresh") }
+    static func expiry() -> Date? { read("expiry").flatMap(Double.init).map(Date.init(timeIntervalSince1970:)) }
+
+    private static func writeItem(_ account: String, _ text: String) -> Bool {
+        var q = query(account)
+        q[kSecValueData as String] = Data(text.utf8)
         q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         return SecItemAdd(q as CFDictionary, nil) == errSecSuccess
     }
 
-    static func delete() { SecItemDelete(query as CFDictionary) }
+    static func delete() {
+        for account in ["token", "refresh", "expiry"] { SecItemDelete(query(account) as CFDictionary) }
+    }
 }
 
 enum HXGitHub {
-    /// The client every part of the app uses: the Keychain token first, then GITHUB_TOKEN, then the gh tool.
-    static func client() -> GitHubClient { GitHubClient(token: HXKeychain.read()) }
+    /// The client every part of the app uses. Refresh expiring GitHub App authorization before API calls.
+    static func client() -> GitHubClient {
+        refreshAuthorizationIfNeeded()
+        return GitHubClient(token: HXKeychain.read())
+    }
+
+    private static func refreshAuthorizationIfNeeded() {
+        guard let expiry = HXKeychain.expiry(), expiry.timeIntervalSinceNow < 300,
+              let refreshToken = HXKeychain.refreshToken(),
+              let clientID = Bundle.main.object(forInfoDictionaryKey: "HatchGitHubClientID") as? String,
+              !clientID.isEmpty, !clientID.contains("REPLACE") else { return }
+
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "grant_type", value: "refresh_token"),
+            URLQueryItem(name: "refresh_token", value: refreshToken)
+        ]
+        var request = URLRequest(url: URL(string: "https://github.com/login/oauth/access_token")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data((components.percentEncodedQuery ?? "").utf8)
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var responseData: Data?
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            responseData = data
+            semaphore.signal()
+        }.resume()
+        guard semaphore.wait(timeout: .now() + 20) == .success,
+              let responseData,
+              let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              let accessToken = json["access_token"] as? String else { return }
+        _ = HXKeychain.writeOAuth(accessToken: accessToken,
+                                  refreshToken: json["refresh_token"] as? String ?? refreshToken,
+                                  expiresIn: json["expires_in"] as? Int)
+    }
 }
 
 extension Notification.Name {
@@ -85,7 +144,7 @@ final class GitHubAccountModel: ObservableObject {
     func connect(token: String) {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        if !HXKeychain.write(trimmed) { error = "The Keychain would not store the token."; return }
+        if !HXKeychain.write(trimmed) { error = "The Keychain would not store the GitHub authorization."; return }
         NotificationCenter.default.post(name: .hxGitHubAccountChanged, object: nil)
         refresh()
     }

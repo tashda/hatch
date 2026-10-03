@@ -30,6 +30,7 @@
 		53D4579D6537437B4BEB40CC /* HatchSync in Frameworks */ = {isa = PBXBuildFile; productRef = C92A8B1F523538756CBE6D69 /* HatchSync */; };
 		60932597CB89763A211708DD /* ProjectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B110069306661FF4A2E42165 /* ProjectView.swift */; };
 		6382CD856210B2FBD375405E /* GitHubAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E374A9B62BB42A52EAAC221 /* GitHubAccount.swift */; };
+		2C294CBEE8C4487CA95C0001 /* GitHubDeviceFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C294CBEE8C4487CA95C0002 /* GitHubDeviceFlow.swift */; };
 		6982C5D2A39CF9B7C315D9E7 /* Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF82D71D692C33CB9A7DC077 /* Format.swift */; };
 		7A496CF5D64909DB27AAB72F /* IrisReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50AA3B651A6F720EEC6333D3 /* IrisReviewView.swift */; };
 		7A50BDABD12739C54CB65EB3 /* Snapshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AFC7402DEC44D748849719B /* Snapshots.swift */; };
@@ -71,6 +72,7 @@
 		46443AE485036DD464BF0D3E /* CommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPalette.swift; sourceTree = "<group>"; };
 		472BDC36A8D14D096FCC9517 /* Stubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stubs.swift; sourceTree = "<group>"; };
 		4E374A9B62BB42A52EAAC221 /* GitHubAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubAccount.swift; sourceTree = "<group>"; };
+		2C294CBEE8C4487CA95C0002 /* GitHubDeviceFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubDeviceFlow.swift; sourceTree = "<group>"; };
 		4FEE3B6C1BACD094A37DE7F3 /* DecisionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionsView.swift; sourceTree = "<group>"; };
 		501F8478F0F8743977F822BD /* TicketOverviewTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketOverviewTab.swift; sourceTree = "<group>"; };
 		50AA3B651A6F720EEC6333D3 /* IrisReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IrisReviewView.swift; sourceTree = "<group>"; };
@@ -158,6 +160,7 @@
 				AC8D6FDD0676BA5D121563D7 /* EventText.swift */,
 				DF82D71D692C33CB9A7DC077 /* Format.swift */,
 				4E374A9B62BB42A52EAAC221 /* GitHubAccount.swift */,
+				2C294CBEE8C4487CA95C0002 /* GitHubDeviceFlow.swift */,
 				C55062C4CDC76CEA05F19695 /* ProblemChip.swift */,
 				F0CD09DBC6396867DD8D2F66 /* ProposalInfo.swift */,
 				E5E368A9FDF982F83C543958 /* TurnChip.swift */,
@@ -346,6 +349,7 @@
 				B167D0AA9EF600C83E4B6870 /* EventText.swift in Sources */,
 				6982C5D2A39CF9B7C315D9E7 /* Format.swift in Sources */,
 				6382CD856210B2FBD375405E /* GitHubAccount.swift in Sources */,
+				2C294CBEE8C4487CA95C0001 /* GitHubDeviceFlow.swift in Sources */,
 				4358486F0788BD721883D3E8 /* HatchApp.swift in Sources */,
 				7A496CF5D64909DB27AAB72F /* IrisReviewView.swift in Sources */,
 				E9666C026E05CA6094D17B29 /* LogView.swift in Sources */,

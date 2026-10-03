@@ -3,7 +3,7 @@ import AppKit
 import HatchCore
 import HatchSync
 
-/// Settings: paths, agent limit, the apps Hatch launches, and where the GitHub token comes from.
+/// Settings: paths, agent limit, the apps Hatch launches, and GitHub authorization.
 struct SettingsView: View {
     @EnvironmentObject var state: AppState
 
@@ -12,7 +12,7 @@ struct SettingsView: View {
     @State private var claudeStatus = "Checking..."
     @State private var loaded = false
     @StateObject private var account = GitHubAccountModel()
-    @State private var tokenText = ""
+    @StateObject private var deviceFlow = GitHubDeviceFlow()
 
     var body: some View {
         Form {
@@ -38,24 +38,41 @@ struct SettingsView: View {
                 if let error = account.error {
                     Text(error).font(.callout).foregroundStyle(Theme.critical)
                 }
-                HStack {
-                    SecureField("Paste a token", text: $tokenText).textFieldStyle(.roundedBorder)
-                    Button { account.connect(token: tokenText); tokenText = "" } label: { Label("Connect", systemImage: "link") }
-                        .buttonStyle(.glassProminent)
-                        .disabled(tokenText.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button { deviceFlow.start { _ in account.refresh() } } label: {
+                    Label(deviceFlow.busy ? "Waiting for GitHub…" : "Connect with GitHub", systemImage: "person.crop.circle.badge.checkmark")
                 }
+                .buttonStyle(.glassProminent)
+                .disabled(deviceFlow.busy)
                 .controlSize(.large)
-                HStack {
-                    Link(destination: URL(string: "https://github.com/settings/tokens/new?scopes=repo&description=Hatch")!) {
-                        Label("Create a token on GitHub", systemImage: "arrow.up.right.square")
+                if let code = deviceFlow.userCode {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Enter this one-time code on GitHub").font(.callout)
+                        HStack {
+                            Text(code).font(.title2.monospaced().weight(.semibold)).textSelection(.enabled)
+                            Spacer()
+                            if let url = deviceFlow.verificationURL {
+                                Button("Open GitHub") { NSWorkspace.shared.open(url) }.buttonStyle(.glass)
+                            }
+                        }
                     }
+                }
+                if let message = deviceFlow.message {
+                    Text(message).font(.callout).foregroundStyle(.secondary)
+                }
+                if let error = deviceFlow.error {
+                    Text(error).font(.callout).foregroundStyle(Theme.critical)
+                }
+                HStack {
                     Spacer()
+                    if deviceFlow.busy {
+                        Button("Cancel") { deviceFlow.cancel() }.buttonStyle(.glass)
+                    }
                     if account.source == .stored {
-                        Button { account.signOut() } label: { Label("Remove token", systemImage: "xmark") }.buttonStyle(.glass)
+                        Button { account.signOut() } label: { Label("Disconnect", systemImage: "xmark") }.buttonStyle(.glass)
                     }
                     Button { account.refresh() } label: { Label("Check again", systemImage: "arrow.clockwise") }.buttonStyle(.glass)
                 }
-                Text("A token with the repo scope lets Hatch create private repositories and sync tickets. It is kept in the macOS Keychain. Without one, Hatch uses GITHUB_TOKEN or the gh command line tool. Tickets repositories are always created private.")
+                Text("Connect by approving Hatch in your browser. The authorization is stored in the macOS Keychain. Hatch requests access only to repositories where its GitHub App is installed. Tickets repositories must be private. Environment and gh credentials remain available for development fallback.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -69,7 +86,7 @@ struct SettingsView: View {
         guard let user = account.user else { return account.source == .none ? "Not connected" : "Token found, but not accepted" }
         let from: String
         switch account.source {
-        case .stored: from = "token in Keychain"
+        case .stored: from = "GitHub authorization in Keychain"
         case .environment: from = "GITHUB_TOKEN"
         case .ghTool: from = "gh tool"
         case .none: from = ""
