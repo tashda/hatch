@@ -7,12 +7,6 @@ struct CommandPalette: View { var body: some View { Text("Search").padding(40) }
 struct AskPanel: View { var body: some View { Text("Ask") } }
 struct TicketsView: View { var body: some View { Text("Tickets") } }
 struct BoardView: View { var body: some View { Text("Board") } }
-struct PreviewsView: View { var body: some View { Text("Previews") } }
-struct SpecsView: View { var body: some View { Text("Specs") } }
-struct DecisionsView: View { var body: some View { Text("Decisions") } }
-struct AgentsView: View { var body: some View { Text("Agents") } }
-struct LogView: View { var body: some View { Text("Log") } }
-struct ProjectView: View { var body: some View { Text("Project") } }
 struct TicketDetailView: View { let ticketId: Int; var body: some View { Text("Ticket \(ticketId)") } }
 struct ComposerView: View { var body: some View { Text("New ticket") } }
 struct SettingsView: View { var body: some View { Text("Settings").padding(40) } }
