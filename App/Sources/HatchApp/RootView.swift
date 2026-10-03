@@ -15,23 +15,26 @@ struct RootView: View {
                     SettingsView()
                 } else if state.snapshotPresentation == .palette {
                     CommandPalette()
-                } else if state.snapshotPresentation == .askPanel {
-                    HStack(spacing: 0) {
-                        content.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        Divider()
-                        AskPanel().frame(width: 320)
-                    }
+                } else if state.snapshotPresentation == .addProject {
+                    AddProjectSheet()
+                } else if state.snapshotPresentation == .createTicketsRepo {
+                    HXCreateTicketsRepoSheet(account: GitHubAccountModel(), projectName: "Acme") { _ in }
                 } else {
-                    HStack(spacing: 0) {
+                    if state.showAskPanel {
+                        HSplitView {
+                            content
+                                .frame(minWidth: 500, maxWidth: .infinity, maxHeight: .infinity)
+                            AskPanel()
+                                .frame(minWidth: 280, idealWidth: 320, maxWidth: 420, maxHeight: .infinity)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
                         content
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if state.showAskPanel {
-                            Divider()
-                            AskPanel().frame(width: 320)
-                        }
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle(snapshotTitle)
             .toolbar {
                 if state.snapshotPresentation == nil { MainToolbar() }
@@ -47,7 +50,8 @@ struct RootView: View {
         switch state.snapshotPresentation {
         case .settings: "Settings"
         case .palette: "Search"
-        case .askPanel: "Ask Hatch"
+        case .addProject: "Add project"
+        case .createTicketsRepo: "Create private repository"
         case nil: state.route.title
         }
     }

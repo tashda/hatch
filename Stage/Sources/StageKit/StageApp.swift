@@ -15,6 +15,7 @@ public struct StageLaunchOptions: Equatable {
     public var manifestPath: String? = nil
     public var home: String? = nil
     public var check: Bool = false
+    public var snapshotDirectory: URL? = nil
 
     public init() {}
 
@@ -36,6 +37,9 @@ public struct StageLaunchOptions: Equatable {
                 i += 1
             } else if a == "--check" {
                 o.check = true
+            } else if a == "--snapshots", i + 1 < arguments.count {
+                o.snapshotDirectory = URL(fileURLWithPath: arguments[i + 1], isDirectory: true)
+                i += 1
             }
             i += 1
         }
@@ -74,7 +78,7 @@ public enum StageApp {
         let source: StageDataSource
         if let given = dataSource {
             source = given
-        } else if !options.demo, let ticket = options.ticket {
+        } else if options.snapshotDirectory == nil, !options.demo, let ticket = options.ticket {
             if let home = options.home, !home.isEmpty {
                 source = HatchAPIStageDataSource(ticket: ticket, home: URL(fileURLWithPath: home, isDirectory: true))
             } else {
@@ -85,7 +89,7 @@ public enum StageApp {
         }
         let model = StageModel(manifest: effective, provider: provider, dataSource: source)
         model.captureView = { StageSnapshot.jpegOfFrontStageWindow() }
-        let d = StageAppDelegate(model: model, title: windowTitle(effective, options))
+        let d = StageAppDelegate(model: model, title: windowTitle(effective, options), snapshotDirectory: options.snapshotDirectory)
         delegate = d
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
@@ -108,11 +112,13 @@ private final class DoneFlag: @unchecked Sendable {
 final class StageAppDelegate: NSObject, NSApplicationDelegate {
     private let model: StageModel
     private let title: String
+    private let snapshotDirectory: URL?
     private var window: NSWindow? = nil
 
-    init(model: StageModel, title: String) {
+    init(model: StageModel, title: String, snapshotDirectory: URL? = nil) {
         self.model = model
         self.title = title
+        self.snapshotDirectory = snapshotDirectory
         super.init()
     }
 
@@ -133,6 +139,80 @@ final class StageAppDelegate: NSObject, NSApplicationDelegate {
         w.makeKeyAndOrderFront(nil)
         window = w
         NSApp.activate(ignoringOtherApps: true)
+        if snapshotDirectory != nil {
+            Task { @MainActor in await captureSnapshots() }
+        }
+    }
+
+    private func captureSnapshots() async {
+        guard let snapshotDirectory else { return }
+        try? FileManager.default.createDirectory(at: snapshotDirectory, withIntermediateDirectories: true)
+        // StageView restores asynchronously on appear. Let it settle before taking the fixture captures.
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        model.send(.useAllRecommendations)
+        model.send(.addPin(text: "Keep the action aligned with the message.", option: "b", x: 0.72, y: 0.31))
+        model.send(.pinMix)
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        for appearance in StageAppearance.allCases {
+            model.send(.dismissSheet)
+            model.send(.setMode(.side))
+            model.send(.setAppearance(appearance))
+            model.send(.setScenario("rest"))
+            model.send(.showAllOptions)
+            model.send(.toggleRedlines)
+            model.send(.toggleRedlines)
+            try? await capture("stage-main-\(appearance.rawValue)", into: snapshotDirectory)
+
+            for mode in [StageMode.overlay, .flip, .wipe, .matrix] {
+                model.send(.setMode(mode))
+                try? await capture("stage-\(mode.rawValue)-\(appearance.rawValue)", into: snapshotDirectory)
+            }
+
+            model.send(.setMode(.side))
+            for scenario in ["error", "long-text", "many-items"] {
+                model.send(.setScenario(scenario))
+                try? await capture("stage-\(scenario)-\(appearance.rawValue)", into: snapshotDirectory)
+            }
+
+            model.send(.toggleRedlines)
+            try? await capture("stage-redlines-\(appearance.rawValue)", into: snapshotDirectory)
+            model.send(.toggleRedlines)
+
+            for (name, action) in [
+                ("accept", StageAction.requestAccept),
+                ("send-back", StageAction.requestSendBack),
+                ("ask", StageAction.requestAsk),
+                ("help", StageAction.toggleHelp),
+            ] {
+                model.send(.setScenario("rest"))
+                model.send(action)
+                if name == "send-back" { model.send(.setSendBackNote("Keep the action visible at large text sizes.")) }
+                if name == "ask" { model.send(.setAskDraft("Does the larger padding keep the action easy to find?")) }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                if let sheet = window?.attachedSheet, let view = sheet.contentView {
+                    save(view, name: "stage-\(name)-sheet-\(appearance.rawValue)", into: snapshotDirectory)
+                }
+                model.send(.dismissSheet)
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+        }
+        await model.announceClosed()
+        NSApp.terminate(nil)
+    }
+
+    private func capture(_ name: String, into directory: URL) async throws {
+        try await Task.sleep(nanoseconds: 350_000_000)
+        guard let view = window?.contentView else { return }
+        save(view, name: name, into: directory)
+    }
+
+    private func save(_ view: NSView, name: String, into directory: URL) {
+        view.layoutSubtreeIfNeeded()
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: directory.appendingPathComponent("\(name).png"))
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

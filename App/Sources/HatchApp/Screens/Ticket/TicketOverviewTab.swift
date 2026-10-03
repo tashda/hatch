@@ -50,6 +50,7 @@ struct TicketOverviewTab: View {
             }
             .padding(20)
         }
+        .id(ticket.id)
         .autoReload(every: 5) { load() }
     }
 

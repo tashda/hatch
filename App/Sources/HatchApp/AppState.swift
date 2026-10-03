@@ -7,7 +7,7 @@ import HatchAPI
 /// change, and holds navigation and panel state. Screens never write SQL; they call store methods inside `perform`.
 @MainActor
 final class AppState: ObservableObject {
-    enum SnapshotPresentation { case settings, palette, askPanel }
+    enum SnapshotPresentation { case settings, palette, addProject, createTicketsRepo }
 
     let store: HatchStore
     let paths: AppPaths

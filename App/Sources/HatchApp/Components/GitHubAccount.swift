@@ -200,7 +200,7 @@ struct HXRepoPickerMenu: View {
         }
         .menuIndicator(.hidden)
         .disabled(account.user == nil)
-        .task { if account.user == nil && !account.busy { account.refresh() } }
+        .task { if !Snapshots.demoMode && account.user == nil && !account.busy { account.refresh() } }
     }
 }
 

@@ -22,7 +22,9 @@ struct HatchApp: App {
                     state.stopServices()
                 }
         }
-        .commands { HatchCommands(state: state) }
+        .commands {
+            HatchCommands(state: state)
+        }
 
         Settings {
             SettingsView().environmentObject(state)
@@ -42,6 +44,10 @@ struct HatchCommands: Commands {
             Button("Search") { state.showPalette = true }.keyboardShortcut("k")
             Button("Sync with GitHub") { state.syncNow() }.keyboardShortcut("r", modifiers: [.shift, .command])
             Button("Ask Hatch") { state.showAskPanel.toggle() }.keyboardShortcut("a", modifiers: [.option, .command])
+        }
+        CommandMenu("View") {
+            Toggle("Ask Inspector", isOn: $state.showAskPanel)
+                .keyboardShortcut("i", modifiers: [.control, .command])
         }
         CommandMenu("Go") {
             Button("Desk") { state.route = .desk }.keyboardShortcut("1")

@@ -58,7 +58,9 @@ struct AutoReload: ViewModifier {
             .onAppear { action() }
             .onChange(of: state.revision) { _, _ in action() }
             .onChange(of: state.selectedProjectKey) { _, _ in action() }
-            .onReceive(Timer.publish(every: seconds, on: .main, in: .common).autoconnect()) { _ in action() }
+            .onReceive(Timer.publish(every: seconds, on: .main, in: .common).autoconnect()) { _ in
+                if !Snapshots.demoMode { action() }
+            }
     }
 }
 

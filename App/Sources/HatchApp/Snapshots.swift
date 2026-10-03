@@ -88,6 +88,10 @@ enum Snapshots {
         }
         let proposal = tickets[0], verifyA = tickets[3], building = tickets[4]
         let sketch = tickets[2], verifyB = tickets[12], question = tickets[6]
+        try! store.recordSuggestion(ticketId: verifyA.id, VettingSuggestion(
+            rewrite: .init(title: "Keep query focus after Run", body: "After a query runs, keep keyboard focus in the query editor so the next query can be changed without reaching for the mouse.", changes: ["Names the moment focus moves", "States the expected focus target"]),
+            typeSuggestion: .init(type: .tweak, reason: "This asks for a small behavior refinement rather than a failure repair."),
+            related: [verifyB.id], specTouches: ["EDIT-2.1"]))
         try! store.saveProposal(ticketId: proposal.id, manifestJSON: #"{"revision":1,"specs":["NOTIF-1.2"],"summary":"Reduce toast padding while keeping the action easy to find.","asked":"Make notifications calmer without hiding their action.","controls":[{"id":"density","title":"Spacing","choices":[{"id":"compact","name":"Compact"},{"id":"balanced","name":"Balanced"}],"defaultChoice":"balanced","question":"Which spacing feels easier to scan?","recommend":"balanced","why":"It keeps the action clear without making the toast taller."}],"specimens":[{"id":"today","title":"Today","isEchoToday":true,"designWidth":360,"designHeight":480},{"id":"compact","title":"Compact","designWidth":360,"designHeight":480},{"id":"balanced","title":"Balanced","designWidth":360,"designHeight":480}],"scenarios":[{"id":"light","title":"Light"},{"id":"dark","title":"Dark"}]}"#)
         try! store.setPick(ticketId: proposal.id, topic: "density", choice: "balanced", note: "The action stays easy to spot.")
         try! store.setVerdict(ticketId: proposal.id, topic: "density", option: "compact", verdict: "maybe")
@@ -152,6 +156,7 @@ enum Snapshots {
         try? await Task.sleep(nanoseconds: 2_500_000_000)
         if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         try? await Task.sleep(nanoseconds: 800_000_000)
+        let irisTicket = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Results grid loses scroll position after sort" })
         for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             NSApp.appearance = NSAppearance(named: appearance)
             for (name, route, tab) in routes {
@@ -170,15 +175,16 @@ enum Snapshots {
             state.snapshotTicketTab = .overview
             state.route = first.map(Route.ticket) ?? .desk
             state.selectedTicketId = first
-            state.showAskPanel = false
-            state.snapshotPresentation = .askPanel
+            state.snapshotPresentation = nil
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            state.showAskPanel = true
             try? await Task.sleep(nanoseconds: 1_200_000_000)
             if let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView?.superview ?? window.contentView,
                let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                 view.cacheDisplay(in: view.bounds, to: rep)
                 if let png = rep.representation(using: .png, properties: [:]) { try? png.write(to: folder.appendingPathComponent("ask-panel-\(mode).png")) }
             }
-            state.snapshotPresentation = nil
+            state.showAskPanel = false
             state.route = .tickets
             state.showPalette = false
             state.snapshotPresentation = .palette
@@ -190,6 +196,30 @@ enum Snapshots {
             try? await Task.sleep(nanoseconds: 800_000_000)
             if let window = NSApp.windows.first(where: { $0.isVisible }) {
                 save(window, name: "settings", mode: mode, into: folder)
+            }
+            state.snapshotPresentation = nil
+            try? await Task.sleep(nanoseconds: 250_000_000)
+
+            if let irisTicket {
+                state.selectedTicketId = irisTicket.id
+                state.route = .ticket(irisTicket.id)
+                state.snapshotPresentation = nil
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if let window = NSApp.windows.first(where: { $0.isVisible }) {
+                    save(window, name: "iris-review", mode: mode, into: folder)
+                }
+            }
+
+            state.snapshotPresentation = .addProject
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            if let window = NSApp.windows.first(where: { $0.isVisible }) {
+                save(window, name: "add-project", mode: mode, into: folder)
+            }
+
+            state.snapshotPresentation = .createTicketsRepo
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            if let window = NSApp.windows.first(where: { $0.isVisible }) {
+                save(window, name: "create-tickets-repo", mode: mode, into: folder)
             }
             state.snapshotPresentation = nil
             try? await Task.sleep(nanoseconds: 250_000_000)
