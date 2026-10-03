@@ -98,29 +98,35 @@ struct TicketsView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             // In the page, not in the toolbar: a toolbar search field would run across the Iris inspector.
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("type:bug status:to-verify project:echo turn:you, or words", text: $queryText)
-                    .textFieldStyle(.plain)
-                if !queryText.isEmpty {
-                    Button { queryText = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("type:bug status:to-verify project:echo turn:you, or words", text: $queryText)
+                        .textFieldStyle(.plain)
+                    if !queryText.isEmpty {
+                        Button { queryText = "" } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                Divider()
+                filterBar
+            }
+            .floatingCard()
+            Group {
+                if tickets.isEmpty {
+                    ContentUnavailableView("No tickets match", systemImage: "line.3.horizontal.decrease.circle",
+                                           description: Text("Change the filter, or clear it to see everything."))
+                } else if groupByTheme {
+                    groupedList
+                } else {
+                    table
                 }
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            Divider()
-            filterBar
-            Divider()
-            if tickets.isEmpty {
-                ContentUnavailableView("No tickets match", systemImage: "line.3.horizontal.decrease.circle",
-                                       description: Text("Change the filter, or clear it to see everything."))
-            } else if groupByTheme {
-                groupedList
-            } else {
-                table
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .floatingCard()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationTitle("Tickets")
@@ -260,6 +266,8 @@ struct TicketsView: View {
             }
             .width(min: 40, ideal: 48, max: 70)
         }
+        .alternatingRowBackgrounds(.disabled)
+        .scrollContentBackground(.hidden)
         .contextMenu(forSelectionType: Int.self) { ids in
             if let id = ids.first {
                 Button("Open") { openTicket(id) }
@@ -307,6 +315,7 @@ struct TicketsView: View {
             }
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
     }
 
     private func themeHeader(_ group: ThemeGroup) -> some View {

@@ -81,17 +81,22 @@ struct AgentsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 HXHeader(title: "Agents", subtitle: summaryLine)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .floatingCard()
                 runningSection
                 waitingSection
                 readySection
                 costSection
             }
-            .padding(20)
-            .frame(maxWidth: 820, alignment: .leading)
+            .padding(3)
+            .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .scrollClipDisabled()
+        .environment(\.hxCardOnGray, true)
         .autoReload(every: 5) { tick += 1 }
     }
 

@@ -69,6 +69,11 @@ struct HatchCommands: Commands {
             Button("Tickets") { state.navigate(to: .tickets) }.keyboardShortcut("2")
             Button("Board") { state.navigate(to: .board) }.keyboardShortcut("3")
             Button("Previews") { state.navigate(to: .previews) }.keyboardShortcut("4")
+            Button("Specs") { state.navigate(to: .specs) }.keyboardShortcut("5")
+            Button("Decisions") { state.navigate(to: .decisions) }.keyboardShortcut("6")
+            Button("Agents") { state.navigate(to: .agents) }.keyboardShortcut("7")
+            Button("Log") { state.navigate(to: .log) }.keyboardShortcut("8")
+            Button("Project Settings") { state.navigate(to: .projects) }.keyboardShortcut("9")
         }
     }
 }

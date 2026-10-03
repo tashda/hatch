@@ -82,18 +82,37 @@ struct HXEmpty: View {
 
 /// A quiet rounded container used for the cards on several screens.
 struct HXCard<Content: View>: View {
+    @Environment(\.hxCardOnGray) private var onGray
     let content: Content
 
     init(@ViewBuilder content: () -> Content) { self.content = content() }
 
     var body: some View {
-        content
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor), lineWidth: 0.5))
+        if onGray {
+            // The page sits straight on the window background, so its cards float like the panels do.
+            content
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .floatingCard()
+        } else {
+            content
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor), lineWidth: 0.5))
+        }
     }
 }
+
+private struct HXCardOnGrayKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    /// True on pages that draw their cards straight on the window background.
+    var hxCardOnGray: Bool {
+        get { self[HXCardOnGrayKey.self] }
+        set { self[HXCardOnGrayKey.self] = newValue }
+    }
+}
+
 
 func hxAgo(_ date: Date) -> String {
     let f = RelativeDateTimeFormatter()

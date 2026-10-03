@@ -16,24 +16,35 @@ struct BoardView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbarRow
-            if let theme = themes.first(where: { $0.id == themeId }) {
-                ThemeHeader(theme: theme, done: progress.done, total: progress.total)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 10)
-            }
-            Divider()
-            ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(Phase.allCases, id: \.self) { phase in
-                        BoardColumn(phase: phase,
-                                    tickets: column(phase),
-                                    projectNames: projectNames,
-                                    showProject: state.selectedProjectKey == nil && projectNames.count > 1)
-                    }
+        VStack(spacing: 8) {
+            VStack(spacing: 0) {
+                toolbarRow
+                if let theme = themes.first(where: { $0.id == themeId }) {
+                    ThemeHeader(theme: theme, done: progress.done, total: progress.total)
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 10)
                 }
-                .padding(14)
+            }
+            .floatingCard()
+            GeometryReader { geo in
+                let gap = 8.0
+                let count = Double(Phase.allCases.count)
+                let width = max(200, (geo.size.width - gap * (count - 1)) / count)
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: gap) {
+                        ForEach(Phase.allCases, id: \.self) { phase in
+                            BoardColumn(phase: phase,
+                                        tickets: column(phase),
+                                        projectNames: projectNames,
+                                        showProject: state.selectedProjectKey == nil && projectNames.count > 1)
+                                .frame(width: width)
+                                .frame(maxHeight: .infinity, alignment: .top)
+                                .floatingCard()
+                        }
+                    }
+                    .padding(3)
+                    .frame(minHeight: geo.size.height, alignment: .top)
+                }
             }
         }
         .navigationTitle("Board")
@@ -104,7 +115,7 @@ struct BoardColumn: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 6)
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(tickets) { ticket in
@@ -113,7 +124,7 @@ struct BoardColumn: View {
                 }
             }
         }
-        .frame(width: 230)
+        .padding(8)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 }

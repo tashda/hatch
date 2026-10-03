@@ -64,9 +64,9 @@ struct SpecsView: View {
                 emptyState.floatingCard()
             } else {
                 HStack(spacing: 8) {
-                    areaList.floatingCard().frame(width: 200)
-                    itemList.floatingCard().frame(minWidth: 300)
-                    detail.floatingCard().frame(width: 360)
+                    areaList.frame(maxHeight: .infinity).floatingCard().frame(width: 200)
+                    itemList.frame(maxHeight: .infinity).floatingCard().frame(minWidth: 320, idealWidth: 420, maxWidth: 520)
+                    detail.frame(maxWidth: .infinity, maxHeight: .infinity).floatingCard()
                 }
             }
         }

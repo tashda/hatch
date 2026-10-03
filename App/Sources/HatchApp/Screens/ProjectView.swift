@@ -88,16 +88,21 @@ struct ProjectForm: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 topRow
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .floatingCard()
                 generalSection
                 reposSection
                 areasSection
                 docsSection
                 saveRow
             }
-            .padding(20)
+            .padding(3)
             .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .scrollClipDisabled()
+        .environment(\.hxCardOnGray, true)
         .onAppear {
             if !Snapshots.demoMode { account.refresh() }
             if !loaded { load(); loaded = true }

@@ -24,18 +24,23 @@ struct LogView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             toolbarRow
-            Divider()
+                .floatingCard()
             let list = ops
-            if list.isEmpty {
-        ContentUnavailableView(failedOnly ? "Nothing failed" : "Nothing logged yet", systemImage: "list.bullet.rectangle",
-                                       description: Text("Every change Hatch makes is recorded here with its result on GitHub."))
-            } else {
-                List {
-                    ForEach(list) { op in row(op) }
+            Group {
+                if list.isEmpty {
+                    ContentUnavailableView(failedOnly ? "Nothing failed" : "Nothing logged yet", systemImage: "list.bullet.rectangle",
+                                           description: Text("Every change Hatch makes is recorded here with its result on GitHub."))
+                } else {
+                    List {
+                        ForEach(list) { op in row(op) }
+                    }
+                    .scrollContentBackground(.hidden)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .floatingCard()
         }
         .autoReload(every: 5) { tick += 1 }
     }
@@ -51,7 +56,7 @@ struct LogView: View {
             .buttonStyle(.glass)
             .disabled(state.syncSummary.failed == 0)
         }
-        .padding(12)
+        .padding(16)
     }
 
     private func turn(for op: SyncOp) -> Turn {

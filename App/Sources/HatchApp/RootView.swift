@@ -59,7 +59,7 @@ struct RootView: View {
     /// Pages that lay out several panels themselves; the others get one card.
     private var ownsPanels: Bool {
         switch state.route {
-        case .desk, .specs, .previews: true
+        case .desk, .specs, .previews, .tickets, .board, .decisions, .agents, .log, .projects: true
         default: false
         }
     }

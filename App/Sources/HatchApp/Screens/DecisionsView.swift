@@ -16,28 +16,31 @@ struct DecisionsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 8) {
             HStack {
                 HXHeader(title: "Decisions", subtitle: "What was decided and why. Read only.")
                 Spacer()
                 TextField("Filter", text: $filter).textFieldStyle(.roundedBorder).frame(width: 220)
             }
-            .padding(12)
-            Divider()
+            .padding(16)
+            .floatingCard()
             let list = rows
             if list.isEmpty {
                 ContentUnavailableView("No decisions yet", systemImage: "flag", description: Text("A decision is recorded when you accept a Proposal."))
+                    .floatingCard()
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(Array(list.enumerated()), id: \.offset) { _, d in card(d.ticket, d.summary, d.specCodes, d.at) }
                     }
-                    .padding(16)
-                    .frame(maxWidth: 820, alignment: .leading)
+                    .padding(3)
+                    .frame(maxWidth: 900, alignment: .leading)
                     .frame(maxWidth: .infinity)
                 }
+                .scrollClipDisabled()
             }
         }
+        .environment(\.hxCardOnGray, true)
     }
 
     private func card(_ ticket: Ticket, _ summary: String, _ codes: [String], _ at: Date) -> some View {
