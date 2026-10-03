@@ -118,7 +118,7 @@ final class BootstrapTests: XCTestCase {
     func testSuggestAreasOnTheRealEchoTree() throws {
         try requireEcho(Paths.echoRepo.appendingPathComponent("Echo/Sources/Features"))
         let areas = ProjectBootstrap.suggestAreas(repoRoot: Paths.echoRepo)
-        XCTAssertEqual(areas.count, 24, "the tree has 24 feature folders")
+        XCTAssertEqual(areas.count, 25, "the tree has 25 feature folders")
         XCTAssertTrue(areas.allSatisfy { $0.paths.count == 1 && $0.paths[0].hasPrefix("Echo/Sources/Features/") && $0.paths[0].hasSuffix("/**") })
         XCTAssertEqual(Set(areas.compactMap(\.specPrefix)).count, areas.count)
         let names = areas.map(\.name)

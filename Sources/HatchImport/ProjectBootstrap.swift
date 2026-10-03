@@ -86,7 +86,7 @@ public enum ProjectBootstrap {
 
     static func hasFiles(_ dir: URL) -> Bool {
         guard let walker = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey]) else { return false }
-        for case let url as URL in walker where (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true { return true }
+        for case let url as URL in walker where !url.lastPathComponent.hasPrefix(".") && (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true { return true }
         return false
     }
 

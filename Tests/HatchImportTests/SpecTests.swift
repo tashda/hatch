@@ -216,7 +216,7 @@ final class SpecTests: XCTestCase {
         let areas = SpecExporter.extractAll(areasDirectory: Paths.areas)
         let count = areas.map(\.entries.count).reduce(0, +)
         XCTAssertEqual(areas.map(\.code).sorted(), ["CON", "EDT", "FND", "FTR", "INS", "NTF", "SNS", "TABS", "TLT", "TREE", "WIN"])
-        XCTAssertEqual(count, 226, "the sources declare 226 SpecElement(number:) calls")
+        XCTAssertEqual(count, 233, "225 SpecElement(number:) calls plus 8 rule(...) helper calls in Foundations")
         XCTAssertTrue(areas.allSatisfy { $0.warnings.isEmpty }, "\(areas.flatMap(\.warnings))")
         let all = areas.flatMap(\.entries)
         XCTAssertEqual(Set(all.map(\.code)).count, all.count, "ids are unique")

@@ -30,9 +30,24 @@ public enum SpecExporter {
             guard let n = SwiftSource.string(part.args, "number") else { continue }
             area.parts.append(ExportedPart(number: n, name: SwiftSource.string(part.args, "name") ?? "", summary: SwiftSource.string(part.args, "summary") ?? ""))
         }
+        // Direct `SpecElement(number: "1.1", ...)` calls, and calls of helpers such as `rule("1.1", "Name", "Why")`
+        // declared as `func rule(...) -> SpecElement` (Foundations uses one).
+        var elements: [(offset: Int, args: [(label: String?, value: [Character])])] = SwiftSource.calls(named: "SpecElement", in: chars)
+        for helper in helperNames(source) {
+            for call in SwiftSource.calls(named: helper, in: chars) where call.args.count >= 2 && call.args.allSatisfy({ $0.label == nil }) {
+                guard let number = SwiftSource.joinedStrings(call.args[0].value), !number.isEmpty else { continue }
+                var args: [(label: String?, value: [Character])] = [("number", call.args[0].value), ("name", call.args[1].value)]
+                if call.args.count > 2 { args.append(("summary", call.args[2].value)) }
+                elements.append((call.offset, args))
+            }
+        }
         var seen = Set<String>()
-        for el in SwiftSource.calls(named: "SpecElement", in: chars) {
-            guard let n = SwiftSource.string(el.args, "number") else { area.warnings.append("an element without a number was skipped"); continue }
+        for el in elements.sorted(by: { $0.offset < $1.offset }) {
+            guard let n = SwiftSource.string(el.args, "number") else {
+                // `number: number` inside a helper's body is the template, not an element.
+                if el.args.first(where: { $0.label == "number" }) == nil { area.warnings.append("an element without a number was skipped") }
+                continue
+            }
             let id = "\(code)-\(n)"
             guard SpecMarkdown.isCode(id) else { area.warnings.append("\(id) is not a valid id; skipped"); continue }
             guard seen.insert(id).inserted else { area.warnings.append("\(id) is declared twice; the first one is kept"); continue }
@@ -107,6 +122,13 @@ public enum SpecExporter {
     }
 
     // MARK: Helpers
+
+    /// Names of functions declared as returning `SpecElement`.
+    private static func helperNames(_ source: String) -> [String] {
+        guard let re = try? NSRegularExpression(pattern: #"func\s+(\w+)\s*\([^)]*\)\s*->\s*SpecElement\b"#) else { return [] }
+        let ns = source as NSString
+        return re.matches(in: source, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range(at: 1)) }
+    }
 
     private static func sentence(_ name: String, _ summary: String) -> String {
         if summary.isEmpty { return name }
