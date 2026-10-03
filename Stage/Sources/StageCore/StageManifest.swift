@@ -389,6 +389,24 @@ extension StageManifest {
         return revision > 1 && a >= revision
     }
 
+    /// What was added in the current revision, for the "New since your last review" card.
+    public var newItems: [String] {
+        guard revision > 1 else { return [] }
+        var out: [String] = []
+        for c in controls {
+            if isNew(addedIn: c.addedIn) { out.append("New control: \(c.title)") }
+            for ch in c.choices where isNew(addedIn: ch.addedIn) { out.append("New choice in \(c.title): \(ch.name)") }
+        }
+        for q in questions {
+            if isNew(addedIn: q.addedIn) { out.append("New question: \(q.title)") }
+            for ch in q.choices where isNew(addedIn: ch.addedIn) { out.append("New choice in \(q.title): \(ch.name)") }
+        }
+        for s in specimens where isNew(addedIn: s.addedIn) { out.append("New option: \(s.title)") }
+        for p in presets where isNew(addedIn: p.addedIn) { out.append("New preset: \(p.name)") }
+        for sc in scenarios where isNew(addedIn: sc.addedIn) { out.append("New scenario: \(sc.title)") }
+        return out
+    }
+
     /// The scenarios the strip shows. A manifest without any gets a single Rest scenario.
     public var effectiveScenarios: [StageScenario] {
         scenarios.isEmpty ? [StageScenario(id: "rest", title: "Rest")] : scenarios

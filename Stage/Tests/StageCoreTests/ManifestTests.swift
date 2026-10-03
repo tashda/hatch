@@ -80,6 +80,14 @@ final class ManifestTests: XCTestCase {
         XCTAssertFalse(first.isNew(addedIn: 1))
     }
 
+    func testNewItemsListWhatRevisionAdded() throws {
+        let m = try Fixtures.toast()
+        XCTAssertEqual(m.newItems, ["New choice in Padding, Option B: 20 pt"])
+        var first = m
+        first.revision = 1
+        XCTAssertTrue(first.newItems.isEmpty)
+    }
+
     func testStandardScenarioNormalize() {
         XCTAssertEqual(StandardScenarios.normalize("Long text"), "long-text")
         XCTAssertEqual(StandardScenarios.normalize("long_text"), "long-text")

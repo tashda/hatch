@@ -71,7 +71,10 @@ public enum StageSheet: String, Codable, Equatable {
 }
 
 public enum StageSendBackReason: String, Codable, CaseIterable {
-    case needsMoreOptions, changeAnOption, differentDirection
+    /// The raw values are the words Hatch's local API expects.
+    case needsMoreOptions = "needs-more-options"
+    case changeAnOption = "change-option"
+    case differentDirection = "different-direction"
     public var title: String {
         switch self {
         case .needsMoreOptions: return "Needs more options"

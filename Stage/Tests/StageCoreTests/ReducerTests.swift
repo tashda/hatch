@@ -263,7 +263,7 @@ final class ReducerTests: XCTestCase {
         StageReducer.reduce(&s, .setSendBackNote("Add a flat variant."), manifest: m)
         XCTAssertNil(s.formError)
         let fx = StageReducer.reduce(&s, .confirmSendBack, manifest: m)
-        XCTAssertEqual(fx, [.sendBack(reason: "needsMoreOptions", note: "Add a flat variant.")])
+        XCTAssertEqual(fx, [.sendBack(reason: "needs-more-options", note: "Add a flat variant.")])
         XCTAssertNil(s.sheet)
     }
 
