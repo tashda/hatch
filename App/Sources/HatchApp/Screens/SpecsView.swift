@@ -110,8 +110,10 @@ struct SpecsView: View {
     }
 
     private var itemList: some View {
-        List(items, selection: $selectedCode) { item in
-            itemRow(item).tag(String?.some(item.code))
+        List(selection: $selectedCode) {
+            ForEach(items, id: \.code) { item in
+                itemRow(item).tag(String?.some(item.code))
+            }
         }
     }
 
