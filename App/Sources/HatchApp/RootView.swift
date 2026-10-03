@@ -10,40 +10,55 @@ struct RootView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
         } detail: {
-            Group {
-                if state.snapshotPresentation == .settings {
-                    SettingsView()
-                } else if state.snapshotPresentation == .palette {
-                    CommandPalette()
-                } else if state.snapshotPresentation == .addProject {
-                    AddProjectSheet()
-                } else if state.snapshotPresentation == .createTicketsRepo {
-                    HXCreateTicketsRepoSheet(account: GitHubAccountModel(), projectName: "Acme") { _ in }
-                } else {
-                    if state.showAskPanel {
-                        HSplitView {
-                            content
-                                .frame(minWidth: 500, maxWidth: .infinity, maxHeight: .infinity)
-                            AskPanel()
-                                .frame(minWidth: 280, idealWidth: 320, maxWidth: 420, maxHeight: .infinity)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        content
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .navigationTitle(snapshotTitle)
-            .toolbar {
-                if state.snapshotPresentation == nil { MainToolbar() }
+            if Snapshots.folder == nil {
+                liveDetail
+            } else {
+                detailContent
             }
         }
         .sheet(isPresented: $state.showPalette) { CommandPalette() }
         .alert("Something went wrong", isPresented: Binding(get: { state.errorMessage != nil }, set: { if !$0 { state.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(state.errorMessage ?? "") }
+    }
+
+    private var liveDetail: some View {
+        detailContent
+            .inspector(isPresented: $state.showAskPanel) {
+                AskPanel()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .inspectorColumnWidth(min: 280, ideal: 320, max: 420)
+            }
+    }
+
+    private var detailContent: some View {
+        Group {
+            if state.snapshotPresentation == .settings {
+                SettingsView()
+            } else if state.snapshotPresentation == .palette {
+                CommandPalette()
+            } else if state.snapshotPresentation == .addProject {
+                AddProjectSheet()
+            } else if state.snapshotPresentation == .createTicketsRepo {
+                HXCreateTicketsRepoSheet(account: GitHubAccountModel(), projectName: "Acme") { _ in }
+            } else if Snapshots.folder != nil && state.showAskPanel {
+                HSplitView {
+                    content
+                        .frame(minWidth: 500, maxWidth: .infinity, maxHeight: .infinity)
+                    AskPanel()
+                        .frame(minWidth: 280, idealWidth: 320, maxWidth: 420, maxHeight: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle(snapshotTitle)
+        .toolbar {
+            if state.snapshotPresentation == nil { MainToolbar() }
+        }
     }
 
     private var snapshotTitle: String {
@@ -83,8 +98,11 @@ struct MainToolbar: ToolbarContent {
                 .help("Search (⌘K)")
             Button { state.route = .newTicket } label: { Label("New Ticket", systemImage: "plus") }
                 .help("New ticket (⌘N)")
-            Button { state.showAskPanel.toggle() } label: { Label("Ask", systemImage: "sparkles") }
-                .help("Ask Hatch (⌥⌘A)")
+            Button { state.showAskPanel.toggle() } label: {
+                Label("Ask", systemImage: state.showAskPanel ? "sidebar.trailing" : "sparkles")
+            }
+                .help(state.showAskPanel ? "Hide Ask inspector (⌥⌘A)" : "Show Ask inspector (⌥⌘A)")
+                .accessibilityLabel(state.showAskPanel ? "Hide Ask inspector" : "Show Ask inspector")
         }
     }
 }

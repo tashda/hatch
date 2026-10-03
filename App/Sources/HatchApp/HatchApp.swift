@@ -45,7 +45,7 @@ struct HatchCommands: Commands {
             Button("Sync with GitHub") { state.syncNow() }.keyboardShortcut("r", modifiers: [.shift, .command])
             Button("Ask Hatch") { state.showAskPanel.toggle() }.keyboardShortcut("a", modifiers: [.option, .command])
         }
-        CommandMenu("View") {
+        CommandGroup(after: .sidebar) {
             Toggle("Ask Inspector", isOn: $state.showAskPanel)
                 .keyboardShortcut("i", modifiers: [.control, .command])
         }

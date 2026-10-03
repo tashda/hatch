@@ -22,6 +22,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 | A queue to work through | Sectioned list and detail pane (Desk) | `List`, `Section` |
 | Flow across stages | Lanes with plain cards (Board) | `ScrollView`, `LazyVStack` |
 | Switch main areas | Sidebar source list | `NavigationSplitView`, `List` |
+| Contextual details or actions | Native trailing inspector on the detail column | `.inspector(isPresented:)`, `.inspectorColumnWidth(min:ideal:max:)` |
 | Switch sections of one pane (up to 5) | Text dock | `HXDock` (6 or more: pull-down, automatic) |
 | Switch sections (6 or more) | Pull-down | `Picker` `.menu` |
 | View mode in the toolbar | System segmented control | `Picker` `.segmented` |

@@ -35,7 +35,6 @@ struct AskPanel: View {
             Divider()
             composer
         }
-        .background(Color(nsColor: .windowBackgroundColor))
         .onChange(of: currentTicket?.id) { _, newValue in
             if newValue != messagesTicketId {
                 messages = []
