@@ -1,5 +1,7 @@
 # Handover
 
+> **If you are running on the owner's Mac, with Xcode:** most of section 2 is not for you. It describes the cloud sandbox the project was built in (no macOS, no Xcode), which is why a CI mirror exists. Build and run locally instead: `xcodebuild -project Hatch.xcodeproj -scheme Hatch -destination 'platform=macOS' build` (or open the project in Xcode), `swift test` at the root and in `Stage/`, `cd App && swift build`. Run the app and look at it yourself; no screenshot job is needed. You can ignore the Actions problem and the mirror until the repo is public. Section 4 step 1 becomes: build everything locally and fix the compile errors, because many SwiftUI edits were made without a compiler.
+
 Written 2026-10-03 for whoever continues (another AI assistant or a person). Read this first, then `CLAUDE.md`, `DESIGN.md`, `STATUS.md`. It says what exists, what is verified, what is not, and what to do next, in order.
 
 ## 1. What Hatch is
