@@ -1,31 +1,38 @@
 import SwiftUI
 import HatchCore
+import HatchAgent
 
-/// Connects the UI to the vetting agent (Iris) without the UI depending on it, so the app works while it does not exist.
-///
-/// Whoever owns HatchAgent's `VettingService` wires it once at launch, for example in `AppState.live()` or `HatchApp.init`:
-///
-///     VettingBridge.runner = { ticketId, state in await VettingService(...).vet(ticketId: ticketId) }
-///
-/// Contract for what Iris leaves behind (read by `IrisReviewView`):
-/// - Questions: `store.ask(ticketId, text:, suggestions:, by: "Iris")`. They show as answer cards.
-/// - One summary note: `store.addNote(ticketId, kind: .agent, author: "Iris", body: <one or two sentences>, context: ["vetting": <object>])`
-///   where the object may hold:
-///     "rewrite":    { "title": "...", "body": "..." }                       (the suggested text for the ticket)
-///     "type":       { "suggested": "question", "reason": "..." }             (a suggested type change, decision E9)
-///     "duplicates": [ { "ticket": <ticket id>, "reason": "..." } ]           (likely duplicates, decision E6)
-/// The review records the owner's choices as events of kind "vetting-review" with payload
-/// { note: <note id>, part: "rewrite" | "type" | "duplicate-<id>", outcome: "accepted" | "edited" | "kept" | ... }.
+/// Starts Iris (HatchAgent's `VettingService`) for a ticket in Checking, off the main thread.
+/// What she leaves behind: questions (`store.ask(... by: "Iris")`), a `vetting` event holding a `VettingSuggestion`
+/// (rewrite, type change, duplicate), and either Needs answers or Ready. A failed run leaves the ticket in Checking with a
+/// `vetting-failed` event; `IrisReviewView` shows the reason and offers "Check again".
 @MainActor
 enum VettingBridge {
-    static var runner: ((Int, AppState) async -> Void)?
+    private static var running = Set<Int>()
 
-    static var isAvailable: Bool { runner != nil }
+    static var isAvailable: Bool { true }
 
     static func start(ticketId: Int, state: AppState) {
-        guard let runner else { return }
+        guard !running.contains(ticketId) else { return }
+        let store = state.store
+        guard let claude = HXAskAdapter.locateClaude(setting: state.hxSetting("claude_path")) else {
+            try? store.record(ticketId, actor: "Iris", kind: "vetting-failed",
+                              payload: ["reason": .string("Could not find the claude program. Set its path in Settings.")])
+            state.refresh()
+            return
+        }
+        running.insert(ticketId)
         Task { @MainActor in
-            await runner(ticketId, state)
+            await Task.detached {
+                let runner = ClaudeCLIRunner(executable: claude, workingDirectory: URL(fileURLWithPath: NSHomeDirectory()), timeout: 240)
+                let service = VettingService(store: store, runner: runner)
+                do {
+                    _ = try service.vet(ticketId: ticketId)
+                } catch {
+                    try? store.record(ticketId, actor: "Iris", kind: "vetting-failed", payload: ["reason": .string("\(error)")])
+                }
+            }.value
+            running.remove(ticketId)
             state.refresh()
         }
     }

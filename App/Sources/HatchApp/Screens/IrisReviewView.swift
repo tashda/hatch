@@ -1,44 +1,6 @@
 import SwiftUI
 import HatchCore
-
-/// What Iris suggested, read from her summary note (see `VettingBridge` for the contract).
-struct VettingResult {
-    struct Duplicate: Identifiable {
-        let ticketId: Int
-        let reason: String
-        var id: Int { ticketId }
-    }
-    var noteId: Int
-    var summary: String
-    var rewriteTitle: String?
-    var rewriteBody: String?
-    var suggestedType: TicketType?
-    var typeReason: String?
-    var duplicates: [Duplicate] = []
-
-    var hasRewrite: Bool { rewriteTitle != nil || rewriteBody != nil }
-
-    static func latest(store: HatchStore, ticketId: Int) -> VettingResult? {
-        let notes: [Note] = (try? store.notes(ticketId: ticketId)) ?? []
-        guard let note = notes.last(where: { $0.author == "Iris" && $0.context?["vetting"] != nil }) else { return nil }
-        guard let v = note.context?["vetting"] else { return nil }
-        var result = VettingResult(noteId: note.id, summary: note.body)
-        if let rewrite = v["rewrite"] {
-            result.rewriteTitle = rewrite["title"]?.stringValue
-            result.rewriteBody = rewrite["body"]?.stringValue
-        }
-        if let type = v["type"], let raw = type["suggested"]?.stringValue, let t = TicketType(rawValue: raw) {
-            result.suggestedType = t
-            result.typeReason = type["reason"]?.stringValue
-        }
-        for item in v["duplicates"]?.arrayValue ?? [] {
-            if let id = item["ticket"]?.intValue {
-                result.duplicates.append(Duplicate(ticketId: id, reason: item["reason"]?.stringValue ?? ""))
-            }
-        }
-        return result
-    }
-}
+import HatchAgent
 
 /// Word-level comparison of two texts, drawn with colour, underline and strikethrough (decision E8).
 enum WordDiff {
@@ -88,30 +50,39 @@ enum WordDiff {
     }
 }
 
-/// The review after Iris has checked a ticket: answer cards, the rewrite as a diff, the type suggestion, likely duplicates.
-/// Used inside the composer after Submit and at the top of a ticket (decisions E4, E6, E8, E9).
+/// The review after Iris has checked a ticket: answer cards, the rewrite as a diff, the type suggestion, a likely duplicate.
+/// Used inside the composer after Submit and at the top of a ticket's Overview (decisions E4, E6, E8, E9).
+/// Parts that are not the text (type, duplicate) are decided one at a time; the text decision (Accept, Edit, Keep mine)
+/// resolves the whole suggestion through `IrisApplier`, and anything not yet decided stays as it is.
 struct IrisReviewView: View {
     @EnvironmentObject var state: AppState
     let ticketId: Int
     var showIdleMessage: Bool = false
 
     @State private var ticket: Ticket?
-    @State private var result: VettingResult?
-    @State private var resolved: Set<String> = []
+    @State private var suggestion: VettingSuggestion?
+    @State private var suggestionId: Int = 0
+    @State private var decided: Set<String> = []
     @State private var openQuestionCount = 0
+    @State private var failure: String?
+    @State private var duplicateTicket: Ticket?
     @State private var editing = false
     @State private var editTitle = ""
     @State private var editBody = ""
-    @State private var mergeCandidate: VettingResult.Duplicate?
+    @State private var confirmMerge = false
 
-    private var pendingRewrite: Bool { (result?.hasRewrite ?? false) && !resolved.contains("rewrite") }
-    private var pendingType: Bool { result?.suggestedType != nil && !resolved.contains("type") }
-    private var pendingDuplicates: [VettingResult.Duplicate] {
-        (result?.duplicates ?? []).filter { !resolved.contains("duplicate-\($0.ticketId)") }
+    private var rewrite: VettingSuggestion.Rewrite? { suggestion?.rewrite }
+
+    private func typePending(_ t: Ticket) -> TicketType? {
+        guard let change = suggestion?.typeSuggestion, change.type != t.type, !decided.contains("type") else { return nil }
+        return change.type
     }
-    private var hasAnything: Bool {
-        openQuestionCount > 0 || pendingRewrite || pendingType || !pendingDuplicates.isEmpty
+
+    private var duplicatePending: Bool {
+        suggestion?.duplicateOf != nil && duplicateTicket != nil && !decided.contains("duplicate")
     }
+
+    private var hasAnything: Bool { suggestion != nil || openQuestionCount > 0 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -121,9 +92,9 @@ struct IrisReviewView: View {
         }
         .autoReload(every: 3) { load() }
         .sheet(isPresented: $editing) { editSheet }
-        .confirmationDialog("Merge into the other ticket?", isPresented: Binding(get: { mergeCandidate != nil }, set: { if !$0 { mergeCandidate = nil } })) {
+        .confirmationDialog("Merge into the other ticket?", isPresented: $confirmMerge) {
             Button("Mark this as a duplicate and drop it", role: .destructive) { merge() }
-            Button("Cancel", role: .cancel) { mergeCandidate = nil }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("This ticket is linked as a duplicate and dropped. Nothing is deleted; you can reopen it later.")
         }
@@ -134,10 +105,11 @@ struct IrisReviewView: View {
             checking(ticket)
         } else if hasAnything {
             header
-            if !pendingDuplicates.isEmpty { duplicatesCard }
-            if pendingType { typeCard(ticket) }
+            if duplicatePending { duplicateCard }
+            if let newType = typePending(ticket) { typeCard(ticket, newType) }
             if openQuestionCount > 0 { AnswerCardsView(ticketId: ticketId) }
-            if pendingRewrite { rewriteCard(ticket) }
+            if let rewrite { rewriteCard(ticket, rewrite) }
+            alsoFound
         } else if showIdleMessage {
             idle(ticket)
         }
@@ -151,122 +123,158 @@ struct IrisReviewView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Iris checked this ticket")
                     .font(.subheadline.weight(.semibold))
-                if let summary = result?.summary, !summary.isEmpty {
-                    Text(summary)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(headerDetail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private var headerDetail: String {
+        var parts: [String] = []
+        if openQuestionCount > 0 { parts.append(Format.count(openQuestionCount, "question") + " for you") }
+        if rewrite != nil { parts.append("a suggested rewrite") }
+        if suggestion?.typeSuggestion != nil { parts.append("a type suggestion") }
+        if suggestion?.duplicateOf != nil { parts.append("a likely duplicate") }
+        return parts.isEmpty ? "Nothing needs your attention." : parts.joined(separator: ", ").capitalizedFirst
     }
 
     private func checking(_ ticket: Ticket) -> some View {
         let slow = Date().timeIntervalSince(ticket.updatedAt) > 120
         return HStack(spacing: 10) {
-            ProgressView().controlSize(.small)
+            if failure == nil { ProgressView().controlSize(.small) }
             VStack(alignment: .leading, spacing: 2) {
-                Text("Iris is checking this ticket")
+                Text(failure == nil ? "Iris is checking this ticket" : "Iris could not finish the check")
                     .font(.subheadline.weight(.semibold))
-                Text(slow ? "This is taking longer than usual." : "She compares it with other tickets and the Spec, then asks questions before any work starts.")
+                Text(checkingDetail(slow: slow))
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            if slow && VettingBridge.isAvailable {
+            if failure != nil || slow {
                 Button("Check again") { VettingBridge.start(ticketId: ticket.id, state: state) }
             }
         }
         .padding(12)
-        .background(Theme.agentBackground, in: RoundedRectangle(cornerRadius: 8))
+        .background(failure == nil ? Theme.agentBackground : Theme.criticalBackground, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func checkingDetail(slow: Bool) -> String {
+        if let failure { return failure }
+        if slow { return "This is taking longer than usual." }
+        return "Iris compares it with other tickets and the Spec, then asks questions before any work starts."
     }
 
     private func idle(_ ticket: Ticket) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.circle").foregroundStyle(Theme.finished)
-            Text(ticket.status == .ready ? "Nothing to review. The ticket is Ready." : "Nothing to review.")
+            Text(ticket.status == .ready ? "Iris had nothing to ask. The ticket is Ready." : "Nothing to review.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
     }
 
-    private var duplicatesCard: some View {
-        SectionCard("Likely duplicates") {
-            ForEach(pendingDuplicates) { dup in
-                VStack(alignment: .leading, spacing: 6) {
-                    if let other = try? state.store.ticket(id: dup.ticketId) {
-                        HStack(spacing: 8) {
-                            Button {
-                                state.open(other)
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Text(other.displayNumber).foregroundStyle(.secondary)
-                                    Text(other.title)
-                                }
-                            }
-                            .buttonStyle(.link)
-                            StatusChip(status: other.status)
+    @ViewBuilder private var duplicateCard: some View {
+        if let other = duplicateTicket {
+            SectionCard("Likely duplicate") {
+                HStack(spacing: 8) {
+                    Button {
+                        state.open(other)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(other.displayNumber).foregroundStyle(.secondary)
+                            Text(other.title)
                         }
                     }
-                    if !dup.reason.isEmpty {
-                        Text(dup.reason).font(.callout).foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Button("Link") { linkDuplicate(dup) }
-                        Button("Merge") { mergeCandidate = dup }
-                        Button("Keep separate") { resolve("duplicate-\(dup.ticketId)", outcome: "kept") }
-                    }
-                    .controlSize(.small)
+                    .buttonStyle(.link)
+                    StatusChip(status: other.status)
                 }
+                Text("Link keeps both tickets and records the connection. Merge links them and drops this one. Keep separate leaves both alone.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Link") { linkDuplicate(other) }
+                    Button("Merge") { confirmMerge = true }
+                    Button("Keep separate") { record("duplicate", outcome: "kept") }
+                }
+                .controlSize(.small)
             }
         }
     }
 
-    private func typeCard(_ ticket: Ticket) -> some View {
-        let suggested: TicketType = result?.suggestedType ?? ticket.type
-        return SectionCard("Type") {
+    private func typeCard(_ ticket: Ticket, _ newType: TicketType) -> some View {
+        SectionCard("Type") {
             HStack(spacing: 8) {
                 TypeBadge(type: ticket.type)
                 Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
-                TypeBadge(type: suggested)
+                TypeBadge(type: newType)
             }
-            if let reason = result?.typeReason, !reason.isEmpty {
+            if let reason = suggestion?.typeSuggestion?.reason, !reason.isEmpty {
                 Text(reason).font(.callout).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Button("Accept") { acceptType(suggested) }
+                Button("Accept") { acceptType(newType) }
                     .buttonStyle(.borderedProminent)
-                Button("Keep mine") { resolve("type", outcome: "kept") }
+                Button("Keep mine") { record("type", outcome: "kept") }
             }
             .controlSize(.small)
         }
     }
 
-    private func rewriteCard(_ ticket: Ticket) -> some View {
-        let newTitle: String = result?.rewriteTitle ?? ticket.title
-        let newBody: String = result?.rewriteBody ?? ticket.body
-        return SectionCard("Suggested rewrite") {
-            if newTitle != ticket.title {
-                diffColumns(old: ticket.title, new: newTitle, bold: true)
+    private func rewriteCard(_ ticket: Ticket, _ r: VettingSuggestion.Rewrite) -> some View {
+        SectionCard("Suggested rewrite") {
+            if r.title != ticket.title {
+                diffColumns(old: ticket.title, new: r.title, bold: true)
             }
-            if newBody != ticket.body {
-                diffColumns(old: ticket.body, new: newBody, bold: false)
+            if r.body != ticket.body {
+                diffColumns(old: ticket.body, new: r.body, bold: false)
             }
-            Text("Removed words are struck through in red; added words are underlined in green. Your original is always kept in the history.")
+            if !r.changes.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(r.changes, id: \.self) { change in
+                        Text("\u{2022} \(change)").font(.callout).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Text("Removed words are struck through in red; added words are underlined in green. Your original text is always kept in the history. Type and duplicate choices you have not made stay as they are.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button("Accept") { acceptRewrite(newTitle: newTitle, newBody: newBody) }
+                Button("Accept") { decideText(.accept) }
                     .buttonStyle(.borderedProminent)
                 Button("Edit") {
-                    editTitle = newTitle
-                    editBody = newBody
+                    editTitle = r.title
+                    editBody = r.body
                     editing = true
                 }
-                Button("Keep mine") { resolve("rewrite", outcome: "kept") }
+                Button("Keep mine") { decideText(.keep) }
             }
             .controlSize(.small)
         }
+    }
+
+    @ViewBuilder private var alsoFound: some View {
+        if let s = suggestion, !s.related.isEmpty || !s.specTouches.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                if !s.related.isEmpty {
+                    Text("Related: " + relatedText(s.related))
+                }
+                if !s.specTouches.isEmpty {
+                    Text("Spec: " + s.specTouches.joined(separator: ", "))
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func relatedText(_ ids: [Int]) -> String {
+        let names: [String] = ids.compactMap { (try? state.store.ticket(id: $0))?.displayNumber }
+        return names.joined(separator: ", ")
     }
 
     private func diffColumns(old: String, new: String, bold: Bool) -> some View {
@@ -311,8 +319,8 @@ struct IrisReviewView: View {
                 Button("Cancel") { editing = false }
                     .keyboardShortcut(.cancelAction)
                 Button("Save") {
-                    applyText(title: editTitle, body: editBody, outcome: "edited")
                     editing = false
+                    decideText(.edit)
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
@@ -325,65 +333,109 @@ struct IrisReviewView: View {
 
     // MARK: Actions
 
-    private func acceptRewrite(newTitle: String, newBody: String) {
-        applyText(title: newTitle, body: newBody, outcome: "accepted")
-    }
+    private enum TextChoice { case accept, edit, keep }
 
-    private func applyText(title: String, body: String, outcome: String) {
+    private func decideText(_ choice: TextChoice) {
         let id = ticketId
-        let ok: Ticket? = state.perform("Could not apply the rewrite") { try state.store.update(id, title: title, body: body, actor: .owner) }
-        if ok != nil { resolve("rewrite", outcome: outcome) }
+        let store = state.store
+        let title = editTitle
+        let body = editBody
+        // Anything the owner did not decide is recorded as kept, so the suggestion resolves cleanly.
+        for part in ["type", "duplicate"] where !decided.contains(part) { recordQuietly(part, outcome: "kept") }
+        _ = state.perform("Could not apply the decision") { () -> Ticket in
+            switch choice {
+            case .accept: return try IrisApplier.accept(ticketId: id, store: store)
+            case .edit: return try IrisApplier.edit(ticketId: id, title: title, body: body, store: store)
+            case .keep: return try IrisApplier.keepMine(ticketId: id, store: store)
+            }
+        }
     }
 
     private func acceptType(_ type: TicketType) {
         let id = ticketId
-        let reason: String? = result?.typeReason
+        let reason: String? = suggestion?.typeSuggestion?.reason
         let ok: Ticket? = state.perform("Could not change the type") { try state.store.changeType(id, to: type, actor: .owner, reason: reason) }
-        if ok != nil { resolve("type", outcome: "accepted") }
+        if ok != nil { record("type", outcome: "accepted") }
     }
 
-    private func linkDuplicate(_ dup: VettingResult.Duplicate) {
+    private func linkDuplicate(_ other: Ticket) {
         let id = ticketId
-        let other = dup.ticketId
-        _ = state.perform("Could not link the tickets") { try state.store.link(from: id, to: other, kind: .duplicates) }
-        resolve("duplicate-\(dup.ticketId)", outcome: "linked")
+        let otherId = other.id
+        let ok: Bool? = state.perform("Could not link the tickets") { () -> Bool in
+            try state.store.link(from: id, to: otherId, kind: .duplicates)
+            return true
+        }
+        if ok != nil { record("duplicate", outcome: "linked") }
     }
 
     private func merge() {
-        guard let dup = mergeCandidate else { return }
-        mergeCandidate = nil
+        guard let other = duplicateTicket else { return }
         let id = ticketId
-        let other = dup.ticketId
-        let done: Ticket? = state.perform("Could not merge the tickets") {
-            try state.store.link(from: id, to: other, kind: .duplicates)
-            return try state.store.move(id, to: .dropped, actor: .owner, reason: "duplicate of \(other)")
+        let otherId = other.id
+        let done: Ticket? = state.perform("Could not merge the tickets") { () -> Ticket in
+            try state.store.link(from: id, to: otherId, kind: .duplicates)
+            return try state.store.move(id, to: .dropped, actor: .owner, reason: "duplicate of \(other.displayNumber)")
         }
-        if done != nil { resolve("duplicate-\(dup.ticketId)", outcome: "merged") }
+        if done != nil { record("duplicate", outcome: "merged") }
     }
 
-    private func resolve(_ part: String, outcome: String) {
-        guard let noteId = result?.noteId else { return }
+    private func recordQuietly(_ part: String, outcome: String) {
+        try? state.store.record(ticketId, actor: "owner", kind: "vetting-review",
+                                payload: ["suggestion": .int(suggestionId), "part": .string(part), "outcome": .string(outcome)])
+    }
+
+    /// Records one part decision, then resolves the whole suggestion when there is no rewrite left to decide.
+    private func record(_ part: String, outcome: String) {
+        recordQuietly(part, outcome: outcome)
+        decided.insert(part)
+        state.refresh()
+        finishWithoutRewrite()
+    }
+
+    private func finishWithoutRewrite() {
+        guard let s = suggestion, s.rewrite == nil, let t = ticket else { return }
+        let typeOpen = s.typeSuggestion != nil && s.typeSuggestion?.type != t.type && !decided.contains("type")
+        let dupOpen = s.duplicateOf != nil && duplicateTicket != nil && !decided.contains("duplicate")
+        if typeOpen || dupOpen { return }
         let id = ticketId
-        _ = state.perform("Could not record the choice") {
-            try state.store.record(id, actor: "owner", kind: "vetting-review",
-                                   payload: ["note": .int(noteId), "part": .string(part), "outcome": .string(outcome)])
-        }
+        let store = state.store
+        _ = state.perform("Could not finish the review") { () -> Ticket in try IrisApplier.keepMine(ticketId: id, store: store) }
     }
 
     // MARK: Data
 
     private func load() {
-        ticket = try? state.store.ticket(id: ticketId)
-        let latest = VettingResult.latest(store: state.store, ticketId: ticketId)
-        result = latest
+        let current: Ticket? = try? state.store.ticket(id: ticketId)
+        ticket = current
+        let events: [Event] = (try? state.store.events(ticketId: ticketId, kinds: ["vetting", "vetting-resolved", "vetting-review", "vetting-failed"])) ?? []
+        let pending: VettingSuggestion? = (try? state.store.pendingSuggestion(ticketId: ticketId)) ?? nil
+        suggestion = pending
+        var sid = 0
+        if pending != nil, let last = events.last(where: { $0.kind == "vetting" }) { sid = last.id }
+        suggestionId = sid
         var done = Set<String>()
-        if let latest {
-            let events: [Event] = (try? state.store.events(ticketId: ticketId, kinds: ["vetting-review"])) ?? []
-            for e in events where e.payload["note"]?.intValue == latest.noteId {
-                if let part = e.payload["part"]?.stringValue { done.insert(part) }
-            }
+        for e in events where e.kind == "vetting-review" && e.payload["suggestion"]?.intValue == sid {
+            if let part = e.payload["part"]?.stringValue { done.insert(part) }
         }
-        resolved = done
+        decided = done
+        if let last = events.last, last.kind == "vetting-failed" {
+            failure = last.payload["reason"]?.stringValue ?? "The check failed."
+        } else {
+            failure = nil
+        }
+        if let dupId = pending?.duplicateOf {
+            duplicateTicket = try? state.store.ticket(id: dupId)
+        } else {
+            duplicateTicket = nil
+        }
         openQuestionCount = ((try? state.store.questions(ticketId: ticketId, openOnly: true)) ?? []).count
+    }
+}
+
+extension String {
+    /// "a suggested rewrite" becomes "A suggested rewrite".
+    var capitalizedFirst: String {
+        guard let first = self.first else { return self }
+        return first.uppercased() + self.dropFirst()
     }
 }
