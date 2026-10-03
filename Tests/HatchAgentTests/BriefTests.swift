@@ -36,6 +36,7 @@ final class BriefTests: XCTestCase {
         - Which toast kind? -> Both
 
         ## Spec items (search)
+        - NOTIF-1.3: A toast stays on screen for four seconds.
         - NOTIF-1.2: A toast has 12pt padding and a 10pt corner radius.
 
         ## Area
