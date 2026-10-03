@@ -213,6 +213,14 @@ public final class StageModel: ObservableObject {
 
     // MARK: Derived values for the views
 
+    /// The revisions the switcher offers, newest first.
+    var revisionNumbers: [Int] { Array((1...max(latestManifest.revision, 1)).reversed()) }
+
+    var isViewingEarlierRevision: Bool { manifest.revision < latestManifest.revision }
+
+    /// true when Hatch's manifest is newer than the code this app was built from: a specimen added since may be missing here.
+    var manifestIsNewerThanApp: Bool { latestManifest.revision > launchRevision }
+
     var columns: [StageColumn] { StageColumns.columns(manifest: manifest, state: state) }
 
     var selectedColumn: StageColumn? { StageColumns.selectedColumn(columns, selected: state.selected) }
