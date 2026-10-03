@@ -72,9 +72,14 @@ public struct RepoConfig: Codable, Equatable, Sendable {
     public var localPath: String?
     public var buildCommand: String?
     public var testPlans: [String]?
-    public init(role: RepoRole, remote: String, branch: String, localPath: String? = nil, buildCommand: String? = nil, testPlans: [String]? = nil) {
+    /// Run in the ticket's workspace by `hatch ready`: the area's tests, never the full suite (decision I3).
+    public var testCommand: String?
+    /// Compares the built result with the accepted reference (the Match check, CONFORMANCE.md). Optional.
+    public var matchCommand: String?
+    public init(role: RepoRole, remote: String, branch: String, localPath: String? = nil, buildCommand: String? = nil, testPlans: [String]? = nil,
+                testCommand: String? = nil, matchCommand: String? = nil) {
         self.role = role; self.remote = remote; self.branch = branch; self.localPath = localPath
-        self.buildCommand = buildCommand; self.testPlans = testPlans
+        self.buildCommand = buildCommand; self.testPlans = testPlans; self.testCommand = testCommand; self.matchCommand = matchCommand
     }
 }
 

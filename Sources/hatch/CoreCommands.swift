@@ -133,6 +133,7 @@ enum CoreCommands {
             guard let r = try c.store.repos(projectId: t.projectId).first(where: { $0.role.rawValue == role }) else { throw CLIError("No repo with role '\(role)'.") }
             repoId = r.id
         }
+        try c.store.record(t.id, actor: t.takenBy ?? "agent", kind: "plan", payload: ["files": .array(files.map { .string($0) })])
         let outcome = try c.store.claim(ticketId: t.id, repoId: repoId, paths: files)
         let after = try c.store.ticket(id: t.id)!
         switch outcome {
