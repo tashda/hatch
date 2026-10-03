@@ -252,8 +252,6 @@ struct HXRepositorySelectionSheet: View {
 
     @StateObject private var deviceFlow = GitHubDeviceFlow()
     @State private var selectedNames: [RepoRole: String]
-    @State private var openPicker: RepoRole?
-    @State private var filter = ""
     @State private var saveError: String?
 
     init(account: GitHubAccountModel, projectName: String, initial: [RepoRole: String], ticketsLocked: Bool = false,
@@ -265,24 +263,32 @@ struct HXRepositorySelectionSheet: View {
         _selectedNames = State(initialValue: initial)
     }
 
+    /// A plain sheet: a title, one grouped form with a pop-up menu per role, and the standard buttons.
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .padding(.top, 28)
-                .padding(.bottom, 20)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Choose GitHub Repositories").font(.title3.weight(.semibold))
+                Text(subtitle).font(.callout).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 4)
 
             if connected {
-                VStack(spacing: 10) {
-                    assignmentRow(.tickets, title: "Tickets",
-                                  detail: ticketsLocked ? "Issues and attachments. Fixed after the first ticket." : "Issues and attachments. Private repositories only.",
-                                  symbol: "ticket", tint: .orange)
-                    assignmentRow(.app, title: "Project", detail: "App source and Specs", symbol: "curlybraces", tint: .blue)
-                    assignmentRow(.designSystem, title: "Design", detail: "Design system assets", symbol: "paintpalette", tint: .purple)
-                    statusLine
-                        .padding(.top, 4)
+                Form {
+                    Section {
+                        assignmentRow(.tickets, title: "Tickets",
+                                      detail: ticketsLocked ? "Issues and attachments. Fixed after the first ticket." : "Issues and attachments. Private repositories only.")
+                        assignmentRow(.app, title: "Project", detail: "App source and Specs")
+                        assignmentRow(.designSystem, title: "Design", detail: "Design system assets")
+                    } footer: {
+                        statusLine
+                    }
                 }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 8)
+                .formStyle(.grouped)
+                .scrollContentBackground(.hidden)
+                .scrollDisabled(true)
+                .fixedSize(horizontal: false, vertical: true)
             } else {
                 connectionPrompt
             }
@@ -291,81 +297,53 @@ struct HXRepositorySelectionSheet: View {
                 Text(saveError)
                     .font(.callout)
                     .foregroundStyle(Theme.critical)
-                    .padding(.horizontal, 28)
-                    .padding(.top, 6)
+                    .padding(.horizontal, 24)
             }
-            HStack(spacing: 10) {
+            HStack {
                 Text(ticketsLocked
                      ? "Project and Design can be changed later in Project settings."
                      : "You can change these choices later in Project settings.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Cancel") { dismiss() }
-                    .buttonStyle(.glass)
                     .keyboardShortcut(.cancelAction)
-                Button("Save Repositories") { save() }
-                    .buttonStyle(.glassProminent)
-                    .disabled(!canSave)
+                Button("Save") { save() }
+                    .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
+                    .disabled(!canSave)
             }
-            .controlSize(.large)
-            .padding(.horizontal, 28)
-            .padding(.top, 14)
-            .padding(.bottom, 22)
+            .padding(.horizontal, 24)
+            .padding(.top, 10)
+            .padding(.bottom, 20)
         }
-        .frame(width: 620)
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .frame(width: 540)
         .onAppear { if !Snapshots.demoMode { account.refresh() } }
     }
 
-    /// The GitHub mark, a centred title, and who is connected.
-    private var header: some View {
-        VStack(spacing: 12) {
-            Image("GitHubMark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 32, height: 32)
-                .frame(width: 64, height: 64)
-                .background(Color.black, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
-            VStack(spacing: 4) {
-                Text("Choose GitHub Repositories").font(.title2.weight(.semibold))
-                Text("Select where \(projectName) keeps its work.")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-            if let user = account.user {
-                Label("Connected as @\(user.login)", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Color.secondary.opacity(0.1), in: Capsule())
-            } else if Snapshots.demoMode {
-                Label("Demo preview", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Color.secondary.opacity(0.1), in: Capsule())
-            }
-        }
+    private var subtitle: String {
+        if let user = account.user { return "Select where \(projectName) keeps its work. Connected as @\(user.login)." }
+        return "Select where \(projectName) keeps its work."
     }
 
-    /// One line under the cards: what is wrong, or a quiet note that only available repositories show.
+    /// What is wrong, or a quiet note; plus a way to reload the list from GitHub.
     @ViewBuilder private var statusLine: some View {
-        if available.isEmpty {
-            statusText("No repositories are available to Hatch. Check the GitHub App installation and refresh the list.", critical: true)
-        } else if hasUnavailableAssignment {
-            statusText("A saved repository is no longer available to this account. Choose another before saving.", critical: true)
-        } else if hasDuplicateAssignments {
-            statusText("Choose a different repository for each role.", critical: true)
-        } else {
-            statusText("Only repositories available to Hatch appear here.", critical: false)
+        HStack(alignment: .firstTextBaseline) {
+            if available.isEmpty {
+                Text("No repositories are available to Hatch. Check the GitHub App installation and refresh the list.")
+                    .foregroundStyle(Theme.critical)
+            } else if hasUnavailableAssignment {
+                Text("A saved repository is no longer available to this account. Choose another before saving.")
+                    .foregroundStyle(Theme.critical)
+            } else if hasDuplicateAssignments {
+                Text("Choose a different repository for each role.").foregroundStyle(Theme.critical)
+            } else {
+                Text("Only repositories available to Hatch appear here.")
+            }
+            Spacer()
+            if !Snapshots.demoMode {
+                Button("Refresh") { account.refresh() }.buttonStyle(.link)
+            }
         }
-    }
-
-    private func statusText(_ text: String, critical: Bool) -> some View {
-        Label(text, systemImage: critical ? "exclamationmark.triangle.fill" : "info.circle")
-            .font(.caption)
-            .foregroundStyle(critical ? Theme.critical : Color.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 4)
     }
 
     private var connected: Bool { account.user != nil || Snapshots.demoMode }
@@ -406,121 +384,42 @@ struct HXRepositorySelectionSheet: View {
         return available.first { $0.fullName == name }
     }
 
-    private func assignmentRow(_ role: RepoRole, title: String, detail: String, symbol: String, tint: Color) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 42, height: 42)
-                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 10)
+    /// The repositories a role may use: Tickets takes private ones only.
+    private func choices(for role: RepoRole) -> [GitHubRepoSummary] {
+        role == .tickets ? available.filter { $0.isPrivate } : available
+    }
+
+    private func assignmentRow(_ role: RepoRole, title: String, detail: String) -> some View {
+        LabeledContent {
             if role == .tickets && ticketsLocked {
                 Label(selectedNames[role] ?? "Not selected", systemImage: "lock.fill")
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Color.secondary.opacity(0.08), in: Capsule())
             } else {
-                Button {
-                    filter = ""
-                    openPicker = role
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: selectedNames[role] == nil ? "plus" : "shippingbox")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Text(selectedNames[role] ?? "Choose repository").lineLimit(1)
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption2).foregroundStyle(.secondary)
+                Picker(title, selection: Binding<String?>(
+                    get: { selectedNames[role] },
+                    set: { selectedNames[role] = $0 }
+                )) {
+                    if role != .tickets { Text("None").tag(String?.none) }
+                    // A saved choice that is no longer available stays visible, so it can be replaced on purpose.
+                    if let name = selectedNames[role], !choices(for: role).contains(where: { $0.fullName == name }) {
+                        Text("\(name) (unavailable)").tag(String?.some(name))
+                    } else if selectedNames[role] == nil && role == .tickets {
+                        Text("Choose…").tag(String?.none)
                     }
-                    .padding(.horizontal, 6)
-                    .frame(minWidth: 170)
+                    ForEach(choices(for: role), id: \.fullName) { repo in
+                        Text(repo.isPrivate ? repo.fullName : "\(repo.fullName) (public)").tag(String?.some(repo.fullName))
+                    }
                 }
-                .buttonStyle(.glass)
-                .controlSize(.large)
-                .popover(isPresented: Binding(
-                    get: { openPicker == role },
-                    set: { if !$0 { openPicker = nil } }
-                ), arrowEdge: .bottom) {
-                    repositoryPopover(for: role)
-                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .floatingCard()
-    }
-
-    private func repositoryPopover(for role: RepoRole) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Choose \(role == .tickets ? "tickets" : role == .app ? "project" : "design") repository")
-                .font(.headline)
-            TextField("Filter repositories", text: $filter)
-                .textFieldStyle(.roundedBorder)
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    if role != .tickets {
-                        Button {
-                            selectedNames.removeValue(forKey: role)
-                            openPicker = nil
-                        } label: {
-                            Label("No repository", systemImage: "minus.circle")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 8)
-                        }
-                        .buttonStyle(.plain)
-                        Divider()
-                    }
-                    ForEach(filteredRepositories) { repo in
-                        Button {
-                            selectedNames[role] = repo.fullName
-                            openPicker = nil
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: repo.isPrivate ? "lock" : "globe")
-                                    .frame(width: 20)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(repo.fullName).lineLimit(1)
-                                    Text(repo.isPrivate ? "Private" : role == .tickets ? "Public · unavailable for Tickets" : "Public")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if selectedNames[role] == repo.fullName {
-                                    Image(systemName: "checkmark").foregroundStyle(.tint)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 8)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(role == .tickets && !repo.isPrivate)
-                        Divider()
-                    }
-                    if filteredRepositories.isEmpty {
-                        Text("No matching repositories")
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 12)
-                    }
-                }
-            }
-            HStack {
-                Text("Repositories available to Hatch")
-                    .font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Refresh") { account.refresh() }
-                    .buttonStyle(.borderless)
-            }
-        }
-        .padding(14)
-        .frame(width: 390, height: 350)
-    }
-
-    private var filteredRepositories: [GitHubRepoSummary] {
-        available.filter { filter.isEmpty || $0.fullName.localizedCaseInsensitiveContains(filter) }
     }
 
     private var connectionPrompt: some View {

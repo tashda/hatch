@@ -85,8 +85,8 @@ struct ProjectForm: View {
     }
 
     var body: some View {
-        // A native grouped form on the window background, as in Echo's Settings: each group is a rounded
-        // inset card, rows are label on the left and value on the right.
+        // A native grouped form in the page's panel, as in Echo's Settings: each group is a rounded inset
+        // section, rows are label on the left and value on the right.
         Form {
             identitySection
             generalSection
@@ -352,10 +352,11 @@ struct ProjectForm: View {
         .controlSize(.large)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .frame(maxWidth: 520)
+        .fixedSize()
         .glassEffect(.regular, in: Capsule())
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity)
+        .padding(.bottom, 14)
+        .padding(.trailing, 28)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     // MARK: Loading and saving
