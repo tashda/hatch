@@ -50,6 +50,9 @@ struct RootView: View {
         .background(Color(nsColor: .underPageBackgroundColor))
         .animation(.snappy(duration: 0.25), value: state.showSidebar)
         .navigationTitle(state.route.title)
+        // The system's soft scroll edge under the toolbar, forced on every scroll view in the window
+        // (macOS 27 defaults to the hard edge).
+        .scrollEdgeEffectStyle(.soft, for: .top)
         .toolbar { LiveToolbar() }
     }
 
