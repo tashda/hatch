@@ -22,11 +22,11 @@ Status: **proposed**. These are the recommendations on the design page (decision
 | A queue to work through | Sectioned list and detail pane (Desk) | `List`, `Section` |
 | Flow across stages | Lanes with plain cards (Board) | `ScrollView`, `LazyVStack` |
 | Switch main areas | Sidebar source list | `NavigationSplitView`, `List` |
-| Switch sections of one pane (up to 5) | Text dock | `HXDock` |
+| Switch sections of one pane (up to 5) | Text dock | `HXDock` (6 or more: pull-down, automatic) |
 | Switch sections (6 or more) | Pull-down | `Picker` `.menu` |
 | View mode in the toolbar | System segmented control | `Picker` `.segmented` |
 | Status of a ticket | Phase glyph and name | `HXStatus` (`Label` with symbol) |
-| Project | Project card at the top of the sidebar | `HXProjectCard` |
+| Project | Title menu in the toolbar: tile, name, pull-down of projects | `ProjectTitleMenu` |
 | Facts about the selection | Details card | `LabeledContent` in `Form` |
 | Settings | Grouped form | `Form` `.formStyle(.grouped)` |
 | Main action | One prominent glass capsule, first in the row | `.glassProminent`, `.controlSize(.large)` |
@@ -45,7 +45,7 @@ Status: **proposed**. These are the recommendations on the design page (decision
 4. Colour only for turn or a real problem.
 5. Check the CI screenshots (light and dark) before marking the work ready.
 
-## Which buttons where (proposed, decisions LK10 and LK11)
+## Which buttons where (decisions LK10 and LK11)
 
 The style is the one on Echo's server page and Activity Monitor: Liquid Glass capsules with an icon and a label.
 
