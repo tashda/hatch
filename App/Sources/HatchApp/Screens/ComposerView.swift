@@ -76,7 +76,15 @@ struct ComposerView: View {
             }
         }
         .navigationTitle("New ticket")
-        .onAppear { setUp() }
+        .onAppear {
+            setUp()
+            if Snapshots.folder != nil {
+                type = .bug
+                title = "Keep focus in the query after Run"
+                bodyText = "After running a query, focus moves to the toolbar. Keep the keyboard focus in the query editor so the next query can be changed without reaching for the mouse."
+                area = "Editor"
+            }
+        }
         .onChange(of: title) { _, _ in scheduleHints() }
         .onChange(of: bodyText) { _, _ in scheduleHints() }
         .onChange(of: projectId) { _, _ in projectChanged() }

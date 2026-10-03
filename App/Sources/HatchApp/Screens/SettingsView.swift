@@ -78,7 +78,10 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(minWidth: 520, minHeight: 480)
-        .onAppear { load(); account.refresh() }
+        .onAppear {
+            load()
+            if !Snapshots.demoMode { account.refresh() }
+        }
     }
 
     private var accountLine: String {
@@ -101,6 +104,11 @@ struct SettingsView: View {
             maxAgents = (try? state.store.maxAgents(projectId: state.projectFilterId)) ?? 3
         }
         loaded = true
+        guard !Snapshots.demoMode else {
+            claudeStatus = "Not checked in demo mode"
+            tokenStatus = "Not checked in demo mode"
+            return
+        }
         let configured = state.hxSetting("claude_path")
         Task {
             let status = await Task.detached { () -> (String, String) in

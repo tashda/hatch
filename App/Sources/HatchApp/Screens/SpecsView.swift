@@ -70,6 +70,9 @@ struct SpecsView: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
+        .onAppear {
+            if Snapshots.folder != nil, selectedCode == nil { selectedCode = items.first?.code }
+        }
     }
 
     private var topBar: some View {

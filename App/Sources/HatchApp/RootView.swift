@@ -10,21 +10,46 @@ struct RootView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
         } detail: {
-            HStack(spacing: 0) {
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if state.showAskPanel {
-                    Divider()
-                    AskPanel().frame(width: 320)
+            Group {
+                if state.snapshotPresentation == .settings {
+                    SettingsView()
+                } else if state.snapshotPresentation == .palette {
+                    CommandPalette()
+                } else if state.snapshotPresentation == .askPanel {
+                    HStack(spacing: 0) {
+                        content.frame(maxWidth: .infinity, maxHeight: .infinity)
+                        Divider()
+                        AskPanel().frame(width: 320)
+                    }
+                } else {
+                    HStack(spacing: 0) {
+                        content
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if state.showAskPanel {
+                            Divider()
+                            AskPanel().frame(width: 320)
+                        }
+                    }
                 }
             }
-            .navigationTitle(state.route.title)
-            .toolbar { MainToolbar() }
+            .navigationTitle(snapshotTitle)
+            .toolbar {
+                if state.snapshotPresentation == nil { MainToolbar() }
+            }
         }
         .sheet(isPresented: $state.showPalette) { CommandPalette() }
         .alert("Something went wrong", isPresented: Binding(get: { state.errorMessage != nil }, set: { if !$0 { state.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(state.errorMessage ?? "") }
+    }
+
+    private var snapshotTitle: String {
+        switch state.snapshotPresentation {
+        case .settings: "Settings"
+        case .palette: "Search"
+        case .askPanel: "Ask Hatch"
+        case nil: state.route.title
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -63,14 +88,33 @@ struct MainToolbar: ToolbarContent {
 /// The project as the window's title control (decision LK2, option D): tile and name; a click opens the list of projects.
 struct ProjectTitleMenu: View {
     @EnvironmentObject var state: AppState
-    @State private var open = false
 
     private var current: Project? {
         state.projects.first { $0.key == state.selectedProjectKey }
     }
 
     var body: some View {
-        Button { open.toggle() } label: {
+        Menu {
+            Button {
+                state.selectedProjectKey = nil
+            } label: {
+                Label("All projects", systemImage: state.selectedProjectKey == nil ? "checkmark" : "square.stack.3d.up")
+            }
+            if !state.projects.isEmpty { Divider() }
+            ForEach(state.projects) { project in
+                Button {
+                    state.selectedProjectKey = project.key
+                } label: {
+                    if state.selectedProjectKey == project.key {
+                        Label(project.name, systemImage: "checkmark")
+                    } else {
+                        Text(project.name)
+                    }
+                }
+            }
+            if !state.projects.isEmpty { Divider() }
+            Button("Project settings…", systemImage: "gearshape") { state.route = .projects }
+        } label: {
             HStack(spacing: 6) {
                 if let p = current {
                     ProjectTile(name: p.name, key: p.key)
@@ -82,46 +126,8 @@ struct ProjectTitleMenu: View {
             }
             .padding(.horizontal, 4)
         }
-        .buttonStyle(.plain)
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
         .help("Switch project")
-        .popover(isPresented: $open, arrowEdge: .bottom) { list }
-    }
-
-    private var list: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            row(title: "All projects", subtitle: nil, key: nil, name: nil)
-            Divider().padding(.vertical, 4)
-            ForEach(state.projects) { project in
-                row(title: project.name, subtitle: project.config?.repo(.app)?.branch, key: project.key, name: project.name)
-            }
-            Divider().padding(.vertical, 4)
-            Button { open = false; state.route = .projects } label: {
-                Label("Project settings…", systemImage: "gearshape").frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 8).padding(.vertical, 4)
-        }
-        .padding(8)
-        .frame(minWidth: 240)
-    }
-
-    private func row(title: String, subtitle: String?, key: String?, name: String?) -> some View {
-        Button {
-            state.selectedProjectKey = key
-            open = false
-        } label: {
-            HStack(spacing: 8) {
-                if let key, let name { ProjectTile(name: name, key: key) } else { Image(systemName: "square.stack.3d.up").frame(width: 20, height: 20).foregroundStyle(.secondary) }
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(title)
-                    if let subtitle, !subtitle.isEmpty { Text("branch \(subtitle)").font(.caption).foregroundStyle(.secondary) }
-                }
-                Spacer()
-                if state.selectedProjectKey == key { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
-            }
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }

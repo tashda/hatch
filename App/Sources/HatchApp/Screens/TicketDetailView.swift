@@ -55,6 +55,12 @@ struct TicketDetailView: View {
             tab = .overview
             load()
         }
+        .onChange(of: state.snapshotTicketTab) { _, next in
+            if Snapshots.folder != nil, let next { tab = next }
+        }
+        .onAppear {
+            if Snapshots.folder != nil, let next = state.snapshotTicketTab { tab = next }
+        }
         .confirmationDialog("Drop this ticket?", isPresented: $confirmDrop) {
             Button("Drop", role: .destructive) { move(to: .dropped) }
             Button("Cancel", role: .cancel) {}

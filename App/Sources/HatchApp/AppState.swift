@@ -7,6 +7,8 @@ import HatchAPI
 /// change, and holds navigation and panel state. Screens never write SQL; they call store methods inside `perform`.
 @MainActor
 final class AppState: ObservableObject {
+    enum SnapshotPresentation { case settings, palette, askPanel }
+
     let store: HatchStore
     let paths: AppPaths
     private var stageServer: StageServer?
@@ -23,6 +25,9 @@ final class AppState: ObservableObject {
     @Published var showPalette = false
     @Published var searchText = ""
     @Published var syncSummary = SyncSummary()
+    /// Snapshot harness only: selects each ticket subview without changing the normal navigation model.
+    @Published var snapshotTicketTab: TicketTab?
+    @Published var snapshotPresentation: SnapshotPresentation?
 
     struct SyncSummary: Equatable {
         var pending = 0

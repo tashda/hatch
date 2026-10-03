@@ -26,9 +26,9 @@ enum WordDiff {
         for (i, word) in words.enumerated() {
             let piece: String = i < words.count - 1 ? word + " " : word
             if m.removed.contains(i) {
-                out = out + Text(piece).foregroundStyle(.secondary).strikethrough()
+                out = Text("\(out)\(Text(piece).foregroundStyle(.secondary).strikethrough())")
             } else {
-                out = out + Text(piece)
+                out = Text("\(out)\(Text(piece))")
             }
         }
         return out
@@ -41,9 +41,9 @@ enum WordDiff {
         for (i, word) in words.enumerated() {
             let piece: String = i < words.count - 1 ? word + " " : word
             if m.inserted.contains(i) {
-                out = out + Text(piece).fontWeight(.semibold).underline()
+                out = Text("\(out)\(Text(piece).fontWeight(.semibold).underline())")
             } else {
-                out = out + Text(piece)
+                out = Text("\(out)\(Text(piece))")
             }
         }
         return out

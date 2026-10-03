@@ -3,7 +3,7 @@ import HatchCore
 
 @main
 struct HatchApp: App {
-    @StateObject private var state = Snapshots.folder == nil ? AppState.live() : Snapshots.demoState()
+    @StateObject private var state = (Snapshots.folder == nil && !Snapshots.demoMode) ? AppState.live() : Snapshots.demoState()
 
     var body: some Scene {
         WindowGroup {
@@ -11,9 +11,16 @@ struct HatchApp: App {
                 .environmentObject(state)
                 .frame(minWidth: 1000, minHeight: 640)
                 .task {
-                    if let folder = Snapshots.folder { await Snapshots.run(state: state, into: folder) } else { state.startServices() }
+                    if let folder = Snapshots.folder {
+                        await Snapshots.run(state: state, into: folder)
+                    } else if !Snapshots.demoMode {
+                        state.startServices()
+                    }
                 }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in state.stopServices() }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    Snapshots.restoreDemoPreferences()
+                    state.stopServices()
+                }
         }
         .commands { HatchCommands(state: state) }
 

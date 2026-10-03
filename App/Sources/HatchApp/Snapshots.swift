@@ -5,6 +5,34 @@ import HatchCore
 /// `Hatch --snapshots <folder>` opens the window on made-up data, saves a PNG of each main screen in light and dark, and quits.
 /// CI uses it so the screens can be looked at without a person running the app. It never touches the real database.
 enum Snapshots {
+    static var demoMode: Bool {
+        CommandLine.arguments.contains("--demo") || CommandLine.arguments.contains("--snapshots")
+    }
+    private static let pendingQueryKey = "hatch.pendingTicketQuery"
+    private static var priorPendingQuery: String??
+
+    @MainActor private static func isolateDemoPreferences() {
+        guard priorPendingQuery == nil else { return }
+        priorPendingQuery = UserDefaults.standard.string(forKey: pendingQueryKey)
+        UserDefaults.standard.set("", forKey: pendingQueryKey)
+    }
+
+    @MainActor static func restoreDemoPreferences() {
+        guard let priorPendingQuery else { return }
+        if let value = priorPendingQuery { UserDefaults.standard.set(value, forKey: pendingQueryKey) }
+        else { UserDefaults.standard.removeObject(forKey: pendingQueryKey) }
+        self.priorPendingQuery = nil
+    }
+
+    @MainActor private static func save(_ window: NSWindow, name: String, mode: String, into folder: URL) {
+        guard let view = window.contentView?.superview ?? window.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        if let png = rep.representation(using: .png, properties: [:]) {
+            try? png.write(to: folder.appendingPathComponent("\(name)-\(mode).png"))
+        }
+    }
+
     static var folder: URL? {
         let a = CommandLine.arguments
         guard let i = a.firstIndex(of: "--snapshots"), i + 1 < a.count else { return nil }
@@ -12,43 +40,124 @@ enum Snapshots {
     }
 
     @MainActor static func demoState() -> AppState {
+        isolateDemoPreferences()
         let store = try! HatchStore.inMemory()
-        let p = try! store.upsertProject(key: "echo", name: "Echo")
+        let config = ProjectConfig(name: "Acme", ticketsRepo: "acme/hatch-tickets", repos: [
+            RepoConfig(role: .app, remote: "acme/app", branch: "main", localPath: "/tmp/hatch-demo/App", buildCommand: "swift build", testPlans: ["UnitTests"]),
+            RepoConfig(role: .designSystem, remote: "acme/design-system", branch: "main", localPath: "/tmp/hatch-demo/DesignSystem"),
+            RepoConfig(role: .specimens, remote: "acme/specimens", branch: "main", localPath: "/tmp/hatch-demo/Specimens"),
+        ], areas: [
+            AreaConfig(name: "Connections", paths: ["Sources/Connections/**"], specPrefix: "CONN", testPlans: ["UnitTests"]),
+            AreaConfig(name: "Editor", paths: ["Sources/Editor/**"], specPrefix: "EDIT"),
+            AreaConfig(name: "Notifications", paths: ["Sources/Notifications/**"], specPrefix: "NOTIF"),
+        ], docs: ["README.md", "Design/CONTRIBUTING.md"], maxAgents: 3, integrationBranch: "main")
+        let p = try! store.upsertProject(key: "acme", name: "Acme", config: config)
         let rows: [(TicketType, Status, String, String)] = [
-            (.proposal, .yourCall, "Toast spacing and corner radius", "connections"),
-            (.proposal, .preparing, "Query tab empty state", "editor"),
-            (.sketch, .yourCall, "Sidebar density options", "sidebar"),
-            (.bug, .toVerify, "Results grid loses scroll position after sort", "results"),
-            (.bug, .building, "Connection test hangs on bad host", "connections"),
-            (.tweak, .ready, "Rename Run to Execute in the toolbar", "editor"),
-            (.question, .needsAnswers, "Should tabs restore after a crash?", "editor"),
-            (.theme, .building, "Polish the Connections area", "connections"),
-            (.tweak, .merged, "Align icon sizes in the inspector", "inspector"),
-            (.bug, .blocked, "Export to CSV drops the last row", "results"),
-            (.proposal, .accepted, "Command palette layout", "palette"),
-            (.question, .draft, "Do we need a dark-only mode?", "settings"),
+            (.proposal, .yourCall, "Toast spacing and corner radius", "Notifications"),
+            (.proposal, .preparing, "Query tab empty state", "Editor"),
+            (.sketch, .yourCall, "Sidebar density options", "Connections"),
+            (.bug, .toVerify, "Results grid loses scroll position after sort", "Editor"),
+            (.bug, .building, "Connection test hangs on bad host", "Connections"),
+            (.tweak, .ready, "Rename Run to Execute in the toolbar", "Editor"),
+            (.question, .needsAnswers, "Should tabs restore after a crash?", "Editor"),
+            (.theme, .building, "Polish the Connections area", "Connections"),
+            (.tweak, .merged, "Align icon sizes in the inspector", "Connections"),
+            (.bug, .blocked, "Export to CSV drops the last row", "Editor"),
+            (.proposal, .accepted, "Command palette layout", "Connections"),
+            (.question, .draft, "Do we need a dark-only mode?", "Editor"),
+            (.tweak, .toVerify, "Keep focus in the query after Run", "Editor"),
+            (.bug, .done, "Crash when importing an empty file", "Connections"),
+            (.proposal, .revising, "Connection timeout message", "Connections"),
+            (.tweak, .parked, "Use compact labels in the inspector", "Connections"),
+            (.bug, .dropped, "Restore the retired XML importer", "Editor"),
+            (.sketch, .draft, "New empty results illustration", "Editor"),
+            (.theme, .ready, "Keyboard navigation across result groups", "Editor"),
+            (.bug, .fixing, "Reconnect action keeps a stale error", "Connections"),
+            (.question, .done, "Can imported tabs preserve order?", "Editor"),
         ]
+        var tickets: [Ticket] = []
         for (i, r) in rows.enumerated() {
-            _ = try? store.createTicket(projectId: p.id, type: r.0, title: r.2, body: "Made-up example text for \(r.2).",
-                                        area: r.3, ghNumber: 140 + i, status: r.1)
+            let body = """
+            What: \(r.2.lowercased()).
+            Why: A realistic example ticket with enough detail to review the reading flow.
+            Scope: \(r.3), including keyboard use, reduced motion, and failure states.
+            Done when: the change is clear, covered by tests, and preserves existing behavior.
+            """
+            tickets.append(try! store.createTicket(projectId: p.id, type: r.0, title: r.2, body: body,
+                                                   area: r.3, ghNumber: 140 + i, status: r.1))
         }
+        let proposal = tickets[0], verifyA = tickets[3], building = tickets[4]
+        let sketch = tickets[2], verifyB = tickets[12], question = tickets[6]
+        try! store.saveProposal(ticketId: proposal.id, manifestJSON: #"{"revision":1,"specs":["NOTIF-1.2"],"summary":"Reduce toast padding while keeping the action easy to find.","asked":"Make notifications calmer without hiding their action.","controls":[{"id":"density","title":"Spacing","choices":[{"id":"compact","name":"Compact"},{"id":"balanced","name":"Balanced"}],"defaultChoice":"balanced","question":"Which spacing feels easier to scan?","recommend":"balanced","why":"It keeps the action clear without making the toast taller."}],"specimens":[{"id":"today","title":"Today","isEchoToday":true,"designWidth":360,"designHeight":480},{"id":"compact","title":"Compact","designWidth":360,"designHeight":480},{"id":"balanced","title":"Balanced","designWidth":360,"designHeight":480}],"scenarios":[{"id":"light","title":"Light"},{"id":"dark","title":"Dark"}]}"#)
+        try! store.setPick(ticketId: proposal.id, topic: "density", choice: "balanced", note: "The action stays easy to spot.")
+        try! store.setVerdict(ticketId: proposal.id, topic: "density", option: "compact", verdict: "maybe")
+        _ = try! store.addPin(ticketId: proposal.id, option: "balanced", x: 0.72, y: 0.31, scenario: "Dark", appearance: "dark", corners: 14, zoom: 1, text: "Keep the close button aligned with the message.")
+        _ = try! store.recordRevision(ticketId: proposal.id, summary: "Raised contrast and aligned the action.", added: ["Dark-mode example"])
+        try! store.saveProposal(ticketId: sketch.id, manifestJSON: #"{"variants":[{"id":"compact","title":"Compact","summary":"More rows stay visible.","html":"<html><body style='font:16px -apple-system;background:#f5f5f7;padding:28px'><h2>Connections</h2><div style='padding:16px;background:white;border-radius:12px;margin:8px 0'>Database · Connected</div><div style='padding:16px;background:white;border-radius:12px;margin:8px 0'>Analytics · Needs attention</div><div style='padding:16px;background:white;border-radius:12px;margin:8px 0'>Cache · Connected</div></body></html>"},{"id":"roomy","title":"Roomy","summary":"Each connection gets more breathing room.","html":"<html><body style='font:16px -apple-system;background:#f5f5f7;padding:28px'><h2>Connections</h2><div style='padding:24px;background:white;border-radius:16px;margin:12px 0'>Database<br><small>Connected</small></div><div style='padding:24px;background:white;border-radius:16px;margin:12px 0'>Analytics<br><small>Needs attention</small></div></body></html>"}]}"#)
+        try! store.addNote(proposal.id, kind: .note, author: "owner", body: "The quieter spacing is close. Keep the close action aligned.")
+        try! store.addNote(proposal.id, kind: .agent, author: "Mina", body: "Revision 2 keeps the label to two lines and brings the action back to the baseline.")
+        _ = try! store.ask(question.id, text: "Should restored tabs keep their previous split position?", suggestions: ["Yes, when both tabs still exist", "No, use the default split"], by: "Iris")
+        try! store.upsertSpecItems(projectId: p.id, items: [
+            ("NOTIF-1.2", "Notifications", "Toast actions remain visible at compact and regular text sizes.", "notifications.md"),
+            ("NOTIF-1.3", "Notifications", "A toast does not cover the primary window action.", "notifications.md"),
+            ("EDIT-2.1", "Editor", "A restored tab retains its selected query and cursor position.", "editor.md"),
+            ("EDIT-2.2", "Editor", "The empty state names one useful next action.", "editor.md"),
+            ("CONN-3.1", "Connections", "A failed connection test names the host and offers Retry.", "connections.md"),
+            ("CONN-3.2", "Connections", "Secrets are never included in logs or support bundles.", "connections.md"),
+        ])
+        _ = try! store.recordDecision(ticketId: proposal.id, summary: "Use balanced toast spacing: it keeps the action easy to scan while avoiding extra height.", specCodes: ["NOTIF-1.2", "NOTIF-1.3"])
+        try! store.setPick(ticketId: proposal.id, topic: "density", choice: "balanced")
+
+        let appRepo = try! store.repo(projectId: p.id, role: .app)!
+        _ = try! store.saveWorkspace(ticketId: verifyA.id, repoId: appRepo.id, path: "/tmp/hatch-demo/worktrees/140", branch: "ticket/140-results-scroll", baseSha: "a1b2c3d")
+        _ = try! store.saveWorkspace(ticketId: verifyB.id, repoId: appRepo.id, path: "/tmp/hatch-demo/worktrees/152", branch: "ticket/152-query-focus", baseSha: "a1b2c3d")
+        let preview = try! store.createPreview(name: "Preview 01", branch: "preview/01", ticketIds: [verifyA.id, verifyB.id])
+        try! store.setPreview(preview.id, state: "built", log: "Build succeeded. 312 tests passed.", built: true)
+        try! store.setVerdict(previewId: preview.id, ticketId: verifyA.id, verdict: "looks-right", note: "The result stays in view after sorting.")
+        try! store.setVerdict(previewId: preview.id, ticketId: verifyB.id, verdict: "needs-work", note: "Focus still moves to the toolbar after Run.")
+
+        try! store.setTakenBy(building.id, "Mina")
+        _ = try! store.startRun(ticketId: building.id, agent: "Mina", step: "Running connection tests")
+        _ = try! store.claim(ticketId: building.id, repoId: appRepo.id, paths: ["Sources/Connections/ConnectionTest.swift"])
+        _ = try! store.take(tickets[5].id, agent: "Jon")
+        let completedRun = try! store.startRun(ticketId: tickets[8].id, agent: "Jon", step: "Preview passed")
+        try! store.endRun(completedRun, tokensIn: 18400, tokensOut: 2300, outcome: "ok")
+        try! store.logPull(summary: "17 issues updated", ok: true)
+        try! store.logPull(summary: "Preview status unavailable", ok: false, error: "Checks are still running.")
         let paths = AppPaths(root: FileManager.default.temporaryDirectory.appendingPathComponent("hatch-snapshots-\(getpid())"))
         return AppState(store: store, paths: paths)
     }
 
     @MainActor static func run(state: AppState, into folder: URL) async {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let first = (try? state.store.tickets(TicketFilter()))?.first?.id
-        var routes: [(String, Route)] = [("desk", .desk), ("tickets", .tickets), ("board", .board), ("previews", .previews),
-                                         ("specs", .specs), ("decisions", .decisions), ("agents", .agents), ("log", .log),
-                                         ("project", .projects), ("new-ticket", .newTicket)]
-        if let first { routes.insert(("ticket", .ticket(first)), at: 3) }
+        let first = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Toast spacing and corner radius" })?.id
+        var routes: [(String, Route, TicketTab?)] = [("desk", .desk, nil), ("tickets", .tickets, nil), ("board", .board, nil),
+                                                      ("previews", .previews, nil), ("specs", .specs, nil), ("decisions", .decisions, nil),
+                                                      ("agents", .agents, nil), ("log", .log, nil), ("project", .projects, nil),
+                                                      ("new-ticket", .newTicket, nil)]
+        if let first {
+            routes.insert(("ticket-overview", .ticket(first), .overview), at: 3)
+            routes.insert(("ticket-options", .ticket(first), .options), at: 4)
+            routes.insert(("ticket-thread", .ticket(first), .thread), at: 5)
+            routes.insert(("ticket-work", .ticket(first), .work), at: 6)
+            routes.insert(("ticket-history", .ticket(first), .history), at: 7)
+        }
+        let sketchID = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Sidebar density options" })?.id
+        let questionID = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Should tabs restore after a crash?" })?.id
+        if let sketchID { routes.append(("sketch-options", .ticket(sketchID), .options)) }
+        if let questionID { routes.append(("question-overview", .ticket(questionID), .overview)) }
+        if let ticket = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Connection test hangs on bad host" }) {
+            routes.append(("building-work", .ticket(ticket.id), .work))
+        }
         try? await Task.sleep(nanoseconds: 2_500_000_000)
         if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         try? await Task.sleep(nanoseconds: 800_000_000)
         for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             NSApp.appearance = NSAppearance(named: appearance)
-            for (name, route) in routes {
+            for (name, route, tab) in routes {
+                state.snapshotTicketTab = tab
+                state.showAskPanel = false
+                state.showPalette = false
                 state.route = route
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
                 guard let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView?.superview ?? window.contentView,
@@ -58,7 +167,34 @@ enum Snapshots {
                     try? png.write(to: folder.appendingPathComponent("\(name)-\(mode).png"))
                 }
             }
+            state.snapshotTicketTab = .overview
+            state.route = first.map(Route.ticket) ?? .desk
+            state.selectedTicketId = first
+            state.showAskPanel = false
+            state.snapshotPresentation = .askPanel
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            if let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView?.superview ?? window.contentView,
+               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: rep)
+                if let png = rep.representation(using: .png, properties: [:]) { try? png.write(to: folder.appendingPathComponent("ask-panel-\(mode).png")) }
+            }
+            state.snapshotPresentation = nil
+            state.route = .tickets
+            state.showPalette = false
+            state.snapshotPresentation = .palette
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            if let window = NSApp.windows.first(where: { $0.isVisible }) {
+                save(window, name: "command-palette", mode: mode, into: folder)
+            }
+            state.snapshotPresentation = .settings
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            if let window = NSApp.windows.first(where: { $0.isVisible }) {
+                save(window, name: "settings", mode: mode, into: folder)
+            }
+            state.snapshotPresentation = nil
+            try? await Task.sleep(nanoseconds: 250_000_000)
         }
+        restoreDemoPreferences()
         NSApp.terminate(nil)
     }
 }
