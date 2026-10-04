@@ -255,33 +255,57 @@ struct FooterProjectPill: View {
 
 /// One glyph for everything that moves data: GitHub sync, the notebooks and the database. A check when all is saved, a
 /// spinner while something moves, orange when something needs a look, red when something failed. Hover: what is where.
+/// How the data is doing, for the footer glyph and the menu bar item.
+enum SaveLevel {
+    case calm, busy, attention, problem
+
+    var title: String {
+        switch self {
+        case .calm: "Everything is saved"
+        case .busy: "Saving…"
+        case .attention: "Not synced yet"
+        case .problem: "Something needs a look"
+        }
+    }
+}
+
+extension AppState {
+    var saveLevel: SaveLevel {
+        let s = syncSummary
+        if s.failed > 0 || s.message != nil || notebookProblem != nil { return .problem }
+        if syncing || exportingNotebooks || s.pending > 0 { return .busy }
+        if s.lastOK == nil && projects.contains(where: { !($0.config?.ticketsRepo ?? "").isEmpty }) { return .attention }
+        return .calm
+    }
+}
+
+/// The status glyph: a check when all is saved, a turning arrow while something moves, orange or red when not.
+struct SaveLevelGlyph: View {
+    let level: SaveLevel
+    var body: some View {
+        Group {
+            switch level {
+            case .calm: Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.finished)
+            case .busy: Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.secondary)
+                    .symbolEffect(.rotate, options: .repeating)
+            case .attention: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
+            case .problem: Image(systemName: "xmark.octagon.fill").foregroundStyle(Theme.critical)
+            }
+        }
+        .contentTransition(.symbolEffect(.replace))
+    }
+}
+
 struct FooterStatusGlyph: View {
     @EnvironmentObject var state: AppState
     @State private var ci: String?
 
-    private enum Level { case calm, busy, attention, problem }
-
-    private var level: Level {
-        let s = state.syncSummary
-        if s.failed > 0 || s.message != nil || state.notebookProblem != nil { return .problem }
-        if state.syncing || state.exportingNotebooks || s.pending > 0 { return .busy }
-        if s.lastOK == nil && state.projects.contains(where: { !($0.config?.ticketsRepo ?? "").isEmpty }) { return .attention }
-        return .calm
-    }
+    private var level: SaveLevel { state.saveLevel }
 
     var body: some View {
         Button { state.navigate(to: .health) } label: {
-            Group {
-                switch level {
-                case .calm: Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.finished)
-                case .busy: Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.secondary)
-                        .symbolEffect(.rotate, options: .repeating)
-                case .attention: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
-                case .problem: Image(systemName: "xmark.octagon.fill").foregroundStyle(Theme.critical)
-                }
-            }
+            SaveLevelGlyph(level: level)
             .font(.system(size: 13))
-            .contentTransition(.symbolEffect(.replace))
             .frame(width: 20, height: 20)
             .contentShape(Rectangle())
         }
@@ -302,14 +326,7 @@ struct FooterStatusGlyph: View {
         }
     }
 
-    private var title: String {
-        switch level {
-        case .calm: "Everything is saved"
-        case .busy: "Saving…"
-        case .attention: "Not synced yet"
-        case .problem: "Something needs a look"
-        }
-    }
+    private var title: String { level.title }
 
     private var githubLine: String {
         let s = state.syncSummary

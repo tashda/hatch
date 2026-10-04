@@ -10,7 +10,7 @@ import HatchImport
 /// change, and holds navigation and panel state. Screens never write SQL; they call store methods inside `perform`.
 @MainActor
 final class AppState: ObservableObject {
-    enum SnapshotPresentation { case settings, palette, addProject, repositorySelector, agentCard }
+    enum SnapshotPresentation { case settings, palette, addProject, repositorySelector, agentCard, menuBar }
 
     let store: HatchStore
     let paths: AppPaths
@@ -23,12 +23,15 @@ final class AppState: ObservableObject {
     private var notebookDirty: Set<Int> = []
     private var notebookDebounce: DispatchWorkItem?
 
-    @Published var route: Route = .desk
+    /// Remembered as it changes, so "When Hatch opens: The last page" can return to it (Settings › General).
+    @Published var route: Route = .desk { didSet { rememberPlace() } }
     @Published private(set) var backStack: [Route] = []
     @Published private(set) var forwardStack: [Route] = []
     /// A card the current page asks the Iris inspector to show at its top (the Desk's decision brief).
     @Published var inspectorTop: AnyView?
-    @Published var selectedProjectKey: String?          // nil means "All projects" (decision B2, B3)
+    @Published var selectedProjectKey: String? {        // nil means "All projects" (decision B2, B3)
+        didSet { rememberProject(); updateWaitingCount() }
+    }
     @Published var selectedTicketId: Int?
     @Published var revision = 0                          // bumped after any change so views reload
     @Published var errorMessage: String?
@@ -59,6 +62,12 @@ final class AppState: ObservableObject {
     /// Agents the launcher is running now, for the footer, the ticket and the Agents page.
     @Published var agentRuns: [AgentRunInfo] = []
     @Published var agentsPaused = false
+    /// Settings › General: Hatch's item in the menu bar, on by default. Snapshot runs never add it to the real menu bar.
+    @Published var showMenuBarItem = Snapshots.folder == nil
+    /// Settings › General: whether the Dock icon shows how many tickets wait for you.
+    var dockBadgeShown = true
+    /// Tickets waiting for the owner, counted once per change for the Dock badge and the menu bar item.
+    @Published private(set) var waitingCount = 0
     var launcher: AgentLauncher?
     var launchTimer: Timer?
     @Published private(set) var exportingNotebooks = false
@@ -85,7 +94,9 @@ final class AppState: ObservableObject {
         let paths = AppPaths.default
         do {
             let store = try HatchStore(path: paths.database.path)
-            return AppState(store: store, paths: paths)
+            let state = AppState(store: store, paths: paths)
+            state.applyLaunchPreferences()
+            return state
         } catch {
             // The app must still open so the owner sees the message; fall back to a throwaway in-memory store.
             let store = try! HatchStore.inMemory()
@@ -296,6 +307,13 @@ final class AppState: ObservableObject {
     /// Tickets waiting for the owner, for the Dock badge and the sidebar (decision B6).
     var yourTurnCount: Int { ((try? store.countByTurn(projectId: projectFilterId)) ?? [:])[.you] ?? 0 }
 
+    /// Counts the waiting tickets and shows them on the Dock icon, unless Settings › General turned the badge off.
+    func updateWaitingCount() {
+        let count = yourTurnCount
+        if waitingCount != count { waitingCount = count }
+        NSApp?.dockTile.badgeLabel = dockBadgeShown && count > 0 ? String(count) : nil
+    }
+
     /// Called after anything is written to a project's notebook clone: Hatch commits and pushes it in the background.
     func notebookChanged(projectId: Int) {
         notebookDirty.insert(projectId)
@@ -323,7 +341,7 @@ final class AppState: ObservableObject {
         if syncSummary.pending > 0, syncStarted { scheduleSync() }
         // Every change may move a ticket or record a decision: refresh the notebooks shortly after the last one.
         if syncStarted { scheduleNotebookExport() }
-        NSApp?.dockTile.badgeLabel = yourTurnCount > 0 ? String(yourTurnCount) : nil
+        updateWaitingCount()
     }
 
     func refreshSyncSummary() {

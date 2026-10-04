@@ -41,6 +41,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 | Nothing to show | Empty state with next step | `ContentUnavailableView` |
 | Work in progress | Spinner in the row, text says what | `ProgressView` |
 | Short feedback | Toast capsule | `HXToast` |
+| Status while Hatch is in the background | Menu bar item with a panel (the footer in small) | `MenuBarExtra`, `.menuBarExtraStyle(.window)` |
 
 ## When adding something new
 

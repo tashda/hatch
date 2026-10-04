@@ -27,7 +27,9 @@ struct SimilarHit: Identifiable {
 struct ComposerView: View {
     @EnvironmentObject var state: AppState
 
-    @State private var type: TicketType = .proposal
+    /// Starts as Settings › General › New ticket type; nil (Ask me) until you choose.
+    @State private var type: TicketType?
+    @State private var typeLoaded = false
     @State private var title = ""
     @State private var bodyText = ""
     @State private var projectId: Int?
@@ -52,7 +54,7 @@ struct ComposerView: View {
     private var areaNames: [String] { project?.config?.areas.map { $0.name } ?? [] }
 
     private var canSubmit: Bool {
-        projectId != nil && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        projectId != nil && type != nil && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -104,9 +106,10 @@ struct ComposerView: View {
 
     private var actionBar: some View {
         HStack(spacing: 10) {
-            Text("A new ticket starts as a draft.")
+            // Never silently disabled: when the type is all that is missing, say so.
+            Text(type == nil && hasInput ? "Choose a type to save the ticket." : "A new ticket starts as a draft.")
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(type == nil && hasInput ? Theme.you : Color.secondary)
             Spacer()
             Button { state.navigate(to: .desk) } label: { Label("Cancel", systemImage: "xmark") }
                 .buttonStyle(.glass)
@@ -213,15 +216,17 @@ struct ComposerView: View {
 
     private var typePicker: some View {
         Picker("Type", selection: $type) {
+            if type == nil { Text("Choose…").tag(TicketType?.none) }
             ForEach(TicketType.allCases, id: \.self) { kind in
-                Text(kind.displayName).tag(kind)
+                Text(kind.displayName).tag(Optional(kind))
             }
         }
         .pickerStyle(.menu)
     }
 
-    static func typeHelp(_ type: TicketType) -> String {
+    static func typeHelp(_ type: TicketType?) -> String {
         switch type {
+        case nil: return "Choose what kind of ticket this is. Iris will suggest another type if it fits better."
         case .question: return "An idea or UX issue that is still words. You get a reply that has read the Spec and related tickets."
         case .sketch: return "Exploring a layout or flow before any Swift. You get 2 to 4 variants as HTML."
         case .proposal: return "Several options to compare in Swift. Hatch will suggest another type if it fits better."
@@ -490,6 +495,10 @@ struct ComposerView: View {
     // MARK: Hints (free, local)
 
     private func setUp() {
+        if !typeLoaded {
+            type = state.newTicketType
+            typeLoaded = true
+        }
         takeTitle()
         if projectId == nil {
             projectId = state.projectFilterId ?? state.projects.first?.id
@@ -544,8 +553,7 @@ struct ComposerView: View {
     // MARK: Create and submit
 
     private func create(submit: Bool) {
-        guard let pid = projectId else { return }
-        let ticketType = type
+        guard let pid = projectId, let ticketType = type else { return }
         let ticketTitle = title
         let ticketBody = bodyText
         let ticketArea: String? = area.isEmpty ? nil : area
