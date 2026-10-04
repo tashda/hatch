@@ -1397,11 +1397,11 @@ A project may have chosen Not now, or have its components in a plain folder of t
 
 Risk for all of these: the components are compiled once per base commit and cached. That is quick for a small package; time it on Echo's package before relying on it.
 
-## V. Decide: one place for everything that needs the owner (open, asked 2026-10-04, ids DC1 to DC9)
+## V. Decide: one place for everything that needs the owner (answered 2026-10-04, ids DC1 to DC10)
 
-Concept page with a playable mockup: `design-review/decide-concepts.html`. Not answered yet and not built. The owner asked for one place to go over everything that needs a decision, with this against that, gains and costs, accept, reject, note or refine, and to make it fun. Today the Desk lists what waits, but the deciding happens in five other places (the Stage, the ticket's Question banner, Iris review, answer cards, Previews), plan approval has no screen, and component conflicts (CO9 to CO13) have none either.
+Concept page with a playable mockup: `design-review/decide-concepts.html`. All answers were the recommendation (1A to 9A); DC10 is the owner's addition. Not built yet. The owner asked for one place to go over everything that needs a decision, with this against that, gains and costs, accept, reject, note or refine, and to make it fun. Today the Desk lists what waits, but the deciding happens in five other places (the Stage, the ticket's Question banner, Iris review, answer cards, Previews), plan approval has no screen, and component conflicts (CO9 to CO13) have none either.
 
-| Id | Question | My recommendation (open) | Reason |
+| Id | Question | Choice | Reason |
 |---|---|---|---|
 | DC1 | Where it lives | A Decide session started from the Desk (button, shortcut, command palette, Go menu); it ends back on the Desk. Not its own sidebar page, not only a better Desk pane. | One queue shown two ways cannot disagree; a second "waiting for me" list would. |
 | DC2 | How it looks | A focus card: one card in a calm window, progress at the top. Not a card stack, not queue and card. | Keeps attention on one decision, fits every kind of card, same keys everywhere. A stack suggests swiping yes or no, which does not fit "pick one of four". |
@@ -1412,3 +1412,4 @@ Concept page with a playable mockup: `design-review/decide-concepts.html`. Not a
 | DC7 | Sound and haptics | Trackpad tap on, sound off; both in Settings. | Felt, not heard. |
 | DC8 | Approving an agent's plan | A card in the session, and on the ticket. | Decided but has no screen; it is a yes or no with a file list. |
 | DC9 | Component conflicts | Question tickets in the session (CO11); the Components page shows how many wait and opens a session with only those. Not a list decided on the Components page. | No special code, and one place to decide. |
+| DC10 | Iris points to it (owner's addition) | Whenever anything is the owner's turn, the Iris inspector shows one card at the top: how many decisions wait, about how long they take, what kinds, and a prominent Decide button that opens the session. Iris's own review cards ("Needs your decision" today) fold into that card, except the one for the ticket open on screen. When new decisions arrive while the owner works, Iris says so in that card, never with a popup. | Iris is where the owner already looks for what Hatch wants from them; one card and one button keep the session the single place to decide. |
