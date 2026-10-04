@@ -300,7 +300,7 @@ final class AgentSettingsTests: XCTestCase {
             XCTAssertEqual(e as? AgentSetupError, .providerOff(.iris, "Claude Code"))
             XCTAssertTrue("\(e)".contains("turned off"))
         }
-        s.setChoice(nil, for: .iris)
+        s.setChoice(.off, for: .iris)
         XCTAssertThrowsError(try AgentFactory.resolve(.iris, settings: s, context: AgentContext())) { e in
             XCTAssertEqual(e as? AgentSetupError, .noProvider(.iris))
         }
@@ -486,5 +486,47 @@ final class ModelServiceTests: XCTestCase {
         let s = try XCTUnwrap(AgentSettings.decode(old))
         XCTAssertNil(s.providers[0].serviceId)
         XCTAssertNil(s.codingProviderId)
+    }
+}
+
+final class TaskDefaultTests: XCTestCase {
+    func testTasksFollowTheDefaultUnlessTheyChooseOrAreOff() {
+        var s = AgentSettings.initial(detect: false)
+        XCTAssertEqual(s.choice(.ask), RoleChoice(providerId: AgentSettings.claudeProviderId), "Ask follows the default")
+        XCTAssertEqual(s.choice(.iris)?.model, "haiku", "Iris has its own")
+        s.setChoice(.off, for: .ask)
+        XCTAssertNil(s.choice(.ask))
+        XCTAssertEqual(s.ownChoice(.ask), .off)
+        s.setChoice(nil, for: .ask)
+        XCTAssertEqual(s.choice(.ask), s.defaultChoice)
+    }
+
+    func testOlderSettingsGetADefault() throws {
+        let old = #"{"version":1,"providers":[{"id":"claude-code","name":"Claude Code","kind":"claudeCode"}],"roles":{"iris":{"providerId":"claude-code","model":"haiku","thinking":false},"ask":{"providerId":"claude-code"}}}"#
+        var s = try XCTUnwrap(AgentSettings.decode(old))
+        s.normalize()
+        XCTAssertNotNil(s.defaultChoice)
+        XCTAssertEqual(s.roles.count, 1, "the task that matched the default now follows it")
+    }
+
+    func testAliasesBecomeVersionsAndVersionsMoveUp() {
+        var s = AgentSettings.initial(detect: false)
+        s.providers[0].models = ModelCatalog.claudeAliases + [
+            ModelInfo(id: "claude-haiku-5-0", name: "Haiku 5"), ModelInfo(id: "claude-haiku-4-5", name: "Haiku 4.5"),
+            ModelInfo(id: "claude-sonnet-5-5", name: "Sonnet 5.5"),
+        ]
+        let moved = s.upgradeModels()
+        XCTAssertEqual(s.choice(.iris)?.model, "claude-haiku-5-0", "the alias became the newest Haiku")
+        XCTAssertEqual(moved.count, 1)
+
+        s.setChoice(RoleChoice(providerId: AgentSettings.claudeProviderId, model: "claude-haiku-4-5"), for: .ask)
+        s.providers[0].autoUpgrade = false
+        s.upgradeModels()
+        XCTAssertEqual(s.choice(.ask)?.model, "claude-haiku-4-5", "kept when the provider does not move tasks")
+        s.providers[0].autoUpgrade = nil
+        s.upgradeModels()
+        XCTAssertEqual(s.choice(.ask)?.model, "claude-haiku-5-0", "moved to the newer version")
+        XCTAssertEqual(AgentSettings.family(of: "claude-sonnet-5-5"), "sonnet")
+        XCTAssertNil(AgentSettings.family(of: "gpt-5"))
     }
 }

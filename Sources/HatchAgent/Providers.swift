@@ -105,6 +105,9 @@ public struct AgentProvider: Codable, Equatable, Identifiable, Sendable {
     public var extraArguments: [String]
     /// The known service this provider was set up for (`ModelService.id`), for its name, key link and address.
     public var serviceId: String?
+    /// Nil or true: tasks on one of its models move to a newer version of the same family when the list shows one.
+    public var autoUpgrade: Bool?
+    public var movesToNewVersions: Bool { autoUpgrade ?? true }
 
     public init(id: String = UUID().uuidString.lowercased(), name: String, kind: ProviderKind, enabled: Bool = true,
                 executable: String? = nil, signIn: ClaudeSignIn? = nil, baseURL: String? = nil, apiKeyEnv: String? = nil,
@@ -132,6 +135,7 @@ public struct AgentProvider: Codable, Equatable, Identifiable, Sendable {
         modelsError = try c.decodeIfPresent(String.self, forKey: .modelsError)
         extraArguments = try c.decodeIfPresent([String].self, forKey: .extraArguments) ?? []
         serviceId = try c.decodeIfPresent(String.self, forKey: .serviceId)
+        autoUpgrade = try c.decodeIfPresent(Bool.self, forKey: .autoUpgrade)
     }
 
     /// Whether a key is needed at all (local servers and signed-in programs need none).
@@ -269,6 +273,10 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
 
 /// The provider and model one task uses. A nil model means the provider's default model.
 public struct RoleChoice: Codable, Equatable, Sendable {
+    /// A task set to this does not run (stored so it is not mistaken for "use the default").
+    public static let off = RoleChoice(providerId: "")
+    public var isOff: Bool { providerId.isEmpty }
+
     public var providerId: String
     public var model: String?
     public var effort: String?
@@ -308,6 +316,8 @@ public struct AgentSettings: Codable, Equatable, Sendable {
     public var roles: [String: RoleChoice]
     /// The program provider that runs coding agents (the agents that build tickets). Nil means Claude Code.
     public var codingProviderId: String?
+    /// The provider and model every task uses unless it has its own choice.
+    public var defaultChoice: RoleChoice?
 
     public init(providers: [AgentProvider] = [], roles: [String: RoleChoice] = [:]) {
         self.version = 1; self.providers = providers; self.roles = roles
@@ -329,12 +339,23 @@ public struct AgentSettings: Codable, Equatable, Sendable {
                 providers.append(provider)
             }
         }
-        return AgentSettings(providers: providers, roles: [
+        var s = AgentSettings(providers: providers, roles: [
             // Measured on five real tickets: same questions and rewrites, about 6 s instead of 35 to 60 s,
             // and about a twelfth of the output tokens, compared with thinking on.
             AgentRole.iris.rawValue: RoleChoice(providerId: claudeProviderId, model: "haiku", thinking: false),
-            AgentRole.ask.rawValue: RoleChoice(providerId: claudeProviderId),
         ])
+        s.defaultChoice = RoleChoice(providerId: claudeProviderId)
+        return s
+    }
+
+    /// Settings saved before the default existed get one: the choice most tasks share (or Claude Code), and tasks that
+    /// match it follow it from then on.
+    public mutating func normalize() {
+        guard defaultChoice == nil else { return }
+        let choices = AgentRole.allCases.compactMap { roles[$0.rawValue] }.filter { !$0.isOff }
+        let common = choices.max { a, b in choices.filter { $0 == a }.count < choices.filter { $0 == b }.count }
+        defaultChoice = common ?? (provider(Self.claudeProviderId) != nil ? RoleChoice(providerId: Self.claudeProviderId) : providers.first.map { RoleChoice(providerId: $0.id) })
+        for role in AgentRole.allCases where roles[role.rawValue] == defaultChoice { roles[role.rawValue] = nil }
     }
 
     public static func decode(_ json: String) -> AgentSettings? {
@@ -352,7 +373,7 @@ public struct AgentSettings: Codable, Equatable, Sendable {
 
     /// The saved settings, or the first-run settings (built from the old `claude_path` setting) when none are saved.
     public static func load(from store: HatchStore, detect: Bool = true) -> AgentSettings {
-        if let raw = try? store.setting(settingKey), let s = decode(raw) { return s }
+        if let raw = try? store.setting(settingKey), var s = decode(raw) { s.normalize(); return s }
         let legacy = try? store.setting(legacyClaudePathKey)
         return initial(claudePath: legacy ?? nil, detect: detect)
     }
@@ -363,8 +384,16 @@ public struct AgentSettings: Codable, Equatable, Sendable {
 
     public func provider(_ id: String) -> AgentProvider? { providers.first { $0.id == id } }
 
-    public func choice(_ role: AgentRole) -> RoleChoice? { roles[role.rawValue] }
+    /// What a task runs with: its own choice, or the default. Nil when it is off or nothing is chosen.
+    public func choice(_ role: AgentRole) -> RoleChoice? {
+        guard let c = roles[role.rawValue] ?? defaultChoice, !c.isOff else { return nil }
+        return c
+    }
 
+    /// The task's own choice: nil when it follows the default, `RoleChoice.off` when it is off.
+    public func ownChoice(_ role: AgentRole) -> RoleChoice? { roles[role.rawValue] }
+
+    /// Nil makes the task follow the default.
     public mutating func setChoice(_ choice: RoleChoice?, for role: AgentRole) { roles[role.rawValue] = choice }
 
     public mutating func update(_ provider: AgentProvider) {
@@ -375,6 +404,7 @@ public struct AgentSettings: Codable, Equatable, Sendable {
     public mutating func remove(_ id: String) {
         providers.removeAll { $0.id == id }
         for (k, v) in roles where v.providerId == id { roles[k] = nil }
+        if defaultChoice?.providerId == id { defaultChoice = nil }
     }
 
     /// The tasks that use a provider, for the Settings list and for the warning before turning it off.

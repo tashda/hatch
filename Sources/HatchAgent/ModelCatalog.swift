@@ -166,3 +166,41 @@ public enum ModelCatalog {
             .sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
     }
 }
+
+extension AgentSettings {
+    /// Claude model families, as they appear in model ids (`claude-haiku-4-5`).
+    static let claudeFamilies = ["opus", "sonnet", "haiku", "fable"]
+
+    /// The family of a Claude model id or alias, or nil for other models.
+    public static func family(of model: String) -> String? {
+        if claudeFamilies.contains(model) { return model }
+        return claudeFamilies.first { model.contains("-\($0)-") || model.hasPrefix("\($0)-") }
+    }
+
+    /// Moves tasks to real versions (decisions round two): an alias such as `haiku` becomes the newest Haiku the list
+    /// shows, and a version moves to a newer one of its family when its provider allows it. Returns what moved, as
+    /// (task or "Default", from, to), for the status line.
+    @discardableResult
+    public mutating func upgradeModels() -> [(what: String, from: String, to: String)] {
+        var moved: [(String, String, String)] = []
+        func upgraded(_ c: RoleChoice?) -> RoleChoice? {
+            guard var c, let model = c.model, let p = provider(c.providerId), let family = Self.family(of: model) else { return nil }
+            let listed = p.models.filter { !$0.isAlias && $0.featured && Self.family(of: $0.id) == family }
+            guard let newest = listed.first, newest.id != model else { return nil }
+            let isAlias = Self.claudeFamilies.contains(model)
+            if !isAlias {
+                guard p.movesToNewVersions else { return nil }
+                // Only forward: a version the list shows below the newest, or one it no longer lists.
+                if let i = p.models.firstIndex(where: { $0.id == model }), let j = p.models.firstIndex(where: { $0.id == newest.id }), j > i { return nil }
+            }
+            c.model = newest.id
+            return c
+        }
+        if let d = upgraded(defaultChoice) { moved.append(("Default", defaultChoice?.model ?? "", d.model ?? "")); defaultChoice = d }
+        for role in AgentRole.allCases {
+            if let c = upgraded(roles[role.rawValue]) { moved.append((role.taskTitle, roles[role.rawValue]?.model ?? "", c.model ?? "")); roles[role.rawValue] = c }
+        }
+        return moved
+    }
+}
+
