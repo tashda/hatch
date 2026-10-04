@@ -19,6 +19,18 @@ public struct VettingService {
     /// The provider and model behind `runner`, recorded with each run for Usage and Reports.
     public var provider: String?
     public var model: String?
+    /// The stronger model for tickets Iris is unsure about (decision WF-T7): run once more before the owner is asked.
+    public var unsure: Escalation?
+
+    public struct Escalation: Sendable {
+        public var runner: AgentRunner
+        public var label: String?
+        public var provider: String?
+        public var model: String?
+        public init(runner: AgentRunner, label: String?, provider: String?, model: String?) {
+            self.runner = runner; self.label = label; self.provider = provider; self.model = model
+        }
+    }
 
     public init(store: HatchStore, runner: AgentRunner, options: AgentOptions = AgentOptions(), label: String? = nil,
                 provider: String? = nil, model: String? = nil) {
@@ -33,24 +45,43 @@ public struct VettingService {
             throw StoreError.invalid("\(t.displayNumber) is \(t.status.displayName); only a Checking ticket is vetted.")
         }
         let request = try VettingRequest.build(store: store, ticketId: ticketId)
+        let prompt = IrisPrompt.make(request)
+        var options = self.options
+        options.images = (request.screenshots ?? []).map { URL(fileURLWithPath: $0) }
         let runId = try store.startRun(ticketId: ticketId, agent: IrisApplier.name, step: label.map { "vet with \($0)" } ?? "vet",
                                        provider: provider, model: model, role: AgentRole.iris.rawValue)
 
         let output: AgentOutput
-        do { output = try runner.run(prompt: IrisPrompt.make(request), options: options) }
+        do { output = try runner.run(prompt: prompt, options: options) }
         catch {
             return try fail(ticketId, runId, tokensIn: 0, tokensOut: 0, outcome: "failed", reason: "\(error)")
         }
         do {
-            let result = try IrisResult.parse(output.text)
-            let applied = try IrisApplier.apply(result, to: ticketId, store: store)
+            var result = try IrisResult.parse(output.text)
             try store.endRun(runId, tokensIn: output.tokensIn, tokensOut: output.tokensOut, outcome: "ok")
+            if !result.isSure("path"), let unsure, let better = try escalate(ticketId, prompt: prompt, options: options, with: unsure) {
+                result = better
+            }
+            let applied = try IrisApplier.apply(result, to: ticketId, store: store)
             return .vetted(applied)
         } catch {
             // The tokens were spent even though the answer was unusable, so they are still counted.
             return try fail(ticketId, runId, tokensIn: output.tokensIn, tokensOut: output.tokensOut, outcome: "unusable", reason: "\(error)",
                             answer: Text.clip(output.text, 2000))
         }
+    }
+
+    /// Runs the same check on the stronger model. Its answer is used when it parses; otherwise the first one stands.
+    private func escalate(_ ticketId: Int, prompt: String, options: AgentOptions, with e: Escalation) throws -> VettingResult? {
+        let runId = try store.startRun(ticketId: ticketId, agent: IrisApplier.name, step: "unsure, vet again" + (e.label.map { " with \($0)" } ?? ""),
+                                       provider: e.provider, model: e.model, role: AgentRole.irisUnsure.rawValue)
+        guard let output = try? e.runner.run(prompt: prompt, options: options) else {
+            try store.endRun(runId, tokensIn: 0, tokensOut: 0, outcome: "failed")
+            return nil
+        }
+        let result = try? IrisResult.parse(output.text)
+        try store.endRun(runId, tokensIn: output.tokensIn, tokensOut: output.tokensOut, outcome: result == nil ? "unusable" : "ok")
+        return result
     }
 
     /// `answer` keeps the start of an unusable reply, so the owner can see what the model sent.

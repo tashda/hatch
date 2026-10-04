@@ -381,12 +381,41 @@ public final class AgentLauncher: @unchecked Sendable {
             do { try launch(again, attempt: attempt + 1) } catch { lock.withLock { lastError[plan.ticketId] = "\(error)" } }
             return
         }
+        // Stopped twice: one more run on the stronger model before the owner is asked (decision WF-B3).
+        if attempt == Self.retries + 1, let rescue = rescuePlan(plan) {
+            _ = try? store.addNote(plan.ticketId, kind: .system, author: "hatch",
+                                   body: "The agent stopped again (exit \(exitCode)). Trying once more with \(rescue.model ?? "the stronger model").\n\n\(tail)")
+            do { try launch(rescue, attempt: attempt + 1); return } catch { lock.withLock { lastError[plan.ticketId] = "\(error)" } }
+        }
         // Ask first, so the ticket is out of the agent's hands before it is released and no tick takes it up again.
         // "Try again" sends it back to the work; "Stop working on it" parks it there (HatchStore.answer).
         _ = try? store.ask(plan.ticketId, text: "The agent stopped twice before handing in (exit \(exitCode)). Its last lines are in the thread. Should it try again?",
                            suggestions: [HatchStore.agentStoppedTryAgain, HatchStore.agentStoppedStop], by: "Hatch")
         try? store.release(plan.ticketId, reason: "stopped twice")
         _ = try? store.addNote(plan.ticketId, kind: .system, author: "hatch", body: tail)
+    }
+
+    /// The same run on the model chosen for "Second try" in Settings, Agents, when it is Claude Code and a different model.
+    func rescuePlan(_ plan: Plan) -> Plan? {
+        let cfg = lock.withLock { config }
+        guard let r = try? AgentFactory.resolve(.rescue, settings: settings(), context: cfg.context), r.provider.kind == .claudeCode,
+              r.model != plan.model, let env = try? AgentFactory.claudeEnvironment(r.provider, secrets: cfg.context.secrets, thinking: r.thinking) else { return nil }
+        var p = plan
+        var args: [String] = []
+        var i = 0
+        while i < plan.arguments.count {
+            let a = plan.arguments[i]
+            if (a == "--model" || a == "--effort") && i + 1 < plan.arguments.count { i += 2; continue }
+            args.append(a); i += 1
+        }
+        if let m = r.model { args += ["--model", m] }
+        if let e = r.effort { args += ["--effort", e] }
+        p.arguments = args
+        p.model = r.model
+        p.providerName = r.provider.name
+        p.environment = env.merging(plan.environment.filter { ["HATCH_HOME", "HATCH_PROJECT", "PATH"].contains($0.key) }) { _, kept in kept }
+        p.logPath = (plan.logPath as NSString).deletingPathExtension + "-rescue.jsonl"
+        return p
     }
 
     /// The last lines the program wrote, as plain text, for the ticket's thread.

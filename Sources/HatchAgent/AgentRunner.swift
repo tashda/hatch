@@ -5,8 +5,11 @@ public struct AgentOptions: Equatable, Sendable {
     public var workingDirectory: URL?
     /// Seconds before the run is stopped. Nil means the runner's own default.
     public var timeout: TimeInterval?
-    public init(model: String? = nil, workingDirectory: URL? = nil, timeout: TimeInterval? = nil) {
-        self.model = model; self.workingDirectory = workingDirectory; self.timeout = timeout
+    /// Pictures the model should look at (Iris and a ticket's screenshots, decision WF-C5). Runners that cannot read
+    /// files ignore them; the prompt still names them.
+    public var images: [URL] = []
+    public init(model: String? = nil, workingDirectory: URL? = nil, timeout: TimeInterval? = nil, images: [URL] = []) {
+        self.model = model; self.workingDirectory = workingDirectory; self.timeout = timeout; self.images = images
     }
 }
 
@@ -89,7 +92,14 @@ public struct ClaudeCLIRunner: AgentRunner {
         args += ["--output-format", "json"]
         if let m = options.model ?? model { args += ["--model", m] }
         if let effort, !effort.isEmpty { args += ["--effort", effort] }
-        if lean { args += Self.leanArguments }
+        if lean {
+            if options.images.isEmpty { args += Self.leanArguments }
+            else {
+                // Only the Read tool, only in the screenshots' folders, so the model can look at them and do nothing else.
+                args += ["--tools", "Read", "--allowedTools", "Read", "--permission-mode", "dontAsk"] + Self.leanArguments.dropFirst(2)
+                for dir in Set(options.images.map { $0.deletingLastPathComponent().path }) { args += ["--add-dir", dir] }
+            }
+        }
         args += extraArguments
         let seconds = options.timeout ?? timeout
         let result = try AgentProcess.spawn(program, args, stdin: useStdin ? prompt : nil, directory: options.workingDirectory ?? workingDirectory,

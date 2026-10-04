@@ -14,14 +14,13 @@ let hxDefaultTicketsSetting = "tickets.default"
 @MainActor
 final class ProjectSetupModel: ObservableObject {
     enum Step: Int, CaseIterable, Identifiable {
-        case github, project, tickets, code, design, notebook, branches, agents, review
+        case github, project, tickets, design, notebook, branches, agents, review
         var id: Int { rawValue }
         var title: String {
             switch self {
             case .github: "GitHub"
             case .project: "Project"
             case .tickets: "Tickets"
-            case .code: "App code"
             case .design: "Components"
             case .notebook: "Notebook"
             case .branches: "Branches"
@@ -232,9 +231,8 @@ final class ProjectSetupModel: ObservableObject {
     func canContinue(_ step: Step) -> Bool {
         switch step {
         case .github: return connected
-        case .project: return appRepo != nil && !name.trimmingCharacters(in: .whitespaces).isEmpty
+        case .project: return appRepo != nil && localPath != nil && !name.trimmingCharacters(in: .whitespaces).isEmpty
         case .tickets: return ticketsRepo != nil
-        case .code: return appRepo != nil && localPath != nil
         case .design: return designChoice == .none || designRepo != nil || componentsConfig != nil
         case .notebook: return notebookRepo != nil
         case .agents: return true
@@ -616,7 +614,6 @@ struct ProjectSetupAssistant: View {
         case .github: githubPage
         case .project: projectPage
         case .tickets: ticketsPage
-        case .code: codePage
         case .design: designPage
         case .notebook: notebookPage
         case .branches: branchesPage
@@ -675,9 +672,37 @@ struct ProjectSetupAssistant: View {
     private var projectPage: some View {
         VStack(alignment: .leading, spacing: 16) {
             HXSetupHeader(symbol: "square.stack.3d.up", tint: HX.projectTint(model.key), title: "Which app is this project for?",
-                          detail: "Choose its repository. The name is suggested from it, and you can change it.")
+                          detail: "Choose its repository. Hatch finds your clone of it on this Mac, and suggests the name from it.")
             HXSetupGroup {
                 HXSetupRow("App repository") { appRepoPicker }
+                HXSetupRow("On this Mac") {
+                    if model.appRepo == nil {
+                        Text("Choose the repository first").foregroundStyle(.tertiary)
+                    } else if model.searchingClones || model.cloning {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text(model.cloning ? "Cloning…" : "Looking for a clone…").foregroundStyle(.secondary)
+                        }
+                    } else if let path = model.localPath {
+                        HStack(spacing: 8) {
+                            Label(hxAbbreviated(path), systemImage: "checkmark.circle.fill").foregroundStyle(Theme.finished)
+                            Button("Change…") { model.chooseFolder() }
+                        }
+                    } else {
+                        HStack(spacing: 8) {
+                            Button("Clone to \(hxAbbreviated(model.cloneDestination))") { model.clone() }
+                            Button("Choose…") { model.chooseFolder() }
+                        }
+                    }
+                }
+                if model.clones.count > 1 {
+                    HXSetupRow("Other clones") {
+                        Picker("Clone", selection: Binding(get: { model.localPath }, set: { model.localPath = $0 })) {
+                            ForEach(model.clones, id: \.self) { Text(hxAbbreviated($0)).tag(String?.some($0)) }
+                        }
+                        .labelsHidden().fixedSize()
+                    }
+                }
                 HXSetupRow("Name") {
                     TextField("Name", text: Binding(get: { model.name }, set: { model.setName($0, edited: true) }), prompt: Text(""))
                         .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden()
@@ -693,6 +718,8 @@ struct ProjectSetupAssistant: View {
                 Text("The key marks this project's tickets with the label \(Text("project:\(model.key)").font(.callout.monospaced())). It is suggested from the name.")
                     .font(.callout).foregroundStyle(.secondary)
             }
+            Text("You never edit the same files as an agent: each one works in its own copy of your clone.")
+                .font(.callout).foregroundStyle(.secondary)
             missingRepositoryButton
         }
     }
@@ -730,54 +757,6 @@ struct ProjectSetupAssistant: View {
             HXSetupExample("What it looks like on GitHub") {
                 HXIssueSample(number: 151, title: "Toast spacing feels cramped", labels: ["type:proposal", "status:your-call", "project:\(model.key)"])
                 HXIssueSample(number: 152, title: "Crash when a connection times out", labels: ["type:bug", "status:building", "project:\(model.key)"])
-            }
-        }
-    }
-
-    private var codePage: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HXSetupHeader(symbol: "chevron.left.forwardslash.chevron.right", tint: .blue, title: "The app's code",
-                          detail: "The repository agents change, and your clone of it on this Mac. Hatch needs both.")
-            HXSetupGroup {
-                HXSetupRow("Repository") { appRepoPicker }
-                HXSetupRow("On this Mac") {
-                    if model.appRepo == nil {
-                        Text("Choose the repository first").foregroundStyle(.tertiary)
-                    } else if model.searchingClones || model.cloning {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text(model.cloning ? "Cloning…" : "Looking for a clone…").foregroundStyle(.secondary)
-                        }
-                    } else if let path = model.localPath {
-                        HStack(spacing: 8) {
-                            Label(hxAbbreviated(path), systemImage: "checkmark.circle.fill").foregroundStyle(Theme.finished)
-                            Button("Change…") { model.chooseFolder() }
-                        }
-                    } else {
-                        HStack(spacing: 8) {
-                            Button("Clone to \(hxAbbreviated(model.cloneDestination))") { model.clone() }
-                            Button("Choose…") { model.chooseFolder() }
-                        }
-                    }
-                }
-                if model.clones.count > 1 {
-                    HXSetupRow("Other clones") {
-                        Picker("Clone", selection: Binding(get: { model.localPath }, set: { model.localPath = $0 })) {
-                            ForEach(model.clones, id: \.self) { Text(hxAbbreviated($0)).tag(String?.some($0)) }
-                        }
-                        .labelsHidden().fixedSize()
-                    }
-                }
-            }
-            Text("Hatch looks for a clone in your usual code folders. You never edit the same files as an agent: each one works in its own copy.")
-                .font(.callout).foregroundStyle(.secondary)
-            HXSetupExample("What happens on this Mac") {
-                let repo = model.appRepo?.split(separator: "/").last.map(String.init) ?? "app"
-                VStack(alignment: .leading, spacing: 4) {
-                    HXPathLine(path: hxAbbreviated(model.localPath ?? model.cloneDestination), note: "your clone, Hatch never edits it")
-                    HXPathLine(path: "…/Hatch/worktrees/\(repo)-151", note: "Agent on #151, branch ticket/151-toast-spacing")
-                    HXPathLine(path: "…/Hatch/worktrees/\(repo)-152", note: "Agent on #152")
-                }
             }
         }
     }

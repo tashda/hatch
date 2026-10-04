@@ -222,6 +222,10 @@ public struct ProviderPreset: Identifiable, Sendable {
 /// Iris and Ask send one prompt; the coding tasks run an agent program in a ticket's workspace.
 public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
     case iris, ask, prepare, build, fix
+    /// Iris again, on a stronger model, when she is unsure about a ticket's path (decision WF-T7).
+    case irisUnsure
+    /// An agent that stopped twice gets one more run on this model before the owner is asked (decision WF-B3).
+    case rescue
 
     public var id: String { rawValue }
 
@@ -232,6 +236,8 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
         case .prepare: "Prepare options"
         case .build: "Build"
         case .fix: "Fix after review"
+        case .irisUnsure: "Iris when unsure"
+        case .rescue: "Second try"
         }
     }
 
@@ -243,6 +249,8 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
         case .prepare: "Prepare options"
         case .build: "Build"
         case .fix: "Fix after review"
+        case .irisUnsure: "File unclear tickets"
+        case .rescue: "Rescue a stopped agent"
         }
     }
 
@@ -253,6 +261,8 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
         case .prepare: "Writes a Proposal's options or a Sketch's variants, and revises them after your feedback."
         case .build: "Builds what you accepted in the ticket's own copy of the code, including its plan."
         case .fix: "Fixes what you found while verifying a ticket."
+        case .irisUnsure: "Files a ticket again when Iris is unsure which way it should go, before you are asked."
+        case .rescue: "Runs once more when a coding agent stopped twice before handing in, before you are asked."
         }
     }
 
@@ -264,6 +274,8 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
         case .prepare: "Recommended: Opus with high effort. You judge the options side by side, so their quality matters most."
         case .build: "Recommended: Sonnet. It builds what you already decided, quickly and within your plan."
         case .fix: "Recommended: Sonnet. Fixes are small and specific."
+        case .irisUnsure: "Recommended: Sonnet. Only unclear tickets reach it, so the extra cost is small."
+        case .rescue: "Recommended: Opus. Most stops are a model getting lost; a stronger one often gets through."
         }
     }
 
@@ -271,13 +283,13 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
     public var recommendedModel: String {
         switch self {
         case .iris: "haiku"
-        case .ask, .build, .fix: "sonnet"
-        case .prepare: "opus"
+        case .ask, .build, .fix, .irisUnsure: "sonnet"
+        case .prepare, .rescue: "opus"
         }
     }
 
     /// Coding tasks run an agent program that edits files, so only program providers can do them.
-    public var isCoding: Bool { self == .prepare || self == .build || self == .fix }
+    public var isCoding: Bool { self == .prepare || self == .build || self == .fix || self == .rescue }
 
     /// SF Symbol for the task's tile.
     public var symbol: String {
@@ -287,6 +299,8 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
         case .prepare: "square.on.square"
         case .build: "hammer"
         case .fix: "wrench.adjustable"
+        case .irisUnsure: "questionmark.circle"
+        case .rescue: "lifepreserver"
         }
     }
 
@@ -303,9 +317,9 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
     /// Seconds before the run is stopped.
     public var timeout: TimeInterval {
         switch self {
-        case .iris: 240
+        case .iris, .irisUnsure: 240
         case .ask: 180
-        case .prepare, .build, .fix: 3 * 3600
+        case .prepare, .build, .fix, .rescue: 3 * 3600
         }
     }
 }
@@ -384,6 +398,8 @@ public struct AgentSettings: Codable, Equatable, Sendable {
             AgentRole.iris.rawValue: RoleChoice(providerId: claudeProviderId, model: "haiku", thinking: false),
             // Options are judged side by side, so they get the strongest model; building and fixing follow the default.
             AgentRole.prepare.rawValue: RoleChoice(providerId: claudeProviderId, model: "opus", effort: "high"),
+            AgentRole.irisUnsure.rawValue: RoleChoice(providerId: claudeProviderId, model: "sonnet"),
+            AgentRole.rescue.rawValue: RoleChoice(providerId: claudeProviderId, model: "opus"),
         ])
         s.defaultChoice = RoleChoice(providerId: claudeProviderId)
         return s

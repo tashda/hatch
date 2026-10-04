@@ -304,6 +304,14 @@ public enum Schema {
         ALTER TABLE attachment ADD COLUMN uploaded_sha TEXT;
         ALTER TABLE attachment ADD COLUMN upload_error TEXT;
         """,
+        // 6: Iris files tickets from a prompt (section X). `path` is the way the work goes (WorkPath), `verify` how it is
+        // checked at the end; a question's `purpose` says what Hatch does with the answer and `payload` carries its data.
+        """
+        ALTER TABLE ticket ADD COLUMN path TEXT;
+        ALTER TABLE ticket ADD COLUMN verify TEXT;
+        ALTER TABLE question ADD COLUMN purpose TEXT;
+        ALTER TABLE question ADD COLUMN payload TEXT;
+        """,
     ]
 
     public static func migrate(_ db: Database) throws {

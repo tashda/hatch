@@ -16,7 +16,28 @@ enum CoreCommands {
         "search": search,
         "admin": admin,
         "components": components,
+        "new": new,
+        "suggest": suggest,
     ]
+
+    // hatch new "The toast feels cramped when the message is long" [--draft] [--project key]
+    // A ticket from a prompt (decision WF-C1). Hatch's app has Iris file it within seconds; `hatch vet` does it here.
+    static func new(_ c: Context) throws {
+        let prompt = c.args.positionals.dropFirst().joined(separator: " ")
+        guard !prompt.trimmingCharacters(in: .whitespaces).isEmpty else { throw CLIError("Usage: hatch new \"what you want\" [--draft]") }
+        let t = try c.store.capture(prompt: prompt, projectId: try c.project().id, draft: c.args.flag("draft"))
+        c.out.emit(t.asJSON, text: "Created \(t.displayNumber). " + (t.status == .draft ? "Saved as a draft." : "Iris files it next (the app does it by itself, or run hatch vet \(t.displayNumber))."))
+    }
+
+    // hatch suggest #151 "The same bug is in the Postgres driver"
+    // An agent's follow-up (decision WF-A2): filed by Iris like any prompt, linked to where it came from.
+    static func suggest(_ c: Context) throws {
+        let from = try c.ticket(c.args.pos(1))
+        let prompt = c.args.rest(from: 2)
+        guard !prompt.trimmingCharacters(in: .whitespaces).isEmpty else { throw CLIError("Usage: hatch suggest #151 \"what should be done next\"") }
+        let t = try c.store.capture(prompt: prompt, projectId: from.projectId, from: from.id, by: from.takenBy ?? "agent")
+        c.out.emit(t.asJSON, text: "Suggested \(t.displayNumber), linked to \(from.displayNumber). Iris files it; nothing starts outside its normal path. Carry on with your own ticket.")
+    }
 
     // hatch init [--config .hatch/project.json] [--key echo --name Echo --tickets owner/repo]
     static func initProject(_ c: Context) throws {

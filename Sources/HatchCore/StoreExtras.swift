@@ -77,11 +77,13 @@ public extension HatchStore {
     // Questions (Needs answers, decision E4)
 
     @discardableResult
-    func ask(_ ticketId: Int, text: String, suggestions: [String] = [], by: String, actor: Actor = .agent) throws -> Question {
+    func ask(_ ticketId: Int, text: String, suggestions: [String] = [], by: String, actor: Actor = .agent,
+             purpose: String? = nil, payload: JSONValue? = nil) throws -> Question {
         try db.transaction {
             guard let t = try ticket(id: ticketId) else { throw StoreError.notFound("ticket \(ticketId)") }
-            try db.execute("INSERT INTO question(ticket_id, text, suggestions_json, asked_by, at) VALUES(?,?,?,?,?)",
-                           [.int(ticketId), .text(text), .text(JSONValue.array(suggestions.map { .string($0) }).jsonString()), .text(by), .date(now())])
+            try db.execute("INSERT INTO question(ticket_id, text, suggestions_json, asked_by, at, purpose, payload) VALUES(?,?,?,?,?,?,?)",
+                           [.int(ticketId), .text(text), .text(JSONValue.array(suggestions.map { .string($0) }).jsonString()), .text(by), .date(now()),
+                            .opt(purpose), .opt(payload?.jsonString())])
             let id = Int(db.lastInsertRowID)
             try record(ticketId, actor: by, kind: "question", payload: ["question": .int(id), "text": .string(text)])
             if t.status != .needsAnswers && Workflow.isAllowed(type: t.type, from: t.status, to: .needsAnswers, actor: actor) {
@@ -95,7 +97,8 @@ public extension HatchStore {
         try db.query("SELECT * FROM question WHERE ticket_id = ?\(openOnly ? " AND answer IS NULL" : "") ORDER BY at, id", [.int(ticketId)]) {
             Question(id: $0.int("id")!, ticketId: $0.int("ticket_id")!, text: $0.string("text")!,
                      suggestions: (JSONValue.parse($0.string("suggestions_json") ?? "[]").arrayValue ?? []).compactMap { $0.stringValue },
-                     askedBy: $0.string("asked_by")!, at: $0.date("at")!, answer: $0.string("answer"), answeredAt: $0.date("answered_at"))
+                     askedBy: $0.string("asked_by")!, at: $0.date("at")!, answer: $0.string("answer"), answeredAt: $0.date("answered_at"),
+                     purpose: $0.string("purpose"), payload: $0.string("payload").map(JSONValue.parse))
         }
     }
 
@@ -116,10 +119,16 @@ public extension HatchStore {
             try record(ticketId, actor: "owner", kind: "answer", payload: ["question": .int(questionId)])
             try db.execute("UPDATE ticket SET updated_at = ? WHERE id = ?", [.date(now()), .int(ticketId)])
             try indexTicket(ticketId)
+            let asked = try questions(ticketId: ticketId).first { $0.id == questionId }
+            // Answers Hatch understands are applied now: an area, a path, a duplicate, a split (section X).
+            if let asked, try !actOnAnswer(asked, text: text) { return try ticket(id: ticketId)! }
             let t = try ticket(id: ticketId)!
             guard t.status == .needsAnswers, try questions(ticketId: ticketId, openOnly: true).isEmpty else { return t }
-            let asked = try questions(ticketId: ticketId).first { $0.id == questionId }
             let from = try statusBeforeQuestions(ticketId)
+            // When Iris asked only things Hatch has now applied, the ticket is filed: no second check is needed.
+            if from == .checking, try roundQuestions(ticketId).allSatisfy({ QuestionPurpose.isActedOn($0.purpose) }) {
+                return try move(ticketId, to: .ready, actor: .hatch, reason: "answered; filed")
+            }
             if asked?.askedBy == "Hatch", text == Self.agentStoppedStop {
                 // Parked where the work was, so Resume starts it again later.
                 if let from, Workflow.isAllowed(type: t.type, from: .needsAnswers, to: from, actor: .hatch) {
@@ -133,6 +142,16 @@ public extension HatchStore {
             }
             return try move(ticketId, to: .ready, actor: .hatch, reason: "all questions answered")
         }
+    }
+
+    /// The questions of the latest round: asked since the ticket entered the status it went to Needs answers from.
+    func roundQuestions(_ ticketId: Int) throws -> [Question] {
+        let moves = try events(ticketId: ticketId, kinds: ["status"])
+        guard let i = moves.lastIndex(where: { $0.payload["to"]?.stringValue == Status.needsAnswers.rawValue }) else {
+            return try questions(ticketId: ticketId)
+        }
+        let since = i > 0 ? moves[i - 1].at : .distantPast
+        return try questions(ticketId: ticketId).filter { $0.at >= since }
     }
 
     /// Where the ticket was when it last went to Needs answers, from its history.

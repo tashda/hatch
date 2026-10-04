@@ -127,6 +127,9 @@ public enum Workflow {
         // Intake
         add(.draft, .checking, [.owner, .hatch], pipeline)
         add(.draft, .done, [.hatch, .owner], [.theme])
+        // A prompt Iris splits becomes a Theme, which lives in Draft until its children are done (WF-T4).
+        add(.checking, .draft, [.hatch], [.theme])
+        add(.needsAnswers, .draft, [.hatch], [.theme])
         add(.checking, .needsAnswers, [.agent, .hatch], pipeline)
         add(.checking, .ready, [.agent, .hatch], pipeline)
         add(.needsAnswers, .ready, [.hatch], pipeline)
@@ -162,7 +165,8 @@ public enum Workflow {
         // Anywhere that is not finished: park, drop (owner) and block (Hatch)
         for status in Status.allCases where !status.isTerminal && status != .parked && status != .blocked {
             add(status, .parked, [.owner], all)
-            add(status, .dropped, [.owner], all)
+            // Hatch closes a sure duplicate while it is still being filed (WF-T5); later only the owner drops.
+            add(status, .dropped, status.phase == .intake ? [.owner, .hatch] : [.owner], all)
             add(status, .blocked, [.hatch], all)
         }
         add(.blocked, .parked, [.owner], all)

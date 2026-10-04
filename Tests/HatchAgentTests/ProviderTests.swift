@@ -549,7 +549,8 @@ final class TaskDefaultTests: XCTestCase {
         ]
         let moved = s.upgradeModels()
         XCTAssertEqual(s.choice(.iris)?.model, "claude-haiku-5-0", "the alias became the newest Haiku")
-        XCTAssertEqual(moved.count, 1)
+        XCTAssertEqual(s.choice(.irisUnsure)?.model, "claude-sonnet-5-5", "Iris when unsure moved to the newest Sonnet")
+        XCTAssertEqual(moved.count, 2)
 
         s.setChoice(RoleChoice(providerId: AgentSettings.claudeProviderId, model: "claude-haiku-4-5"), for: .ask)
         s.providers[0].autoUpgrade = false

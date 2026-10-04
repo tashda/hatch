@@ -340,6 +340,28 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(try store.ticket(id: theme.id)?.status, .done, "gap G23")
     }
 
+    func testCaptureMakesAWorkingTitleAndStartsIris() throws {
+        let t = try store.capture(prompt: "The toast feels cramped when the message is long\nEspecially in dark mode.", projectId: project.id)
+        XCTAssertEqual(t.title, "The toast feels cramped when the message is long")
+        XCTAssertEqual(t.body, "Especially in dark mode.")
+        XCTAssertEqual(t.status, .checking, "Iris starts at once (WF-C3)")
+        XCTAssertFalse(try store.isFiled(t))
+        let long = String(repeating: "word ", count: 40)
+        let l = try store.capture(prompt: long, projectId: project.id, draft: true)
+        XCTAssertTrue(l.title.hasSuffix("…"))
+        XCTAssertLessThanOrEqual(l.title.count, 80)
+        XCTAssertEqual(l.body, long.trimmingCharacters(in: .whitespaces))
+        XCTAssertEqual(l.status, .draft)
+        XCTAssertThrowsError(try store.capture(prompt: "  ", projectId: project.id))
+    }
+
+    func testAnAgentsSuggestionIsLinkedToWhereItCameFrom() throws {
+        let from = try ticket(.bug, "Slow grid")
+        let s = try store.capture(prompt: "The same is slow in Postgres", projectId: project.id, from: from.id, by: "Agent on #1")
+        XCTAssertEqual(s.status, .checking)
+        XCTAssertEqual(try store.links(ticketId: s.id).first?.link.kind, .related)
+    }
+
     func walk(_ t: Ticket, to target: Status) throws -> Ticket {
         var current = t
         let path = Workflow.path(for: t.type)

@@ -200,6 +200,10 @@ public struct Ticket: Identifiable, Equatable, Sendable {
     public var takenBy: String?
     public var createdAt: Date
     public var updatedAt: Date
+    /// The way the work goes, set by Iris when she files the ticket (decision WF-R1). Nil until filed.
+    public var path: WorkPath? = nil
+    /// How the finished work is verified (decision WF-K2). Nil means the path's default.
+    public var verify: VerifyKind? = nil
 
     /// `#151` once the issue exists on GitHub, `new-12` before that.
     public var displayNumber: String { ghNumber.map { "#\($0)" } ?? "new-\(id)" }
@@ -248,6 +252,9 @@ public struct Question: Identifiable, Equatable, Sendable {
     public let at: Date
     public var answer: String?
     public var answeredAt: Date?
+    /// What Hatch does with the answer (QuestionPurpose); nil for a question that is only context.
+    public var purpose: String? = nil
+    public var payload: JSONValue? = nil
     public var isOpen: Bool { answer == nil }
 }
 

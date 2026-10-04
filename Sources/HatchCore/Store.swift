@@ -118,7 +118,8 @@ public final class HatchStore: @unchecked Sendable {
                originalTitle: r.string("original_title"), originalBody: r.string("original_body"),
                parentId: r.int("parent_id"), priority: r.int("priority") ?? 0, area: r.string("area"),
                revision: r.int("revision") ?? 1, takenBy: r.string("taken_by"),
-               createdAt: r.date("created_at") ?? Date(), updatedAt: r.date("updated_at") ?? Date())
+               createdAt: r.date("created_at") ?? Date(), updatedAt: r.date("updated_at") ?? Date(),
+               path: r.string("path").flatMap(WorkPath.init(rawValue:)), verify: r.string("verify").flatMap(VerifyKind.init(rawValue:)))
     }
 
     @discardableResult
@@ -238,15 +239,17 @@ public final class HatchStore: @unchecked Sendable {
         }
     }
 
-    /// Changes the ticket type while it is still in intake (decision E9). The owner decides; the vetting agent only suggests.
+    /// Changes the ticket type. The owner changes it before work starts; Hatch also when the work shows it was wrong, such
+    /// as a Bug whose fix needs a choice (decision WF-R2). Agents never change it themselves.
     @discardableResult
     public func changeType(_ id: Int, to type: TicketType, actor: Actor, reason: String? = nil) throws -> Ticket {
         try db.transaction {
             guard let t = try ticket(id: id) else { throw StoreError.notFound("ticket \(id)") }
-            guard [.draft, .checking, .needsAnswers, .ready].contains(t.status) else {
+            guard actor == .owner || actor == .hatch else { throw StoreError.invalid("Only the owner or Hatch changes a ticket's type.") }
+            let intake: Set<Status> = [.draft, .checking, .needsAnswers, .ready]
+            guard intake.contains(t.status) || (actor == .hatch && !t.status.isTerminal) else {
                 throw StoreError.invalid("The type can only change before work starts (it is \(t.status.displayName)).")
             }
-            guard actor == .owner || actor == .hatch else { throw StoreError.invalid("Only the owner changes a ticket's type.") }
             if t.type == type { return t }
             try db.execute("UPDATE ticket SET type = ?, updated_at = ? WHERE id = ?", [.text(type.rawValue), .date(now()), .int(id)])
             try record(id, actor: actor.rawValue, kind: "type", payload: ["from": .string(t.type.rawValue), "to": .string(type.rawValue), "reason": reason.map { .string($0) } ?? .null])
