@@ -46,6 +46,7 @@ public enum Notebook {
         for repo in config.repos where repo.role != .notebook {
             lines.append("- \(roleName(repo.role)): `\(repo.remote)`, base branch `\(repo.branch)`")
         }
+        if let c = config.components { lines.append("- Components: `\(c.path)` inside the app repository" + (c.product.map { " (`import \($0)`)" } ?? "")) }
         if config.repo(.tickets) == nil && !config.ticketsRepo.isEmpty { lines.append("- Tickets: `\(config.ticketsRepo)` (GitHub issues)") }
         lines += ["", "## What is where", "",
                   "- `NOW.md`: open tickets by whose turn it is, and recent decisions.",
@@ -209,12 +210,16 @@ public enum Notebook {
     }()
 
     public static func starterRules(config: ProjectConfig) -> String {
-        """
+        var text = """
         # How code is written in \(config.name)
 
         Keep this file short: every agent reads all of it. Put detail for one area in `rules/areas/<area>.md`.
 
         """
+        if let label = config.componentsLabel {
+            text += "\n## Components\n\nColors, type, sizes and shared views come from `\(label)`. Never type a color, font size or spacing number into a view: use a name from the components, or add one there.\n"
+        }
+        return text
     }
 
     static func promotionSentence(_ p: Promotion, base: String) -> String {

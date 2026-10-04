@@ -15,6 +15,7 @@ enum CoreCommands {
         "note": note,
         "search": search,
         "admin": admin,
+        "components": components,
     ]
 
     // hatch init [--config .hatch/project.json] [--key echo --name Echo --tickets owner/repo]
@@ -31,6 +32,41 @@ enum CoreCommands {
         } else {
             throw CLIError("Usage: hatch init --config <.hatch/project.json> [--key echo]   or   hatch init --key echo --name Echo [--tickets owner/repo]")
         }
+    }
+
+    // hatch components            -> the project's components as agents see them, and values typed into views
+    // hatch components scan <dir>  -> what Hatch finds in any app folder (no project needed)
+    static func components(_ c: Context) throws {
+        if c.args.pos(1) == "scan" {
+            guard let dir = c.args.pos(2) else { throw CLIError("Usage: hatch components scan <app folder>") }
+            let scan = ComponentsScanner.scan(appRoot: (dir as NSString).expandingTildeInPath)
+            var lines = ["\(scan.swiftFiles) Swift files."]
+            if scan.candidates.isEmpty { lines.append("No components found.") }
+            for cand in scan.candidates {
+                lines.append("\(cand.path)\(cand.isPackage ? " (package\(cand.product.map { ", import \($0)" } ?? ""))" : " (folder in the app)"): \(cand.summary)")
+            }
+            lines.append(scan.typedSummary.map { "Typed into views: \($0)." } ?? "No values typed into views.")
+            for f in scan.typedFiles { lines.append("  \(f.count)  \(f.path)") }
+            c.out.emit(["files": .int(scan.swiftFiles), "candidates": .array(scan.candidates.map { .string($0.path) }),
+                        "typed": .int(scan.typedTotal)], text: lines.joined(separator: "\n"))
+            return
+        }
+        let project = try c.project()
+        guard let config = project.config, let label = config.componentsLabel else {
+            throw CLIError("\(project.name) has no components yet. Set them up in Project settings, or run hatch components scan <app folder>.")
+        }
+        guard let folder = config.componentsFolder, FileManager.default.fileExists(atPath: folder) else {
+            throw CLIError("\(label) is not on this Mac yet (no clone, or its setup ticket has not made it).")
+        }
+        let catalog = ComponentsScanner.catalog(at: folder, isPackage: config.components.map { $0.product != nil } ?? true)
+        var lines = ["Components: \(label)" + (config.components?.product.map { ", import \($0)" } ?? "")]
+        lines += catalog.isEmpty ? ["Nothing in it yet."] : catalog.briefLines(cap: c.args.flag("all") ? 10_000 : 16, values: c.args.flag("values"))
+        if let app = config.repo(.app)?.localPath {
+            let scan = ComponentsScanner.scan(appRoot: app, excluding: config.components?.path)
+            lines.append(scan.typedSummary.map { "Typed into views elsewhere: \($0)." } ?? "No values typed into views elsewhere.")
+        }
+        c.out.emit(["components": .string(label), "colors": .int(catalog.colors.count), "fonts": .int(catalog.fonts.count),
+                    "sizes": .int(catalog.sizes.count), "views": .int(catalog.views.count)], text: lines.joined(separator: "\n"))
     }
 
     // hatch status

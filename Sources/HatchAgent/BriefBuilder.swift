@@ -60,6 +60,7 @@ public enum BriefBuilder {
         out += try specLines(store, t)
         out += try decisionLines(store, t)
         out += areaLines(config, t)
+        out += componentLines(config, t, kind)
         out += try repoLines(store, t)
         out += try notebookLines(store, t, config: config)
         if let config, !config.docs.isEmpty {
@@ -195,6 +196,23 @@ public enum BriefBuilder {
            !text.hasPrefix(Notebook.placedMarker) {
             out.append("- Also follow `\(Notebook.rulesPath)` in the notebook; the app's own AGENTS.md is loaded already.")
         }
+        return out
+    }
+
+    /// The components to use, by name (decision CO5), so an agent reuses them instead of reading views to copy their
+    /// values. Only for work that draws something; names only, capped, a few hundred tokens at most.
+    static func componentLines(_ config: ProjectConfig?, _ t: Ticket, _ kind: AgentTaskKind?) -> [String] {
+        guard let kind, kind != .vet, t.type != .question, t.type != .theme, let config, let label = config.componentsLabel else { return [] }
+        var out = ["\n## Components (\(label)" + (config.components?.product.map { ", import \($0)" } ?? "") + ")"]
+        if let folder = config.componentsFolder, FileManager.default.fileExists(atPath: folder) {
+            let catalog = ComponentsScanner.catalog(at: folder, isPackage: config.components.map { $0.product != nil } ?? true)
+            out += catalog.isEmpty ? ["Empty so far."] : catalog.briefLines(values: t.type == .sketch)
+        } else {
+            out.append("Not made yet; the \"\(ComponentsSetup.startTitle)\" ticket makes it.")
+        }
+        out.append(t.type == .sketch
+                   ? "Draw the variants with these colors and this type."
+                   : "Use these names; never type a color, font size or spacing number into a view. If one is missing, add it to the components on this ticket. `hatch components --all` lists everything.")
         return out
     }
 

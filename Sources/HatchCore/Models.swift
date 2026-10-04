@@ -116,6 +116,9 @@ public struct ProjectConfig: Codable, Equatable, Sendable {
     /// Optional in the file so configs written before it still load; read `promotionMode`.
     public var promotion: Promotion?
     public var promotionMode: Promotion { promotion ?? .pullRequest }
+    /// The app's components inside its repository (decision CO1). Nil when there are none yet, or when they are a
+    /// separate repository (the `design-system` repo role).
+    public var components: ComponentsConfig?
 
     public init(name: String, ticketsRepo: String, repos: [RepoConfig] = [], areas: [AreaConfig] = [], docs: [String] = [],
                 maxAgents: Int = 3, integrationBranch: String = "hatch", planApprovalFileThreshold: Int = 8) {

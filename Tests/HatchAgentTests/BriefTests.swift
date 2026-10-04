@@ -188,4 +188,26 @@ final class BriefTests: XCTestCase {
     func testMissingTicketThrows() {
         XCTAssertThrowsError(try BriefBuilder.brief(store: store, ticketId: 9999, agent: "a"))
     }
+
+    func testComponentsAreListedForWorkThatDrawsAndLeftOutForQuestions() throws {
+        let app = FileManager.default.temporaryDirectory.appendingPathComponent("brief-app-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: app) }
+        let tokens = app.appendingPathComponent("Packages/EchoComponents/Sources/EchoComponents/Tokens.swift")
+        try FileManager.default.createDirectory(at: tokens.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "public extension Color {\n    static let surface = Color(white: 0.96)\n}\npublic enum Spacing { public static let m: CGFloat = 12 }\n"
+            .write(to: tokens, atomically: true, encoding: .utf8)
+        var config = ProjectConfig(name: "Echo", ticketsRepo: "acme/tickets",
+                                   repos: [RepoConfig(role: .app, remote: "acme/echo", branch: "dev", localPath: app.path)])
+        config.components = ComponentsConfig(path: "Packages/EchoComponents", product: "EchoComponents")
+        let proposal = try Fixture.ticket(store, project, status: .ready)
+        let lines = BriefBuilder.componentLines(config, proposal, .build).joined(separator: "\n")
+        XCTAssertTrue(lines.contains("## Components (Packages/EchoComponents, import EchoComponents)"))
+        XCTAssertTrue(lines.contains("- Colors: Color.surface"))
+        XCTAssertTrue(lines.contains("- Sizes: Spacing.m 12"))
+        XCTAssertTrue(BriefBuilder.componentLines(config, proposal, .vet).isEmpty)
+        let question = try Fixture.ticket(store, project, type: .question, title: "Which database?", status: .ready)
+        XCTAssertTrue(BriefBuilder.componentLines(config, question, .prepare).isEmpty)
+        config.components = ComponentsConfig(path: "Packages/Missing", product: "Missing")
+        XCTAssertTrue(BriefBuilder.componentLines(config, proposal, .build).joined().contains("Not made yet"))
+    }
 }

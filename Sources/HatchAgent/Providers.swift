@@ -409,6 +409,6 @@ public struct AgentSettings: Codable, Equatable, Sendable {
 
     /// The tasks that use a provider, for the Settings list and for the warning before turning it off.
     public func roles(using providerId: String) -> [AgentRole] {
-        AgentRole.allCases.filter { roles[$0.rawValue]?.providerId == providerId }
+        AgentRole.allCases.filter { choice($0)?.providerId == providerId }
     }
 }

@@ -141,6 +141,19 @@ enum AgentCommands {
             try step("commit", ok: status.dirtyFiles.isEmpty, detail: status.dirtyFiles.isEmpty ? "\(repo.role.rawValue): \(status.commitsAhead) commit(s) ahead" : "\(repo.role.rawValue) has uncommitted files: \(status.dirtyFiles.prefix(5).joined(separator: ", ")). Commit them first.")
             let drift = try ClaimsFromDiff(store: c.store).claimDrift(t, workspace: ws)
             if drift.hasDrift { try c.store.record(t.id, actor: "hatch", kind: "claim-drift", payload: ["files": .array(drift.unclaimedChanges.map { .string($0) })]); lines.append("note: changed files outside the claim: \(drift.unclaimedChanges.prefix(5).joined(separator: ", "))") }
+            // Values typed into views instead of taken from the components (decision CO6): a note, never a failure,
+            // because a plain text check can over-count.
+            if repo.role == .app, project?.config?.componentsLabel != nil {
+                let diff = (try? manager.git.git(["diff", "-U0", "\(repo.defaultBranch)...HEAD", "--", "*.swift"], in: ws.path)) ?? ""
+                let found = TypedValues.inDiff(diff, excluding: project?.config?.components?.path)
+                if !found.isEmpty {
+                    try c.store.record(t.id, actor: "hatch", kind: "typed-values",
+                                       payload: ["count": .int(found.count), "files": .array(found.prefix(20).map { .string("\($0.file):\($0.line)") })])
+                    lines.append("note: \(found.count) value(s) typed into views instead of taken from the components: "
+                                 + found.prefix(5).map { "\($0.file):\($0.line)" }.joined(separator: ", ")
+                                 + ". Use the components' names, or add the missing ones there.")
+                }
+            }
             for (kind, cmd) in [("build", cfg?.buildCommand), ("tests", cfg?.testCommand), ("match-check", cfg?.matchCommand)] {
                 guard let cmd, !cmd.isEmpty else { continue }
                 let r = shell(cmd, in: ws.path)
