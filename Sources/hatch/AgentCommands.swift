@@ -19,13 +19,17 @@ enum AgentCommands {
     static func options(_ c: Context) throws {
         let t = try c.ticket(c.args.pos(1))
         let raw = c.args.list("option")
-        guard !raw.isEmpty else { throw CLIError("Usage: hatch options #<question> --option \"A|Title|detail\" ... --recommend A --why \"reason\"") }
+        let usage = "Usage: hatch options #<question> --option \"A|Title|detail|gain|cost\" ... --recommend A --why \"reason\""
+        guard !raw.isEmpty else { throw CLIError(usage) }
         let recommend = c.args.option("recommend")
-        let options = raw.map { line -> QuestionOption in
-            let parts = line.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
+        let options = try raw.map { line -> QuestionOption in
+            let parts = line.split(separator: "|", maxSplits: 4, omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
             let key = parts[0]
-            return QuestionOption(key: key, title: parts.count > 1 ? parts[1] : key, detail: parts.count > 2 && !parts[2].isEmpty ? parts[2] : nil,
-                                  recommended: key == recommend, why: key == recommend ? c.args.option("why") : nil)
+            func part(_ i: Int) -> String? { parts.count > i && !parts[i].isEmpty ? parts[i] : nil }
+            // What each option gains and costs is required, so the owner can weigh them side by side (decision DC5).
+            guard let gain = part(3), let cost = part(4) else { throw CLIError("Option \(key) needs what it gains and what it costs.\n\(usage)") }
+            return QuestionOption(key: key, title: part(1) ?? key, detail: part(2),
+                                  recommended: key == recommend, why: key == recommend ? c.args.option("why") : nil, gain: gain, cost: cost)
         }
         guard recommend == nil || options.contains(where: { $0.key == recommend }) else { throw CLIError("--recommend \(recommend!) is not one of the options.") }
         guard recommend != nil else { throw CLIError("Recommend one option with --recommend and say why with --why (the owner's rule).") }

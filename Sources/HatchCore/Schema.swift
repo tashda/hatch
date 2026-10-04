@@ -273,6 +273,22 @@ public enum Schema {
             error TEXT
         );
         """,
+        // 3: Decide (decisions DC5, DC8). Options say what they gain and cost; a plan over the limit waits for the owner.
+        """
+        ALTER TABLE question_option ADD COLUMN gain TEXT;
+        ALTER TABLE question_option ADD COLUMN cost TEXT;
+        CREATE TABLE plan_review(
+            id INTEGER PRIMARY KEY,
+            ticket_id INTEGER NOT NULL REFERENCES ticket(id) ON DELETE CASCADE,
+            files_json TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            state TEXT NOT NULL DEFAULT 'pending',
+            note TEXT,
+            at REAL NOT NULL,
+            decided_at REAL
+        );
+        CREATE INDEX plan_review_pending ON plan_review(state, at);
+        """,
     ]
 
     public static func migrate(_ db: Database) throws {

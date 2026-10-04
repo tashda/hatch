@@ -44,8 +44,13 @@ public struct QuestionOption: Equatable, Sendable {
     public var detail: String?
     public var recommended: Bool
     public var why: String?
-    public init(key: String, title: String, detail: String? = nil, recommended: Bool = false, why: String? = nil) {
+    /// What choosing it gains and what it costs, one line each (decision DC5), so options can be compared side by side.
+    public var gain: String?
+    public var cost: String?
+    public init(key: String, title: String, detail: String? = nil, recommended: Bool = false, why: String? = nil,
+                gain: String? = nil, cost: String? = nil) {
         self.key = key; self.title = title; self.detail = detail; self.recommended = recommended; self.why = why
+        self.gain = gain; self.cost = cost
     }
 }
 
@@ -121,8 +126,9 @@ public extension HatchStore {
         try db.transaction {
             try db.execute("DELETE FROM question_option WHERE ticket_id = ?", [.int(ticketId)])
             for o in options {
-                try db.execute("INSERT INTO question_option(ticket_id, key, title, detail, recommended, why) VALUES(?,?,?,?,?,?)",
-                               [.int(ticketId), .text(o.key), .text(o.title), .opt(o.detail), .int(o.recommended ? 1 : 0), .opt(o.why)])
+                try db.execute("INSERT INTO question_option(ticket_id, key, title, detail, recommended, why, gain, cost) VALUES(?,?,?,?,?,?,?,?)",
+                               [.int(ticketId), .text(o.key), .text(o.title), .opt(o.detail), .int(o.recommended ? 1 : 0), .opt(o.why),
+                                .opt(o.gain), .opt(o.cost)])
             }
         }
     }
@@ -130,7 +136,7 @@ public extension HatchStore {
     func questionOptions(ticketId: Int) throws -> [QuestionOption] {
         try db.query("SELECT * FROM question_option WHERE ticket_id = ? ORDER BY key", [.int(ticketId)]) {
             QuestionOption(key: $0.string("key")!, title: $0.string("title")!, detail: $0.string("detail"),
-                           recommended: ($0.int("recommended") ?? 0) == 1, why: $0.string("why"))
+                           recommended: ($0.int("recommended") ?? 0) == 1, why: $0.string("why"), gain: $0.string("gain"), cost: $0.string("cost"))
         }
     }
 

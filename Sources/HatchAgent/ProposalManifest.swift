@@ -155,12 +155,16 @@ public struct ManifestSpecimen: Codable, Equatable, Sendable {
     public var designWidth: Double?
     public var designHeight: Double?
     public var addedIn: Int?
+    /// What choosing this option gains and what it costs, one line each (decision DC5). Required for proposals.
+    public var gain: String?
+    public var cost: String?
     public init(id: String, title: String, summary: String = "", isEchoToday: Bool = false, designWidth: Double? = nil,
-                designHeight: Double? = nil, addedIn: Int? = nil) {
+                designHeight: Double? = nil, addedIn: Int? = nil, gain: String? = nil, cost: String? = nil) {
         self.id = id; self.title = title; self.summary = summary; self.isEchoToday = isEchoToday
         self.designWidth = designWidth; self.designHeight = designHeight; self.addedIn = addedIn
+        self.gain = gain; self.cost = cost
     }
-    private enum CodingKeys: String, CodingKey { case id, title, summary, isEchoToday, designWidth, designHeight, addedIn }
+    private enum CodingKeys: String, CodingKey { case id, title, summary, isEchoToday, designWidth, designHeight, addedIn, gain, cost }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -170,6 +174,8 @@ public struct ManifestSpecimen: Codable, Equatable, Sendable {
         designWidth = try c.decodeIfPresent(Double.self, forKey: .designWidth)
         designHeight = try c.decodeIfPresent(Double.self, forKey: .designHeight)
         addedIn = try c.decodeIfPresent(Int.self, forKey: .addedIn)
+        gain = try c.decodeIfPresent(String.self, forKey: .gain)
+        cost = try c.decodeIfPresent(String.self, forKey: .cost)
     }
 }
 

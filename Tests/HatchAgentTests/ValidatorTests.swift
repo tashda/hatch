@@ -97,7 +97,7 @@ final class ValidatorTests: XCTestCase {
 
     func testRevisionMayAddWithAddedIn() {
         let (old, new) = revised {
-            $0.specimens.append(ManifestSpecimen(id: "c", title: "Spinner", designWidth: 340, designHeight: 480, addedIn: 2))
+            $0.specimens.append(ManifestSpecimen(id: "c", title: "Spinner", designWidth: 340, designHeight: 480, addedIn: 2, gain: "Shows progress", cost: "Moves on screen"))
             $0.controls[0].choices.append(ManifestChoice(id: "loud", name: "Loud", addedIn: 2))
         }
         XCTAssertEqual(ProposalValidator.validate(new, previous: old), [])
@@ -114,7 +114,7 @@ final class ValidatorTests: XCTestCase {
     }
 
     func testRevisionAdditionsNeedAddedIn() {
-        let (old, new) = revised { $0.specimens.append(ManifestSpecimen(id: "c", title: "Spinner", designWidth: 340, designHeight: 480)) }
+        let (old, new) = revised { $0.specimens.append(ManifestSpecimen(id: "c", title: "Spinner", designWidth: 340, designHeight: 480, gain: "Shows progress", cost: "Moves on screen")) }
         XCTAssertTrue(codes(ProposalValidator.validate(new, previous: old)).contains("revision.added-in"))
     }
 

@@ -176,4 +176,62 @@ final class ComponentsTests: XCTestCase {
         XCTAssertEqual(withApp.componentsFolder, "/code/app/Packages/AUI")
         XCTAssertEqual(withApp.componentsLabel, "Packages/AUI")
     }
+
+    func testClashesFindNamesWithTwoValuesAcrossSets() {
+        var package = ComponentCatalog(), folder = ComponentCatalog()
+        ComponentReader.read("public extension Color {\n static let accent = Color(hex: \"#2B59C2\")\n static let surface = Color.secondary\n}\n",
+                             file: "Tokens.swift", requirePublic: true, into: &package)
+        ComponentReader.read("extension Color {\n static let accent = Color(hex: \"#3366CC\")\n static let surface = Color.secondary\n}\n",
+                             file: "Colors.swift", requirePublic: false, into: &folder)
+        let chosen = ComponentsCandidate(path: "Packages/UI", isPackage: true, product: "UI", catalog: package)
+        let other = ComponentsCandidate(path: "App/DesignSystem", isPackage: false, product: nil, catalog: folder)
+        let clashes = ComponentConflicts.clashes(chosen: chosen, others: [other])
+        XCTAssertEqual(clashes.map(\.name), ["Color.accent"], "same value is not a clash")
+        XCTAssertEqual(clashes.first?.values.map(\.value), ["#2B59C2", "#3366CC"])
+
+        let q = ComponentsSetup.clashQuestion(clashes, chosen: chosen, usage: ["Color.accent": 40])
+        XCTAssertEqual(q?.type, .question)
+        XCTAssertEqual(q?.area, "Components")
+        XCTAssertEqual(q?.options.map(\.key), ["A", "B", "C"])
+        XCTAssertEqual(q?.options.filter(\.recommended).map(\.key), ["A"])
+        XCTAssertTrue(q?.options.allSatisfy { $0.gain != nil && $0.cost != nil } ?? false)
+        XCTAssertTrue(q?.body.contains("used about 40 times") ?? false)
+        XCTAssertNil(ComponentsSetup.clashQuestion([], chosen: chosen, usage: [:]))
+        XCTAssertTrue(ComponentsSetup.mergeDraft(into: chosen, from: other).title.contains("Merge DesignSystem into UI"))
+    }
+
+    func testTypedValuesAreMatchedToNamesExactlyOrNearly() {
+        let found = TypedValues.literals(in: ".foregroundStyle(Color(red: 0.2, green: 0.4, blue: 0.8))\n.padding(12)\n.padding(11)\nVStack(spacing: 12) {\n")
+        XCTAssertEqual(found.colors, ["#3366CC": 1])
+        XCTAssertEqual(found.sizes, [12: 2, 11: 1])
+
+        var catalog = ComponentCatalog()
+        ComponentReader.read("public extension Color {\n static let accent = Color(hex: \"#3366CC\")\n static let link = Color(hex: \"#0A66D8\")\n}\npublic enum Spacing { public static let m: CGFloat = 12 }\n",
+                             file: "T.swift", requirePublic: true, into: &catalog)
+        let colors = ComponentConflicts.colorMatches(["#3366CC": 5, "#0B66D8": 2, "#FF0000": 1], catalog: catalog)
+        XCTAssertEqual(colors.map(\.literal), ["#3366CC", "#0B66D8"])
+        XCTAssertEqual(colors.map(\.exact), [true, false])
+        XCTAssertEqual(colors.map(\.name), ["Color.accent", "Color.link"])
+        let sizes = ComponentConflicts.sizeMatches([12: 9, 11: 2, 40: 1], catalog: catalog)
+        XCTAssertEqual(sizes.map(\.literal), ["12", "11"])
+        XCTAssertEqual(sizes.map(\.exact), [true, false])
+        // Without names, a rarer value next to a more used one is flagged against it.
+        let loose = ComponentConflicts.colorMatches(["#3366CC": 9, "#3367CC": 1], catalog: nil)
+        XCTAssertEqual(loose.map(\.literal), ["#3367CC"])
+        XCTAssertEqual(loose.first?.nameValue, "#3366CC")
+
+        let scan = ComponentsScan(candidates: [], typed: [.color: 8, .size: 11], typedFiles: [], swiftFiles: 10,
+                                  colorLiterals: ["#3366CC": 5, "#0B66D8": 2], sizeLiterals: [12: 9, 11: 2])
+        let moves = ComponentsSetup.moveDrafts(config: ComponentsConfig(path: "Packages/UI", product: "UI"), scan: scan, catalog: catalog)
+        XCTAssertTrue(moves[0].body.contains("#3366CC → Color.accent (5)"))
+        XCTAssertTrue(moves[0].body.contains("#0B66D8 (2) ~ Color.link #0A66D8"))
+        XCTAssertTrue(moves[1].body.contains("12 → Spacing.m (9)"))
+    }
+
+    func testTheStartTicketNamesComponentsAlreadyInTheApp() {
+        let drafts = ComponentsSetup.drafts(appName: "Echo", config: ComponentsConfig(path: "Packages/EchoComponents", product: "EchoComponents"),
+                                            scan: nil, existing: ["Echo/Sources/Shared/DesignSystem"])
+        XCTAssertTrue(drafts[0].body.contains("`Echo/Sources/Shared/DesignSystem`"))
+        XCTAssertEqual(drafts[0].area, "Components")
+    }
 }
