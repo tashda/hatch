@@ -167,8 +167,11 @@ struct CommandPalette: View {
     @State private var actionsFor: Ticket?
     @State private var actionSelection = 0
     @State private var allTickets: [Ticket] = []
+    @State private var specItems: [SpecItem] = []
     /// Read once when the palette opens; the Keychain is not read on every keystroke.
     @State private var githubConnected = HXKeychain.read() != nil
+    /// The text field takes Backspace before onKeyPress sees it, so Backspace on an empty field is caught here.
+    @State private var keyMonitor: Any?
     @FocusState private var focused: Bool
 
     struct Hit: Identifiable {
@@ -220,8 +223,18 @@ struct CommandPalette: View {
         .onAppear {
             scope = hasProjects ? state.paletteScope : .all
             allTickets = (try? state.store.tickets(TicketFilter(projectId: state.projectFilterId, limit: 2000))) ?? []
+            if let pid = referenceProjectId { specItems = (try? state.store.specItems(projectId: pid)) ?? [] }
             rebuild()
             DispatchQueue.main.async { focused = true }
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                let plain = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad, .function]).isEmpty
+                if event.keyCode == 51, plain, widenScope() { return nil }
+                return event
+            }
+        }
+        .onDisappear {
+            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+            keyMonitor = nil
         }
         .onChange(of: state.paletteScope) { _, new in
             if hasProjects { scope = new; query = ""; rebuild() }
@@ -250,7 +263,6 @@ struct CommandPalette: View {
                 .onKeyPress(.upArrow) { move(-1); return .handled }
                 .onKeyPress(.tab) { toggleActions(); return .handled }
                 .onKeyPress(.escape) { escape(); return .handled }
-                .onKeyPress(.delete) { widenScope() ? .handled : .ignored }
                 .onKeyPress(keys: [.return]) { press in
                     activate(command: press.modifiers.contains(.command))
                     return .handled
@@ -724,18 +736,32 @@ struct CommandPalette: View {
 
     // MARK: Spec and decisions
 
+    /// The Spec belongs to one project: the selected one, else the first.
+    private var referenceProjectId: Int? { state.hxProject?.id ?? state.projectFilterId ?? state.projects.first?.id }
+
     private func referenceGroups(_ q: String, specLimit: Int = 6, decisionLimit: Int = 4) -> [Group] {
-        guard let pid = state.hxProject?.id ?? state.projectFilterId ?? state.projects.first?.id else { return [] }
+        guard let pid = referenceProjectId else { return [] }
         let decisions = (try? state.store.decisions(projectId: pid)) ?? []
         if q.isEmpty {
             let recent = decisions.prefix(decisionLimit).map { decisionHit($0.ticket, summary: AttributedString($0.summary)) }
             return nonEmpty([Group(title: "Recent decisions", hits: Array(recent))])
         }
-        let specs = (try? state.store.searchSpec(projectId: pid, query: q, limit: specLimit)) ?? []
-        let specHits = specs.map { s in
-            Hit(id: "s\(s.id)", symbol: "doc.text", number: s.code, title: FuzzyMatch.highlightedWords(s.text, q),
-                trailing: .text(s.area ?? ""), run: { state.navigate(to: .specs) })
+        // Fuzzy over the code and text first (a partial word finds it), then full-text hits for whole words.
+        func specHit(_ s: SpecItem, _ title: AttributedString) -> Hit {
+            Hit(id: "s\(s.id)", symbol: "doc.text", number: s.code, title: title, trailing: .text(s.area ?? ""),
+                run: { state.navigate(to: .specs) })
         }
+        let fuzzy: [(Int, Hit)] = specItems.compactMap { s in
+            if s.code.localizedCaseInsensitiveContains(q) { return (400, specHit(s, AttributedString(s.text))) }
+            guard let m = FuzzyMatch.match(q, in: s.text) else { return nil }
+            return (m.score, specHit(s, FuzzyMatch.highlighted(s.text, m.indices)))
+        }
+        var specHits = fuzzy.sorted { $0.0 > $1.0 }.map(\.1)
+        let text = (try? state.store.searchSpec(projectId: pid, query: q, limit: specLimit)) ?? []
+        for s in text where !specHits.contains(where: { $0.id == "s\(s.id)" }) {
+            specHits.append(specHit(s, FuzzyMatch.highlightedWords(s.text, q)))
+        }
+        specHits = Array(specHits.prefix(specLimit))
         let matched: [(Int, Hit)] = decisions.compactMap { d in
             if let m = FuzzyMatch.match(q, in: d.summary) {
                 return (m.score, decisionHit(d.ticket, summary: FuzzyMatch.highlighted(d.summary, m.indices)))

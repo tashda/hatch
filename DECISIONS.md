@@ -1296,3 +1296,18 @@ Concept pages: `design-review/add-project-concepts.html` and `design-review/proj
 | PS14 | NOW.md | Yes, refreshed by Hatch on every change. |
 | PS15 | Kinds of decisions | Design, Architecture, Workflow. |
 | PS16 | How architecture choices are made | A Question can carry options with a recommendation; the answer becomes a decision file. No seventh ticket type. |
+
+## S. Command palette (answered 2026-10-04, ids CP1 to CP8)
+
+Concept page: `design-review/command-palette-concepts.html`. All answers were the recommendation; CP5 carries the owner's note.
+
+| Id | Question | Choice |
+|---|---|---|
+| CP1 | How it appears | A floating Liquid Glass panel over the window, like Spotlight: no sheet, no dimming. Click outside or Esc closes it. |
+| CP2 | What it shows before you type | Waiting for you, then Recent tickets, then a few actions. Pages appear when typed (the sidebar and cmd-1 to 9 cover them). |
+| CP3 | Rows | One line: type symbol, number, title, then status or shortcut, under small group headers. The panel grows with the results up to eight rows. |
+| CP4 | Acting on a result | Return opens; Tab lists what else can be done with the selected ticket. Status moves go through `HatchStore.move` and only where the owner needs no more input (Submit, Close as answered, Park, Resume, Reopen); sending back and accepting stay on the ticket. |
+| CP5 | Narrowing the search | Scopes with a prefix that becomes a token: `#` Tickets, `>` Actions, `/` Go to, `@` Spec and decisions. Owner's note: each scope has its own shortcut, and the default is Tickets. cmd-K Tickets, shift-cmd-K Actions, cmd-O Go to, shift-cmd-O Spec and decisions; the same shortcut again closes it, Backspace on an empty field searches everything. A `?` scope for Iris waits until Iris can take a free-form question. |
+| CP6 | When nothing matches | Capture as a draft (the default on Return) and New ticket with this title (cmd-Return). Ask Iris waits, as in CP5. |
+| CP7 | Matching | Fuzzy on titles: the letters in order, each at a word start or right after the previous one, matched letters in bold. Your-turn and recent tickets rank higher, finished ones lower. Full-text search adds body matches. |
+| CP8 | Shortcuts in rows | Shown on the right of actions and places, as menus do (an exception added to DESIGN.md). |

@@ -34,6 +34,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 | Other actions | Quiet glass capsules with icon and label; rare ones in a More menu | `.glass`, `Menu` |
 | Destructive action | Menu item then confirmation sheet | `role: .destructive` |
 | Filter or search | Search field with tokens, saved views | `.searchable` |
+| Search and commands across the app | Floating glass command palette, scoped by prefix or shortcut (CP1 to CP8) | `commandPaletteOverlay()`, `.glassEffect` |
 | Nothing to show | Empty state with next step | `ContentUnavailableView` |
 | Work in progress | Spinner in the row, text says what | `ProgressView` |
 | Short feedback | Toast capsule | `HXToast` |
@@ -60,4 +61,4 @@ The style is the one on Echo's server page and Activity Monitor: Liquid Glass ca
 | Inside a row, card or toast | Small bordered buttons (`.bordered`, `.controlSize(.small)`), on hover or selection. |
 | Sheets and dialogs | Prominent default button; Cancel quiet. The default is never silently disabled: say what is missing and focus it. |
 | A run that can be stopped | One button that swaps in place and turns red while running. |
-| Shortcuts | In the tooltip and menus, not in the label. |
+| Shortcuts | In the tooltip and menus, not in the label. The command palette is a menu, so its rows show them on the right (CP8). |
