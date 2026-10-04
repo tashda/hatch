@@ -103,6 +103,8 @@ public struct AgentProvider: Codable, Equatable, Identifiable, Sendable {
     public var modelsError: String?
     /// Extra arguments for the program, for options Hatch has no field for.
     public var extraArguments: [String]
+    /// The known service this provider was set up for (`ModelService.id`), for its name, key link and address.
+    public var serviceId: String?
 
     public init(id: String = UUID().uuidString.lowercased(), name: String, kind: ProviderKind, enabled: Bool = true,
                 executable: String? = nil, signIn: ClaudeSignIn? = nil, baseURL: String? = nil, apiKeyEnv: String? = nil,
@@ -129,6 +131,7 @@ public struct AgentProvider: Codable, Equatable, Identifiable, Sendable {
         modelsFetchedAt = try c.decodeIfPresent(Date.self, forKey: .modelsFetchedAt)
         modelsError = try c.decodeIfPresent(String.self, forKey: .modelsError)
         extraArguments = try c.decodeIfPresent([String].self, forKey: .extraArguments) ?? []
+        serviceId = try c.decodeIfPresent(String.self, forKey: .serviceId)
     }
 
     /// Whether a key is needed at all (local servers and signed-in programs need none).
@@ -231,11 +234,27 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// One recommendation with its reason (rule 3).
+    /// One recommendation with its reason (rule 3), in one line for the section footer.
     public var recommendation: String {
         switch self {
-        case .iris: "Recommended: Haiku with thinking off. The check is short and structured; with thinking off it takes about 6 seconds instead of 40 and uses about a twelfth of the output, with the same questions. Hatch rejects an answer it cannot read, so a slip is visible, never silent. Move to Sonnet if the rewrites read poorly."
-        case .ask: "Recommended: Sonnet. Quick answers with good judgement, using far less of your plan than Opus."
+        case .iris: "Recommended: Haiku with thinking off, about 6 seconds per check with the same questions. Sonnet if rewrites read poorly."
+        case .ask: "Recommended: Sonnet, quick answers with good judgement and far less of your plan than Opus."
+        }
+    }
+
+    /// The model the recommendation names, as a Claude model family, to mark it in the model menu.
+    public var recommendedModel: String {
+        switch self {
+        case .iris: "haiku"
+        case .ask: "sonnet"
+        }
+    }
+
+    /// What the task does, as the title of its section.
+    public var taskTitle: String {
+        switch self {
+        case .iris: "Check new tickets"
+        case .ask: "Answer questions"
         }
     }
 
@@ -287,6 +306,8 @@ public struct AgentSettings: Codable, Equatable, Sendable {
     public var providers: [AgentProvider]
     /// Keyed by `AgentRole.rawValue`, so a role added later decodes from an older file.
     public var roles: [String: RoleChoice]
+    /// The program provider that runs coding agents (the agents that build tickets). Nil means Claude Code.
+    public var codingProviderId: String?
 
     public init(providers: [AgentProvider] = [], roles: [String: RoleChoice] = [:]) {
         self.version = 1; self.providers = providers; self.roles = roles

@@ -452,3 +452,39 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertThrowsError(try ModelCatalog.fetch(p, context: AgentContext(secrets: FixedSecrets(keys: [:]), transport: t)))
     }
 }
+
+final class ModelServiceTests: XCTestCase {
+    func testClaudeCodeThroughAServiceIsAnOrdinaryProvider() {
+        let zai = ModelService.service("zai")!
+        let p = AgentProvider.claudeCode(through: zai)
+        XCTAssertEqual(p.name, "Claude Code · Z.ai")
+        XCTAssertEqual(p.kind, .claudeCode)
+        XCTAssertEqual(p.signIn, .endpoint)
+        XCTAssertEqual(p.baseURL, "https://api.z.ai/api/anthropic")
+        XCTAssertEqual(p.apiKeyEnv, "ZAI_API_KEY")
+        XCTAssertEqual(p.way, .program)
+        let anthropic = AgentProvider.claudeCode(through: ModelService.service("anthropic")!)
+        XCTAssertEqual(anthropic.signIn, .apiKey)
+        XCTAssertNil(anthropic.baseURL)
+    }
+
+    func testTheThreeWays() {
+        XCTAssertEqual(AgentProvider.program(.codex).way, .program)
+        XCTAssertEqual(AgentProvider.api(ModelService.service("openrouter")!).way, .api)
+        XCTAssertEqual(AgentProvider.api(ModelService.service("anthropic")!).kind, .anthropicAPI)
+        XCTAssertEqual(AgentProvider.server(name: "Ollama", baseURL: "http://localhost:11434/v1").way, .server)
+        XCTAssertEqual(AgentProvider.server(name: "Lab box", baseURL: "http://10.0.0.5:8000/v1").way, .server)
+    }
+
+    func testOnlyServicesWithAnAnthropicAPICanBackClaudeCode() {
+        XCTAssertEqual(Set(ModelService.anthropicCompatible.map(\.id)), ["anthropic", "zai", "deepseek", "moonshot"])
+        XCTAssertTrue(ModelService.all.allSatisfy { $0.anthropicURL != nil || $0.openAIURL != nil })
+    }
+
+    func testOlderSettingsDecodeWithoutTheNewFields() throws {
+        let old = #"{"version":1,"providers":[{"id":"claude-code","name":"Claude Code","kind":"claudeCode"}],"roles":{}}"#
+        let s = try XCTUnwrap(AgentSettings.decode(old))
+        XCTAssertNil(s.providers[0].serviceId)
+        XCTAssertNil(s.codingProviderId)
+    }
+}
