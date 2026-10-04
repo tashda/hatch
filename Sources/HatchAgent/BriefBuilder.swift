@@ -184,7 +184,7 @@ public enum BriefBuilder {
         guard let notebook = try store.repo(projectId: t.projectId, role: .notebook), let dir = notebook.localPath else { return [] }
         let fm = FileManager.default
         var out = ["\n## Notebook (\(notebook.remote))"]
-        out.append("- Spec: `\(Notebook.specDir)/` in your notebook workspace. Update the items you change on the same ticket branch, or say they are unchanged.")
+        out.append("- Spec: `\(Notebook.specDir)/` in your notebook workspace. Update the items you change on the same ticket branch and commit them, then run `hatch ready` with `--spec <IDs>`, or `--spec unchanged`.")
         if let area = t.area {
             let file = "rules/areas/\(HatchStore.slug(area)).md"
             if fm.fileExists(atPath: (dir as NSString).appendingPathComponent(file)) { out.append("- Rules for \(area): `\(file)` in the notebook. Read it.") }

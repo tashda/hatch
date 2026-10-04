@@ -148,6 +148,23 @@ enum AgentCommands {
                 if !r.ok { break }
             }
         }
+        // The Spec must follow the code (decision PS13): the agent names the items it changed, or says none changed,
+        // and a named change must really be on the notebook's ticket branch.
+        if let notebook = repos.first(where: { $0.role == .notebook }) {
+            let declared = c.args.option("spec")?.trimmingCharacters(in: .whitespaces) ?? ""
+            if declared.isEmpty {
+                try step("spec", ok: false, detail: "Say which Spec items you changed: --spec TOAST-3,TOAST-4, or --spec unchanged.")
+            } else if declared.lowercased() == "unchanged" {
+                try step("spec", ok: true, detail: "unchanged")
+            } else if let ws = spaces.first(where: { $0.repoId == notebook.id }) {
+                let changed = (try? manager.git.git(["diff", "--name-only", "\(notebook.defaultBranch)...HEAD", "--", Notebook.specDir], in: ws.path)) ?? ""
+                try step("spec", ok: !changed.isEmpty, detail: changed.isEmpty
+                         ? "--spec names \(declared), but the notebook branch changes nothing in \(Notebook.specDir)/. Edit and commit the Spec there."
+                         : "\(declared) in \(changed.split(separator: "\n").joined(separator: ", "))")
+            } else {
+                try step("spec", ok: false, detail: "No notebook workspace for \(t.displayNumber); run hatch take again to get one.")
+            }
+        }
         if failures.isEmpty {
             let after = try c.store.move(t.id, to: .toVerify, actor: .hatch, reason: "build, tests and match check passed")
             c.out.emit(["ready": true, "status": .string(after.status.rawValue)], text: lines.joined(separator: "\n") + "\nAll checks passed. \(after.displayNumber) is now \(after.status.displayName); the owner will verify it in a Preview. You are done with this ticket.")
