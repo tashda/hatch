@@ -42,9 +42,9 @@ enum PaletteScope: CaseIterable {
         switch self {
         case .all: []
         case .tickets: ["⌘", "K"]
-        case .actions: ["⇧", "⌘", "K"]
-        case .places: ["⌘", "O"]
-        case .reference: ["⇧", "⌘", "O"]
+        case .actions: ["⇧", "⌘", "P"]
+        case .places: ["⇧", "⌘", "K"]
+        case .reference: ["⌥", "⌘", "K"]
         }
     }
 

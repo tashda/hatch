@@ -37,7 +37,8 @@ struct HatchApp: App {
 }
 
 /// Menu commands and shortcuts from the design: New ticket (cmd-N), Search (cmd-K), Ask (opt-cmd-A). The palette's
-/// scopes each have their own: Tickets cmd-K, Actions shift-cmd-K, Go to cmd-O, Spec and decisions shift-cmd-O.
+/// scopes each have their own: Tickets cmd-K, Go to shift-cmd-K, Actions shift-cmd-P (as in VS Code), Spec and decisions
+/// opt-cmd-K. Cmd-O stays free for Open.
 struct HatchCommands: Commands {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var state: AppState
@@ -52,8 +53,8 @@ struct HatchCommands: Commands {
         }
         CommandGroup(after: .textEditing) {
             Button("Search Tickets") { state.openPalette(.tickets) }.keyboardShortcut("k")
-            Button("Actions…") { state.openPalette(.actions) }.keyboardShortcut("k", modifiers: [.shift, .command])
-            Button("Search Spec and Decisions") { state.openPalette(.reference) }.keyboardShortcut("o", modifiers: [.shift, .command])
+            Button("Actions…") { state.openPalette(.actions) }.keyboardShortcut("p", modifiers: [.shift, .command])
+            Button("Search Spec and Decisions") { state.openPalette(.reference) }.keyboardShortcut("k", modifiers: [.option, .command])
             Button("Sync with GitHub") { state.syncNow() }.keyboardShortcut("r", modifiers: [.shift, .command])
             Button("Iris") { state.showAskPanel.toggle() }.keyboardShortcut("a", modifiers: [.option, .command])
         }
@@ -68,7 +69,7 @@ struct HatchCommands: Commands {
                 .keyboardShortcut("i", modifiers: [.control, .command])
         }
         CommandMenu("Go") {
-            Button("Go to…") { state.openPalette(.places) }.keyboardShortcut("o")
+            Button("Go to…") { state.openPalette(.places) }.keyboardShortcut("k", modifiers: [.shift, .command])
             Divider()
             Button("Desk") { state.navigate(to: .desk) }.keyboardShortcut("1")
             Button("Tickets") { state.navigate(to: .tickets) }.keyboardShortcut("2")
