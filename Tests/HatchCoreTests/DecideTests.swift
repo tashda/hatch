@@ -111,3 +111,27 @@ final class DecideRunTests: XCTestCase {
         XCTAssertEqual(run.agentsStarted, 1)
     }
 }
+
+final class SpecBeforeVerifyTests: XCTestCase {
+    func testBuiltWorkNeedsTheSpecStepWhenTheProjectHasANotebook() throws {
+        let store = try HatchStore.inMemory()
+        var config = ProjectConfig(name: "Echo", ticketsRepo: "acme/tickets",
+                                   repos: [RepoConfig(role: .notebook, remote: "acme/echo-notebook", branch: "main")])
+        let project = try store.upsertProject(key: "echo", name: "Echo", config: config)
+        let t = try store.createTicket(projectId: project.id, type: .tweak, title: "Rename Run")
+        for (s, a) in [(Status.checking, Actor.owner), (.ready, .hatch), (.building, .hatch)] { try store.move(t.id, to: s, actor: a) }
+        XCTAssertThrowsError(try store.move(t.id, to: .toVerify, actor: .hatch))
+        try store.record(t.id, actor: "hatch", kind: "spec", payload: ["ok": .bool(true), "detail": "unchanged"])
+        XCTAssertEqual(try store.move(t.id, to: .toVerify, actor: .hatch).status, .toVerify)
+        // A fix is new work: it needs its own Spec step.
+        try store.move(t.id, to: .fixing, actor: .owner)
+        XCTAssertThrowsError(try store.move(t.id, to: .toVerify, actor: .hatch))
+
+        // Without a notebook there is no Spec to keep, so nothing is checked.
+        config.repos = []
+        let other = try store.upsertProject(key: "plain", name: "Plain", config: config)
+        let u = try store.createTicket(projectId: other.id, type: .bug, title: "Crash")
+        for (s, a) in [(Status.checking, Actor.owner), (.ready, .hatch), (.building, .hatch), (.toVerify, .hatch)] { try store.move(u.id, to: s, actor: a) }
+        XCTAssertEqual(try store.ticket(id: u.id)?.status, .toVerify)
+    }
+}
