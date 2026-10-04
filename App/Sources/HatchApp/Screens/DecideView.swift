@@ -376,7 +376,7 @@ private struct DecideCard: View {
                 header
                 middle
                 if let recommended, !why.isEmpty {
-                    (Text("★ Recommended: \(choices.first { $0.id == recommended }?.title ?? recommended). ").fontWeight(.semibold) + Text(why))
+                    Text("\(Text("★ Recommended: \(choices.first { $0.id == recommended }?.title ?? recommended). ").fontWeight(.semibold))\(why)")
                         .font(.callout)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)

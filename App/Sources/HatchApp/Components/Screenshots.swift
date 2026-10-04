@@ -48,6 +48,7 @@ enum ScreenshotClipboard {
 final class ScreenshotPasteCenter {
     static let shared = ScreenshotPasteCenter()
 
+    private struct UncheckedEvent: @unchecked Sendable { let event: NSEvent? }
     private struct Target { let id: UUID; weak var window: NSWindow?; let take: ([(name: String, data: Data)]) -> Void }
     private var targets: [Target] = []
     private var monitor: Any?
@@ -57,7 +58,9 @@ final class ScreenshotPasteCenter {
         targets.append(Target(id: id, window: window, take: take))
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            MainActor.assumeIsolated { ScreenshotPasteCenter.shared.handle(event) }
+            // NSEvent is not Sendable; local monitors run on the main thread, so the hop is safe.
+            let box = UncheckedEvent(event: event)
+            return MainActor.assumeIsolated { UncheckedEvent(event: ScreenshotPasteCenter.shared.handle(box.event!)) }.event
         }
     }
 

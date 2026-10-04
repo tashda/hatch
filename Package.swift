@@ -29,7 +29,7 @@ let package = Package(
         .testTarget(name: "HatchSyncTests", dependencies: ["HatchSync", "HatchCore"]),
         .testTarget(name: "HatchAgentTests", dependencies: ["HatchAgent", "HatchCore", "HatchGit"]),
         .testTarget(name: "HatchAPITests", dependencies: ["HatchAPI", "HatchCore"]),
-        .testTarget(name: "HatchImportTests", dependencies: ["HatchImport", "HatchCore"]),
+        .testTarget(name: "HatchImportTests", dependencies: ["HatchImport", "HatchCore"], exclude: ["Fixtures"]),
     ],
     swiftLanguageModes: [.v5]
 )

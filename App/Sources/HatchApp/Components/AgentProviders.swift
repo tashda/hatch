@@ -102,7 +102,7 @@ enum HXAskAdapter {
 
 extension AppState {
     /// Where the `hatch` command is: chosen in Settings, else found on PATH or in the usual install places.
-    static let hatchCommandSetting = "hatch_command"
+    nonisolated static let hatchCommandSetting = "hatch_command"
 
     /// The hatch built into this app (Contents/Helpers), so agents always use the one that matches it.
     nonisolated static var builtInHatch: String? {
