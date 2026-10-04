@@ -54,8 +54,8 @@ struct AskPanel: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: "sparkles")
-                .font(.headline)
+            Image("IrisIcon")
+                .resizable().scaledToFit().frame(width: 20, height: 20)
                 .foregroundStyle(Theme.agent)
                 .frame(width: 34, height: 34)
                 .background(Theme.agentBackground, in: RoundedRectangle(cornerRadius: 10))

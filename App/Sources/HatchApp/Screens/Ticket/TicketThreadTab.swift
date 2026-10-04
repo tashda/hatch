@@ -239,10 +239,18 @@ struct ThreadKindChip: View {
 struct ThreadAvatar: View {
     let fromOwner: Bool
     var symbol: String? = nil
+    /// Iris gets her own mark; other agents keep the generic one.
+    var isIris = false
 
     var body: some View {
-        Image(systemName: symbol ?? (fromOwner ? "person.fill" : "sparkles"))
-            .font(.system(size: 12, weight: .semibold))
+        Group {
+            if isIris && symbol == nil {
+                Image("IrisIcon").resizable().scaledToFit().frame(width: 17, height: 17)
+            } else {
+                Image(systemName: symbol ?? (fromOwner ? "person.fill" : "sparkles"))
+                    .font(.system(size: 12, weight: .semibold))
+            }
+        }
             .foregroundStyle(fromOwner ? Theme.you : Theme.agent)
             .frame(width: 28, height: 28)
             .background((fromOwner ? Theme.youBackground : Theme.agentBackground), in: Circle())
@@ -261,7 +269,7 @@ private struct ThreadBubble<Body: View>: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            if fromOwner { Spacer(minLength: 60) } else { ThreadAvatar(fromOwner: false, symbol: symbol) }
+            if fromOwner { Spacer(minLength: 60) } else { ThreadAvatar(fromOwner: false, symbol: symbol, isIris: name.lowercased().hasPrefix("iris")) }
             VStack(alignment: fromOwner ? .trailing : .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(name).font(.caption.weight(.semibold)).foregroundStyle(.secondary)

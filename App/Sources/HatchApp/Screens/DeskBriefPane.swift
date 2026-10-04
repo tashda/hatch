@@ -156,7 +156,7 @@ struct DeskBriefPane: View {
             Button(action: onPark) { Label("Park", systemImage: "pause") }
                 .buttonStyle(.glass)
                 .help("Park (P)")
-            Button(action: onAsk) { Label("Ask", systemImage: "sparkles") }
+            Button(action: onAsk) { Label { Text("Ask") } icon: { Image("IrisIcon") } }
                 .buttonStyle(.glass)
                 .help("Ask (\u{2325}\u{2318}A)")
         }

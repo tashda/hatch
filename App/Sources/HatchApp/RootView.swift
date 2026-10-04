@@ -155,7 +155,7 @@ private struct ToolbarActions: View {
         }
         // The icon takes the accent color while the panel is open; no pill behind it.
         Button { state.showAskPanel.toggle() } label: {
-            Image(systemName: "sparkles")
+            Image("IrisIcon")
                 .foregroundStyle(state.showAskPanel ? Color.accentColor : Color.primary)
         }
             .help(state.showAskPanel ? "Hide Iris (\u{2325}\u{2318}A)" : "Show Iris (\u{2325}\u{2318}A)")

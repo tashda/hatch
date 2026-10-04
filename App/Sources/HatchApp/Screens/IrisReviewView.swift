@@ -120,7 +120,7 @@ struct IrisReviewView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "sparkles").foregroundStyle(.secondary)
+            Image("IrisIcon").resizable().scaledToFit().frame(width: 16, height: 16).foregroundStyle(Theme.agent)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Iris checked this ticket")
                     .font(.subheadline.weight(.semibold))
