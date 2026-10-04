@@ -553,6 +553,50 @@ struct ProjectForm: View {
     }
 }
 
+/// The first thing a new owner sees: what a project is made of, and one button to set it up.
+struct WelcomeView: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        VStack(spacing: 24) {
+            VStack(spacing: 8) {
+                Image(systemName: "square.stack.3d.up").font(.system(size: 34)).foregroundStyle(.tertiary)
+                Text("Let's set up a project").font(.title2.weight(.semibold))
+                Text("Hatch keeps a project's tickets in a private GitHub repository and lets agents work in the app's folder on this Mac.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                step(1, "Connect GitHub", "Hatch lists the repositories your account can see.")
+                step(2, "Choose repositories", "A private one for tickets; the app and design system if you have them.")
+                step(3, "Choose the app's folder", "The local checkout agents build and test in.")
+            }
+            .frame(maxWidth: 420, alignment: .leading)
+            Button("Set up a project") { state.showAddProject = true }
+                .buttonStyle(.glassProminent)
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func step(_ number: Int, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text("\(number)")
+                .font(.callout.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
+                .background(.quaternary, in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).fontWeight(.medium)
+                Text(detail).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 /// The add-project flow: a key, a name, the tickets repo and the app repo.
 struct AddProjectSheet: View {
     @EnvironmentObject var state: AppState

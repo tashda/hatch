@@ -21,6 +21,7 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $state.showPalette) { CommandPalette() }
+        .sheet(isPresented: $state.showAddProject) { AddProjectSheet() }
         .alert("Something went wrong", isPresented: Binding(get: { state.errorMessage != nil }, set: { if !$0 { state.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(state.errorMessage ?? "") }
@@ -65,7 +66,9 @@ struct RootView: View {
     }
 
     @ViewBuilder private var pageCard: some View {
-        if ownsPanels { detailContent } else { detailContent.floatingCard() }
+        // Nothing works without a project, so until there is one every page is the welcome.
+        if state.projects.isEmpty { WelcomeView().floatingCard() }
+        else if ownsPanels { detailContent } else { detailContent.floatingCard() }
     }
 
     private var liveDetail: some View {
@@ -219,34 +222,57 @@ struct LiveToolbar: ToolbarContent {
 }
 
 /// The project as the window's title control (decision LK2, option D): tile and name; a click opens the list of projects.
+/// With no project it is the way to set one up; "All projects" is offered only when there are two or more.
 struct ProjectTitleMenu: View {
     @EnvironmentObject var state: AppState
 
+    /// The project the title shows. A single project is always the current one.
     private var current: Project? {
-        state.projects.first { $0.key == state.selectedProjectKey }
+        let projects = state.projects
+        return projects.first { $0.key == state.selectedProjectKey } ?? (projects.count == 1 ? projects.first : nil)
     }
 
     var body: some View {
-        Menu {
-            Button {
-                state.selectedProjectKey = nil
-            } label: {
-                Label("All projects", systemImage: state.selectedProjectKey == nil ? "checkmark" : "square.stack.3d.up")
+        let projects = state.projects
+        if projects.isEmpty {
+            Button { state.showAddProject = true } label: {
+                Label("Set up a project", systemImage: "plus")
+                    .labelStyle(.titleAndIcon)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 4)
             }
-            if !state.projects.isEmpty { Divider() }
-            ForEach(state.projects) { project in
+            .buttonStyle(.plain)
+            .padding(.vertical, 6)
+            .help("Set up your first project")
+        } else {
+            menu(projects)
+        }
+    }
+
+    private func menu(_ projects: [Project]) -> some View {
+        Menu {
+            if projects.count > 1 {
+                Button {
+                    state.selectedProjectKey = nil
+                } label: {
+                    Label("All projects", systemImage: current == nil ? "checkmark" : "square.stack.3d.up")
+                }
+                Divider()
+            }
+            ForEach(projects) { project in
                 Button {
                     state.selectedProjectKey = project.key
                 } label: {
-                    if state.selectedProjectKey == project.key {
+                    if current?.key == project.key {
                         Label(project.name, systemImage: "checkmark")
                     } else {
                         Text(project.name)
                     }
                 }
             }
-            if !state.projects.isEmpty { Divider() }
+            Divider()
             Button("Project settings…", systemImage: "gearshape") { state.navigate(to: .projects) }
+            Button("Add project…", systemImage: "plus") { state.showAddProject = true }
         } label: {
             HStack(spacing: 6) {
                 if let p = current {

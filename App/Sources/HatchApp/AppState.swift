@@ -34,6 +34,7 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(showAskPanel, forKey: "hatch.showAskPanel") }
     }
     @Published var showPalette = false
+    @Published var showAddProject = false
     @Published var searchText = ""
     @Published var syncSummary = SyncSummary()
     /// Snapshot harness only: selects each ticket subview without changing the normal navigation model.
