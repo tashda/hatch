@@ -283,19 +283,40 @@ enum HXMergeAdapter {
 // MARK: CI status from HatchSync (I6)
 
 enum HXCIAdapter {
-    /// One line the UI can show: "passing", "running", "failing: name", or why it is unknown.
-    static func status(remote: String, ref: String) -> String {
+    /// What the UI shows for a branch with no checks at all: not an error, and nothing to wait for.
+    static let noCI = "no CI set up"
+
+    /// One line the UI can show: "passing", "running", "failing: name", "cancelled", "no CI set up", or in words why
+    /// it could not be read. Only "failing" is an alarm. The check is kept (and logged on merged tickets) when the
+    /// project is known, so the footer, ticket pages and Board agree.
+    static func status(remote: String, ref: String, store: HatchStore? = nil, projectId: Int? = nil) -> String {
         do {
-            let engine = SyncEngine(store: try HatchStore.inMemory(), tracker: HXGitHub.client())
-            let state = try engine.ciStatus(repo: remote, ref: ref)
+            let engine = SyncEngine(store: try store ?? HatchStore.inMemory(), tracker: HXGitHub.client())
+            let state = if let projectId { try engine.checkCI(projectId: projectId, repo: remote, ref: ref) }
+                        else { try engine.ciStatus(repo: remote, ref: ref) }
             switch state {
+            case .none: return noCI
             case .passed: return "passing"
-            case .pending: return "running or not started"
+            case .pending: return "running"
+            case .cancelled: return "cancelled"
             case .failed(let names): return "failing: " + names.joined(separator: ", ")
             }
+        } catch let error as TrackerError {
+            switch error {
+            case .noToken: return "not checked: not connected to GitHub"
+            case .unauthorized: return "not checked: no access to this repository"
+            case .notFound: return "not checked: \(ref) is not on GitHub yet"
+            default: return "not checked: could not reach GitHub"
+            }
         } catch {
-            return "unknown (\(error))"
+            return "not checked: could not reach GitHub"
         }
+    }
+
+    /// GitHub's list of runs on the branch, where a failure shows its log.
+    static func runsURL(remote: String, ref: String) -> URL? {
+        let branch = ref.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ref
+        return URL(string: "https://github.com/\(remote)/actions?query=branch%3A\(branch)")
     }
 }
 

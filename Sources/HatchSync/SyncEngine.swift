@@ -17,8 +17,12 @@ public struct PullSummary: Equatable, Sendable {
 }
 
 public enum CIState: Equatable, Sendable {
+    /// No check ran on the branch: the repository has no CI, or none for this branch. Not a problem.
+    case none
     case pending
     case passed
+    /// A run was cancelled by hand and nothing failed. Not a failure.
+    case cancelled
     case failed([String])
 }
 
@@ -208,10 +212,13 @@ public final class SyncEngine {
     /// Aggregates check runs on the integration branch (decision I6). A failure is reported as soon as one run fails.
     public func ciStatus(repo: String, ref: String) throws -> CIState {
         let runs = try tracker.checkRuns(repo: repo, ref: ref)
-        let bad: Set<String> = ["failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"]
+        // A cancelled run is not a failure: a newer push usually cancels the one before it.
+        let bad: Set<String> = ["failure", "timed_out", "action_required", "startup_failure", "stale"]
         let failed = runs.filter { $0.status == "completed" && bad.contains($0.conclusion ?? "") }.map(\.name)
         if !failed.isEmpty { return .failed(failed) }
-        if runs.isEmpty || runs.contains(where: { $0.status != "completed" }) { return .pending }
+        if runs.isEmpty { return .none }
+        if runs.contains(where: { $0.status != "completed" }) { return .pending }
+        if runs.contains(where: { $0.conclusion == "cancelled" }) { return .cancelled }
         return .passed
     }
 
@@ -221,6 +228,8 @@ public final class SyncEngine {
         let state = try ciStatus(repo: repo, ref: ref)
         let record: CIRecord
         switch state {
+        case .none: record = CIRecord(state: .none, ref: ref, checkedAt: store.now())
+        case .cancelled: record = CIRecord(state: .cancelled, ref: ref, checkedAt: store.now())
         case .passed: record = CIRecord(state: .passed, ref: ref, checkedAt: store.now())
         case .pending: record = CIRecord(state: .pending, ref: ref, checkedAt: store.now())
         case .failed(let names): record = CIRecord(state: .failed, failed: names, ref: ref, checkedAt: store.now())

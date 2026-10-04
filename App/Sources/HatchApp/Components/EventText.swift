@@ -8,6 +8,17 @@ enum EventText {
         return s.displayName
     }
 
+    /// "passing", "failing: test", "cancelled"… from a `ci` event's state and failed checks.
+    static func ciWord(_ state: String?, failed: [String]) -> String {
+        switch state {
+        case "passed": "passing"
+        case "failed": "failing" + (failed.isEmpty ? "" : ": " + failed.joined(separator: ", "))
+        case "cancelled": "cancelled"
+        case "none": "not set up"
+        default: "running"
+        }
+    }
+
     static func describe(_ e: Event) -> String {
         let p = e.payload
         switch e.kind {
@@ -59,7 +70,7 @@ enum EventText {
         case "attachment-upload-failed":
             return "Screenshot upload failed: \(p["error"]?.stringValue ?? "")"
         case "ci":
-            return "CI on \(p["ref"]?.stringValue ?? "the integration branch"): \(p["state"]?.stringValue == "passed" ? "passing" : p["state"]?.stringValue == "failed" ? "failing" : "running")"
+            return "CI on \(p["ref"]?.stringValue ?? "the integration branch"): \(ciWord(p["state"]?.stringValue, failed: p["failed"]?.arrayValue?.compactMap { $0.stringValue } ?? []))"
         case "plan-waiting":
             return "Plan waits for the owner (\(p["reason"]?.stringValue ?? ""))"
         case "plan-approved":

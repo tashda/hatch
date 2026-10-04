@@ -299,13 +299,15 @@ final class SyncTests: XCTestCase {
 
     func testCIAggregation() throws {
         tracker.checkRunsByRef["hatch"] = []
-        XCTAssertEqual(try engine.ciStatus(repo: "acme/app", ref: "hatch"), .pending)
+        XCTAssertEqual(try engine.ciStatus(repo: "acme/app", ref: "hatch"), .none, "no checks at all is a repository without CI, not a wait")
         tracker.checkRunsByRef["hatch"] = [CheckRun(name: "build", status: "completed", conclusion: "success"), CheckRun(name: "test", status: "in_progress")]
         XCTAssertEqual(try engine.ciStatus(repo: "acme/app", ref: "hatch"), .pending)
         tracker.checkRunsByRef["hatch"] = [CheckRun(name: "build", status: "completed", conclusion: "success"), CheckRun(name: "test", status: "completed", conclusion: "success")]
         XCTAssertEqual(try engine.ciStatus(repo: "acme/app", ref: "hatch"), .passed)
         tracker.checkRunsByRef["hatch"] = [CheckRun(name: "build", status: "completed", conclusion: "success"), CheckRun(name: "test", status: "completed", conclusion: "failure"), CheckRun(name: "lint", status: "queued")]
         XCTAssertEqual(try engine.ciStatus(repo: "acme/app", ref: "hatch"), .failed(["test"]))
+        tracker.checkRunsByRef["hatch"] = [CheckRun(name: "build", status: "completed", conclusion: "success"), CheckRun(name: "test", status: "completed", conclusion: "cancelled")]
+        XCTAssertEqual(try engine.ciStatus(repo: "acme/app", ref: "hatch"), .cancelled, "a cancelled run is not a failure")
     }
 
     func testCIIsKeptAndNamedOnMergedTickets() throws {

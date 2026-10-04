@@ -436,7 +436,8 @@ struct PreviewsView: View {
         }
         let base = appRepo?.defaultBranch ?? "dev"
         steps.append("CI on \(integrationBranch): \(ciText.isEmpty ? "not checked yet" : ciText).")
-        steps.append("When CI is green, promote \(integrationBranch) to \(base).")
+        steps.append(ciText == HXCIAdapter.noCI ? "Promote \(integrationBranch) to \(base); there is no CI to wait for."
+                                                : "When CI is green, promote \(integrationBranch) to \(base).")
         return steps
     }
 
@@ -479,7 +480,7 @@ struct PreviewsView: View {
                 .buttonStyle(.glass)
             Button { promote() } label: { Label("Promote", systemImage: "arrow.up.right") }
                 .buttonStyle(.glass)
-                .disabled(ciText != "passing")
+                .disabled(ciText != "passing" && ciText != HXCIAdapter.noCI)
                 .help("Moves the integration branch into the base branch when CI is green.")
             if latestPreview != nil {
                 HXMenuButton(title: "More", symbol: "ellipsis") {
@@ -535,7 +536,7 @@ struct PreviewsView: View {
         guard let repo = appRepo else { return }
         let store = state.store
         let integration = integrationBranch
-        let green = ciText == "passing"
+        let green = ciText == "passing" || ciText == HXCIAdapter.noCI
         Task {
             let step = await Task.detached { HXMergeAdapter.promote(store: store, repo: repo, integration: integration, ciPassed: green) }.value
             mergeSteps.append(step)

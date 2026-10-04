@@ -403,7 +403,7 @@ struct GitHubSettingsPage: View {
                     Text("passing")
                 }
                 .font(.callout).foregroundStyle(.secondary)
-            } else if text.hasPrefix("failing") || text.hasPrefix("unknown") {
+            } else if text.hasPrefix("failing") {
                 Subtitle(text: "CI on \(branch) \(text)", critical: true)
             } else {
                 Subtitle(text: "CI on \(branch) \(text)")

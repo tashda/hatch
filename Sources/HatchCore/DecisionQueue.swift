@@ -287,7 +287,7 @@ public extension HatchStore {
 
 /// The last CI result on a project's integration branch (decision I6), read from GitHub during sync.
 public struct CIRecord: Codable, Equatable, Sendable {
-    public enum State: String, Codable, Sendable { case passed, pending, failed }
+    public enum State: String, Codable, Sendable { case passed, pending, failed, none, cancelled }
     public var state: State
     /// The checks that failed, by name.
     public var failed: [String]
@@ -302,6 +302,8 @@ public struct CIRecord: Codable, Equatable, Sendable {
         switch state {
         case .passed: "passing"
         case .pending: "running"
+        case .none: "not set up"
+        case .cancelled: "cancelled"
         case .failed: "failing" + (failed.isEmpty ? "" : ": " + failed.joined(separator: ", "))
         }
     }

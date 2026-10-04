@@ -56,11 +56,21 @@ private struct CardRow: View {
     let label: String
     let value: String
     var tint: Color = .secondary
+    /// Makes the value open this page, with an arrow to say so.
+    var link: URL?
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(label).foregroundStyle(.secondary)
             Spacer(minLength: 12)
-            Text(value).foregroundStyle(tint).multilineTextAlignment(.trailing).lineLimit(2)
+            if let link {
+                Button { NSWorkspace.shared.open(link) } label: {
+                    Text(value + " ↗").foregroundStyle(tint).multilineTextAlignment(.trailing).lineLimit(2)
+                }
+                .buttonStyle(.plain)
+                .help("Open the runs on GitHub")
+            } else {
+                Text(value).foregroundStyle(tint).multilineTextAlignment(.trailing).lineLimit(2)
+            }
         }
         .font(.callout)
     }
@@ -335,8 +345,11 @@ struct FooterStatusGlyph: View {
                     CardRow(label: "Usage", value: state.usageLevel == .pause ? "Above the pause limit; nothing new starts today" : "Above the daily warning",
                             tint: .orange)
                 }
-                if let ci { CardRow(label: "CI on \(state.hxProject?.config?.integrationBranch ?? "hatch")", value: ci,
-                                    tint: ci.hasPrefix("failing") ? Theme.critical : .secondary) }
+                // A repository with no CI has nothing to say here; "not checked" and "cancelled" are grey, only a failure is red.
+                if let ci, ci != HXCIAdapter.noCI {
+                    CardRow(label: "CI on \(state.hxProject?.config?.integrationBranch ?? "hatch")", value: ci,
+                            tint: ci.hasPrefix("failing") ? Theme.critical : .secondary, link: ciURL)
+                }
             }
             .task { await loadCI() }
         }
@@ -368,6 +381,12 @@ struct FooterStatusGlyph: View {
     private func loadCI() async {
         guard let p = state.hxProject, let app = p.config?.repo(.app) else { return }
         let branch = p.config?.integrationBranch ?? "hatch"
-        ci = await Task.detached { HXCIAdapter.status(remote: app.remote, ref: branch) }.value
+        let store = state.store, projectId = p.id
+        ci = await Task.detached { HXCIAdapter.status(remote: app.remote, ref: branch, store: store, projectId: projectId) }.value
+    }
+
+    private var ciURL: URL? {
+        guard let app = state.hxProject?.config?.repo(.app) else { return nil }
+        return HXCIAdapter.runsURL(remote: app.remote, ref: state.hxProject?.config?.integrationBranch ?? "hatch")
     }
 }
