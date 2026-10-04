@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decide concepts</title>
+<style>
+  :root {
+    --page: #ececee; --sheet: #fbfbfd; --group: #f2f2f5; --row-line: #e1e1e6; --text: #1d1d1f; --secondary: #6e6e73;
+    --tertiary: #a1a1a6; --blue: #0a66d8; --blue-soft: #e7f0fd; --green: #248a3d; --green-soft: #e6f4ea; --amber: #b86a00;
+    --amber-soft: #fdf1df; --teal: #12868f; --slate: #6b7280; --field: #ffffff; --line: #d6d6db;
+    --win: #e9e9ec; --card: #ffffff; --glass: rgba(250,250,252,.72); --glass-edge: rgba(255,255,255,.75); --key: rgba(0,0,0,.06);
+    --shadow: 0 18px 50px rgba(0,0,0,.14), 0 0 0 0.5px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #161618; --sheet: #232326; --group: #2c2c30; --row-line: #3a3a3f; --text: #f2f2f4; --secondary: #a3a3aa;
+      --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+      --amber-soft: #3d2e14; --teal: #3cc3cc; --slate: #9aa1ad; --field: #1b1b1e; --line: #46464c;
+      --win: #1e1e21; --card: #29292d; --glass: rgba(44,44,48,.72); --glass-edge: rgba(255,255,255,.14); --key: rgba(255,255,255,.1);
+      --shadow: 0 18px 50px rgba(0,0,0,.5), 0 0 0 0.5px rgba(255,255,255,.08); }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1060px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; font-weight: 600; margin: 56px 0 6px; }
+  h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--secondary); font-size: 14px; max-width: 780px; }
+  .muted { color: var(--secondary); }
+  .small { font-size: 11.5px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .note { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 12px; padding: 16px 18px; }
+  .note ul { margin: 0; padding-left: 18px; } .note li { margin-bottom: 4px; }
+  .rec { border: 2px solid var(--blue); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--blue-soft); color: var(--blue); margin-bottom: 8px; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--group); padding: 1px 5px; border-radius: 4px; }
+  .btn { font: inherit; border: 0; border-radius: 7px; padding: 5px 14px; background: var(--group); color: var(--text); box-shadow: inset 0 0 0 0.5px var(--line); cursor: pointer; }
+  .today { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+  table.map { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  table.map td { padding: 6px 8px 6px 0; border-top: 1px solid var(--row-line); vertical-align: top; }
+  table.map tr:first-child td { border-top: 0; }
+  table.map td:first-child { width: 48%; }
+  .warn { color: var(--amber); font-weight: 500; }
+
+  .seg { display: inline-flex; background: var(--group); border-radius: 8px; padding: 2px; box-shadow: inset 0 0 0 0.5px var(--line); margin: 14px 0 12px; flex-wrap: wrap; }
+  .seg button { font: inherit; border: 0; background: transparent; color: var(--text); padding: 4px 12px; border-radius: 6px; cursor: pointer; }
+  .seg button.on { background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,.12), inset 0 0 0 0.5px var(--line); font-weight: 500; }
+
+  /* Faux window */
+  .stage { position: relative; border-radius: 14px; overflow: hidden; background: var(--win); height: 640px; box-shadow: 0 20px 50px rgba(0,0,0,.16), 0 0 0 0.5px var(--line); outline: none; }
+  .stage:focus-visible { box-shadow: 0 20px 50px rgba(0,0,0,.16), 0 0 0 3px var(--blue-soft), 0 0 0 1px var(--blue); }
+  .bar { height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 14px; }
+  .lights { display: flex; gap: 7px; margin-right: 6px; }
+  .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; } .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+  .pill { height: 28px; border-radius: 14px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 12px; gap: 6px; white-space: nowrap; }
+  .tile { width: 16px; height: 16px; border-radius: 4px; background: #ff6482; color: #fff; font-size: 10px; display: grid; place-items: center; font-weight: 700; }
+  .progress { flex: 1; display: flex; gap: 4px; justify-content: center; align-items: center; min-width: 0; }
+  .progress i { width: 26px; height: 5px; border-radius: 3px; background: var(--line); transition: background .25s; }
+  .progress i.done { background: var(--secondary); } .progress i.now { background: var(--amber); } .progress i.later { background: transparent; box-shadow: inset 0 0 0 1px var(--secondary); }
+  .eta { color: var(--secondary); font-size: 12px; white-space: nowrap; }
+  .body { position: absolute; top: 48px; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; padding: 0 8px 8px; }
+  .queue { width: 280px; flex: none; background: var(--card); border-radius: 12px; padding: 10px; overflow: auto; display: none; }
+  .stage.split .queue { display: block; }
+  .qrow { display: flex; gap: 8px; align-items: center; padding: 7px 8px; border-radius: 7px; font-size: 12px; color: var(--secondary); }
+  .qrow.now { background: var(--group); color: var(--text); font-weight: 500; }
+  .qrow .st { width: 14px; text-align: center; flex: none; }
+  .qrow .t { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .qh { font-size: 10.5px; font-weight: 600; color: var(--tertiary); margin: 6px 8px 4px; }
+  .arena { flex: 1; position: relative; display: grid; place-items: center; min-width: 0; }
+
+  /* Cards */
+  .card { position: absolute; max-height: calc(100% - 24px); overflow: auto; width: min(660px, calc(100% - 40px)); background: var(--card); border-radius: 18px; box-shadow: var(--shadow); padding: 22px 24px 18px; transition: transform .32s cubic-bezier(.2,.8,.2,1), opacity .32s; }
+  .card.ghost { pointer-events: none; }
+  .stage.focus .card.ghost { display: none; }
+  .stage.split .card.ghost { display: none; }
+  .card.out-left { transform: translateX(-120%) rotate(-6deg); opacity: 0; }
+  .card.out-right { transform: translateX(120%) rotate(6deg); opacity: 0; }
+  .card.out-down { transform: translateY(80px) scale(.96); opacity: 0; }
+  .card.in { transform: translateY(24px) scale(.98); opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { .card, .progress i { transition: opacity .15s; } .card.out-left, .card.out-right, .card.out-down, .card.in { transform: none; } }
+  .crumb { display: flex; gap: 8px; align-items: center; color: var(--secondary); font-size: 12px; margin-bottom: 6px; }
+  .turn { display: inline-flex; align-items: center; gap: 5px; color: var(--amber); font-weight: 600; }
+  .turn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+  .kind { padding: 1px 7px; border-radius: 5px; background: var(--group); font-size: 11px; font-weight: 500; color: var(--secondary); }
+  .card h4 { font-size: 19px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .card .ask { color: var(--secondary); margin-bottom: 14px; }
+  .choices { display: grid; gap: 10px; }
+  .choices.two { grid-template-columns: 1fr 1fr; }
+  .choices.pick { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .choice { position: relative; border-radius: 12px; background: var(--group); padding: 12px 14px; cursor: pointer; box-shadow: inset 0 0 0 1px transparent; transition: box-shadow .12s, transform .12s; }
+  .choice:hover { box-shadow: inset 0 0 0 1px var(--line); }
+  .choice.hl { box-shadow: inset 0 0 0 2px var(--blue); }
+  .choice .top { display: flex; gap: 6px 8px; align-items: center; flex-wrap: wrap; }
+  .choice .k { font: 11px ui-monospace, Menlo, monospace; color: var(--secondary); background: var(--key); border-radius: 4px; padding: 0 5px; }
+  .choice .ttl { font-weight: 600; }
+  .choice .star { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--blue); white-space: nowrap; }
+  .gc { margin-top: 6px; display: grid; gap: 2px; font-size: 12px; }
+  .gc span::before { display: inline-block; width: 16px; color: var(--secondary); }
+  .gc .g::before { content: "+"; } .gc .c::before { content: "−"; }
+  .gc .c { color: var(--secondary); }
+  .sw { display: inline-block; flex: none; width: 22px; height: 22px; border-radius: 6px; vertical-align: middle; margin-right: 6px; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,.15); }
+  .why { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--blue-soft); font-size: 12.5px; }
+  .why b { color: var(--blue); }
+  .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
+  .diff div { background: var(--group); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; }
+  .diff .lbl { display: block; font-size: 11px; color: var(--secondary); font-weight: 600; margin-bottom: 4px; }
+  .files { font: 11.5px ui-monospace, Menlo, monospace; color: var(--secondary); background: var(--group); border-radius: 10px; padding: 8px 12px; margin-bottom: 4px; line-height: 1.6; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { border-radius: 999px; padding: 6px 12px; background: var(--group); cursor: pointer; box-shadow: inset 0 0 0 1px transparent; }
+  .chip:hover { box-shadow: inset 0 0 0 1px var(--line); } .chip.rec { box-shadow: inset 0 0 0 1.5px var(--blue); }
+  .thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px; }
+  .thumb { border-radius: 10px; background: var(--group); padding: 8px; font-size: 11px; color: var(--secondary); position: relative; }
+  .thumb.rec { box-shadow: inset 0 0 0 1.5px var(--blue); }
+  .thumb .mock { height: 54px; border-radius: 6px; background: var(--card); margin-bottom: 6px; display: grid; gap: 4px; padding: 6px; }
+  .thumb .mock i { display: block; height: 6px; border-radius: 3px; background: var(--line); }
+  .noteBox { display: none; margin-top: 10px; }
+  .noteBox.on { display: block; }
+  .noteBox textarea { width: 100%; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-height: 44px; resize: none; }
+  .actions { display: flex; gap: 8px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+  .act { font: inherit; border: 0; border-radius: 999px; padding: 6px 14px; background: var(--group); color: var(--text); cursor: pointer; box-shadow: inset 0 0 0 0.5px var(--line); display: inline-flex; gap: 6px; align-items: center; }
+  .act.prim { background: var(--blue); color: #fff; box-shadow: none; font-weight: 600; }
+  .act kbd { font: 10.5px ui-monospace, Menlo, monospace; opacity: .7; }
+  .costline { margin-left: auto; color: var(--secondary); font-size: 11.5px; }
+
+  .toast { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px); opacity: 0; transition: .25s; background: var(--glass); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.2), 0 0 0 0.5px rgba(0,0,0,.12); display: flex; gap: 12px; align-items: center; white-space: nowrap; font-size: 12.5px; z-index: 5; }
+  .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast .count { color: var(--secondary); font-variant-numeric: tabular-nums; }
+
+  .summary { text-align: center; max-width: 460px; }
+  .summary .big { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0; }
+  .stats div { background: var(--card); border-radius: 12px; padding: 12px; box-shadow: 0 0 0 0.5px var(--line); }
+  .stats b { display: block; font-size: 22px; }
+  .keys { margin-top: 10px; color: var(--secondary); font-size: 12px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .keys kbd { font: 11px ui-monospace, Menlo, monospace; background: var(--key); border-radius: 4px; padding: 1px 6px; color: var(--text); }
+
+  /* Mini sketches of the alternatives */
+  .mini { position: relative; height: 170px; border-radius: 10px; background: var(--win); overflow: hidden; margin-bottom: 10px; box-shadow: inset 0 0 0 0.5px var(--line); }
+  .mini .c { position: absolute; background: var(--card); border-radius: 10px; box-shadow: 0 6px 16px rgba(0,0,0,.12), 0 0 0 .5px var(--line); }
+  .mini .ln { height: 6px; border-radius: 3px; background: var(--group); margin: 8px 10px; }
+  .mini .side { position: absolute; left: 8px; top: 8px; bottom: 8px; width: 34%; background: var(--card); border-radius: 8px; }
+
+  /* Questions */
+  .qform { padding: 16px 0; border-top: 1px solid var(--row-line); }
+  .qform:first-child { border-top: 0; padding-top: 4px; }
+  .qform h3 .qn { color: var(--secondary); font-weight: 500; margin-right: 6px; }
+  .qform .qwhy { color: var(--secondary); margin-bottom: 10px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+  .opt { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--group); box-shadow: inset 0 0 0 1px transparent; cursor: pointer; }
+  .opt:hover { box-shadow: inset 0 0 0 1px var(--line); }
+  .opt.on { background: var(--blue-soft); box-shadow: inset 0 0 0 1.5px var(--blue); }
+  .opt .rec-tag { font-size: 10.5px; font-weight: 600; color: var(--blue); margin-left: 4px; }
+  .opt .d { color: var(--secondary); font-size: 12px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--field); flex: none; margin-top: 2px; }
+  .dot.on { border: 4px solid var(--blue); }
+  .qnote { width: 100%; margin-top: 8px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; resize: vertical; min-height: 34px; }
+  .code-line { font: 15px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; letter-spacing: .04em; background: var(--group); padding: 10px 14px; border-radius: 10px; user-select: all; }
+  @media (max-width: 760px) {
+    main { padding: 28px 16px 60px; }
+    .today, .diff, .choices.two, .choices.pick { grid-template-columns: 1fr; }
+    .stage { height: 720px; } .stage.split .queue { display: none; }
+    .card { padding: 16px; } .eta, .progress { display: none; } .thumbs { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Decide</h1>
+  <p class="lead">You asked for one place to go over everything that needs a decision from you: see this against that, with what each gains and costs, then accept, reject, add a note or send it back to refine. And make it fun. Below is what exists today, my proposal as a playable mockup, the alternatives, and the decisions I need from you. My recommendation is already selected in every question.</p>
+
+  <h2>What exists today</h2>
+  <div class="today">
+    <div class="note"><h3>The Desk already does part of it</h3><ul class="muted">
+      <li>It lists every ticket that is your turn, grouped: Your call, Needs answers, To verify, Draft.</li>
+      <li>J and K step through it, Return opens, P parks, A accepts the recommendation after a confirmation sheet (C5).</li>
+      <li>A side pane shows the ask, its size and Hatch's recommendation.</li>
+      <li>So it tells you <i>that</i> something waits. It does not let you decide it there.</li>
+    </ul></div>
+    <div class="note"><h3>Where you actually decide</h3>
+      <table class="map muted">
+        <tr><td>A Proposal's options</td><td>The Stage, its own app</td></tr>
+        <tr><td>A Question's options (PS16)</td><td>A banner on the ticket</td></tr>
+        <tr><td>Iris's rewrite, type change, duplicate</td><td>Iris review screen</td></tr>
+        <tr><td>Iris's questions</td><td>Answer cards on the ticket</td></tr>
+        <tr><td>Verifying built work</td><td>Previews</td></tr>
+        <tr><td>Approving an agent's plan (Bug, over 8 files)</td><td class="warn">Decided, no screen yet</td></tr>
+        <tr><td>Component conflicts (CO9 to CO12)</td><td class="warn">Not built</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>Proposal: a Decide session over the Desk</h2>
+  <p class="lead">The Desk stays the overview. A prominent <b>Decide · 6</b> button on the Desk (also a shortcut, a command palette action and a Go menu item) opens a full-window session over the same queue: one decision at a time, quick ones first, then the ones that need the Stage or a Preview. When you finish you are back on the Desk. Click into the window and play it with the keys, or use the buttons. Switch the layout to compare the alternatives.</p>
+  <div class="seg" id="layouts">
+    <button data-l="focus" class="on">A · Focus card (recommended)</button>
+    <button data-l="stack">B · Card stack</button>
+    <button data-l="split">C · Queue and card</button>
+  </div>
+  <div class="stage focus" id="stage" tabindex="0" aria-label="Decide session mockup. Use the keys shown under it.">
+    <div class="bar">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="pill"><span class="tile">E</span>Echo · Decide</div>
+      <div class="progress" id="progress"></div>
+      <div class="eta" id="eta"></div>
+      <div class="pill" style="cursor:pointer" id="done">Done</div>
+    </div>
+    <div class="body">
+      <div class="queue" id="queue"></div>
+      <div class="arena" id="arena"></div>
+    </div>
+    <div class="toast" id="toast"></div>
+  </div>
+  <div class="keys">
+    <span><kbd>↵</kbd> accept the recommendation</span><span><kbd>1</kbd>–<kbd>4</kbd> or <kbd>←</kbd><kbd>→</kbd> choose</span>
+    <span><kbd>N</kbd> note</span><span><kbd>R</kbd> send back to refine</span><span><kbd>Space</kbd> later</span><span><kbd>Z</kbd> undo</span>
+  </div>
+
+  <div class="grid3" style="margin-top:20px">
+    <div class="note"><h3>One card per kind of decision</h3><p class="muted">The same layout every time: what is asked, the choices with what each gains and costs, the recommendation with its reason, then the actions. This or that (side by side), pick one (1 to 4), yes or no (a plan, a rewrite), answer (suggested answers as chips), and "needs a sitting" for Proposals and verifying, which open the Stage or a Preview.</p></div>
+    <div class="note"><h3>Safe without sheets</h3><p class="muted">A confirmation sheet on every accept would kill the flow. Instead each decision waits ten seconds before Hatch acts, with Undo in the toast, and only then does an agent start. Each card says what accepting starts. Every move still goes through <code>HatchStore.move</code>; nothing new is stored.</p></div>
+    <div class="note"><h3>Fun, but quiet</h3><p class="muted">A time estimate at the start, one card at a time with a progress row, cards that slide away with a light trackpad tap, and a short summary at the end: how many you cleared, how often you agreed with the recommendation, how many agents started. Overruling a kind of recommendation often tells Hatch its recommendations need work. Reduce Motion turns the motion off.</p></div>
+  </div>
+
+  <h2>Alternatives I considered</h2>
+  <div class="grid3">
+    <div class="note rec"><span class="badge">Recommended</span>
+      <div class="mini"><div class="c" style="left:18%;right:18%;top:22px;bottom:22px"><div class="ln" style="width:40%"></div><div class="ln"></div><div class="ln" style="width:70%"></div></div></div>
+      <h3>A · Focus card</h3><p class="muted">One card in the middle of a calm window, progress at the top. Nothing else competes, every kind of card fits, and the keys are the same everywhere.</p></div>
+    <div class="note">
+      <div class="mini"><div class="c" style="left:24%;right:24%;top:30px;bottom:14px;opacity:.5;transform:scale(.92)"></div><div class="c" style="left:21%;right:21%;top:26px;bottom:18px;opacity:.75;transform:scale(.96)"></div><div class="c" style="left:18%;right:18%;top:22px;bottom:22px"><div class="ln" style="width:40%"></div><div class="ln"></div></div></div>
+      <h3>B · Card stack</h3><p class="muted">The next cards peek out behind, so you see the pile shrink. More game-like, but the stack suggests swiping yes or no, which does not fit "pick one of four".</p></div>
+    <div class="note">
+      <div class="mini"><div class="side"><div class="ln"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div></div><div class="c" style="left:40%;right:8px;top:8px;bottom:8px"><div class="ln" style="width:40%"></div><div class="ln"></div></div></div>
+      <h3>C · Queue and card</h3><p class="muted">The queue on the left, the card on the right. Closest to today's Desk and easy to jump around, but it is the Desk again with a bigger pane, and the list pulls your eye away from the decision.</p></div>
+  </div>
+
+  <h2>Decisions I need from you</h2>
+  <p class="lead">My recommendation is already selected. The line under the questions updates as you pick. Type it in chat (for example <code>1A 2A 3A …</code>), or just say "all recommended".</p>
+  <form id="answers" class="note" style="margin-top:12px"></form>
+  <p style="margin:16px 0 6px" class="muted">Your answers:</p>
+  <div class="code-line" id="code"></div>
+  <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+    <button class="btn" id="reset" type="button">Reset to recommendations</button>
+  </div>
+</main>
+<script>
+  // ---------- The deck: one sample decision of each kind ----------
+  const DECK = [
+    { id: 164, kind: 'two', type: 'Question', label: 'This or that', title: 'Where does the query history live?',
+      ask: 'The agent answered with two options. Choosing one records an architecture decision.',
+      options: [
+        { key: 'A', title: 'SQLite, next to the connections', gains: ['Searchable, one file to back up'], costs: ['A migration when the schema changes'] },
+        { key: 'B', title: 'One JSON file per day', gains: ['Easy to read and delete by hand'], costs: ['Slow to search past a few thousand queries'] } ],
+      rec: 'A', why: 'Echo already keeps connections in SQLite, and searching history is the main use. The migration is one table.', starts: 'Records a decision; no agent' },
+    { id: 171, kind: 'pick', type: 'Question', label: 'Pick one', title: 'Two values for Color.accent',
+      ask: 'Packages/EchoDesignSystem and Echo/Sources/Shared/DesignSystem both define it. Which one is right?',
+      options: [
+        { key: 'A', title: 'The package’s', sw: '#2B59C2', gains: ['Used 40 times', 'Matches the app icon'], costs: ['12 views change slightly'] },
+        { key: 'B', title: 'The folder’s', sw: '#3366CC', gains: ['Used 12 times'], costs: ['40 views change slightly'] },
+        { key: 'C', title: 'Keep both, rename the folder’s', sw: '#3366CC', gains: ['Nothing changes now'], costs: ['Two blues that look alike'] } ],
+      rec: 'A', why: 'Most views already use it and it is the one in the package that Proposals import.', starts: 'Adds the answer to “Move typed-in colors”' },
+    { id: 158, kind: 'yesno', type: 'Bug', label: 'Approve a plan', title: 'Connection list loses selection after sync',
+      ask: 'The agent plans to touch 11 files, over the limit of 8, so it waits for you.',
+      files: 'ConnectionList.swift · ConnectionStore.swift · SyncEngine.swift · SelectionState.swift (new)<br>+ 7 tests in ConnectionsTests',
+      options: [ { key: 'A', title: 'Approve the plan', gains: ['Keeps the selection by id, not by row'], costs: ['Touches the sync code'] },
+                 { key: 'B', title: 'Send it back', gains: ['A smaller fix first'], costs: ['The bug stays a little longer'] } ],
+      rec: 'A', why: 'Selecting by row is the cause; a smaller fix would hide it until the next sync change.', starts: 'Starts the agent · about 25 min' },
+    { id: 172, kind: 'rewrite', type: 'Draft', label: 'Iris suggests', title: 'Iris rewrote your draft',
+      ask: 'Your words are kept on the ticket either way.',
+      before: 'tabs act weird when u close the last one', after: 'Closing the last query tab leaves an empty editor with no tab selected. It should open a new empty tab.',
+      options: [ { key: 'A', title: 'Use the rewrite', gains: ['Clear for the agent'], costs: [] }, { key: 'B', title: 'Keep mine', gains: ['Your words'], costs: ['The agent may ask'] } ],
+      rec: 'A', why: 'It says what happens and what should happen, so the agent does not have to ask.', starts: 'Submits the ticket · Iris checks it' },
+    { id: 173, kind: 'answer', type: 'Tweak', label: 'Iris asks', title: 'Export to CSV',
+      ask: 'Should the export include hidden columns?',
+      chips: [ ['A', 'No, only what is shown'], ['B', 'Yes, all columns'], ['C', 'Ask each time'] ],
+      options: [ { key: 'A', title: 'No, only what is shown' }, { key: 'B', title: 'Yes, all columns' }, { key: 'C', title: 'Ask each time' } ],
+      rec: 'A', why: 'An export usually means “what I see”; hiding a column is a choice you already made.', starts: 'Last open question · the ticket becomes Ready' },
+    { id: 151, kind: 'sitting', type: 'Proposal', label: 'Needs a sitting', title: 'Server cards: compact or roomy?',
+      ask: 'Three options with live specimens. Judge them in the Stage, or accept the recommended preset.',
+      thumbs: [ ['Echo today', false], ['Compact', true], ['Roomy', false] ],
+      options: [ { key: 'A', title: 'Accept “Compact”' }, { key: 'B', title: 'Open the Stage' } ],
+      rec: 'A', why: 'Compact fits eight servers without scrolling and keeps the status readable; Roomy needs a second column on small windows.', starts: 'Starts the build · about 40 min' },
+  ];
+  const MIN = { two: 1, pick: 1, yesno: 1, rewrite: .5, answer: .5, sitting: 2 };
+
+  // ---------- Session state ----------
+  let order, results, at, highlight, noteOpen, timer, history, lastLeave;
+  function reset() {
+    order = DECK.map((_, i) => i); results = {}; at = 0; highlight = null; noteOpen = false; history = []; lastLeave = 'out-left';
+    hideToast(); render(true);
+  }
+  const stage = document.getElementById('stage'), arena = document.getElementById('arena');
+  const current = () => at < order.length ? DECK[order[at]] : null;
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+  function optionHTML(d, o, i) {
+    const gc = (o.gains || []).map(g => `<span class="g">${esc(g)}</span>`).join('') + (o.costs || []).map(c => `<span class="c">${esc(c)}</span>`).join('');
+    return `<div class="choice ${highlight === o.key ? 'hl' : ''}" data-k="${o.key}">
+      <div class="top"><span class="k">${i + 1}</span>${o.sw ? `<span class="sw" style="background:${o.sw}"></span>` : ''}<span class="ttl">${esc(o.title)}</span>${o.key === d.rec ? '<span class="star">★ Recommended</span>' : ''}</div>
+      ${gc ? `<div class="gc">${gc}</div>` : ''}</div>`;
+  }
+  function cardHTML(d, ghost) {
+    let middle = '';
+    if (d.kind === 'two' || d.kind === 'pick' || d.kind === 'yesno') {
+      if (d.files) middle += `<div class="files">${d.files}</div>`;
+      middle += `<div class="choices ${d.kind !== 'pick' ? 'two' : 'pick'}">${d.options.map((o, i) => optionHTML(d, o, i)).join('')}</div>`;
+    } else if (d.kind === 'rewrite') {
+      middle = `<div class="diff"><div><span class="lbl">Yours</span>${esc(d.before)}</div><div><span class="lbl">Iris’s rewrite</span>${esc(d.after)}</div></div>
+        <div class="choices two">${d.options.map((o, i) => optionHTML(d, o, i)).join('')}</div>`;
+    } else if (d.kind === 'answer') {
+      middle = `<div class="chips">${d.chips.map(([k, t], i) => `<span class="chip ${k === d.rec ? 'rec' : ''} ${highlight === k ? 'rec' : ''}" data-k="${k}">${i + 1} · ${esc(t)}${k === d.rec ? ' ★' : ''}</span>`).join('')}</div>`;
+    } else if (d.kind === 'sitting') {
+      middle = `<div class="thumbs">${d.thumbs.map(([t, r]) => `<div class="thumb ${r ? 'rec' : ''}"><div class="mock"><i style="width:70%"></i><i></i><i style="width:50%"></i></div>${esc(t)}${r ? ' · ★ Recommended' : ''}</div>`).join('')}</div>`;
+    }
+    const sitting = d.kind === 'sitting';
+    return `<div class="card ${ghost ? 'ghost' : ''}">
+      <div class="crumb"><span class="turn">Your turn</span><span>#${d.id} · ${d.type}</span><span class="kind">${d.label}</span></div>
+      <h4>${esc(d.title)}</h4><div class="ask">${esc(d.ask)}</div>
+      ${middle}
+      <div class="why"><b>★ Recommended: ${esc(d.options.find(o => o.key === d.rec).title)}.</b> ${esc(d.why)}</div>
+      <div class="noteBox ${noteOpen && !ghost ? 'on' : ''}"><textarea placeholder="Note for the agent. Return sends it back to refine with this note; Esc closes."></textarea></div>
+      <div class="actions">
+        <button class="act prim" data-a="accept">${sitting ? 'Accept “Compact”' : 'Accept recommendation'} <kbd>↵</kbd></button>
+        ${sitting ? '<button class="act" data-a="stage">Open the Stage</button>' : ''}
+        <button class="act" data-a="note">Note <kbd>N</kbd></button>
+        <button class="act" data-a="refine">Refine <kbd>R</kbd></button>
+        <button class="act" data-a="later">Later <kbd>␣</kbd></button>
+        <span class="costline">${esc(d.starts)}</span>
+      </div></div>`;
+  }
+
+  function render(enter) {
+    const layout = stage.className.match(/focus|stack|split/)[0];
+    const d = current();
+    // progress
+    document.getElementById('progress').innerHTML = DECK.map((_, i) => {
+      const r = results[DECK[i].id]; const isNow = d && DECK.indexOf(d) === i;
+      return `<i class="${isNow ? 'now' : r ? (r.kind === 'later' ? 'later' : 'done') : ''}"></i>`;
+    }).join('');
+    const left = order.slice(at).reduce((m, i) => m + MIN[DECK[i].kind], 0);
+    document.getElementById('eta').textContent = d ? `${order.length - at} left · about ${Math.max(1, Math.round(left))} min` : 'All clear';
+    // queue (layout C)
+    const quick = DECK.filter(x => x.kind !== 'sitting'), sit = DECK.filter(x => x.kind === 'sitting');
+    const row = x => { const r = results[x.id]; const now = d && d.id === x.id;
+      return `<div class="qrow ${now ? 'now' : ''}"><span class="st">${r ? (r.kind === 'later' ? '↷' : '✓') : now ? '●' : '○'}</span><span class="t">#${x.id} ${esc(x.title)}</span></div>`; };
+    document.getElementById('queue').innerHTML = `<div class="qh">Quick</div>${quick.map(row).join('')}<div class="qh">Needs a sitting</div>${sit.map(row).join('')}`;
+    // arena
+    if (!d) { arena.innerHTML = summaryHTML(); bindSummary(); return; }
+    let html = '';
+    if (layout === 'stack') {
+      [2, 1].forEach(n => { const g = order[at + n]; if (g !== undefined) html += cardHTML(DECK[g], true).replace('class="card ghost"', `class="card ghost" style="transform: translateY(${n * 14}px) scale(${1 - n * .04}); opacity:${1 - n * .3}"`); });
+    }
+    html += cardHTML(d, false);
+    arena.innerHTML = html;
+    const card = arena.querySelector('.card:not(.ghost)');
+    if (enter) { card.classList.add('in'); setTimeout(() => card.classList.remove('in'), 30); }
+    card.querySelectorAll('[data-k]').forEach(el => el.addEventListener('click', () => decide(el.dataset.k)));
+    card.querySelectorAll('[data-a]').forEach(el => el.addEventListener('click', () => action(el.dataset.a)));
+    const ta = card.querySelector('textarea');
+    if (noteOpen) { setTimeout(() => ta.focus(), 30); }
+    ta.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Escape') { noteOpen = false; render(false); stage.focus(); }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); record('refine', null, ta.value.trim()); }
+    });
+  }
+
+  function summaryHTML() {
+    const rs = Object.values(results);
+    const decided = rs.filter(r => r.kind === 'choice');
+    const agreed = decided.filter(r => r.agreed).length, own = decided.length - agreed;
+    const refined = rs.filter(r => r.kind === 'refine').length, later = rs.filter(r => r.kind === 'later').length;
+    const agents = decided.filter(r => r.agreed !== undefined && r.starts && /Starts/.test(r.starts)).length + refined;
+    return `<div class="summary"><div class="big">${later ? 'Done for now' : 'Desk cleared'}</div>
+      <p class="muted">${decided.length + refined} decided${later ? `, ${later} left for later` : ''}. ${agents} agent${agents === 1 ? '' : 's'} started; the rest was bookkeeping.</p>
+      <div class="stats"><div><b>${agreed}</b>agreed with the recommendation</div><div><b>${own}</b>your own call</div><div><b>${refined}</b>sent back to refine</div></div>
+      <p class="muted small">Cleared the Desk 4 days in a row.</p>
+      <div class="actions" style="justify-content:center"><button class="act prim" id="toDesk">Back to the Desk</button><button class="act" id="again">Play it again</button></div></div>`;
+  }
+  function bindSummary() {
+    document.getElementById('again').addEventListener('click', () => { reset(); stage.focus(); });
+    document.getElementById('toDesk').addEventListener('click', () => { reset(); stage.focus(); });
+  }
+
+  // ---------- Actions ----------
+  function decide(key) {
+    const d = current(); if (!d) return;
+    if (d.kind === 'sitting' && key === 'B') { toast('Opens the Stage for #151. The card waits until you return.', false); return; }
+    record('choice', key);
+  }
+  function action(a) {
+    const d = current(); if (!d) return;
+    if (a === 'accept') decide(d.rec);
+    else if (a === 'stage') decide('B');
+    else if (a === 'note') { noteOpen = !noteOpen; render(false); }
+    else if (a === 'refine') { if (!noteOpen) { noteOpen = true; render(false); } else record('refine', null, arena.querySelector('textarea').value.trim()); }
+    else if (a === 'later') record('later');
+  }
+  function record(kind, key, note) {
+    const d = current(); if (!d) return;
+    clearTimeout(timer);
+    results[d.id] = { kind, key, note, agreed: kind === 'choice' ? key === d.rec : undefined, starts: d.starts };
+    history.push({ id: d.id, at, order: order.slice() });
+    if (kind === 'later') order.push(order[at]);
+    const card = arena.querySelector('.card:not(.ghost)');
+    lastLeave = kind === 'later' ? 'out-down' : (key && key !== d.rec ? 'out-right' : 'out-left');
+    card.classList.add(lastLeave);
+    noteOpen = false; highlight = null;
+    const name = kind === 'choice' ? d.options.find(o => o.key === key).title : kind === 'refine' ? 'sent back to refine' : 'left for later';
+    setTimeout(() => { at++; render(true); }, 220);
+    if (kind === 'later') toast(`#${d.id} left for later. It comes back at the end.`, true);
+    else toast(`#${d.id} · ${name}.`, true, /Starts/.test(d.starts) || kind === 'refine');
+  }
+  function undo() {
+    const h = history.pop(); if (!h) return;
+    delete results[h.id]; order = h.order; at = h.at; noteOpen = false; hideToast(); render(true);
+  }
+
+  // ---------- Toast with the undo window ----------
+  const toastEl = document.getElementById('toast');
+  function toast(text, canUndo, startsAgent) {
+    clearInterval(timer);
+    let n = 10;
+    const paint = () => { toastEl.innerHTML = `<span>${esc(text)}</span>${startsAgent ? `<span class="count">Agent starts in ${n} s</span>` : ''}${canUndo ? '<button class="act" id="undoBtn">Undo <kbd>Z</kbd></button>' : ''}`;
+      const b = document.getElementById('undoBtn'); if (b) b.addEventListener('click', () => { undo(); stage.focus(); }); };
+    paint(); toastEl.classList.add('on');
+    timer = setInterval(() => { n--; if (n <= 0) { clearInterval(timer); hideToast(); } else if (startsAgent) paint(); }, 1000);
+  }
+  function hideToast() { clearInterval(timer); toastEl.classList.remove('on'); }
+
+  // ---------- Keys ----------
+  stage.addEventListener('keydown', e => {
+    const d = current();
+    if (e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+    if (!d) return;
+    const keys = d.options.map(o => o.key);
+    if (e.key === 'Enter') { e.preventDefault(); highlight ? decide(highlight) : decide(d.rec); }
+    else if (/^[1-4]$/.test(e.key)) { const k = keys[+e.key - 1]; if (k) { e.preventDefault(); decide(k); } }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault(); const i = highlight ? keys.indexOf(highlight) : keys.indexOf(d.rec);
+      highlight = keys[(i + (e.key === 'ArrowRight' ? 1 : keys.length - 1)) % keys.length]; render(false);
+    }
+    else if (e.key.toLowerCase() === 'n') { e.preventDefault(); action('note'); }
+    else if (e.key.toLowerCase() === 'r') { e.preventDefault(); action('refine'); }
+    else if (e.key === ' ') { e.preventDefault(); action('later'); }
+  });
+  document.getElementById('done').addEventListener('click', () => { at = order.length; render(false); });
+  document.querySelectorAll('#layouts button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#layouts button').forEach(x => x.classList.toggle('on', x === b));
+    stage.className = 'stage ' + b.dataset.l; render(false); stage.focus();
+  }));
+  reset();
+
+  // ---------- Questions ----------
+  const QUESTIONS = [
+    { id: 'where', title: 'Where it lives', why: 'One queue shown two ways cannot disagree. A second list of “things waiting for me” next to the Desk would, sooner or later.', rec: 'A', options: [
+      ['A', 'A Decide session started from the Desk', 'Button, shortcut, palette and Go menu; ends on the Desk'],
+      ['B', 'Its own page in the sidebar', '“Decide” under Work, next to the Desk'],
+      ['C', 'A better Desk only', 'Decide inside the Desk’s side pane'] ] },
+    { id: 'look', title: 'How it looks', why: 'A single card keeps your attention on one decision, fits every kind of card, and keeps the keys the same everywhere.', rec: 'A', options: [
+      ['A', 'Focus card', 'One card, progress at the top'],
+      ['B', 'Card stack', 'The next cards peek out behind'],
+      ['C', 'Queue and card', 'The list on the left, the card on the right'] ] },
+    { id: 'what', title: 'What a session holds', why: 'Quick decisions first keep the flow going; Proposals and verifying need the Stage or a Preview, so they come last and can be accepted or opened from there.', rec: 'A', options: [
+      ['A', 'Everything that is your turn, quick ones first', 'Proposals and verifying at the end'],
+      ['B', 'Quick decisions only', 'Proposals and verifying stay on the Desk'],
+      ['C', 'Everything, in Desk order', 'Oldest first, whatever it is'] ] },
+    { id: 'safety', title: 'Safety', why: 'A sheet on every accept kills the flow. A ten-second undo before Hatch acts is as safe: no agent starts until it has passed. This would replace C5’s confirmation sheet inside a session only.', rec: 'A', options: [
+      ['A', 'Undo window, then Hatch acts', 'Ten seconds; agents start after it'],
+      ['B', 'Confirmation sheet per accept', 'As the Desk does today (C5)'],
+      ['C', 'Collect, send all at the end', 'Nothing happens until you finish'] ] },
+    { id: 'pros', title: 'Gains and costs per option', why: 'Options carry a title and what they cost today, not what they gain. One line of each makes “this or that” a real comparison, for a few tokens per option.', rec: 'A', options: [
+      ['A', 'Required: one gain and one cost per option', 'For Questions and Proposals; the quality gate checks it'],
+      ['B', 'Use what is there', 'Title and cost only'] ] },
+    { id: 'game', title: 'How game-like', why: 'Progress, an estimate and a short summary make it feel good to clear the Desk without turning work into points. The agreement rate is useful to Hatch too.', rec: 'A', options: [
+      ['A', 'Light', 'Estimate, progress, summary, a Desk-cleared streak'],
+      ['B', 'More', 'Also points, levels and badges'],
+      ['C', 'None', 'Just the cards'] ] },
+    { id: 'feel', title: 'Sound and haptics', why: 'A light trackpad tap when a card is decided is felt, not heard, and costs nothing in an office. Sound is easy to add later.', rec: 'A', options: [
+      ['A', 'Trackpad tap on, sound off', 'Both can be changed in Settings'],
+      ['B', 'Both off', 'Motion only'],
+      ['C', 'Both on', 'A soft click per decision'] ] },
+    { id: 'plan', title: 'Approving an agent’s plan', why: 'It is decided but has no screen. It is a yes or no with a file list, which is exactly a card.', rec: 'A', options: [
+      ['A', 'A card here, and on the ticket', 'Approve or send back with a note'],
+      ['B', 'On the ticket only', 'Open the ticket to approve'] ] },
+    { id: 'conflicts', title: 'Component conflicts', why: 'They are Question tickets (CO11), so they join the session with no special code. The Components page shows how many wait and starts a session with only those.', rec: 'A', options: [
+      ['A', 'Questions in the session; a count on the Components page', '“2 waiting” opens Decide, filtered'],
+      ['B', 'A “Needs a decision” list on the Components page', 'Decided there, not in the session'] ] },
+  ];
+  const KEY = 'hatch.decideAnswers1';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  const form = document.getElementById('answers');
+  function renderQ() {
+    form.innerHTML = '';
+    QUESTIONS.forEach((q, n) => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const box = document.createElement('div');
+      box.className = 'qform';
+      box.innerHTML = `<h3><span class="qn">${n + 1}</span>${q.title}</h3><div class="qwhy">Why I recommend it: ${q.why}</div><div class="opts"></div><textarea class="qnote" rows="1" placeholder="Note (optional)"></textarea>`;
+      const opts = box.querySelector('.opts');
+      q.options.forEach(([value, label, detail]) => {
+        const o = document.createElement('label');
+        o.className = 'opt' + (a.choice === value ? ' on' : '');
+        o.innerHTML = `<span class="dot ${a.choice === value ? 'on' : ''}"></span><span><b>${value} · ${label}</b>${value === q.rec ? '<span class="rec-tag">Recommended</span>' : ''}<br><span class="d">${detail}</span></span>`;
+        o.addEventListener('click', e => { e.preventDefault(); saved[q.id] = { choice: value, note: box.querySelector('.qnote').value }; store(); renderQ(); });
+        opts.appendChild(o);
+      });
+      const note = box.querySelector('.qnote');
+      note.value = a.note || '';
+      note.addEventListener('input', () => { saved[q.id] = { choice: (saved[q.id] || a).choice, note: note.value }; store(); code(); });
+      form.appendChild(box);
+    });
+    code();
+  }
+  function code() {
+    const parts = QUESTIONS.map((q, n) => (n + 1) + (saved[q.id] || { choice: q.rec }).choice);
+    const allRec = QUESTIONS.every(q => (saved[q.id] || { choice: q.rec }).choice === q.rec);
+    const notes = QUESTIONS.map((q, n) => saved[q.id] && saved[q.id].note ? `${n + 1}: ${saved[q.id].note}` : null).filter(Boolean);
+    document.getElementById('code').textContent = (allRec ? 'All recommended — ' : '') + parts.join(' ') + (notes.length ? '  · notes: ' + notes.join('; ') : '');
+  }
+  function store() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} }
+  window.hatchAnswers = () => document.getElementById('code').textContent;
+  document.getElementById('reset').addEventListener('click', () => { saved = {}; store(); renderQ(); });
+  renderQ();
+</script>
+</body>
+</html>

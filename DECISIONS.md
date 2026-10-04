@@ -1396,3 +1396,19 @@ A project may have chosen Not now, or have its components in a plain folder of t
 **My recommendation and reason:** A. Files in an app folder usually depend on the rest of the app and would not compile alone; the honest banner tells the owner what they are judging. Moving the folder into a package is a ticket like any other (CO8).
 
 Risk for all of these: the components are compiled once per base commit and cached. That is quick for a small package; time it on Echo's package before relying on it.
+
+## V. Decide: one place for everything that needs the owner (open, asked 2026-10-04, ids DC1 to DC9)
+
+Concept page with a playable mockup: `design-review/decide-concepts.html`. Not answered yet and not built. The owner asked for one place to go over everything that needs a decision, with this against that, gains and costs, accept, reject, note or refine, and to make it fun. Today the Desk lists what waits, but the deciding happens in five other places (the Stage, the ticket's Question banner, Iris review, answer cards, Previews), plan approval has no screen, and component conflicts (CO9 to CO13) have none either.
+
+| Id | Question | My recommendation (open) | Reason |
+|---|---|---|---|
+| DC1 | Where it lives | A Decide session started from the Desk (button, shortcut, command palette, Go menu); it ends back on the Desk. Not its own sidebar page, not only a better Desk pane. | One queue shown two ways cannot disagree; a second "waiting for me" list would. |
+| DC2 | How it looks | A focus card: one card in a calm window, progress at the top. Not a card stack, not queue and card. | Keeps attention on one decision, fits every kind of card, same keys everywhere. A stack suggests swiping yes or no, which does not fit "pick one of four". |
+| DC3 | What a session holds | Everything that is the owner's turn, quick decisions first; Proposals and verifying at the end, accepted from the card or opened in the Stage or a Preview. | Quick ones keep the flow; the live ones need the Stage or a Preview, which Hatch cannot draw. |
+| DC4 | Safety | A ten-second undo before Hatch acts; agents start only after it. Replaces C5's confirmation sheet inside a session only. | A sheet per accept kills the flow; an undo window is as safe because nothing starts until it has passed. |
+| DC5 | Gains and costs per option | Required: one gain and one cost per option for Questions and Proposals, checked by the quality gate. | Options carry a title and a cost today, not a gain; a few tokens per option make "this or that" a real comparison. |
+| DC6 | How game-like | Light: a time estimate, progress, a summary (cleared, agreed with the recommendation, own call, agents started) and a Desk-cleared streak. No points or badges. | Feels good to clear without turning work into points; the agreement rate tells Hatch where its recommendations need work. |
+| DC7 | Sound and haptics | Trackpad tap on, sound off; both in Settings. | Felt, not heard. |
+| DC8 | Approving an agent's plan | A card in the session, and on the ticket. | Decided but has no screen; it is a yes or no with a file list. |
+| DC9 | Component conflicts | Question tickets in the session (CO11); the Components page shows how many wait and opens a session with only those. Not a list decided on the Components page. | No special code, and one place to decide. |
