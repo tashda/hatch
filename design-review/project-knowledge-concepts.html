@@ -141,57 +141,68 @@
     <p><b>1. Decisions exist only on this Mac.</b> They are rows in the local database. A new Mac, a reset or a second person loses the "why" behind every choice. Agents can't read them either.</p>
     <p><b>2. Architecture and coding decisions have no home.</b> A Decision is only created when you accept a visual Proposal. "We use actors for connections" or "no Combine in new code" is recorded nowhere that agents read.</p>
     <p><b>3. Agent guidance is one flat list of files.</b> A Build agent and a Prepare agent get the same docs, and there's no place for "how we write code in Echo" beyond <code>CLAUDE.md</code>.</p>
-    <p style="margin:0"><b>4. The setup leaves agents without folders.</b> Build tasks also work in the design system repository and Prepare tasks in the specimens repository, and both need a clone on this Mac. The assistant sets neither, so <code>hatch take</code> would say "no local clone configured". I'll fix this in any case.</p>
+    <p><b>4. Hatch's database is the only record of a lot.</b> Picks, the state of Proposals and where work stands all live in it. Without Hatch, nothing tells an agent where you were.</p>
+    <p style="margin:0"><b>5. The setup leaves agents without folders.</b> Build tasks also work in the design system repository and Prepare tasks in the specimens repository, and both need a clone on this Mac. The assistant sets neither, so <code>hatch take</code> would say "no local clone configured". I'll fix this in any case.</p>
   </div>
 
-  <h2>Proposal: one project notebook</h2>
-  <p class="lead">One private repository per project that holds what Hatch and you decide, as plain files that you, agents and git can read: <code>echo-hatch</code>. Hatch creates it during setup, keeps a clone on this Mac, and is the only one that writes to it, except for the option code agents put in <code>specimens/</code>.</p>
+  <h2>The test it has to pass</h2>
+  <div class="note rec" style="margin-top:12px">
+    <p><b>April 2027.</b> Hatch is gone or you're on another machine. You clone <code>echo-notebook</code> next to the app, open any agent (Claude Code, Codex, Cursor) and say "pick up where we left off". With nothing else, the agent must be able to answer:</p>
+    <p class="muted" style="margin:0">What is this project, and where is its code? · What's in flight, what's waiting for me, what's next? · What did we decide, and why? · How do we work: branches, reviews, shipping? · What did we try and reject? · How do I continue a half-done Proposal?</p>
+  </div>
+  <p class="lead" style="margin-top:12px">That gives the rule everything below follows: <b>nothing that matters lives only in Hatch.</b> Hatch's database becomes a fast cache. The truth is plain files in git (the notebook and the app repository) and GitHub issues. Hatch writes those files for you, so keeping them current costs you nothing.</p>
+
+  <h2>Proposal: a notebook per project, plus AGENTS.md in the app</h2>
   <div class="grid2" style="margin-top:16px">
-    <div class="note" style="font: 12px/1.7 ui-monospace, Menlo, monospace">
-      tashda/echo-hatch<br>
+    <div class="note" style="font: 12px/1.75 ui-monospace, Menlo, monospace">
+      <b>tashda/echo-notebook</b> <span class="muted">private</span><br>
+      ├─ README.md <span class="muted">what Echo is, its repositories, how to start</span><br>
+      ├─ AGENTS.md <span class="muted">for any agent: read this first</span><br>
+      ├─ WORKFLOW.md <span class="muted">how work flows, with or without Hatch</span><br>
+      ├─ NOW.md <span class="muted">in flight, waiting for you, next up</span><br>
       ├─ decisions/<br>
-      │&nbsp;&nbsp;├─ 0151-toast-spacing.md <span class="muted">design</span><br>
-      │&nbsp;&nbsp;├─ 0163-connection-actors.md <span class="muted">architecture</span><br>
-      │&nbsp;&nbsp;└─ 0170-no-full-suite.md <span class="muted">workflow</span><br>
-      ├─ guides/<br>
-      │&nbsp;&nbsp;├─ code.md <span class="muted">how we write code here</span><br>
-      │&nbsp;&nbsp;├─ design.md <span class="muted">visual rules for options</span><br>
-      │&nbsp;&nbsp;└─ review.md <span class="muted">what Iris checks for</span><br>
+      │&nbsp;&nbsp;├─ README.md <span class="muted">index by area and kind</span><br>
+      │&nbsp;&nbsp;├─ 0151-toast-spacing.md<br>
+      │&nbsp;&nbsp;└─ 0163-connection-actors.md<br>
       └─ specimens/<br>
       &nbsp;&nbsp;&nbsp;├─ Today/ <span class="muted">Echo as it is now</span><br>
-      &nbsp;&nbsp;&nbsp;└─ 0151/ <span class="muted">one folder per Proposal</span>
+      &nbsp;&nbsp;&nbsp;└─ 0151/ <span class="muted">options + README of what was chosen</span><br><br>
+      <b>tashda/echo</b> <span class="muted">the app, as today</span><br>
+      ├─ AGENTS.md <span class="muted">how we write code here (CLAUDE.md points to it)</span><br>
+      └─ .hatch/<br>
+      &nbsp;&nbsp;&nbsp;├─ project.json <span class="muted">settings, area index</span><br>
+      &nbsp;&nbsp;&nbsp;└─ spec/ <span class="muted">what the app does, by area</span>
     </div>
-    <div class="note">
-      <h3>A decision file</h3>
-      <div style="font: 12px/1.6 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: var(--secondary)">---
-ticket: 151
-kind: design
-spec: [TOAST-3]
-decided: 2026-10-04
----
-# Toast spacing
-Chose B, 12pt between icon and text.
-Why: A felt cramped at large type; C wasted width.
-Options: A 8pt, B 12pt, C 16pt.</div>
-      <p class="muted small" style="margin-top:8px">Indexed for search like the Spec. Iris checks new tickets against it ("#151 already decided this").</p>
+    <div>
+      <div class="note" style="margin-bottom:12px"><h3>Why coding rules go in the app, not the notebook</h3><p class="muted" style="margin:0">Agents read <code>AGENTS.md</code> in the repository they work in. Codex, Cursor and others read it directly, and Claude Code reads <code>CLAUDE.md</code>, which can point to it. An agent fixing a bug in Echo never opens the notebook, so "no Combine in new code" has to sit next to the code, or a non-Hatch agent breaks it.</p></div>
+      <div class="note"><h3>Why the rest goes in the notebook</h3><p class="muted" style="margin:0">Decisions, work in flight and specimens are about the project, not the code. Kept in the app repository they'd clutter its history and pull requests. Kept on this Mac they'd fail the test.</p></div>
     </div>
+  </div>
+
+  <h2>What each file holds, and who writes it</h2>
+  <div class="note" style="margin-top:12px">
+    <p><b>README.md:</b> the project in a paragraph, links to the app, components and tickets repositories, and "clone these, read AGENTS.md". Written at setup, updated when repositories change.</p>
+    <p><b>AGENTS.md (notebook):</b> the order to read things in, what each file is for, and the rule that Hatch's commands are used when Hatch is running and <code>WORKFLOW.md</code> is followed when it isn't.</p>
+    <p><b>WORKFLOW.md:</b> the process Hatch enforces, in words. A ticket per change, a <code>ticket/151-…</code> branch, plan before big changes, build before review, merge into <code>hatch</code>, a pull request to <code>dev</code>, Spec updated before Done. Generated from the same rules Hatch runs, so the two never disagree.</p>
+    <p><b>NOW.md:</b> the open tickets grouped by turn (waiting for you, agents working, queued), each with one line on where it stands, plus the last ten decisions. Refreshed by Hatch on every status change. GitHub issues still hold the full text.</p>
+    <p><b>decisions/:</b> one file per decision in the common ADR shape (context, options, decision, why, consequences), with ticket, kind, area and Spec IDs at the top. Written when a Proposal, Sketch or Question is decided, and never edited afterwards. A later decision says which one it replaces.</p>
+    <p style="margin:0"><b>specimens/:</b> each Proposal's option code, with a short README of what was compared and what won. Rejected options stay, so "what did we try" has an answer.</p>
   </div>
 
   <h2>What should not go in the notebook</h2>
   <div class="note" style="margin-top:12px">
-    <p><b>The Spec stays in the app repository.</b> It describes what the code does and must change in the same pull request as the code. A ticket can't be Done until its Spec is updated.</p>
-    <p><b>The components package stays its own, versioned thing.</b> The app depends on a tagged version of it. Folding it into the notebook would make the app depend on Hatch's files.</p>
-    <p><b>Tickets, threads and screenshots stay in the tickets repository.</b> Issues need it, and it's shared across projects.</p>
-    <p><b>Live state stays in Hatch's database:</b> picks in progress, claims, agent runs, token costs and the log. They change every minute and are only useful on this Mac. Only the final decision is written to the notebook.</p>
-    <p style="margin:0"><b>Hatch's own rules stay in Hatch's code.</b> The procedure for each task (take, plan, ready) is enforced by the app, not written in a guide an agent might skip. Guides add project knowledge on top.</p>
+    <p><b>The Spec stays in the app repository.</b> It describes what the code does and changes in the same pull request as the code.</p>
+    <p><b>Coding rules stay in the app's AGENTS.md</b>, for the reason above.</p>
+    <p><b>The components package stays its own, versioned repository.</b> The app depends on a tagged version of it.</p>
+    <p><b>Full ticket text, threads and screenshots stay in GitHub issues.</b> NOW.md is a summary, not a second copy that could disagree.</p>
+    <p style="margin:0"><b>Live and noisy state stays in Hatch's database:</b> picks in progress, claims, agent runs, token costs and the log. None of it is needed to pick up again.</p>
   </div>
 
-  <h2>How the workflow changes</h2>
-  <div class="grid2" style="margin-top:12px">
-    <div class="note"><h3>Deciding</h3><p class="muted">Every decided Proposal, Sketch or Question writes a decision file of kind design, architecture or workflow. A Question can carry options A/B/C with a recommendation, like this page, so architecture choices are made the same way as visual ones. There are still six ticket types.</p></div>
-    <div class="note"><h3>Briefing agents</h3><p class="muted"><code>hatch take</code> gives each task its guides (Build and Fix get <code>code.md</code>, Prepare gets <code>design.md</code>) and the decisions for the ticket's area. That replaces the flat docs list.</p></div>
-    <div class="note"><h3>Vetting</h3><p class="muted">Iris already compares new tickets with other tickets and the Spec. She also compares them with decisions, and flags a ticket that would undo one.</p></div>
-    <div class="note"><h3>Setup</h3><p class="muted">The assistant gets a <b>Notebook</b> step (Hatch creates <code>echo-hatch</code>, private), and the components step finds or clones its folder too. Specimens is no longer a separate repository.</p></div>
+  <h2>Is this the best way to work?</h2>
+  <div class="grid3" style="margin-top:12px">
+    <div class="note"><h3>For agents</h3><p class="muted">Each agent reads the AGENTS.md where it works, and Hatch's brief adds the ticket, the area's decisions and Spec. The context is short and on point (the cost rule), with no long list of docs to read.</p></div>
+    <div class="note"><h3>For shipping</h3><p class="muted">Nothing changes in the path to dev: ticket branch, <code>hatch</code>, CI, pull request. Decisions are written as a side effect of deciding, so there's never a documentation chore before a release.</p></div>
+    <div class="note"><h3>For picking up later</h3><p class="muted">Two clones and one sentence to any agent. Everything is plain Markdown and Swift in git. No database, no app and no special format is needed to read it.</p></div>
   </div>
 
   <h2>Decisions I need from you</h2>
@@ -205,30 +216,33 @@ Options: A 8pt, B 12pt, C 16pt.</div>
 </main>
 <script>
   const QUESTIONS = [
-    { id: 'notebook', title: 'A notebook repository per project for decisions, guides and specimens?', why: 'Decisions stop living only on this Mac, and agents and Iris can read them.', rec: 'yes', options: [
-      ['yes', 'Yes, one notebook per project', 'Hatch creates it during setup'],
-      ['app', 'Put it in the app repository instead', 'A .hatch/ folder next to the Spec; no new repository'],
-      ['no', 'No, keep things as they are', 'Decisions stay in the local database'] ] },
-    { id: 'notebookName', title: 'What to call the notebook', why: 'It says what it is in Hatch, and the repository name says whose it is.', rec: 'notebook', options: [
-      ['notebook', 'Notebook (repository echo-hatch)', 'Plain: where the project writes things down'],
-      ['knowledge', 'Knowledge (echo-knowledge)', 'Says what is in it, a bit formal'],
-      ['studio', 'Studio (echo-studio)', 'Fits design work, less so code decisions'] ] },
+    { id: 'notebook', title: 'A notebook repository per project?', why: 'It passes the April 2027 test without cluttering the app. Hatch writes it, so it never goes stale.', rec: 'yes', options: [
+      ['yes', 'Yes, one notebook per project', 'Created during setup, kept current by Hatch'],
+      ['app', 'A folder in the app repository instead', 'One fewer repository; decisions show up in app pull requests'],
+      ['no', 'No, keep things as they are', 'Fails the test: decisions stay on this Mac'] ] },
+    { id: 'notebookName', title: 'What to call it', why: 'It must make sense without Hatch, so the repository name should not depend on the tool.', rec: 'notebook', options: [
+      ['notebook', 'Notebook, repository echo-notebook', 'Tool-neutral and plain'],
+      ['hatch', 'Notebook, repository echo-hatch', 'Says which tool made it'],
+      ['knowledge', 'Knowledge, repository echo-knowledge', 'More formal'] ] },
     { id: 'designName', title: 'What to call "Design system"', why: 'It is a code package of colors, type and components that the app and the Stage import, nothing more.', rec: 'components', options: [
       ['components', 'Components', 'Short; says it is building blocks'],
       ['uikit', 'UI kit', 'Familiar to developers'],
       ['design', 'Keep "Design system"', 'The industry word'] ] },
-    { id: 'kinds', title: 'Kinds of decisions', why: 'Three kinds keep the Decisions page filterable, and you never have to pick from a long list.', rec: 'three', options: [
-      ['three', 'Design, Architecture, Workflow', 'Set by the ticket, changeable'],
-      ['two', 'Design and Code', 'Simpler; workflow counts as code'],
-      ['none', 'No kinds', 'Only search'] ] },
-    { id: 'questionOptions', title: 'How architecture choices are made', why: 'The same A/B/C with a recommendation that you use here, without adding a seventh ticket type.', rec: 'question', options: [
-      ['question', 'A Question can carry options', 'The answer becomes a decision'],
-      ['newtype', 'A new ticket type, Decision', 'More explicit, one more type to learn'] ] },
-    { id: 'guides', title: 'Agent guides per task', why: 'A Build agent needs coding rules, and a Prepare agent needs visual rules. Hatch\'s own procedures stay in code.', rec: 'guides', options: [
-      ['guides', 'guides/ in the notebook, matched to the task', 'code.md, design.md, review.md'],
-      ['docs', 'Keep the flat docs list', 'Every agent reads the same files'] ] }
+    { id: 'rules', title: 'Where coding rules live', why: 'Agents read AGENTS.md where they work, so rules next to the code also bind agents that are not run by Hatch.', rec: 'app', options: [
+      ['app', "In the app's AGENTS.md", 'CLAUDE.md points to it; the notebook links there'],
+      ['notebook', 'In the notebook', 'One place, but agents in the app do not see it'] ] },
+    { id: 'now', title: 'A NOW.md summary of work in flight', why: 'Picking up needs "where were we" in one file. GitHub issues keep the full text, so the summary never has to be complete.', rec: 'yes', options: [
+      ['yes', 'Yes, refreshed by Hatch on every change', 'Open tickets by turn plus recent decisions'],
+      ['no', 'No, GitHub issues are enough', 'An agent has to query GitHub to find out'] ] },
+    { id: 'kinds', title: 'Kinds of decisions', why: 'Three kinds keep the decision index easy to scan, and you never pick from a long list.', rec: 'three', options: [
+      ['three', 'Design, Architecture, Workflow', 'Set from the ticket, changeable'],
+      ['two', 'Design and Code', 'Simpler'],
+      ['none', 'No kinds', 'Search only'] ] },
+    { id: 'questionOptions', title: 'How architecture choices are made', why: 'The same A/B/C with a recommendation you use for design, without a seventh ticket type.', rec: 'question', options: [
+      ['question', 'A Question can carry options', 'The answer becomes a decision file'],
+      ['newtype', 'A new ticket type, Decision', 'More explicit, one more type to learn'] ] }
   ];
-  const KEY = 'hatch.knowledgeAnswers';
+  const KEY = 'hatch.knowledgeAnswers2';
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
   const form = document.getElementById('answers');
