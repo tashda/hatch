@@ -46,7 +46,10 @@ final class QuickCapture: NSObject, NSWindowDelegate {
             return
         }
         if !prefill.isEmpty { draft.prompt = prefill }
-        let p = CapturePanel(contentRect: NSRect(x: 0, y: 0, width: QuickCaptureView.width + 2 * QuickCaptureView.margin, height: 120),
+        // One fixed size, never resized: resizing the window while SwiftUI draws its glass crashed (a recursion in
+        // the glass material). The bar draws at the top; the rest of the window is transparent, so clicks there go
+        // to whatever is behind it, and a click elsewhere closes the bar.
+        let p = CapturePanel(contentRect: NSRect(origin: .zero, size: QuickCaptureView.windowSize),
                              styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isFloatingPanel = true
         p.level = .floating
@@ -63,12 +66,11 @@ final class QuickCapture: NSObject, NSWindowDelegate {
         p.delegate = self
         let host = NSHostingController(rootView: QuickCaptureView(draft: draft, close: { [weak self] in self?.hide() })
             .environmentObject(state))
-        // The window follows the bar's height as text, screenshots or a message are added.
-        host.sizingOptions = [.preferredContentSize]
+        host.sizingOptions = []
         host.view.wantsLayer = true
         host.view.layer?.backgroundColor = .clear
         p.contentViewController = host
-        p.setContentSize(host.view.fittingSize)
+        p.setContentSize(QuickCaptureView.windowSize)
         place(p)
         panel = p
         p.makeKeyAndOrderFront(nil)
@@ -134,10 +136,9 @@ final class QuickCapture: NSObject, NSWindowDelegate {
         if p.frame.origin.x != origin.x || p.frame.maxY != anchor.y { p.setFrameTopLeftPoint(origin) }
     }
 
-    nonisolated func windowDidResize(_ notification: Notification) {
-        Task { @MainActor in
-            if let p = self.panel { self.keepAnchored(p); p.invalidateShadow() }
-        }
+    /// The shadow follows what is drawn; it is worked out again after the bar changes shape.
+    func refreshShadow() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.panel?.invalidateShadow() }
     }
 
 
@@ -202,31 +203,56 @@ final class CapturePanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
-/// What the bar holds while it is closed: it opens again as it was left, until it is sent or started fresh.
+/// A screenshot in the bar with its marks. The marks stay data until the ticket is sent, so closing and reopening the
+/// bar keeps them editable.
+struct CaptureShot: Identifiable, Equatable {
+    let id = UUID()
+    var name: String
+    var original: Data
+    var marks: [ShotMark] = []
+
+    var image: NSImage? { NSImage(data: original) }
+
+    /// The file sent with the ticket: the marks drawn in.
+    @MainActor var pending: PendingShot {
+        PendingShot(name: name, data: ScreenshotMarkupSheet.flatten(original, marks: marks) ?? original)
+    }
+}
+
+/// What the bar holds while it is closed: it opens again as it was left, editor and marks included, until it is sent
+/// or started fresh.
 @MainActor
 final class QuickCaptureDraft: ObservableObject {
     @Published var prompt = ""
-    @Published var shots: [PendingShot] = []
+    @Published var shots: [CaptureShot] = []
     @Published var projectId: Int?
-    #if DEBUG
-    /// `--quick-capture-markup <png>`: open with this screenshot in mark-up, to look at it without clicking.
-    var openMarkupOnShow = false
-    #endif
+    /// The screenshot open in the editor, if any.
+    @Published var editing: CaptureShot.ID?
 
     var isEmpty: Bool { prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && shots.isEmpty }
+
+    func add(name: String, data: Data) { shots.append(CaptureShot(name: name, original: data)) }
+
+    func remove(_ id: CaptureShot.ID) {
+        shots.removeAll { $0.id == id }
+        if editing == id { editing = nil }
+    }
 
     func reset() {
         prompt = ""
         shots = []
+        editing = nil
     }
 }
 
 /// The bar: Iris's mark, one field that grows with the text, and quiet controls on the right (project, start fresh,
-/// capture an area, send). Screenshots appear as a row of thumbnails under the field. The same glass and radius as the
-/// command palette, so the two read as one family (DESIGN.md).
+/// capture an area, send). Each screenshot is a small glass pill under it; clicking one opens it into the editor, a
+/// second piece of glass, and Done folds it back. The bar itself looks the same with or without them. The same glass
+/// and radius as the command palette (DESIGN.md).
 struct QuickCaptureView: View {
     static let width: CGFloat = 680
-    /// Room around the bar inside the transparent window; the window's own shadow is drawn outside it.
+    /// The window's fixed size: the bar with eight lines of text and the editor open fits.
+    static let windowSize = CGSize(width: width, height: 760)
     static let margin: CGFloat = 0
 
     @EnvironmentObject var state: AppState
@@ -234,8 +260,6 @@ struct QuickCaptureView: View {
     let close: () -> Void
 
     @State private var problem: String?
-    /// The screenshot being marked up, inside the bar.
-    @State private var markingUp: PendingShot?
     /// The name and key of the control under the pointer. Tooltips do not show for a panel while Hatch is not the
     /// active app, so the bar shows it itself, as Raycast does.
     @State private var hint: String?
@@ -243,37 +267,48 @@ struct QuickCaptureView: View {
     @FocusState private var focused: Bool
 
     private var canSend: Bool { draft.projectId != nil && !draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    private var hasTray: Bool { !draft.shots.isEmpty || problem != nil || markingUp != nil }
+    private var editingShot: CaptureShot? { draft.editing.flatMap { id in draft.shots.first { $0.id == id } } }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 12) {
             field
-            if hasTray {
-                Divider().opacity(0.5)
-                tray
+                .frame(width: Self.width)
+                .glassEffect(.regular, in: .rect(cornerRadius: 24))
+            if let problem {
+                Text(problem)
+                    .font(.callout)
+                    .foregroundStyle(Theme.critical)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 16))
+            }
+            if let shot = editingShot, let image = shot.image {
+                editor(shot, image)
+                    .transition(.scale(scale: 0.15, anchor: .topLeading).combined(with: .opacity))
+            } else if !draft.shots.isEmpty {
+                pills
+                    .transition(.opacity)
             }
         }
-        .frame(width: Self.width)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
-        .padding(Self.margin)
+        .frame(width: Self.windowSize.width, height: Self.windowSize.height, alignment: .top)
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: draft.editing)
+        .animation(.spring(response: 0.3, dampingFraction: 0.9), value: draft.shots.map(\.id))
         // No window background: SwiftUI would otherwise paint the whole transparent window as a grey rectangle.
         .containerBackground(.clear, for: .window)
-        // Drawn as the active window even while another app is in front, so the glass never turns grey.
-        .environment(\.controlActiveState, .key)
-        .pastesScreenshots { images in draft.shots += images.map { PendingShot(name: $0.name, data: $0.data) } }
+        .pastesScreenshots { images in for i in images { draft.add(name: i.name, data: i.data) } }
+        .onChange(of: draft.editing) { _, _ in QuickCapture.shared.refreshShadow() }
+        .onChange(of: draft.shots.map(\.id)) { _, _ in QuickCapture.shared.refreshShadow() }
+        .onChange(of: draft.prompt.count / 60) { _, _ in QuickCapture.shared.refreshShadow() }
         .onAppear {
             if draft.projectId == nil || !state.projects.contains(where: { $0.id == draft.projectId }) { draft.projectId = startProject }
-            #if DEBUG
-            if draft.openMarkupOnShow, let first = draft.shots.first { markingUp = first; draft.openMarkupOnShow = false }
-            #endif
             DispatchQueue.main.async {
                 focused = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { QuickCapture.shared.moveCaretToEnd() }
             }
+            QuickCapture.shared.refreshShadow()
         }
     }
 
-    // MARK: Parts
+    // MARK: The bar
 
     private var field: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -289,7 +324,10 @@ struct QuickCaptureView: View {
                 .lineLimit(1...8)
                 .focused($focused)
                 .onSubmit { send() }
-                .onKeyPress(.escape) { close(); return .handled }
+                .onKeyPress(.escape) {
+                    if draft.editing != nil { draft.editing = nil } else { close() }
+                    return .handled
+                }
             HStack(spacing: 6) {
                 if let hint {
                     Text(hint).font(.callout).foregroundStyle(.secondary).lineLimit(1).fixedSize()
@@ -298,29 +336,15 @@ struct QuickCaptureView: View {
                 }
                 if state.projects.count > 1 { projectMenu }
                 if !draft.isEmpty {
-                    Button { startFresh() } label: { Image(systemName: "eraser") }
-                        .buttonStyle(.borderless)
-                        .focusEffectDisabled()
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+                    QuietIconButton(symbol: "eraser") { startFresh() }
                         .shortcut("capture.fresh", keys)
                         .onHover { showHint($0, "Start fresh", "capture.fresh") }
                 }
-                Button { captureArea() } label: { Image(systemName: "rectangle.dashed") }
-                    .buttonStyle(.borderless)
-                    .focusEffectDisabled()
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+                QuietIconButton(symbol: "rectangle.dashed") { captureArea() }
                     .shortcut("capture.area", keys)
                     .onHover { showHint($0, "Capture an area", "capture.area") }
-                Button { send() } label: {
-                    Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 22, height: 22)
-                }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-                .focusEffectDisabled()
-                .disabled(!canSend)
-                .onHover { showHint($0, "Send to Iris  ↩", nil) }
+                SendButton(enabled: canSend) { send() }
+                    .onHover { showHint($0, "Send to Iris  ↩", nil) }
             }
             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 7 }
         }
@@ -350,48 +374,60 @@ struct QuickCaptureView: View {
         .help("The project it goes to. Iris moves it if it clearly belongs elsewhere.")
     }
 
-    /// Screenshots under the field, pasted with ⌘V or captured: thumbnails, click one to mark it up.
-    private var tray: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let problem {
-                Text(problem).font(.callout).foregroundStyle(Theme.critical).fixedSize(horizontal: false, vertical: true)
-            }
-            if let shot = markingUp {
-                ScreenshotMarkupSheet(data: shot.data, save: { png in
-                    if let i = draft.shots.firstIndex(where: { $0.id == shot.id }) { draft.shots[i] = PendingShot(name: shot.name, data: png) }
-                }, onClose: { markingUp = nil; focused = true }, compact: true)
-            } else if !draft.shots.isEmpty {
-                HStack(spacing: 8) {
-                    ForEach(draft.shots) { shot in thumbnail(shot) }
-                    Spacer(minLength: 0)
-                }
+    // MARK: Screenshots
+
+    /// One small pill of glass per screenshot, left-aligned under the bar.
+    private var pills: some View {
+        HStack(spacing: 10) {
+            ForEach(draft.shots) { shot in
+                pill(shot)
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
     }
 
-    private func thumbnail(_ shot: PendingShot) -> some View {
-        ZStack(alignment: .topTrailing) {
-            Button { markUp(shot) } label: {
-                Group {
-                    if let image = NSImage(data: shot.data) { Image(nsImage: image).resizable().scaledToFill() } else { Color.secondary.opacity(0.2) }
+    private func pill(_ shot: CaptureShot) -> some View {
+        let size = CGSize(width: 72, height: 48)
+        return ZStack(alignment: .topTrailing) {
+            Button { draft.editing = shot.id } label: {
+                ZStack(alignment: .topLeading) {
+                    if let image = shot.image { Image(nsImage: image).resizable().scaledToFill() } else { Color.secondary.opacity(0.2) }
+                    ShotMarksLayer(marks: shot.marks, size: size, scale: 0.4)
                 }
-                .frame(width: 56, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.separator, lineWidth: 0.5))
+                .frame(width: size.width, height: size.height)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(6)
+                .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .focusEffectDisabled()
-            .help("Mark up: box, arrow or note")
-            Button { draft.shots.removeAll { $0.id == shot.id } } label: {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.white, .black.opacity(0.55))
-            }
-            .buttonStyle(.plain)
-            .focusEffectDisabled()
-            .offset(x: 5, y: -5)
-            .help("Remove")
+            .onHover { showHint($0, shot.marks.isEmpty ? "Mark up" : "Edit the marks", nil) }
+            RemoveBadge { draft.remove(shot.id) }
+                .offset(x: 6, y: -6)
         }
+    }
+
+    /// The editor, opened from a pill: the tools, the image and Done.
+    private func editor(_ shot: CaptureShot, _ image: NSImage) -> some View {
+        // The canvas takes the image's own shape, at most 320 high, so a wide screenshot is not letterboxed.
+        let inner = Self.width - 32
+        let height = image.size.width > 0 ? min(320, inner * image.size.height / image.size.width) : 320
+        return MarkupEditor(image: image, marks: marksBinding(shot.id), canvasHeight: height) {
+            HStack(spacing: 8) {
+                QuietIconButton(symbol: "trash", size: 14) { draft.remove(shot.id) }
+                    .help("Remove the screenshot")
+                DoneButton { draft.editing = nil; focused = true }
+            }
+        }
+        .padding(16)
+        .frame(width: Self.width)
+        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+    }
+
+    private func marksBinding(_ id: CaptureShot.ID) -> Binding<[ShotMark]> {
+        Binding(get: { draft.shots.first { $0.id == id }?.marks ?? [] },
+                set: { new in if let i = draft.shots.firstIndex(where: { $0.id == id }) { draft.shots[i].marks = new } })
     }
 
     // MARK: Actions
@@ -408,17 +444,14 @@ struct QuickCaptureView: View {
         focused = true
     }
 
-    /// Mark-up opens inside the bar, under the field: Box, Arrow, Note, Undo, then Done.
-    private func markUp(_ shot: PendingShot) { markingUp = shot }
-
     private func captureArea() {
         problem = AreaCapture.permissionProblem()
         if problem != nil { return }
         let draft = self.draft
         Task {
             if let data = await QuickCapture.shared.captureArea() {
-                // Attached at once, nothing to confirm; click the thumbnail to mark it up.
-                draft.shots.append(PendingShot(name: "area-\(draft.shots.count + 1).png", data: data))
+                // Attached at once, nothing to confirm; click the pill to mark it up.
+                draft.add(name: "area-\(draft.shots.count + 1).png", data: data)
             }
             focused = true
         }
@@ -428,7 +461,7 @@ struct QuickCaptureView: View {
     private func send() {
         guard canSend, let pid = draft.projectId else { return }
         let text = draft.prompt
-        let pending = draft.shots
+        let pending = draft.shots.map(\.pending)
         let root = state.paths.root
         let made: Ticket? = state.perform("Could not create the ticket") {
             try state.store.db.transaction { () -> Ticket in
@@ -443,6 +476,100 @@ struct QuickCaptureView: View {
         state.refresh()
         draft.reset()
         close()
+    }
+}
+
+// MARK: Controls drawn for the bar
+//
+// Drawn by hand rather than with the system glass button styles: those resolve their own glass inside the bar's glass,
+// and a filled shape looks the same whether Hatch is the active app or not.
+
+/// A secondary icon in the bar: grey, a soft circle on hover.
+struct QuietIconButton: View {
+    let symbol: String
+    var size: CGFloat = 17
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: size, weight: .regular))
+                .foregroundStyle(hovering ? Color.primary : Color.secondary)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(Color.primary.opacity(hovering ? 0.08 : 0)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .onHover { hovering = $0 }
+    }
+}
+
+/// The round send button: the accent colour when there is something to send.
+struct SendButton: View {
+    let enabled: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(enabled ? Color.white : Color.secondary)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(enabled ? Color.accentColor.opacity(hovering ? 0.85 : 1) : Color.primary.opacity(0.08)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .disabled(!enabled)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.15), value: enabled)
+    }
+}
+
+/// Done in the editor: a filled capsule in the accent colour.
+struct DoneButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Label("Done", systemImage: "checkmark")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .frame(height: 30)
+                .background(Capsule().fill(Color.accentColor.opacity(hovering ? 0.85 : 1)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .keyboardShortcut(.defaultAction)
+        .onHover { hovering = $0 }
+    }
+}
+
+/// The small round remove badge on a screenshot pill.
+struct RemoveBadge: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(Color.black.opacity(hovering ? 0.75 : 0.55)))
+                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 1))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .onHover { hovering = $0 }
+        .help("Remove")
     }
 }
 

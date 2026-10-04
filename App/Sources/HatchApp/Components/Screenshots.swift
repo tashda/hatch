@@ -147,119 +147,132 @@ struct ShotMark: Identifiable, Equatable {
     var to: CGPoint
 }
 
-/// The three tools of decision E3 on top of the image: drag for a box or an arrow, click for a note. Saving flattens
-/// the marks into a new PNG at the image's own size.
+/// Box and Arrow over a screenshot (decision E3), the editor both Quick Capture and the mark-up sheet use: a row of
+/// icon tools, Undo and Clear, and the image with its marks. Marks are kept as data until they are drawn into the
+/// file, so they can be changed again later.
+struct MarkupEditor<Trailing: View>: View {
+    let image: NSImage
+    @Binding var marks: [ShotMark]
+    /// A fixed canvas height (Quick Capture); nil lets the canvas fill the space it is given.
+    var canvasHeight: CGFloat? = nil
+    @ViewBuilder var trailing: () -> Trailing
+
+    enum Tool { case box, arrow }
+    @State private var tool: Tool = .box
+    @State private var drawing: ShotMark?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 2) {
+                toolButton(.box, "rectangle", "Box")
+                toolButton(.arrow, "arrow.up.right", "Arrow")
+                Divider().frame(height: 18).padding(.horizontal, 8)
+                iconButton("arrow.uturn.backward", "Undo") { if !marks.isEmpty { marks.removeLast() } }
+                    .keyboardShortcut("z", modifiers: .command)
+                    .disabled(marks.isEmpty)
+                iconButton("xmark.circle", "Clear the marks") { marks = [] }
+                    .disabled(marks.isEmpty)
+                Text(tool == .box ? "Drag around what matters" : "Drag towards the spot")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 10)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                trailing()
+            }
+            canvas
+        }
+    }
+
+    private func toolButton(_ t: Tool, _ symbol: String, _ name: String) -> some View {
+        Button { tool = t } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 34, height: 28)
+                .foregroundStyle(tool == t ? Color.primary : Color.secondary)
+                .background(tool == t ? Color.primary.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .help(name)
+        .accessibilityLabel(name)
+    }
+
+    private func iconButton(_ symbol: String, _ name: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: 30, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .focusEffectDisabled()
+        .help(name)
+        .accessibilityLabel(name)
+    }
+
+    private var canvas: some View {
+        GeometryReader { geo in
+            let fit = Self.fitted(image.size, in: geo.size)
+            ZStack(alignment: .topLeading) {
+                Image(nsImage: image).resizable().frame(width: fit.width, height: fit.height)
+                ShotMarksLayer(marks: marks + [drawing].compactMap { $0 }, size: fit, scale: 1)
+            }
+            .frame(width: fit.width, height: fit.height)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.separator, lineWidth: 0.5))
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { g in
+                drawing = ShotMark(kind: tool == .box ? .box : .arrow, from: Self.norm(g.startLocation, fit), to: Self.norm(g.location, fit))
+            }.onEnded { _ in
+                if let d = drawing, hypot(d.to.x - d.from.x, d.to.y - d.from.y) > 0.01 { marks.append(d) }
+                drawing = nil
+            })
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(height: canvasHeight)
+    }
+
+    static func fitted(_ size: CGSize, in box: CGSize) -> CGSize {
+        guard size.width > 0, size.height > 0 else { return box }
+        let s = min(box.width / size.width, box.height / size.height, 1.5)
+        return CGSize(width: size.width * s, height: size.height * s)
+    }
+
+    static func norm(_ p: CGPoint, _ size: CGSize) -> CGPoint {
+        CGPoint(x: min(max(p.x / size.width, 0), 1), y: min(max(p.y / size.height, 0), 1))
+    }
+}
+
+/// The mark-up sheet on the New Ticket page and a ticket's screenshots: the editor, then Cancel and Save, which
+/// flattens the marks into a new PNG at the image's own size.
 struct ScreenshotMarkupSheet: View {
     @Environment(\.dismiss) private var dismiss
     let data: Data
     /// Marks to start with (snapshot runs).
     var initial: [ShotMark] = []
     let save: (Data) -> Void
-    /// Set when the view is in a window of its own rather than a sheet (Quick Capture), to close that window.
-    var onClose: (() -> Void)? = nil
-    /// Inside Quick Capture's bar: no title, a smaller canvas, Done instead of Save.
-    var compact = false
 
-    private func finish() { if let onClose { onClose() } else { dismiss() } }
-
-    enum Tool: String, CaseIterable, Identifiable { case box = "Box", arrow = "Arrow", note = "Note"; var id: String { rawValue } }
-    @State private var tool: Tool = .box
     @State private var marks: [ShotMark] = []
-    @State private var drawing: ShotMark?
-    @State private var notePoint: CGPoint?
-    @State private var noteText = ""
-    @FocusState private var noteFocused: Bool
-
-    private var image: NSImage? { NSImage(data: data) }
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                if !compact { Text("Mark up").font(.title3.weight(.semibold)) }
-                Picker("Tool", selection: $tool) {
-                    Label("Box", systemImage: "rectangle").tag(Tool.box)
-                    Label("Arrow", systemImage: "arrow.up.right").tag(Tool.arrow)
-                    Label("Note", systemImage: "text.bubble").tag(Tool.note)
-                }
-                .pickerStyle(.segmented).labelsHidden().fixedSize()
-                Button { if !marks.isEmpty { marks.removeLast() } } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
-                    .keyboardShortcut("z", modifiers: .command).disabled(marks.isEmpty)
-                Spacer()
-                Text(hint).font(.callout).foregroundStyle(.secondary)
-            }
-            if let image {
-                canvas(image)
-            }
-            if notePoint != nil {
-                HStack {
-                    TextField("Note on the screenshot", text: $noteText).textFieldStyle(.roundedBorder).focused($noteFocused)
-                        .onSubmit(addNote)
-                    Button("Add Note", action: addNote).disabled(noteText.trimmingCharacters(in: .whitespaces).isEmpty)
-                    Button("Cancel") { notePoint = nil; noteText = "" }
-                }
+        VStack(spacing: 16) {
+            if let image = NSImage(data: data) {
+                MarkupEditor(image: image, marks: $marks) { EmptyView() }
             }
             HStack {
                 Text("Marks are drawn into the saved image.").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("Cancel") { finish() }.keyboardShortcut(.cancelAction)
-                Button(compact ? "Done" : "Save") { if let png = render() { save(png) }; finish() }
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Save") { if let png = render() { save(png) }; dismiss() }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }
         }
-        .padding(compact ? 0 : 20)
-        .frame(minWidth: compact ? nil : 640, idealWidth: compact ? nil : 900, minHeight: compact ? 360 : 480, idealHeight: compact ? 360 : 680)
+        .padding(20)
+        .frame(minWidth: 640, idealWidth: 900, minHeight: 480, idealHeight: 680)
         .onAppear { if marks.isEmpty { marks = initial } }
-    }
-
-    private var hint: String {
-        switch tool {
-        case .box: "Drag around what matters"
-        case .arrow: "Drag from the note to the spot"
-        case .note: "Click where the note goes"
-        }
-    }
-
-    private func canvas(_ image: NSImage) -> some View {
-        GeometryReader { geo in
-            let fit = fitted(image.size, in: geo.size)
-            ZStack(alignment: .topLeading) {
-                Image(nsImage: image).resizable().frame(width: fit.width, height: fit.height)
-                ShotMarksLayer(marks: marks + [drawing].compactMap { $0 }, size: fit, scale: 1)
-            }
-            .frame(width: fit.width, height: fit.height)
-            .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { g in
-                guard tool != .note else { return }
-                let a = norm(g.startLocation, fit), b = norm(g.location, fit)
-                drawing = ShotMark(kind: tool == .box ? .box : .arrow, from: a, to: b)
-            }.onEnded { g in
-                if tool == .note {
-                    notePoint = norm(g.location, fit); noteFocused = true
-                } else if let d = drawing, hypot(d.to.x - d.from.x, d.to.y - d.from.y) > 0.01 {
-                    marks.append(d)
-                }
-                drawing = nil
-            })
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(Color.black.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    private func addNote() {
-        let text = noteText.trimmingCharacters(in: .whitespaces)
-        guard let p = notePoint, !text.isEmpty else { return }
-        marks.append(ShotMark(kind: .note(text), from: p, to: p))
-        notePoint = nil; noteText = ""
-    }
-
-    private func fitted(_ size: CGSize, in box: CGSize) -> CGSize {
-        guard size.width > 0, size.height > 0 else { return box }
-        let s = min(box.width / size.width, box.height / size.height, 1.5)
-        return CGSize(width: size.width * s, height: size.height * s)
-    }
-
-    private func norm(_ p: CGPoint, _ size: CGSize) -> CGPoint {
-        CGPoint(x: min(max(p.x / size.width, 0), 1), y: min(max(p.y / size.height, 0), 1))
     }
 
     @MainActor private func render() -> Data? { Self.flatten(data, marks: marks) }

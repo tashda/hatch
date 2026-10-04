@@ -151,9 +151,26 @@ final class AppState: ObservableObject {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) { QuickCapture.shared.show(prefill: text) }
             }
             if let i = args.firstIndex(of: "--quick-capture-markup"), i + 1 < args.count, let data = FileManager.default.contents(atPath: args[i + 1]) {
-                QuickCapture.shared.draft.shots = [PendingShot(name: "shot.png", data: data)]
-                QuickCapture.shared.draft.openMarkupOnShow = true
+                QuickCapture.shared.draft.add(name: "shot.png", data: data)
+                QuickCapture.shared.draft.editing = QuickCapture.shared.draft.shots.first?.id
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) { QuickCapture.shared.show() }
+            }
+            // `--quick-capture-stress <png>`: adds, opens, closes and removes screenshots for a while, to find crashes.
+            if let i = args.firstIndex(of: "--quick-capture-stress"), i + 1 < args.count, let data = FileManager.default.contents(atPath: args[i + 1]) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { QuickCapture.shared.show() }
+                let d = QuickCapture.shared.draft
+                for step in 0..<40 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5 + Double(step) * 0.35) {
+                        switch step % 5 {
+                        case 0: d.add(name: "a.png", data: data); d.add(name: "b.png", data: data)
+                        case 1: d.editing = d.shots.first?.id
+                        case 2: d.shots[0].marks.append(ShotMark(kind: .box, from: CGPoint(x: 0.1, y: 0.1), to: CGPoint(x: 0.5, y: 0.5)))
+                        case 3: if let id = d.shots.first?.id { d.remove(id) }
+                        default: d.editing = nil; if let id = d.shots.first?.id { d.remove(id) }
+                        }
+                        if step == 39 { print("quick-capture-stress done") }
+                    }
+                }
             }
             #endif
         }
