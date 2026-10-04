@@ -34,7 +34,9 @@ final class ProjectSetupModel: ObservableObject {
     @Published var step: Step = .github
     @Published var name = ""
     @Published var nameEdited = false
-    @Published var keyOverride = ""
+    /// Follows the name until the owner types their own key.
+    @Published var keyText = ""
+    @Published var keyEdited = false
 
     @Published var ticketsChoice: TicketsChoice = .create
     @Published var newTicketsName = "hatch-tickets"
@@ -83,9 +85,16 @@ final class ProjectSetupModel: ObservableObject {
 
     var login: String? { account.user?.login }
     var connected: Bool { account.user != nil }
+    var suggestedKey: String { ProjectConfig.key(for: name, existing: existingKeys) }
     var key: String {
-        let typed = keyOverride.trimmingCharacters(in: .whitespaces).lowercased()
-        return typed.isEmpty ? ProjectConfig.key(for: name, existing: existingKeys) : typed
+        let typed = keyText.trimmingCharacters(in: .whitespaces)
+        return typed.isEmpty ? suggestedKey : ProjectConfig.key(for: typed, existing: existingKeys)
+    }
+
+    func setName(_ value: String, edited: Bool) {
+        name = value
+        nameEdited = edited
+        if !keyEdited { keyText = name.trimmingCharacters(in: .whitespaces).isEmpty ? "" : suggestedKey }
     }
     var displayName: String { name.trimmingCharacters(in: .whitespaces).isEmpty ? "Project" : name.trimmingCharacters(in: .whitespaces) }
     var privateRepos: [GitHubRepoSummary] { account.repos.filter(\.isPrivate) }
@@ -170,8 +179,7 @@ final class ProjectSetupModel: ObservableObject {
         guard appRepo != old, let repo = appRepo else { return }
         if !nameEdited || name.isEmpty {
             let raw = repo.split(separator: "/").last.map(String.init) ?? repo
-            name = raw.prefix(1).uppercased() + raw.dropFirst()
-            nameEdited = false
+            setName(raw.prefix(1).uppercased() + raw.dropFirst(), edited: false)
         }
         baseBranch = appRepoSummary?.defaultBranch ?? "main"
         branches = []
@@ -331,6 +339,10 @@ struct ProjectSetupAssistant: View {
         .onAppear { if !Snapshots.demoMode { model.start() } }
         .onChange(of: account.user) { model.accountChanged() }
         .onReceive(NotificationCenter.default.publisher(for: .hxGitHubAccountChanged)) { _ in account.refresh() }
+        // Coming back from GitHub after adding repositories to Hatch's installation.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if model.connected && !Snapshots.demoMode { account.refresh() }
+        }
     }
 
     // MARK: Frame
@@ -414,7 +426,12 @@ struct ProjectSetupAssistant: View {
                         Label(user.name.map { "\(user.login) · \($0)" } ?? user.login, systemImage: "checkmark.circle.fill")
                             .foregroundStyle(Theme.finished)
                     }
-                    HXSetupRow("Repositories Hatch can see") { Text("\(account.repos.count)").foregroundStyle(.secondary) }
+                    HXSetupRow("Repositories Hatch can see") {
+                        HStack(spacing: 10) {
+                            Text("\(account.repos.count)").foregroundStyle(.secondary)
+                            Button("Choose on GitHub…") { NSWorkspace.shared.open(account.manageRepositoriesURL) }
+                        }
+                    }
                 } else if let code = deviceFlow.userCode {
                     VStack(spacing: 8) {
                         Text("Enter this code on GitHub").foregroundStyle(.secondary)
@@ -451,15 +468,19 @@ struct ProjectSetupAssistant: View {
             HXSetupGroup {
                 HXSetupRow("App repository") { appRepoPicker }
                 HXSetupRow("Name") {
-                    TextField("Name", text: Binding(get: { model.name }, set: { model.name = $0; model.nameEdited = true }),
-                              prompt: Text(""))
+                    TextField("Name", text: Binding(get: { model.name }, set: { model.setName($0, edited: true) }), prompt: Text(""))
                         .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden()
                 }
+                HXSetupRow("Key") {
+                    TextField("Key", text: Binding(get: { model.keyText }, set: { model.keyText = $0; model.keyEdited = !$0.isEmpty }),
+                              prompt: Text(""))
+                        .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden()
+                        .font(.body.monospaced())
+                }
             }
-            if !model.name.trimmingCharacters(in: .whitespaces).isEmpty {
-                Text("The key used in labels, \(Text("project:\(model.key)").font(.callout.monospaced())), is made from the name. Change it under Review › Advanced.")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
+            Text("The key marks this project's tickets with the label \(Text("project:\(model.key)").font(.callout.monospaced())). It is suggested from the name.")
+                .font(.callout).foregroundStyle(.secondary)
+            missingRepositoryButton
         }
     }
 
@@ -492,6 +513,7 @@ struct ProjectSetupAssistant: View {
             if model.ticketsChoice != .useDefault {
                 Toggle("Make it the default for new projects", isOn: $model.makeDefault)
             }
+            missingRepositoryButton
             HXSetupExample("What it looks like on GitHub") {
                 HXIssueSample(number: 151, title: "Toast spacing feels cramped", labels: ["type:proposal", "status:your-call", "project:\(model.key)"])
                 HXIssueSample(number: 152, title: "Crash when a connection times out", labels: ["type:bug", "status:building", "project:\(model.key)"])
@@ -611,10 +633,6 @@ struct ProjectSetupAssistant: View {
             }
             DisclosureGroup("Advanced") {
                 HXSetupGroup {
-                    HXSetupRow("Key") {
-                        TextField(ProjectConfig.key(for: model.name, existing: []), text: $model.keyOverride)
-                            .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden()
-                    }
                     HXSetupRow("Agents at once") {
                         Stepper("\(model.maxAgents)", value: $model.maxAgents, in: 1...8).fixedSize()
                     }
@@ -622,6 +640,12 @@ struct ProjectSetupAssistant: View {
                 .padding(.top, 8)
             }
         }
+    }
+
+    /// Hatch sees only the repositories chosen for its GitHub App. The list refreshes when you come back to Hatch.
+    private var missingRepositoryButton: some View {
+        Button("A repository is missing? Choose it on GitHub…") { NSWorkspace.shared.open(account.manageRepositoriesURL) }
+            .buttonStyle(.link)
     }
 
     private var appRepoPicker: some View {

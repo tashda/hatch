@@ -131,12 +131,14 @@ final class GitHubAccountModel: ObservableObject {
         var source: GitHubTokenSource
         var user: GitHubUser?
         var repos: [GitHubRepoSummary]
+        var installation: GitHubInstallation?
         var error: String?
     }
 
     @Published var user: GitHubUser?
     @Published var source: GitHubTokenSource = .none
     @Published var repos: [GitHubRepoSummary] = []
+    @Published var installation: GitHubInstallation?
     @Published var busy = false
     @Published var error: String?
 
@@ -150,7 +152,8 @@ final class GitHubAccountModel: ObservableObject {
                 do {
                     let me = try client.currentUser()
                     let repos = try client.listRepositories()
-                    return Probe(source: source, user: me, repos: repos, error: nil)
+                    let installation = (try? client.installations())?.first
+                    return Probe(source: source, user: me, repos: repos, installation: installation, error: nil)
                 } catch {
                     return Probe(source: source, user: nil, repos: [], error: Self.describe(error))
                 }
@@ -158,9 +161,15 @@ final class GitHubAccountModel: ObservableObject {
             source = probe.source
             user = probe.user
             repos = probe.repos
+            installation = probe.installation
             error = probe.error
             busy = false
         }
+    }
+
+    /// GitHub's page where repositories are added to Hatch's installation.
+    var manageRepositoriesURL: URL {
+        installation?.settingsURL ?? URL(string: "https://github.com/settings/installations")!
     }
 
     func connect(token: String) {

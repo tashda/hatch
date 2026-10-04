@@ -18,6 +18,16 @@ public struct GitHubRepoSummary: Equatable, Sendable, Identifiable {
     }
 }
 
+/// Where Hatch's GitHub App is installed for the signed-in user. Hatch sees only the repositories chosen there.
+public struct GitHubInstallation: Equatable, Sendable {
+    public var id: Int
+    public var appSlug: String
+    public var account: String
+    /// GitHub's page for this installation, where repositories are added or removed.
+    public var settingsURL: URL
+    public var allRepositories: Bool
+}
+
 /// Where the token in use comes from, for Settings. Order: stored by Hatch, `GITHUB_TOKEN`, the gh tool.
 public enum GitHubTokenSource: Equatable, Sendable {
     case stored, environment, ghTool, none
@@ -100,6 +110,17 @@ extension GitHubClient {
         let labels = LabelSpec.baseSet.map { $0 }
         try ensureLabels(repo: fullName, labels)
         return TicketsRepoReport(repo: found!, created: created, labelsEnsured: labels.count)
+    }
+
+    /// Installations of the GitHub App this token belongs to, for the signed-in user.
+    public func installations() throws -> [GitHubInstallation] {
+        let r = try perform("GET", url("/user/installations", [("per_page", "100")]))
+        let list = JSONValue.parse(String(decoding: r.body, as: UTF8.self))["installations"]?.arrayValue ?? []
+        return list.compactMap { j in
+            guard let id = j["id"]?.intValue, let link = j["html_url"]?.stringValue, let u = URL(string: link) else { return nil }
+            return GitHubInstallation(id: id, appSlug: j["app_slug"]?.stringValue ?? "", account: j["account"]?["login"]?.stringValue ?? "",
+                                      settingsURL: u, allRepositories: j["repository_selection"]?.stringValue == "all")
+        }
     }
 
     /// Branch names of a repository, the default branch's first page included. For the base branch picker.
