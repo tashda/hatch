@@ -147,7 +147,7 @@ enum Snapshots {
         let first = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Toast spacing and corner radius" })?.id
         var routes: [(String, Route, TicketTab?)] = [("desk", .desk, nil), ("tickets", .tickets, nil), ("board", .board, nil),
                                                       ("previews", .previews, nil), ("specs", .specs, nil), ("decisions", .decisions, nil),
-                                                      ("agents", .agents, nil), ("log", .log, nil), ("project", .projects, nil),
+                                                      ("agents", .agents, nil), ("health", .health, nil), ("log", .log, nil), ("project", .projects, nil),
                                                       ("new-ticket", .newTicket, nil)]
         if let first {
             routes.insert(("ticket-overview", .ticket(first), .overview), at: 3)

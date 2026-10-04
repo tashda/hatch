@@ -31,6 +31,7 @@
 		52212D2A4B8F7B710886706C /* TicketDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C578A59293D31A5F7BDA813 /* TicketDetailView.swift */; };
 		53D4579D6537437B4BEB40CC /* HatchSync in Frameworks */ = {isa = PBXBuildFile; productRef = C92A8B1F523538756CBE6D69 /* HatchSync */; };
 		60932597CB89763A211708DD /* ProjectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B110069306661FF4A2E42165 /* ProjectView.swift */; };
+		19F61CE806C5B4F33F330E19 /* HealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D60054C58D600A0D4F7948C /* HealthView.swift */; };
 		0777649DBDC4D7BE1E4B60F0 /* ProjectSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52EE6B8F7D46F8CA386D6410 /* ProjectSetup.swift */; };
 		6382CD856210B2FBD375405E /* GitHubAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E374A9B62BB42A52EAAC221 /* GitHubAccount.swift */; };
 		2C294CBEE8C4487CA95C0001 /* GitHubDeviceFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C294CBEE8C4487CA95C0002 /* GitHubDeviceFlow.swift */; };
@@ -100,6 +101,7 @@
 		AC8D6FDD0676BA5D121563D7 /* EventText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventText.swift; sourceTree = "<group>"; };
 		B08CBB6E28A0112DD7F8C511 /* Adapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Adapters.swift; sourceTree = "<group>"; };
 		B110069306661FF4A2E42165 /* ProjectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectView.swift; sourceTree = "<group>"; };
+		4D60054C58D600A0D4F7948C /* HealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthView.swift; sourceTree = "<group>"; };
 		52EE6B8F7D46F8CA386D6410 /* ProjectSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSetup.swift; sourceTree = "<group>"; };
 		B6D728C148F7A1D0026394FA /* LogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogView.swift; sourceTree = "<group>"; };
 		C55062C4CDC76CEA05F19695 /* ProblemChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProblemChip.swift; sourceTree = "<group>"; };
@@ -247,6 +249,7 @@
 				B6D728C148F7A1D0026394FA /* LogView.swift */,
 				5E6CDB9CB2F56F175AE2B0EC /* PreviewsView.swift */,
 				B110069306661FF4A2E42165 /* ProjectView.swift */,
+				4D60054C58D600A0D4F7948C /* HealthView.swift */,
 				52EE6B8F7D46F8CA386D6410 /* ProjectSetup.swift */,
 				C9D5911E86EACB3736BFBE8D /* SettingsView.swift */,
 				6B1B3B205E2521DD2A08C5B6 /* SidebarView.swift */,
@@ -367,6 +370,7 @@
 				20FBECA9EA25C683EC4F616C /* PreviewsView.swift in Sources */,
 				33B2E39998A1C0165DEDA212 /* ProblemChip.swift in Sources */,
 				60932597CB89763A211708DD /* ProjectView.swift in Sources */,
+				19F61CE806C5B4F33F330E19 /* HealthView.swift in Sources */,
 				0777649DBDC4D7BE1E4B60F0 /* ProjectSetup.swift in Sources */,
 				4A44215470CE3D13640307C4 /* ProposalInfo.swift in Sources */,
 				ECF777578FF6A8D373CCEB2D /* RootView.swift in Sources */,

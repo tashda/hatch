@@ -2,7 +2,7 @@ import Foundation
 
 /// Where the user is in the app. The sidebar sets it (decision B1); a ticket opens full width (decision C1).
 enum Route: Hashable {
-    case desk, tickets, board, previews, specs, decisions, agents, log, projects
+    case desk, tickets, board, previews, specs, decisions, agents, health, log, projects
     case ticket(Int)
     case newTicket
 
@@ -15,6 +15,7 @@ enum Route: Hashable {
         case .specs: "Specs"
         case .decisions: "Decisions"
         case .agents: "Agents"
+        case .health: "Health"
         case .log: "Log"
         case .projects: "Project"
         case .ticket: "Ticket"
@@ -31,6 +32,7 @@ enum Route: Hashable {
         case .specs: "doc.text"
         case .decisions: "flag"
         case .agents: "cpu"
+        case .health: "stethoscope"
         case .log: "list.bullet.rectangle"
         case .projects: "gearshape"
         case .ticket: "ticket"
