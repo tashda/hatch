@@ -2,6 +2,16 @@
 
 Updated 2026-10-04 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
 
+## Local verification (macOS, 2026-10-04): Decide and component conflicts
+
+Decisions DC1 to DC12 and CO9 to CO13 (DECISIONS.md sections T and V).
+
+- **Core** (`HatchCore/DecisionQueue.swift`): `pendingDecisions` is everything that is the owner's turn plus plans over the limit, quick ones first, Themes left out; `pendingDecisionCount` is the one number shown everywhere. `plan_review` (schema 3): `hatch plan` holds a Bug or a plan over the file limit for the owner and says so; `hatch plan #n --wait` waits for the answer; approve or send back with a note (the note becomes an instruction). `decidePreparedQuestion` answers a Question Hatch prepared as a draft: each move on its path is validated and logged, then it becomes a decision. Options keep what they gain and cost; `hatch options` and the quality gate (`specimen.gain-cost`) require both.
+- **Components** (CO9 to CO12): the scan counts a second set's values as typed in; clashes (a name with two values) become one prepared Question with three options; a merge ticket per other set; move tickets list values equal to a name (replace) and close to one (propose in the plan).
+- **App**: the Decide session (full window, one card per decision, keys ↵ 1–4 ← → N R Space Z esc, 10-second undo before Hatch acts, summary with agreement and a streak, trackpad tap and optional sound in Settings, General). Ways in: Desk card, Iris card (Iris's review cards fold into it except the ticket on screen), toolbar button with the count badge in its own group, command palette, Go menu (⇧⌘D), Components page (only component decisions). The Dock badge, the Desk row and the toolbar show the same count, read again every 5 seconds. The ticket page shows a waiting plan (Approve, Send back with a note) and a prepared Question (Choose an option). Setup offers merging other sets and adds the clash Question; Review lists what it adds; Hatch starts them names the existing sets.
+- **Verified**: `swift test` (all bundles, 0 failures; 7 new tests), `tools/smoke.sh`, Xcode app build; snapshots of the Decide session (an Iris card and the prepared pick card, light and dark) and the Desk with the Decide card, the Iris card and the toolbar badge, on demo data.
+- **Not verified**: the keys, the undo window and the summary in a live session (snapshots do not press keys, and driving the window by script hit the owner's own running Hatch instead, with no effect); a plan review with a real agent running `hatch plan --wait`; the Components page offers with a real app that has two sets; the trackpad tap. The Desk row label for a prepared Question still reads "Finish and submit".
+
 ## Local verification (macOS, 2026-10-04): components inside the app
 
 Decisions CO1 to CO8 (DECISIONS.md section T).

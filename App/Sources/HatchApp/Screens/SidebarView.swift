@@ -29,6 +29,19 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: selection) {
+            if state.projects.isEmpty {
+                // Everything else needs a project; it appears once one is set up.
+                Section("Get started") {
+                    Button { state.showAddProject = true } label: {
+                        Label("Set up a project", systemImage: "plus")
+                            .fontWeight(.medium)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Section("Machine") {
+                    SidebarRow(route: .agents).tag(Route.agents)
+                }
+            } else {
             Section("Work") {
                 deskRow
                 SidebarRow(route: .tickets).tag(Route.tickets)
@@ -59,6 +72,7 @@ struct SidebarView: View {
                 SidebarRow(route: .health).tag(Route.health)
                 SidebarRow(route: .log).tag(Route.log)
             }
+            }
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
@@ -79,7 +93,7 @@ struct SidebarView: View {
 
     private func reloadCounts() {
         reloadViews()
-        let count = state.yourTurnCount
+        let count = state.decisionCount
         if count != yourTurn { yourTurn = count }
         let counts = (try? state.store.syncCounts()) ?? (pending: 0, failed: 0)
         if counts.pending != state.syncSummary.pending || counts.failed != state.syncSummary.failed {
@@ -122,11 +136,21 @@ struct WindowFooter: View {
     /// whether everything is saved on the right.
     var body: some View {
         HStack(spacing: 14) {
-            FooterAgentSlots()
-            FooterActivityLine()
-            Spacer(minLength: 12)
-            FooterProjectPill()
-            FooterStatusGlyph()
+            if state.projects.isEmpty {
+                // Nothing runs or syncs yet, so the bar only points at the first step.
+                Button { state.showAddProject = true } label: {
+                    Text("Set up a project to get started").font(.caption).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .frame(minHeight: 20)
+                Spacer(minLength: 12)
+            } else {
+                FooterAgentSlots()
+                FooterActivityLine()
+                Spacer(minLength: 12)
+                FooterProjectPill()
+                FooterStatusGlyph()
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 7)

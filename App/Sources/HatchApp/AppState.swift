@@ -26,7 +26,9 @@ final class AppState: ObservableObject {
     @Published private(set) var forwardStack: [Route] = []
     /// A card the current page asks the Iris inspector to show at its top (the Desk's decision brief).
     @Published var inspectorTop: AnyView?
-    @Published var selectedProjectKey: String?          // nil means "All projects" (decision B2, B3)
+    @Published var selectedProjectKey: String? {        // nil means "All projects" (decision B2, B3)
+        didSet { if selectedProjectKey != oldValue { refreshDecisionCount() } }
+    }
     @Published var selectedTicketId: Int?
     @Published var revision = 0                          // bumped after any change so views reload
     @Published var errorMessage: String?
@@ -65,6 +67,16 @@ final class AppState: ObservableObject {
     @Published var snapshotPresentation: SnapshotPresentation?
     /// Snapshot harness only: which add-project step to show.
     @Published var snapshotSetupStep = 0
+    /// How many decisions wait for the owner: the one number the Desk row, the toolbar button and the Dock show (DC12).
+    @Published private(set) var decisionCount = 0
+    /// The Decide session, when open (decisions DC1 to DC7). `area` limits it, as the Components page does (DC9).
+    @Published var decideSession: DecideRequest?
+    private var countTimer: Timer?
+
+    struct DecideRequest: Identifiable, Equatable {
+        let id = UUID()
+        var area: String? = nil
+    }
 
     struct SyncSummary: Equatable {
         var pending = 0
@@ -77,6 +89,7 @@ final class AppState: ObservableObject {
         self.store = store
         self.paths = paths
         refreshSyncSummary()
+        refreshDecisionCount()
     }
 
     static func live() -> AppState {
@@ -97,6 +110,12 @@ final class AppState: ObservableObject {
     func startServices() {
         NotificationCenterBridge.shared.start(state: self)
         startSync()
+        // Sync and agents change things outside this window, so the count is read again every few seconds too.
+        if countTimer == nil {
+            countTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.refreshDecisionCount() }
+            }
+        }
         startLauncher()
         guard stageServer == nil else { return }
         let server = StageServer(store: store, paths: HatchPaths(home: paths.root))
@@ -305,7 +324,20 @@ final class AppState: ObservableObject {
         if syncSummary.pending > 0, syncTimer != nil { scheduleSync() }
         // Every change may move a ticket or record a decision: refresh the notebooks shortly after the last one.
         if syncTimer != nil { scheduleNotebookExport() }
-        NSApp?.dockTile.badgeLabel = yourTurnCount > 0 ? String(yourTurnCount) : nil
+        refreshDecisionCount()
+    }
+
+    /// Reads the decision count and puts it on the Dock icon.
+    func refreshDecisionCount() {
+        let n = store.pendingDecisionCount(projectId: projectFilterId)
+        if n != decisionCount { decisionCount = n }
+        NSApp?.dockTile.badgeLabel = n > 0 ? String(n) : nil
+    }
+
+    /// Opens a Decide session over everything waiting, or only one area's decisions.
+    func openDecide(area: String? = nil) {
+        showPalette = false
+        decideSession = DecideRequest(area: area)
     }
 
     func refreshSyncSummary() {

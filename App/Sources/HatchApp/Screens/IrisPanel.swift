@@ -7,6 +7,8 @@ struct IrisPanel: View {
     @EnvironmentObject var state: AppState
     @State private var checking: [Ticket] = []
     @State private var waiting: [Ticket] = []
+    /// Everything waiting for the owner: one card and the way into Decide (DC10).
+    @State private var decisions: [PendingDecision] = []
 
     /// On a ticket page that ticket comes first, so its review is always one glance away.
     private var focusId: Int? {
@@ -27,10 +29,13 @@ struct IrisPanel: View {
                     if state.route == .desk, let top = state.inspectorTop {
                         top.floatingCard().transition(.move(edge: .top).combined(with: .opacity))
                     }
-                    if !waiting.isEmpty { section("Needs your decision", count: waiting.count) { ForEach(waiting) { reviewCard($0) } } }
+                    if !decisions.isEmpty { DecideIrisCard(items: decisions).floatingCard() }
+                    // Review cards fold into the Decide card, except the one for the ticket on screen.
+                    let shown = waiting.filter { $0.id == focusId }
+                    if !shown.isEmpty { section("This ticket", count: shown.count) { ForEach(shown) { reviewCard($0) } } }
                     if !checking.isEmpty { section("Checking now", count: checking.count) { ForEach(checking) { checkingCard($0) } } }
                     if state.projects.isEmpty { addProject }
-                    else if waiting.isEmpty && checking.isEmpty { quiet }
+                    else if decisions.isEmpty && checking.isEmpty { quiet }
                 }
                 .padding(.horizontal, 3)
                 .padding(.vertical, 4)
@@ -54,6 +59,7 @@ struct IrisPanel: View {
                 .fixedSize(horizontal: false, vertical: true)
             Button("Set up a project") { state.showAddProject = true }
                 .buttonStyle(.glassProminent)
+                .controlSize(.large)
         }
     }
 
@@ -120,6 +126,7 @@ struct IrisPanel: View {
         }
         checking = list(.checking)
         waiting = list(.needsAnswers)
+        decisions = (try? state.store.pendingDecisions(projectId: state.projectFilterId)) ?? []
     }
 }
 

@@ -92,7 +92,11 @@ struct ComponentsView: View {
                     } else if let catalog = loaded.catalog {
                         if catalog.isEmpty { emptyCatalog(loaded) } else { sections(catalog) }
                     }
-                    if loaded.hasClone, let scan = loaded.scan, loaded.label != nil { typedCard(project, loaded, scan) }
+                    if loaded.label != nil { decisionsCard(project) }
+                    if loaded.hasClone, let scan = loaded.scan, loaded.label != nil {
+                        otherSetsCard(project, loaded, scan)
+                        typedCard(project, loaded, scan)
+                    }
                 }
                 .padding(3)
                 .frame(maxWidth: 980, alignment: .leading)
@@ -294,6 +298,65 @@ struct ComponentsView: View {
         }
     }
 
+    /// Decisions about the components that wait for the owner, and a Decide session with only those (DC9).
+    @ViewBuilder private func decisionsCard(_ project: Project) -> some View {
+        let waiting = (try? state.store.pendingDecisions(projectId: project.id, area: ComponentsSetup.area)) ?? []
+        if !waiting.isEmpty {
+            HXCard {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(waiting.count) decision\(waiting.count == 1 ? "" : "s") about components wait for you").font(.headline)
+                        Text(waiting.prefix(3).map(\.ticket.title).joined(separator: " · ")).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    Button { state.openDecide(area: ComponentsSetup.area) } label: { Label("Decide", systemImage: "checklist") }
+                        .buttonStyle(.glassProminent)
+                }
+            }
+        }
+    }
+
+    /// Other sets of components in the app besides the one in use (CO9, CO13): a rescan offers the tickets, never
+    /// opens them by itself.
+    @ViewBuilder private func otherSetsCard(_ project: Project, _ loaded: Loaded, _ scan: ComponentsScan) -> some View {
+        let path = loaded.components?.path
+        let others = scan.candidates.filter { $0.path != path }
+        let chosen = scan.candidates.first { $0.path == path }
+        let open = Set(((try? state.store.tickets(TicketFilter(projectId: project.id))) ?? [])
+            .filter { $0.status != .done && $0.status != .dropped }.map(\.title))
+        if let chosen, !others.isEmpty {
+            let clashes = ComponentConflicts.clashes(chosen: chosen, others: others)
+            let merges = others.map { ComponentsSetup.mergeDraft(into: chosen, from: $0) }.filter { !open.contains($0.title) }
+            let question = ComponentsSetup.clashQuestion(clashes, chosen: chosen, usage: [:]).flatMap { open.contains($0.title) ? nil : $0 }
+            if !merges.isEmpty || question != nil {
+                HXCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Other components in the app").font(.headline)
+                        ForEach(others, id: \.path) { o in
+                            Text("\(Text(o.path).font(.callout.monospaced())) · \(o.summary)").font(.callout).foregroundStyle(.secondary)
+                        }
+                        Text(clashes.isEmpty ? "Merging them into \(chosen.path) keeps one place for every color, font and size."
+                                             : "\(clashes.count) name\(clashes.count == 1 ? " has" : "s have") two values. Hatch adds a Question for you to choose, then a ticket to merge.")
+                            .foregroundStyle(.secondary)
+                        Button("Add Tickets") { addConflictTickets(project, chosen: chosen, others: others, clashes: clashes, merges: merges, question: question != nil) }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    }
+                }
+            }
+        }
+    }
+
+    private func addConflictTickets(_ project: Project, chosen: ComponentsCandidate, others: [ComponentsCandidate], clashes: [NameClash],
+                                    merges: [ComponentsSetup.Draft], question: Bool) {
+        let app = project.config?.repo(.app)?.localPath
+        Task {
+            let usage = await Task.detached { app.map { ComponentConflicts.usage(of: clashes.map(\.name), appRoot: $0) } ?? [:] }.value
+            let q = question ? ComponentsSetup.clashQuestion(clashes, chosen: chosen, usage: usage) : nil
+            guard let count = state.addComponentTickets(projectId: project.id, drafts: [q].compactMap { $0 } + merges) else { return }
+            message = "Added \(count) draft ticket\(count == 1 ? "" : "s")" + (q != nil ? ". The Question waits in Decide." : ". Read and submit them from the Desk.")
+        }
+    }
+
     /// How many values views still type in, where, and a way to move them.
     private func typedCard(_ project: Project, _ loaded: Loaded, _ scan: ComponentsScan) -> some View {
         HXCard {
@@ -357,13 +420,14 @@ struct ComponentsView: View {
         config.components = components
         guard state.saveProject(key: project.key, name: project.name, config: config, label: "Start components") != nil,
               let count = state.addComponentTickets(projectId: project.id,
-                                                    drafts: ComponentsSetup.drafts(appName: project.name, config: components, scan: scan)) else { return }
+                                                    drafts: ComponentsSetup.drafts(appName: project.name, config: components, scan: scan,
+                                                                                   existing: scan?.candidates.map(\.path) ?? [])) else { return }
         message = "Added \(count) draft ticket\(count == 1 ? "" : "s"). Read and submit them from the Desk."
         Task { await load() }
     }
 
     private func addMoves(_ project: Project, _ components: ComponentsConfig, _ scan: ComponentsScan) {
-        guard let count = state.addComponentTickets(projectId: project.id, drafts: ComponentsSetup.moveDrafts(config: components, scan: scan)) else { return }
+        guard let count = state.addComponentTickets(projectId: project.id, drafts: ComponentsSetup.moveDrafts(config: components, scan: scan, catalog: loaded?.catalog)) else { return }
         message = "Added \(count) draft ticket\(count == 1 ? "" : "s"). Read and submit them from the Desk."
     }
 
@@ -504,8 +568,10 @@ extension AppState {
         perform("Add components tickets") {
             var parent: Int?
             for (index, d) in drafts.enumerated() {
-                let t = try store.createTicket(projectId: projectId, type: d.type, title: d.title, body: d.body, parentId: parent)
+                let t = try store.createTicket(projectId: projectId, type: d.type, title: d.title, body: d.body, area: d.area, parentId: parent)
                 if index == 0 && d.type == .theme { parent = t.id }
+                // A Question Hatch prepared carries its options, so it is answered in Decide without an agent (CO11).
+                if !d.options.isEmpty { try store.setQuestionOptions(ticketId: t.id, d.options) }
             }
             return drafts.count
         }

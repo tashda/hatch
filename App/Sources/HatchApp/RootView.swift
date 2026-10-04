@@ -11,6 +11,7 @@ struct RootView: View {
         // Snapshot runs use the same window as the live app, so what they show is what you see.
         liveShell
         .commandPaletteOverlay()
+        .decideOverlay()
         .sheet(isPresented: $state.showAddProject) { ProjectSetupAssistant(store: state.store) }
         .alert("Something went wrong", isPresented: Binding(get: { state.errorMessage != nil }, set: { if !$0 { state.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
@@ -143,12 +144,15 @@ private struct ToolbarActions: View {
     @EnvironmentObject var state: AppState
 
     var body: some View {
-        Button { state.showPalette = true } label: { Label("Search", systemImage: "magnifyingglass") }
+        Button { state.openPalette(.tickets) } label: { Label("Command Palette", systemImage: "command") }
             .labelStyle(.iconOnly)
-            .help("Search (\u{2318}K)")
-        Button { state.navigate(to: .newTicket) } label: { Label("New Ticket", systemImage: "plus") }
-            .labelStyle(.iconOnly)
-            .help("New ticket (\u{2318}N)")
+            .help("Command palette (\u{2318}K)")
+        // A ticket needs a project to belong to.
+        if !state.projects.isEmpty {
+            Button { state.navigate(to: .newTicket) } label: { Label("New Ticket", systemImage: "plus") }
+                .labelStyle(.iconOnly)
+                .help("New ticket (\u{2318}N)")
+        }
         // The icon takes the accent color while the panel is open; no pill behind it.
         Button { state.showAskPanel.toggle() } label: {
             Image(systemName: "sparkles")
@@ -209,6 +213,12 @@ struct LiveToolbar: ToolbarContent {
 
         ToolbarItem(placement: .principal) {
             Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
+        }
+
+        // Decide in its own group, shown only while something waits (DC11).
+        if state.decisionCount > 0 {
+            ToolbarItem(placement: .primaryAction) { DecideToolbarButton() }
+            ToolbarSpacer(.fixed, placement: .primaryAction)
         }
 
         ToolbarItemGroup(placement: .primaryAction) { ToolbarActions() }
