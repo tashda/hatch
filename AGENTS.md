@@ -1,13 +1,13 @@
 # Hatch
 
-Hatch is a macOS app and a `hatch` command-line tool for tickets, AI agents and visual design decisions. It replaces Echo Labs. Read `DESIGN.md` before changing any UI. Read `SUMMARY.md` for what it is, `DECISIONS.md` for every decision (99, with the reason), `STATUS.md` for what is built and verified, `NEXT.md` for how to continue.
+Hatch is a macOS app and a `hatch` command-line tool for tickets, AI agents and visual design decisions. It replaces Echo Labs. Read `DESIGN.md` before changing any UI. Read `SUMMARY.md` for what it is, `DECISIONS.md` for every decision (with the reason; section R changes project setup and adds the notebook), `STATUS.md` for what is built and verified, `NEXT.md` for how to continue.
 
 ## Layout
 
 - `Package.swift`: the core (no external packages, language mode 5): `HatchCore`, `HatchGit`, `HatchSync`, `HatchAgent`, `HatchAPI`, `HatchImport`, and the `hatch` executable.
 - `App/`: the SwiftUI app (macOS only). `Stage/`: `StageCore` (logic), `StageKit` and the round packages (macOS only).
 - `design-page/`: source of the interactive design page and the saved answers.
-- `examples/`: sample `.hatch/project.json`. `tools/`: CLI smoke test and helper scripts.
+- `examples/`: a sample `project.json` (it now lives in each project's notebook, not in the app). `tools/`: CLI smoke test and helper scripts.
 
 ## Rules that must hold in every change
 

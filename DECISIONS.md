@@ -1273,3 +1273,26 @@ Nothing has been built yet. The order matters because the biggest assumption is 
 | LK9 | Keeping screens on track | A: tokens file, DESIGN.md, CI screenshots reviewed in one pass. |
 | LK10 | Button style | A: glass capsules with icon and label, as on Echo's server page. |
 | LK11 | Which buttons where | A: adopt the table in DESIGN.md. Drop sits behind a More menu. |
+
+## R. Project setup and the notebook (answered 2026-10-04, ids PS1 to PS16)
+
+Concept pages: `design-review/add-project-concepts.html` and `design-review/project-knowledge-concepts.html`. All answers were the recommendation unless noted.
+
+| Id | Question | Choice |
+|---|---|---|
+| PS1 | How a project is added and edited | A setup assistant to add (one step per part, filled in from the app repository); cards for Project settings. |
+| PS2 | Where GitHub is set up | The assistant's first step, skipped when connected; Settings keeps Disconnect. The app uses only the account connected in Hatch, never `gh` or `GITHUB_TOKEN`. |
+| PS3 | The project key | Suggested from the name and editable on the Project step, next to the name (owner: "this is not advanced"). |
+| PS4 | Tickets repository | Can be shared by several projects; one is the default for new projects (owner's note). |
+| PS5 | The app's folder on this Mac | Found automatically (a clone whose remote is the repository), or cloned by Hatch; Choose… remains. |
+| PS6 | How `hatch` reaches the base branch | Hatch opens a pull request, the owner merges; automatic and manual are settings in Project settings too (owner's note). Overrides I6's automatic promotion as the default. |
+| PS7 | Agent settings | Their own step: use the defaults or customize (agents at once, plan approval threshold, build and test commands). The build command is suggested from the clone. |
+| PS8 | Components repository | Use an existing one, have Hatch create one (name from the app, private or public), or none. |
+| PS9 | A notebook repository per project | Yes. Decisions, Spec, agent rules and Proposal options live there as plain files, so the project can be picked up with any agent without Hatch. Nothing that matters lives only in Hatch's database. |
+| PS10 | Its name | Notebook, repository `<app>-notebook` (tool-neutral). |
+| PS11 | "Design system" | Renamed Components. |
+| PS12 | Coding rules for agents | In the notebook (`rules/AGENTS.md`); Hatch places them in each clone and worktree as AGENTS.md plus a CLAUDE.md importing it, excluded via `.git/info/exclude`, never committed. An app that commits its own AGENTS.md is left alone. |
+| PS13 | Spec and project settings | Move from the app's `.hatch/` to the notebook; the app repository gets no Hatch files. The Spec-before-Done check spans the ticket's branches in both. |
+| PS14 | NOW.md | Yes, refreshed by Hatch on every change. |
+| PS15 | Kinds of decisions | Design, Architecture, Workflow. |
+| PS16 | How architecture choices are made | A Question can carry options with a recommendation; the answer becomes a decision file. No seventh ticket type. |
