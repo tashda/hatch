@@ -1326,3 +1326,63 @@ The owner asked why setup made both a components and a notebook repository, and 
 | CO6 | Keeping on track | `hatch ready` notes values typed into views on the lines a ticket adds, outside the components. A note, never a failure: a text check can over-count. The notebook's starter rules say to use the components. |
 | CO7 | What counts as a component | Read from Swift text and asset catalogs: `static let` colors, fonts and sizes in extensions or enums, public views, styles and View modifiers (any name in a plain folder of the app target), and color sets. Packages count only public names. |
 | CO8 | A folder in the app target | Allowed (many large apps have a `DesignSystem` folder), but marked "not a package yet": the app can use it, a Proposal cannot import it. Moving it into a package is a ticket like any other. |
+
+## U. How the Stage uses components (open, asked 2026-10-04, ids SC1 to SC5)
+
+Not answered yet and not built. They apply once the Stage is built per Proposal (S1); today the Stage is one prebuilt app (the toast spike). ★ marks the recommendation.
+
+### SC1. Which code does a Stage build against?
+
+A Proposal's Stage imports the app's components. They can come from different copies of the app.
+
+- ★ **A · A clean copy of the base branch that Hatch keeps**: a worktree of the base branch, updated by Hatch. Hatch writes the round's `Package.swift` itself, and the Stage records the commit it was judged against.
+- **B · The owner's own clone**: no extra copy, but it can be on any branch with half-finished edits.
+- **C · The ticket's branch**: shows the ticket's own changes, but a Proposal is judged before anything is built.
+
+**Open:** not answered yet.
+
+**My recommendation and reason:** A. A Proposal should be judged against what ships today. The owner's clone can be on any branch with half-finished edits, and the ticket's branch has nothing on it yet while options are judged. Recording the commit lets a decision say what it was compared with.
+
+### SC2. Where do an option's new colors, type or sizes go?
+
+An option may need a value the components do not have yet, such as a new background color.
+
+- ★ **A · Proposed inside the option, moved on build**: the option adds them in its own folder; the Stage shows "adds 2 colors"; the build ticket moves only the accepted ones into the components.
+- **B · Added to the components on a branch while preparing**: the Stage imports the branch, so options use the real package.
+
+**Open:** not answered yet.
+
+**My recommendation and reason:** A. Rejected options never leave anything in the app, and the components change once, on the build ticket, through the normal review. B needs a components branch per Proposal and has to be cleaned up when options are dropped.
+
+### SC3. How is "today" drawn?
+
+Every Proposal starts with the app as it is now. Agents are told "Echo today" (`isEchoToday`), which only fits Echo.
+
+- ★ **A · "App today", the real component where there is one**: renamed for any app (the old key still accepted). When the thing being changed is a component, such as `PrimaryButton`, the Stage draws the real one; a screen that lives only in the app is drawn by hand from the components.
+- **B · Always drawn by hand**: as now, renamed only.
+
+**Open:** not answered yet.
+
+**My recommendation and reason:** A. A real component cannot drift from what ships, and a hand-drawn screen built from the components is much closer than one built from copied values. The rename is needed either way, since Hatch is for any macOS app.
+
+### SC4. Does the Stage show what each option costs in components?
+
+- ★ **A · Yes, per option, with a gate warning**: "uses 9 components, adds 1, types 3 values in", from the same free text check as `hatch ready`; the quality gate warns the agent before the owner sees it.
+- **B · No**: the Stage shows only the options.
+
+**Open:** not answered yet.
+
+**My recommendation and reason:** A. What an option adds or types in is part of its cost, and it helps choose between two that look alike. The check costs nothing: no model call.
+
+### SC5. What does the Stage do without a components package?
+
+A project may have chosen Not now, or have its components in a plain folder of the app target, which a Stage cannot import.
+
+- ★ **A · Plain SwiftUI with a banner**: the Stage works as it does now and says the options only look roughly like the app.
+- **B · Compile the app's folder into the round**: copy or link the folder's files into the round.
+
+**Open:** not answered yet.
+
+**My recommendation and reason:** A. Files in an app folder usually depend on the rest of the app and would not compile alone; the honest banner tells the owner what they are judging. Moving the folder into a package is a ticket like any other (CO8).
+
+Risk for all of these: the components are compiled once per base commit and cached. That is quick for a small package; time it on Echo's package before relying on it.
