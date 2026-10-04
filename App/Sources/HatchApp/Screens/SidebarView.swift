@@ -13,8 +13,12 @@ struct SidebarView: View {
     private var selection: Binding<Route?> {
         Binding<Route?>(
             get: { Self.sidebarRoute(for: state.route) },
+            // The List can call this while SwiftUI is updating views, where publishing a change is not allowed
+            // ("Publishing changes from within view updates"). The change waits one turn of the run loop, and is
+            // skipped when the selection already shows the page.
             set: { newValue in
-                if let newValue { state.navigate(to: newValue) }
+                guard let newValue, newValue != Self.sidebarRoute(for: state.route) else { return }
+                DispatchQueue.main.async { state.navigate(to: newValue) }
             }
         )
     }
