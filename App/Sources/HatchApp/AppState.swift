@@ -140,6 +140,18 @@ final class AppState: ObservableObject {
             }
         }
         startLauncher()
+        // A ticket from any app (WF-C2); not while taking snapshots or showing demo data.
+        if Snapshots.folder == nil, !Snapshots.demoMode {
+            QuickCapture.shared.start(state: self)
+            #if DEBUG
+            // `--show-quick-capture ["text"]` opens the bar at launch, to look at it without pressing the key.
+            let args = CommandLine.arguments
+            if let i = args.firstIndex(of: "--show-quick-capture") {
+                let text = i + 1 < args.count && !args[i + 1].hasPrefix("-") ? args[i + 1] : ""
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { QuickCapture.shared.show(prefill: text) }
+            }
+            #endif
+        }
         maintainStorageIfDue()
         if maintenanceTimer == nil {
             maintenanceTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in

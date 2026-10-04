@@ -251,9 +251,10 @@ struct ThreadAvatar: View {
                     .font(.system(size: 12, weight: .semibold))
             }
         }
-            .foregroundStyle(fromOwner ? Theme.you : Theme.agent)
+            // Iris is drawn in the label colour: teal means an agent is working, and she is not one (DESIGN.md).
+            .foregroundStyle(fromOwner ? Theme.you : (isIris ? Color.primary : Theme.agent))
             .frame(width: 28, height: 28)
-            .background((fromOwner ? Theme.youBackground : Theme.agentBackground), in: Circle())
+            .background((fromOwner ? Theme.youBackground : (isIris ? Color.secondary.opacity(0.12) : Theme.agentBackground)), in: Circle())
     }
 }
 

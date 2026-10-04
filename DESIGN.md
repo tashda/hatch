@@ -13,6 +13,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 7. One prominent action per screen.
 8. Text: system font and text styles only. Monospaced only for ticket numbers and code.
 9. Every suggestion shows one recommendation and its reason.
+10. Iris's mark is drawn in the label colour (primary or secondary; the accent when her panel is open), never teal. Teal says an agent is working; Iris is the one who files and asks, not a worker.
 
 ## Component map
 
@@ -42,6 +43,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 | The way into Decide | A card with the count, time and kinds, one prominent Decide button (Desk top, Iris top); a toolbar button in its own group with the count badge, hidden at zero | `DecideIrisCard`, `DecideToolbarButton` |
 | Pointing at something in a screenshot | Mark-up sheet: Box, Arrow and Note in a segmented control, Undo, Save flattens the marks into the image. Marks are one fixed red so they read the same in light, dark and the saved file | `ScreenshotMarkupSheet`, `ShotMarksLayer` |
 | Where model work went (Reports) | Figures in one card, a stacked bar per day with hover, breakdown cards with a thin share bar per row, CSV export. Tokens only | `Chart` `BarMark` `.chartXSelection`, `Grid`, `NSSavePanel` |
+| Writing a ticket from any app | Quick Capture: one glass bar like Spotlight, Iris's mark, a field that grows, project, capture area and a round send button on the right; screenshots as thumbnails under it. Same glass, 24 pt radius and shadow as the command palette. Return sends, ⌥Return a new line, Esc or a click elsewhere closes | `QuickCaptureView`, `.glassEffect(.regular, in: .rect(cornerRadius: 24))` |
 | Nothing to show | Empty state with next step | `ContentUnavailableView` |
 | Work in progress | Spinner in the row, text says what | `ProgressView` |
 | Short feedback | Toast capsule | `HXToast` |

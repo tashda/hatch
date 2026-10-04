@@ -104,15 +104,19 @@ struct IrisReviewView: View {
     @ViewBuilder private func content(_ ticket: Ticket) -> some View {
         if ticket.status == .checking {
             checking(ticket)
-        } else if hasAnything {
-            header
-            if duplicatePending { duplicateCard }
-            if let newType = typePending(ticket) { typeCard(ticket, newType) }
-            if openQuestionCount > 0 { AnswerCardsView(ticketId: ticketId) }
-            if let rewrite { rewriteCard(ticket, rewrite) }
-            alsoFound
-        } else if showIdleMessage {
-            idle(ticket)
+        } else {
+            if hasAnything {
+                header
+                if duplicatePending { duplicateCard }
+                if let newType = typePending(ticket) { typeCard(ticket, newType) }
+                if openQuestionCount > 0 { AnswerCardsView(ticketId: ticketId) }
+                if let rewrite { rewriteCard(ticket, rewrite) }
+                alsoFound
+            } else if showIdleMessage {
+                idle(ticket)
+            }
+            // What she set, with a Change menu on each field (WF-T1).
+            FiledByIrisCard(ticketId: ticketId)
         }
     }
 
@@ -120,9 +124,9 @@ struct IrisReviewView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image("IrisIcon").resizable().scaledToFit().frame(width: 16, height: 16).foregroundStyle(Theme.agent)
+            Image("IrisIcon").resizable().scaledToFit().frame(width: 16, height: 16).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Iris checked this ticket")
+                Text(suggestion == nil ? "Iris needs you" : "Iris checked this ticket")
                     .font(.subheadline.weight(.semibold))
                 Text(headerDetail)
                     .font(.callout)
@@ -146,7 +150,7 @@ struct IrisReviewView: View {
         return HStack(spacing: 10) {
             if failure == nil { ProgressView().controlSize(.small) }
             VStack(alignment: .leading, spacing: 2) {
-                Text(failure == nil ? "Iris is checking this ticket" : "Iris could not finish the check")
+                Text(failure == nil ? "Iris is filing this ticket" : "Iris could not finish")
                     .font(.subheadline.weight(.semibold))
                 Text(checkingDetail(slow: slow))
                     .font(.callout)
@@ -160,19 +164,19 @@ struct IrisReviewView: View {
             }
         }
         .padding(12)
-        .background(failure == nil ? Theme.agentBackground : Theme.criticalBackground, in: RoundedRectangle(cornerRadius: 8))
+        .background(failure == nil ? Color.secondary.opacity(0.08) : Theme.criticalBackground, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func checkingDetail(slow: Bool) -> String {
         if let failure { return failure }
         if slow { return "This is taking longer than usual." }
-        return "Iris compares it with other tickets and the Spec, then asks questions before any work starts."
+        return "She works out what it is and checks it against the other tickets, the Spec, the components and earlier decisions. She asks only what she cannot guess."
     }
 
     private func idle(_ ticket: Ticket) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
-            Text(ticket.status == .ready ? "Iris had nothing to ask. The ticket is Ready." : "Nothing to review.")
+            Text(ticket.status == .ready ? "Iris had nothing to ask. It is on its way to an agent." : "Nothing to review.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

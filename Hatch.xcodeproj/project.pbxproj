@@ -72,6 +72,8 @@
 		DD98B4574A12C14073E2357C /* Adapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = B08CBB6E28A0112DD7F8C511 /* Adapters.swift */; };
 		E4AF184F4344EC6D98ECF139 /* StageLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 168F59BA94540A6EA616F0CB /* StageLauncher.swift */; };
 		E75B511680E103D750306D48 /* TicketHistoryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78355C404242719FFEB0295 /* TicketHistoryTab.swift */; };
+		17DB170330246F9DA273703E /* FiledByIris.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46632CCECA82359165663D89 /* FiledByIris.swift */; };
+		1B7B800577CA3495DEAF8891 /* QuickCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A056202E8E4F0CCCBABFBB2 /* QuickCapture.swift */; };
 		E82E2F2DD0373D41928DBA39 /* AnswerCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 548F8F5CD99070F671D33F73 /* AnswerCards.swift */; };
 		E9666C026E05CA6094D17B29 /* LogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D728C148F7A1D0026394FA /* LogView.swift */; };
 		ECF777578FF6A8D373CCEB2D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64F0F50F0745471BE8744028 /* RootView.swift */; };
@@ -111,6 +113,8 @@
 		501F8478F0F8743977F822BD /* TicketOverviewTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketOverviewTab.swift; sourceTree = "<group>"; };
 		50AA3B651A6F720EEC6333D3 /* IrisReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IrisReviewView.swift; sourceTree = "<group>"; };
 		548F8F5CD99070F671D33F73 /* AnswerCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnswerCards.swift; sourceTree = "<group>"; };
+		1A056202E8E4F0CCCBABFBB2 /* QuickCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCapture.swift; sourceTree = "<group>"; };
+		46632CCECA82359165663D89 /* FiledByIris.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FiledByIris.swift; sourceTree = "<group>"; };
 		5CD8172654E3B05A33D62F8C /* DeskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskView.swift; sourceTree = "<group>"; };
 		5E6CDB9CB2F56F175AE2B0EC /* PreviewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewsView.swift; sourceTree = "<group>"; };
 		617F034C123D732B1CF03882 /* HatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HatchApp.swift; sourceTree = "<group>"; };
@@ -225,6 +229,8 @@
 			isa = PBXGroup;
 			children = (
 				548F8F5CD99070F671D33F73 /* AnswerCards.swift */,
+				1A056202E8E4F0CCCBABFBB2 /* QuickCapture.swift */,
+				46632CCECA82359165663D89 /* FiledByIris.swift */,
 				A08FF820CF142B03A9888E3C /* AttachmentThumb.swift */,
 				33467206E68F205A69FFB029 /* Screenshots.swift */,
 				F4B2D75F35E1444F13624804 /* DesignSystem.swift */,
@@ -476,6 +482,8 @@
 				DD98B4574A12C14073E2357C /* Adapters.swift in Sources */,
 				437B449283ADBC928D57C174 /* AgentsView.swift in Sources */,
 				E82E2F2DD0373D41928DBA39 /* AnswerCards.swift in Sources */,
+				1B7B800577CA3495DEAF8891 /* QuickCapture.swift in Sources */,
+				17DB170330246F9DA273703E /* FiledByIris.swift in Sources */,
 				421D632B0243EED9E2C59F19 /* AppState+Notifications.swift in Sources */,
 				AEF9082ECDFF44FDB3E85268 /* AppState+Preferences.swift in Sources */,
 				D4919CDA766042B5B3A21F27 /* MenuBarPanel.swift in Sources */,

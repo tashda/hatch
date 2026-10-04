@@ -56,9 +56,9 @@ struct AskPanel: View {
         HStack(spacing: 10) {
             Image("IrisIcon")
                 .resizable().scaledToFit().frame(width: 20, height: 20)
-                .foregroundStyle(Theme.agent)
+                .foregroundStyle(.primary)
                 .frame(width: 34, height: 34)
-                .background(Theme.agentBackground, in: RoundedRectangle(cornerRadius: 10))
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 2) {
                 Text("Ask Hatch").font(.headline)
                 if let t = currentTicket {
@@ -140,11 +140,27 @@ struct AskPanel: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(m.fromOwner ? Color.secondary : Theme.agent)
             Text(m.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            if !m.fromOwner {
+                // Turns the exchange into a prompt for Iris (decision WF-C2); nothing is created until it is sent.
+                Button { QuickCapture.shared.show(prefill: ticketPrompt(answer: m)) } label: { Label("Make a Ticket", systemImage: "square.and.pencil") }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Opens Quick Capture with this question and answer, for Iris to file")
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(m.fromOwner ? Color.secondary.opacity(0.08) : Theme.agentBackground,
                     in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func ticketPrompt(answer: Message) -> String {
+        let index = messages.firstIndex { $0.id == answer.id } ?? 0
+        let asked = messages[..<index].last { $0.fromOwner }?.text ?? ""
+        var text = asked
+        if !answer.text.isEmpty { text += (text.isEmpty ? "" : "\n\n") + "Hatch said: " + String(answer.text.prefix(1200)) }
+        if let t = currentTicket { text += "\n\nFrom a question about \(t.displayNumber) \(t.title)." }
+        return text
     }
 
     private func errorView(_ text: String) -> some View {

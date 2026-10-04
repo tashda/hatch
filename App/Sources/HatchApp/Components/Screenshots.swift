@@ -155,6 +155,10 @@ struct ScreenshotMarkupSheet: View {
     /// Marks to start with (snapshot runs).
     var initial: [ShotMark] = []
     let save: (Data) -> Void
+    /// Set when the view is in a window of its own rather than a sheet (Quick Capture), to close that window.
+    var onClose: (() -> Void)? = nil
+
+    private func finish() { if let onClose { onClose() } else { dismiss() } }
 
     enum Tool: String, CaseIterable, Identifiable { case box = "Box", arrow = "Arrow", note = "Note"; var id: String { rawValue } }
     @State private var tool: Tool = .box
@@ -195,8 +199,8 @@ struct ScreenshotMarkupSheet: View {
             HStack {
                 Text("Marks are drawn into the saved image.").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Save") { if let png = render() { save(png) }; dismiss() }
+                Button("Cancel") { finish() }.keyboardShortcut(.cancelAction)
+                Button("Save") { if let png = render() { save(png) }; finish() }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }
         }

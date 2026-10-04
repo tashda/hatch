@@ -23,41 +23,28 @@ struct SimilarHit: Identifiable {
     var id: Int { ticket.id }
 }
 
-/// New ticket: one form with a Hatch check panel on the right (decisions E1, E2, E3, E5, E7).
+/// New ticket: one prompt, the way you would tell a colleague, with screenshots if you like (decision WF-C1). Iris works
+/// out the type, title, area and the rest (WF-T1), so there is nothing else to fill in. The panel on the right shows the
+/// related tickets and Spec items local search finds while you type: free, no model call.
 struct ComposerView: View {
     @EnvironmentObject var state: AppState
 
-    /// Starts as Settings › General › New ticket type; nil (Ask me) until you choose.
-    @State private var type: TicketType?
-    @State private var typeLoaded = false
-    @State private var title = ""
-    @State private var bodyText = ""
+    @State private var prompt = ""
     @State private var projectId: Int?
-    @State private var area = ""
-    @State private var themeId: Int?
     @State private var shots: [PendingShot] = []
     /// The screenshot open in the mark-up sheet.
     @State private var markingUp: PendingShot?
     @State private var links: [PendingLink] = []
-    @State private var linkRef = ""
-    @State private var linkKind: LinkKind = .related
     @State private var similar: [SimilarHit] = []
     @State private var specs: [SpecItem] = []
-    @State private var themes: [Ticket] = []
     @State private var hintTask: Task<Void, Never>?
     @State private var dropTargeted = false
     @State private var submitted: Ticket?
+    @FocusState private var promptFocused: Bool
+    @ObservedObject private var keys = ShortcutStore.shared
 
-    private var project: Project? {
-        guard let projectId else { return nil }
-        return state.project(id: projectId)
-    }
-
-    private var areaNames: [String] { project?.config?.areas.map { $0.name } ?? [] }
-
-    private var canSubmit: Bool {
-        projectId != nil && type != nil && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
+    private var hasInput: Bool { !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var canSubmit: Bool { projectId != nil && hasInput }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -80,26 +67,22 @@ struct ComposerView: View {
         .onAppear {
             setUp()
             if Snapshots.folder != nil {
-                type = .bug
-                title = "Keep focus in the query after Run"
-                bodyText = "After running a query, focus moves to the toolbar. Keep the keyboard focus in the query editor so the next query can be changed without reaching for the mouse."
-                area = "Editor"
+                prompt = "After running a query, focus jumps to the toolbar. It should stay in the editor so I can change the query and run it again without the mouse."
             }
         }
         .onChange(of: similar.map(\.ticket.id)) { _, _ in publishCheck() }
         .onChange(of: specs.map(\.code)) { _, _ in publishCheck() }
         .onChange(of: hasInput) { _, _ in publishCheck() }
         .onDisappear { state.hatchCheck = nil }
-        // ⌘V with a screenshot on the clipboard, wherever the cursor is in the form (decision E3).
+        // ⌘V with a screenshot on the clipboard, wherever the cursor is (decision E3).
         .pastesScreenshots { images in shots += images.map { PendingShot(name: $0.name, data: $0.data) } }
         .sheet(item: $markingUp) { shot in
             ScreenshotMarkupSheet(data: shot.data) { png in
                 if let i = shots.firstIndex(where: { $0.id == shot.id }) { shots[i] = PendingShot(name: shot.name, data: png) }
             }
         }
-        .onChange(of: title) { _, _ in scheduleHints() }
-        .onChange(of: bodyText) { _, _ in scheduleHints() }
-        .onChange(of: projectId) { _, _ in projectChanged() }
+        .onChange(of: prompt) { _, _ in scheduleHints() }
+        .onChange(of: projectId) { _, _ in scheduleHints() }
         .onChange(of: state.composerTitle) { _, _ in takeTitle() }
     }
 
@@ -107,31 +90,24 @@ struct ComposerView: View {
         state.hatchCheck = HatchCheckState(similar: similar, specs: specs, hasInput: hasInput, onLink: addLink)
     }
 
-    private var hasInput: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
     // MARK: Actions
 
     private var actionBar: some View {
         HStack(spacing: 10) {
-            // Never silently disabled: when the type is all that is missing, say so.
-            Text(type == nil && hasInput ? "Choose a type to save the ticket." : "A new ticket starts as a draft.")
+            Text(hasInput ? "Iris files it: type, title, area and priority. She asks only what she cannot guess." : "Write what you want; that is all Hatch needs.")
                 .font(.callout)
-                .foregroundStyle(type == nil && hasInput ? Theme.you : Color.secondary)
+                .foregroundStyle(.secondary)
             Spacer()
             Button { state.navigate(to: .desk) } label: { Label("Cancel", systemImage: "xmark") }
                 .buttonStyle(.glass)
                 .keyboardShortcut(.cancelAction)
-            Button { create(submit: false) } label: { Label("Save as draft", systemImage: "square.and.arrow.down") }
+            Button { create(draft: true) } label: { Label("Save as draft", systemImage: "square.and.arrow.down") }
                 .buttonStyle(.glass)
                 .disabled(!canSubmit)
-            Button { create(submit: true) } label: {
-                Label(type == .theme ? "Create Theme" : "Submit for check", systemImage: type == .theme ? "plus" : "paperplane")
-            }
-            .buttonStyle(.glassProminent)
-            .keyboardShortcut(.return, modifiers: .command)
-            .disabled(!canSubmit)
+            Button { create(draft: false) } label: { Label("Send to Iris", systemImage: "paperplane") }
+                .buttonStyle(.glassProminent)
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(!canSubmit)
         }
         .controlSize(.large)
         .padding(.horizontal, 24)
@@ -143,157 +119,46 @@ struct ComposerView: View {
     // MARK: Form
 
     private var form: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 0) {
-                narrativeForm
-                    .frame(minWidth: 500, maxWidth: .infinity)
-                detailsForm
-                    .frame(width: 280)
-            }
-            compactForm
-        }
-    }
-
-    private var narrativeForm: some View {
         Form {
-            Section("Ticket") { titleField }
-            Section("Description") { bodyEditor }
+            Section {
+                promptEditor
+            } header: {
+                Text("What do you want?")
+            } footer: {
+                Text("A bug, an idea, a question, a change, several things at once. Paste a crash log or a screenshot if it helps.")
+            }
             Section("Screenshots") { screenshotArea }
-            Section("Links") { linkArea }
-            if !branchText().isEmpty {
-                Section("Branches") { branchLine }
+            if !links.isEmpty { Section("Links") { linkList } }
+            if state.projects.count > 1 {
+                Section {
+                    Picker("Project", selection: $projectId) {
+                        ForEach(state.projects) { p in Text(p.name).tag(Optional(p.id)) }
+                    }
+                } footer: {
+                    Text("Iris moves it if it clearly belongs to another project, and says so.")
+                }
             }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
     }
 
-    private var detailsForm: some View {
-        Form {
-            Section {
-                typePicker
-                pickers
-            } header: {
-                Text("Details")
-            } footer: {
-                Text(Self.typeHelp(type))
+    private var promptEditor: some View {
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $prompt)
+                .font(.body)
+                .scrollContentBackground(.hidden)
+                .padding(4)
+                .focused($promptFocused)
+            if prompt.isEmpty {
+                Text("For example: Opening a big table on SQL Server is really slow.")
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 14)
+                    .allowsHitTesting(false)
             }
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-    }
-
-    private var compactForm: some View {
-        Form {
-            Section {
-                typePicker
-                titleField
-                pickers
-            } header: {
-                Text("Ticket")
-            } footer: {
-                Text(Self.typeHelp(type))
-            }
-            Section("Description") {
-                bodyEditor
-            }
-            Section("Screenshots") {
-                screenshotArea
-            }
-            Section("Links") {
-                linkArea
-            }
-            if !branchText().isEmpty {
-                Section("Branches") { branchLine }
-            }
-        }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-    }
-
-    private var titleField: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Title").font(.callout.weight(.medium))
-            TextField("Title", text: $title, prompt: Text("What needs to change?"))
-                .textFieldStyle(.roundedBorder)
-                .labelsHidden()
-                .multilineTextAlignment(.leading)
-                .font(.title3)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var typePicker: some View {
-        Picker("Type", selection: $type) {
-            if type == nil { Text("Choose…").tag(TicketType?.none) }
-            ForEach(TicketType.allCases, id: \.self) { kind in
-                Text(kind.displayName).tag(Optional(kind))
-            }
-        }
-        .pickerStyle(.menu)
-    }
-
-    static func typeHelp(_ type: TicketType?) -> String {
-        switch type {
-        case nil: return "Choose what kind of ticket this is. Iris will suggest another type if it fits better."
-        case .question: return "An idea or UX issue that is still words. You get a reply that has read the Spec and related tickets."
-        case .sketch: return "Exploring a layout or flow before any Swift. You get 2 to 4 variants as HTML."
-        case .proposal: return "Several options to compare in Swift. Hatch will suggest another type if it fits better."
-        case .tweak: return "A small change with one obvious fix. No judging step."
-        case .bug: return "Something that behaves wrongly. Say the steps, what you expected and what happened."
-        case .theme: return "A group of related tickets, like \"Connection management\". It shows progress."
-        }
-    }
-
-    private var pickers: some View {
-        Group {
-            Picker("Project", selection: $projectId) {
-                ForEach(state.projects) { p in
-                    Text(p.name).tag(Optional(p.id))
-                }
-            }
-            Picker("Area", selection: $area) {
-                Text("No area").tag("")
-                ForEach(areaNames, id: \.self) { name in
-                    Text(name).tag(name)
-                }
-            }
-            Picker("Theme", selection: $themeId) {
-                Text("No theme").tag(Int?.none)
-                ForEach(themes) { theme in
-                    Text(theme.title).tag(Optional(theme.id))
-                }
-            }
-            .disabled(type == .theme)
-        }
-    }
-
-    private var bodyEditor: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ZStack(alignment: .topLeading) {
-                TextEditor(text: $bodyText)
-                    .font(.body)
-                    .scrollContentBackground(.hidden)
-                    .padding(4)
-                if bodyText.isEmpty {
-                    Text("What should change, and why. Write what you like; Iris will help structure it.")
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 14)
-                        .allowsHitTesting(false)
-                }
-            }
-            .frame(minHeight: 220)
-            if type == .proposal {
-                Text("Useful for a Proposal: what, why, scope, constraints.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if type == .bug {
-                Text("Useful for a Bug: steps, expected, actual.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
+        .frame(minHeight: 260)
     }
 
     // MARK: Screenshots
@@ -303,15 +168,17 @@ struct ComposerView: View {
             HStack(spacing: 8) {
                 Image(systemName: "photo.on.rectangle")
                     .foregroundStyle(.secondary)
-                Text("Drop, paste (⌘V) or capture screenshots; click one to mark it up")
+                Text("Drop, paste (⌘V) or capture; click one to mark it up. Iris looks at them too.")
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Choose…") { chooseFiles() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                Button("Paste") { pasteFromClipboard() }
+                Button("Capture area") { captureArea() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .shortcut("capture.area", keys)
+                    .help(keys.help("Drag a rectangle over anything on screen", "capture.area"))
                 Button("Capture window") { captureWindow() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -321,7 +188,7 @@ struct ComposerView: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
                         ForEach(shots) { shot in
-                            ShotThumb(shot: shot, onMarkUp: { markingUp = shot }) { remove(shot) }
+                            ShotThumb(shot: shot, onMarkUp: { markingUp = shot }) { shots.removeAll { $0.id == shot.id } }
                         }
                     }
                 }
@@ -330,13 +197,7 @@ struct ComposerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 8)
         .background(dropTargeted ? Color.accentColor.opacity(0.12) : .clear)
-        .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in
-            handleDrop(providers)
-        }
-    }
-
-    private func remove(_ shot: PendingShot) {
-        shots.removeAll { $0.id == shot.id }
+        .onDrop(of: [UTType.fileURL], isTargeted: $dropTargeted) { providers in handleDrop(providers) }
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -345,18 +206,10 @@ struct ComposerView: View {
             handled = true
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                 var url: URL?
-                if let data = item as? Data {
-                    url = URL(dataRepresentation: data, relativeTo: nil)
-                } else if let direct = item as? URL {
-                    url = direct
-                }
-                guard let url else { return }
-                guard Self.isImage(url) else { return }
-                guard let data = try? Data(contentsOf: url) else { return }
+                if let data = item as? Data { url = URL(dataRepresentation: data, relativeTo: nil) } else if let direct = item as? URL { url = direct }
+                guard let url, Self.isImage(url), let data = try? Data(contentsOf: url) else { return }
                 let name = url.lastPathComponent
-                DispatchQueue.main.async {
-                    shots.append(PendingShot(name: name, data: data))
-                }
+                DispatchQueue.main.async { shots.append(PendingShot(name: name, data: data)) }
             }
         }
         return handled
@@ -373,14 +226,11 @@ struct ComposerView: View {
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
-            if let data = try? Data(contentsOf: url) {
-                shots.append(PendingShot(name: url.lastPathComponent, data: data))
-            }
+            if let data = try? Data(contentsOf: url) { shots.append(PendingShot(name: url.lastPathComponent, data: data)) }
         }
     }
 
     /// Capture the Echo window (decision E3): the system picker lets the owner click any window.
-    /// Runs `screencapture` off the main thread; cancelling the picker leaves no file and adds nothing.
     private func captureWindow() {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("hatch-capture-\(UUID().uuidString).png")
         Task {
@@ -394,17 +244,21 @@ struct ComposerView: View {
                 try? FileManager.default.removeItem(at: file)
                 return result
             }.value
-            if let data, !data.isEmpty {
-                shots.append(PendingShot(name: "capture-\(shots.count + 1).png", data: data))
-            }
+            if let data, !data.isEmpty { shots.append(PendingShot(name: "capture-\(shots.count + 1).png", data: data)) }
         }
     }
 
-    private func pasteFromClipboard() {
-        if let images = ScreenshotClipboard.images() {
-            shots += images.map { PendingShot(name: $0.name, data: $0.data) }
-        } else {
-            state.errorMessage = "The clipboard has no image."
+    /// Drag a rectangle over anything on screen; the shot is attached at once (click it to mark it up).
+    private func captureArea() {
+        if let problem = AreaCapture.permissionProblem() { state.errorMessage = problem; return }
+        let window = NSApp.keyWindow
+        window?.orderOut(nil)
+        Task {
+            let data = await AreaCapture.run()
+            window?.makeKeyAndOrderFront(nil)
+            if let data {
+                shots.append(PendingShot(name: "area-\(shots.count + 1).png", data: data))
+            }
         }
     }
 
@@ -413,50 +267,20 @@ struct ComposerView: View {
         return rep.representation(using: .png, properties: [:])
     }
 
-    // MARK: Links
+    // MARK: Links (from the panel's Link buttons; Iris adds her own)
 
-    private var linkArea: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(links) { link in
-                HStack(spacing: 8) {
-                    Text(LinkText.name(link.kind))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 80, alignment: .leading)
-                    Text(link.ticket.displayNumber).foregroundStyle(.secondary)
-                    Text(link.ticket.title).lineLimit(1)
-                    Spacer()
-                    Button { links.removeAll { $0.id == link.id } } label: { Image(systemName: "xmark.circle") }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                }
-            }
+    private var linkList: some View {
+        ForEach(links) { link in
             HStack(spacing: 8) {
-                Picker("Kind", selection: $linkKind) {
-                    ForEach(LinkKind.allCases.filter { $0 != .parent }, id: \.self) { kind in
-                        Text(LinkText.name(kind)).tag(kind)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 130)
-                TextField("#118", text: $linkRef)
-                    .textFieldStyle(.roundedBorder)
-                    .labelsHidden()
-                    .frame(width: 120)
-                    .onSubmit { addLinkFromField() }
-                Button("Add link") { addLinkFromField() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(linkRef.trimmingCharacters(in: .whitespaces).isEmpty)
+                Text(LinkText.name(link.kind)).font(.caption).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
+                Text(link.ticket.displayNumber).foregroundStyle(.secondary)
+                Text(link.ticket.title).lineLimit(1)
+                Spacer()
+                Button { links.removeAll { $0.id == link.id } } label: { Image(systemName: "xmark.circle") }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private func addLinkFromField() {
-        let ref = linkRef
-        guard let found: Ticket = state.perform("Could not find that ticket", { try state.store.resolve(ref) }) else { return }
-        addLink(found, kind: linkKind)
-        linkRef = ""
     }
 
     private func addLink(_ ticket: Ticket, kind: LinkKind) {
@@ -464,63 +288,19 @@ struct ComposerView: View {
         links.append(PendingLink(ticket: ticket, kind: kind))
     }
 
-    private var branchLine: some View {
-        let text: String = branchText()
-        return Group {
-            if !text.isEmpty {
-                Text("Branches: \(text) (from the project settings)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func branchText() -> String {
-        guard let config = project?.config else { return "" }
-        var parts: [String] = []
-        for repo in config.repos {
-            switch repo.role {
-            case .app: parts.append("App \u{2192} \(repo.branch)")
-            case .designSystem: parts.append("Components \u{2192} \(repo.branch)")
-            case .specimens: parts.append("Specimens \u{2192} \(repo.branch)")
-            case .tickets, .notebook: break
-            }
-        }
-        return parts.joined(separator: " · ")
-    }
-
     // MARK: Hints (free, local)
 
     private func setUp() {
-        if !typeLoaded {
-            type = state.newTicketType
-            typeLoaded = true
-        }
         takeTitle()
-        if projectId == nil {
-            projectId = state.projectFilterId ?? state.projects.first?.id
-        }
-        loadThemes()
+        if projectId == nil { projectId = state.projectFilterId ?? state.projects.first?.id }
+        promptFocused = true
     }
 
-    /// A title handed over by the palette (⌘Return), taken once.
+    /// Text handed over by the palette (⌘Return), taken once.
     private func takeTitle() {
         guard let handed = state.composerTitle else { return }
-        title = handed
+        prompt = handed
         state.composerTitle = nil
-    }
-
-    private func projectChanged() {
-        area = ""
-        themeId = nil
-        loadThemes()
-        scheduleHints()
-    }
-
-    private func loadThemes() {
-        guard let projectId else { themes = []; return }
-        let all: [Ticket] = (try? state.store.tickets(TicketFilter(projectId: projectId, types: [.theme]))) ?? []
-        themes = all.filter { !$0.status.isTerminal }
     }
 
     private func scheduleHints() {
@@ -533,89 +313,70 @@ struct ComposerView: View {
     }
 
     private func runHints() {
-        guard hasInput else {
-            similar = []
-            specs = []
-            return
-        }
-        let hits = (try? state.store.similarTickets(projectId: projectId, title: title, body: bodyText, limit: 5)) ?? []
-        similar = hits.map { SimilarHit(ticket: $0.ticket, score: $0.score) }
-        if let projectId {
-            specs = (try? state.store.searchSpec(projectId: projectId, query: title + " " + bodyText, limit: 5)) ?? []
-        } else {
-            specs = []
-        }
+        guard hasInput else { similar = []; specs = []; return }
+        let (title, body) = HatchStore.workingTitle(prompt.trimmingCharacters(in: .whitespacesAndNewlines))
+        similar = ((try? state.store.similarTickets(projectId: projectId, title: title, body: body, limit: 5)) ?? []).map { SimilarHit(ticket: $0.ticket, score: $0.score) }
+        specs = projectId.flatMap { try? state.store.searchSpec(projectId: $0, query: prompt, limit: 5) } ?? []
     }
 
-    // MARK: Create and submit
+    // MARK: Create
 
-    private func create(submit: Bool) {
-        guard let pid = projectId, let ticketType = type else { return }
-        let ticketTitle = title
-        let ticketBody = bodyText
-        let ticketArea: String? = area.isEmpty ? nil : area
-        let parent: Int? = ticketType == .theme ? nil : themeId
-        let runCheck = submit && ticketType != .theme
+    private func create(draft: Bool) {
+        guard let pid = projectId else { return }
+        let text = prompt
+        let pendingShots = shots
+        let pendingLinks = links
+        let paths = state.paths
         let created: Ticket? = state.perform("Could not create the ticket") {
-            let t = try state.store.createTicket(projectId: pid, type: ticketType, title: ticketTitle, body: ticketBody,
-                                                 area: ticketArea, parentId: parent, status: .draft, actor: .owner)
-            try saveShots(for: t)
-            for link in links {
-                try state.store.link(from: t.id, to: link.ticket.id, kind: link.kind)
+            try state.store.db.transaction { () -> Ticket in
+                let t = try state.store.capture(prompt: text, projectId: pid, draft: true)
+                try Self.saveShots(pendingShots, for: t, store: state.store, root: paths.root)
+                for link in pendingLinks { try state.store.link(from: t.id, to: link.ticket.id, kind: link.kind) }
+                // Screenshots are saved before Iris starts, so she sees them (WF-C5).
+                if draft { return t }
+                return try state.store.move(t.id, to: .checking, actor: .owner, reason: "captured; Iris files it")
             }
-            if runCheck {
-                return try state.store.move(t.id, to: .checking, actor: .owner, reason: "submitted for check")
-            }
-            return t
         }
         guard let created else { return }
-        if runCheck {
+        if draft {
+            state.open(created)
+        } else {
             VettingBridge.start(ticketId: created.id, state: state)
             submitted = created
-        } else {
-            state.open(created)
         }
+        state.refresh()
     }
 
-    private func saveShots(for ticket: Ticket) throws {
+    static func saveShots(_ shots: [PendingShot], for ticket: Ticket, store: HatchStore, root: URL) throws {
         guard !shots.isEmpty else { return }
         let relative = "attachments/\(ticket.id)"
-        let dir = state.paths.root.appendingPathComponent(relative, isDirectory: true)
+        let dir = root.appendingPathComponent(relative, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         for (index, shot) in shots.enumerated() {
             let ext = (shot.name as NSString).pathExtension.lowercased()
             let fileName = "shot-\(index + 1).\(ext.isEmpty ? "png" : ext)"
             try shot.data.write(to: dir.appendingPathComponent(fileName))
-            let digest = SHA256.hash(data: shot.data)
-            let sha = digest.map { String(format: "%02x", $0) }.joined()
-            try state.store.addAttachment(ticket.id, path: "\(relative)/\(fileName)", sha: sha, kind: "screenshot", caption: shot.name)
+            let sha = SHA256.hash(data: shot.data).map { String(format: "%02x", $0) }.joined()
+            try store.addAttachment(ticket.id, path: "\(relative)/\(fileName)", sha: sha, kind: "screenshot", caption: shot.name)
         }
     }
 
-    // MARK: After submit
+    // MARK: After sending
 
     private func submittedView(_ ticket: Ticket) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
-                    Image(systemName: "paperplane")
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "paperplane").foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(ticket.displayNumber) submitted")
-                            .font(.title3.weight(.semibold))
-                        Text(ticket.title)
-                            .foregroundStyle(.secondary)
+                        Text("\(ticket.displayNumber) sent to Iris").font(.title3.weight(.semibold))
+                        Text(ticket.title).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button { resetForm() } label: { Label("New ticket", systemImage: "plus") }
                         .buttonStyle(.glass)
                     Button { state.open(ticket) } label: { Label("Open ticket", systemImage: "arrow.right") }
                         .buttonStyle(.glassProminent)
-                }
-                if !VettingBridge.isAvailable {
-                    Text("Iris is not connected in this build, so the check will not run on its own. The ticket waits in Checking.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
                 }
                 IrisReviewView(ticketId: ticket.id, showIdleMessage: true)
             }
@@ -627,14 +388,12 @@ struct ComposerView: View {
 
     private func resetForm() {
         submitted = nil
-        title = ""
-        bodyText = ""
+        prompt = ""
         shots = []
         links = []
         similar = []
         specs = []
-        area = ""
-        themeId = nil
+        promptFocused = true
     }
 }
 
@@ -694,7 +453,7 @@ struct HatchCheckPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !hasInput {
-                    Text("Start typing a title and related tickets and Spec items appear here.")
+                    Text("Start typing and related tickets and Spec items appear here.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -773,9 +532,9 @@ struct HatchCheckPanel: View {
 
     private var afterSubmit: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("After you submit")
+            Text("After you send it")
                 .font(.subheadline.weight(.semibold))
-            Text("Iris compares the ticket with every other ticket and the Spec, and asks her questions before any work starts. She may also suggest a clearer text and a better type; you decide on both.")
+            Text("Iris files it: what kind of work it is, a clear title and text, the area, the priority and the links. She asks only what she cannot guess, with her guess picked, and checks design work against the components and earlier decisions. Everything she sets can be changed on the ticket.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

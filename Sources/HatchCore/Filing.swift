@@ -206,6 +206,15 @@ public extension HatchStore {
         return (cut + "…", text)
     }
 
+    /// Open questions waiting for the owner across tickets, oldest first, for the menu bar and notifications (WF-Q3).
+    func openQuestions(projectId: Int? = nil, limit: Int = 10) throws -> [(question: Question, ticket: Ticket)] {
+        var out: [(Question, Ticket)] = []
+        for t in try tickets(TicketFilter(projectId: projectId, statuses: [.needsAnswers])) {
+            for q in try questions(ticketId: t.id, openOnly: true) { out.append((q, t)) }
+        }
+        return Array(out.sorted { $0.0.at < $1.0.at }.prefix(limit))
+    }
+
     /// Whether Iris has filed this ticket yet (a ticket captured from a prompt has a placeholder type until then).
     func isFiled(_ t: Ticket) throws -> Bool {
         if t.path != nil { return true }
@@ -286,6 +295,17 @@ public extension HatchStore {
                            [.text(path.rawValue), .text(path.defaultVerify.rawValue), .date(now()), .int(id)])
             try record(id, actor: actor.rawValue, kind: "path", payload: ["from": t.path.map { .string($0.rawValue) } ?? .null, "to": .string(path.rawValue)])
             if path.type != t.type { try changeType(id, to: path.type, actor: actor == .agent ? .hatch : actor, reason: "path: \(path.displayName)") }
+            return try ticket(id: id)!
+        }
+    }
+
+    /// The owner changes how the work will be verified (the ticket's Change menu, decision WF-K2).
+    @discardableResult
+    func setVerify(_ id: Int, to verify: VerifyKind, actor: Actor) throws -> Ticket {
+        try db.transaction {
+            guard let t = try ticket(id: id) else { throw StoreError.notFound("ticket \(id)") }
+            try db.execute("UPDATE ticket SET verify = ?, updated_at = ? WHERE id = ?", [.text(verify.rawValue), .date(now()), .int(id)])
+            try record(id, actor: actor.rawValue, kind: "verify", payload: ["from": t.verify.map { .string($0.rawValue) } ?? .null, "to": .string(verify.rawValue)])
             return try ticket(id: id)!
         }
     }

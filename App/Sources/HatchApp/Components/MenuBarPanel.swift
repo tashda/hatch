@@ -44,6 +44,7 @@ struct MenuBarPanel: View {
     @Environment(\.openWindow) private var openWindow
     @State private var latest: (event: Event, ticket: Ticket)?
     @State private var maxAgents = 3
+    @State private var questions: [(question: Question, ticket: Ticket)] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -55,6 +56,10 @@ struct MenuBarPanel: View {
             Divider().padding(.horizontal, 10)
             waiting
                 .padding(.horizontal, 14).padding(.vertical, 10)
+            if !questions.isEmpty {
+                questionList
+                    .padding(.horizontal, 14).padding(.bottom, 10)
+            }
             activity
                 .padding(.horizontal, 14).padding(.bottom, 10)
             Divider().padding(.horizontal, 10)
@@ -144,8 +149,42 @@ struct MenuBarPanel: View {
         }
     }
 
+    /// Iris's and agents' questions, answered with one click from here (decision WF-Q3).
+    private var questionList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(questions, id: \.question.id) { item in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(item.ticket.displayNumber) · \(item.question.askedBy) asks").font(.caption).foregroundStyle(.secondary)
+                    Text(item.question.text).font(.callout).lineLimit(3)
+                    if item.question.suggestions.isEmpty {
+                        Button("Answer in Hatch") { open(ticketId: item.ticket.id) }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    } else {
+                        FlowLayout(spacing: 4) {
+                            ForEach(Array(item.question.suggestions.enumerated()), id: \.offset) { index, s in
+                                Button(s) { answer(item.question.id, s) }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                                    .tint(index == 0 ? Theme.you : nil)
+                                    .help(index == 0 ? "Iris's guess" : "")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func answer(_ questionId: Int, _ text: String) {
+        _ = state.perform("Could not save the answer") { try state.store.answer(questionId: questionId, text: text) }
+        state.refresh()
+        load()
+    }
+
     private var actions: some View {
         VStack(spacing: 0) {
+            Button { QuickCapture.shared.show() } label: {
+                MenuBarActionLabel(title: "New Ticket…", symbol: "square.and.pencil", shortcut: ShortcutStore.shared.hint("capture.quick"))
+            }
             Button { state.setAgentsPaused(!state.agentsPaused) } label: {
                 MenuBarActionLabel(title: state.agentsPaused ? "Resume Agents" : "Pause Agents",
                                    symbol: state.agentsPaused ? "play.circle" : "pause.circle")
@@ -180,6 +219,7 @@ struct MenuBarPanel: View {
     private func load() {
         latest = (try? state.store.recentEvents(projectId: state.projectFilterId, limit: 1))?.first
         maxAgents = (try? state.store.maxAgents(projectId: state.projectFilterId)) ?? 3
+        questions = (try? state.store.openQuestions(projectId: state.projectFilterId, limit: 3)) ?? []
     }
 
     private func open(ticketId: Int) {

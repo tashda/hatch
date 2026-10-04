@@ -21,6 +21,24 @@ final class ShortcutsTests: XCTestCase {
         }
     }
 
+    func testQuickCaptureIsSystemWideAndNeedsTwoModifiers() {
+        var map = ShortcutMap()
+        XCTAssertEqual(map.chord(for: "capture.quick"), KeyChord("h", [.control, .option]))
+        XCTAssertEqual(map.set(KeyChord("n", .control), for: "capture.quick"), .needsModifier)
+        XCTAssertEqual(map.set(KeyChord("space", [.control, .option]), for: "capture.quick"), .reserved, "switches input sources")
+        XCTAssertEqual(map.set(KeyChord("n", [.control, .option, .command]), for: "capture.quick"), .ok)
+        // It takes the key from every app, so a Hatch menu command cannot share it.
+        if case .conflict(let other) = map.set(KeyChord("h", [.control, .command]), for: "capture.quick") { XCTAssertEqual(other.id, "page.health") } else { XCTFail() }
+    }
+
+    func testCaptureAreaHasItsOwnKeyAndCanBeChanged() {
+        var map = ShortcutMap()
+        XCTAssertEqual(map.chord(for: "capture.area"), KeyChord("a", [.shift, .command]))
+        XCTAssertEqual(map.set(KeyChord("a"), for: "capture.area"), .needsModifier, "it is typed while writing")
+        XCTAssertEqual(map.set(KeyChord("4", [.control, .command]), for: "capture.area"), .ok)
+        XCTAssertEqual(map.chord(for: "capture.area"), KeyChord("4", [.control, .command]))
+    }
+
     func testDisplayOrderMatchesMacOS() {
         XCTAssertEqual(KeyChord("o", [.command, .shift]).display, "⇧⌘O")
         XCTAssertEqual(KeyChord("h", [.command, .control]).display, "⌃⌘H")

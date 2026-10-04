@@ -67,14 +67,24 @@ public enum ShortcutScope: String, Codable, CaseIterable, Sendable {
     case list
     /// Inside the open command palette.
     case palette
+    /// From any app on the Mac, even when Hatch is in the background (decision WF-C2). It takes the key before any
+    /// app sees it, so it clashes with Hatch's menu commands too.
+    case system
+    /// While writing a ticket: in Quick Capture and on the New Ticket page.
+    case compose
 
-    func overlaps(_ other: ShortcutScope) -> Bool { self == .app || other == .app || self == other }
+    func overlaps(_ other: ShortcutScope) -> Bool {
+        if self == .system || other == .system { return self == other || self == .app || other == .app }
+        return self == .app || other == .app || self == other
+    }
 
     public var title: String {
         switch self {
         case .app: "Anywhere"
         case .list: "In a list"
         case .palette: "In the command palette"
+        case .system: "From any app"
+        case .compose: "While writing a ticket"
         }
     }
 }
@@ -133,6 +143,14 @@ public enum ShortcutCatalog {
         .init("page.components", "Components", .pages, .app, .init("0", cmd)),
         .init("page.health", "Health", .pages, .app, .init("h", [.control, .command])),
         .init("page.reports", "Reports", .pages, .app, .init("r", [.control, .command])),
+        // A ticket from anywhere on the Mac (WF-C2). ⌃⌥H: H for Hatch, two modifiers no common app or macOS uses, and
+        // not ⌃Space or ⌃⌥Space, which switch input sources.
+        .init("capture.quick", "Quick Capture", .general, .system, .init("h", [.control, .option])),
+        // Drag a rectangle over the screen for a screenshot (WF-C2). ⇧⌘A: A for area, and not a key a capture tool
+        // such as Shottr or macOS's own ⇧⌘3 to ⇧⌘5 takes.
+        .init("capture.area", "Capture Area", .general, .compose, .init("a", [.shift, .command])),
+        // Empties Quick Capture, which otherwise keeps what was typed and pasted until it is sent.
+        .init("capture.fresh", "Start Fresh", .general, .compose, .init("delete", [.shift, .command])),
         .init("page.newTicket", "New Ticket", .pages, .app, .init("n", cmd)),
         .init("go.places", "Go to…", .pages, .app, .init("k", [.shift, .command])),
         .init("decide.open", "Decide", .pages, .app, .init("d", [.shift, .command])),
@@ -243,10 +261,19 @@ public struct ShortcutMap: Equatable, Sendable {
         return set
     }()
 
+    /// Keys macOS uses system-wide: Spotlight, Finder search and switching input sources.
+    static let reservedSystemWide: Set<KeyChord> = [KeyChord("space", .command), KeyChord("space", [.option, .command]),
+                                                    KeyChord("space", [.control, .option]), KeyChord("space", .control)]
+
     public func check(_ chord: KeyChord, for command: ShortcutCommand) -> ShortcutCheck {
         guard chord.isValidKey else { return .invalidKey }
         if Self.reserved.contains(chord) { return .reserved }
-        if command.scope == .app, !chord.modifiers.contains(.command), !chord.modifiers.contains(.control) { return .needsModifier }
+        if command.scope == .app || command.scope == .compose, !chord.modifiers.contains(.command), !chord.modifiers.contains(.control) { return .needsModifier }
+        // A key taken from every app needs two modifiers, so it never steals an ordinary shortcut like ⌘K.
+        if command.scope == .system {
+            if Self.reservedSystemWide.contains(chord) { return .reserved }
+            if [KeyModifiers.control, .option, .shift, .command].filter({ chord.modifiers.contains($0) }).count < 2 { return .needsModifier }
+        }
         if let other = owner(of: chord, scope: command.scope, excluding: command.id) { return .conflict(other) }
         return .ok
     }
