@@ -16,6 +16,8 @@ final class AppState: ObservableObject {
     let paths: AppPaths
     private var stageServer: StageServer?
     private var syncTimer: Timer?
+    /// True once services run; the timer may be off (Only when I ask) while changes still sync after a few seconds.
+    private var syncStarted = false
     @Published private(set) var syncing = false
     private var syncDebounce: DispatchWorkItem?
     private var notebookDirty: Set<Int> = []
@@ -114,9 +116,24 @@ final class AppState: ObservableObject {
     /// Pushes queued changes to the tickets repository of every project and pulls what changed there. Off the main thread;
     /// the sidebar footer shows the result (decision B5). Runs on a timer, shortly after a change, and from the Go menu.
     func startSync() {
-        guard syncTimer == nil else { return }
+        guard !syncStarted else { return }
+        syncStarted = true
         syncNow()
-        syncTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        restartSyncTimer()
+    }
+
+    /// The `sync_interval` setting: seconds between checks of GitHub, 0 for only when the owner asks. Default a minute.
+    static let syncIntervalSetting = "sync_interval"
+
+    var syncInterval: Int {
+        hxSetting(Self.syncIntervalSetting).flatMap(Int.init) ?? 60
+    }
+
+    /// Starts the timer again with the saved interval, after Settings › GitHub changes it.
+    func restartSyncTimer() {
+        syncTimer?.invalidate(); syncTimer = nil
+        guard syncStarted, syncInterval > 0 else { return }
+        syncTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(syncInterval), repeats: true) { [weak self] _ in
             Task { @MainActor in self?.syncNow() }
         }
     }
@@ -208,6 +225,7 @@ final class AppState: ObservableObject {
 
     func stopServices() {
         syncTimer?.invalidate(); syncTimer = nil
+        syncStarted = false
         launchTimer?.invalidate(); launchTimer = nil
         stageServer?.stop()
         stageServer = nil
@@ -302,9 +320,9 @@ final class AppState: ObservableObject {
     func refresh() {
         revision += 1
         refreshSyncSummary()
-        if syncSummary.pending > 0, syncTimer != nil { scheduleSync() }
+        if syncSummary.pending > 0, syncStarted { scheduleSync() }
         // Every change may move a ticket or record a decision: refresh the notebooks shortly after the last one.
-        if syncTimer != nil { scheduleNotebookExport() }
+        if syncStarted { scheduleNotebookExport() }
         NSApp?.dockTile.badgeLabel = yourTurnCount > 0 ? String(yourTurnCount) : nil
     }
 
