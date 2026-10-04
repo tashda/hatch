@@ -209,6 +209,13 @@ final class StoreTests: XCTestCase {
         XCTAssertThrowsError(try store.take(a.id, agent: "someone else"), "already taken")
     }
 
+    func testRemovedSettingReadsAsMissing() throws {
+        try store.setSetting("tickets.default", "acme/hatch-tickets")
+        XCTAssertEqual(try store.setting("tickets.default"), "acme/hatch-tickets")
+        try store.removeSetting("tickets.default")
+        XCTAssertNil(try store.setting("tickets.default"))
+    }
+
     func testVettingDoesNotUseABuildSlot() throws {
         try store.setSetting("max_agents", "0")
         let t = try ticket(.bug, "x")
