@@ -73,15 +73,12 @@ enum AgentCommands {
         let t = try c.ticket(c.args.pos(1))
         let agent = c.args.option("agent") ?? "Agent on \(t.displayNumber)"
         let task = try c.store.take(t.id, agent: agent)
-        let wanted: [RepoRole] = task.kind == .prepare ? [.specimens, .notebook] : (task.kind == .build || task.kind == .fix ? [.app, .designSystem, .notebook] : [])
         var spaces: [String] = [], notes: [String] = []
-        if !wanted.isEmpty && !c.args.flag("no-workspace") {
-            let manager = WorkspaceManager(store: c.store)
-            for repo in try c.store.repos(projectId: task.ticket.projectId) where wanted.contains(repo.role) {
-                guard repo.localPath != nil else { notes.append("No local clone configured for the \(repo.role.rawValue) repository, so no workspace was made for it."); continue }
-                let ws = try manager.create(ticket: task.ticket, repo: repo)
-                spaces.append("\(repo.role.rawValue): \(ws.path)  (branch \(ws.branch))")
-            }
+        if !AgentWorkspaces.roles(for: task.kind).isEmpty && !c.args.flag("no-workspace") {
+            // The same workspaces the launcher makes, so a hand-started agent works exactly like one Hatch started.
+            let made = try AgentWorkspaces.make(store: c.store, task: task)
+            notes += made.notes
+            for space in made.all { spaces.append("\(space.repo.role.rawValue): \(space.workspace.path)  (branch \(space.workspace.branch))") }
         }
         let brief = try BriefBuilder.brief(store: c.store, ticketId: t.id, agent: agent, kind: task.kind)
         var text = brief
