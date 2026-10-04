@@ -103,8 +103,25 @@ extension AppState {
     /// Where the `hatch` command is: chosen in Settings, else found on PATH or in the usual install places.
     static let hatchCommandSetting = "hatch_command"
 
+    /// The hatch built into this app (Contents/Helpers), so agents always use the one that matches it.
+    nonisolated static var builtInHatch: String? {
+        let path = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/hatch").path
+        return FileManager.default.isExecutableFile(atPath: path) ? path : nil
+    }
+
+    /// Where `hatch` is linked for Terminal: a folder macOS puts on every PATH.
+    nonisolated static let pathLink = "/usr/local/bin/hatch"
+
+    /// Whether Terminal finds this app's hatch: the PATH link points at the built-in one.
+    nonisolated static var hatchInPath: Bool {
+        guard let builtIn = builtInHatch,
+              let target = try? FileManager.default.destinationOfSymbolicLink(atPath: pathLink) else { return false }
+        return URL(fileURLWithPath: target).standardizedFileURL.path == URL(fileURLWithPath: builtIn).standardizedFileURL.path
+    }
+
     nonisolated static func hatchCommand(store: HatchStore) -> String? {
         if let chosen = (try? store.setting(hatchCommandSetting)) ?? nil, FileManager.default.isExecutableFile(atPath: chosen) { return chosen }
+        if let builtIn = builtInHatch { return builtIn }
         if let found = AgentProcess.locate("hatch") { return found }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return ["\(home)/.local/bin/hatch", "/usr/local/bin/hatch", "/opt/homebrew/bin/hatch"].first { FileManager.default.isExecutableFile(atPath: $0) }
@@ -147,6 +164,23 @@ extension AppState {
         perform("Pause agents") { try launcher?.setPaused(paused) ?? store.setSetting(AgentLauncher.pausedSetting, paused ? "1" : "0") }
         agentsPaused = paused
         if !paused { tickLauncher() }
+    }
+
+    /// Links /usr/local/bin/hatch to the built-in hatch, so `hatch` works in Terminal. macOS asks for an administrator's
+    /// password in its own dialog; Hatch never sees it. Returns why it failed, or nil.
+    func installHatchInPath() -> String? {
+        guard let builtIn = Self.builtInHatch else { return "This copy of Hatch has no built-in hatch command." }
+        let quoted = builtIn.replacingOccurrences(of: "'", with: "'\\''")
+        let source = "do shell script \"mkdir -p /usr/local/bin && ln -sf '\(quoted)' \(Self.pathLink)\" with administrator privileges with prompt \"Hatch wants to add the hatch command to Terminal.\""
+        var error: NSDictionary?
+        NSAppleScript(source: source)?.executeAndReturnError(&error)
+        if let error {
+            // Cancelling the password dialog is not a failure worth a message.
+            if (error[NSAppleScript.errorNumber] as? Int) == -128 { return nil }
+            return error[NSAppleScript.errorMessage] as? String ?? "macOS did not allow the link."
+        }
+        tickLauncher()
+        return nil
     }
 
     /// Opens Terminal in an agent's workspace, so the owner can take over.

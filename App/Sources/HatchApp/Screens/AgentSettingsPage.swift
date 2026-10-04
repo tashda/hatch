@@ -92,8 +92,11 @@ struct AgentSettingsPage: View {
         Section {
             Toggle("Start agents by themselves", isOn: Binding(get: { !state.agentsPaused }, set: { state.setAgentsPaused(!$0) }))
             LabeledContent("hatch command") {
-                Text(hatchCommand.map(hxAbbreviated) ?? "Not found").foregroundStyle(hatchCommand == nil ? Theme.critical : .secondary)
+                Text(hatchCommandLabel).foregroundStyle(hatchCommand == nil ? Theme.critical : .secondary)
                     .lineLimit(1).truncationMode(.middle)
+            }
+            LabeledContent("In Terminal") {
+                Text(inPath ? "Yes, as \(AppState.pathLink)" : "Not yet").foregroundStyle(.secondary)
             }
             Picker("Agents at once", selection: $maxAgents) {
                 ForEach(Self.agentCounts, id: \.self) { n in
@@ -108,9 +111,9 @@ struct AgentSettingsPage: View {
             Text("Coding agents")
         } footer: {
             HStack(alignment: .top) {
-                Text("When a ticket is ready and a slot is free, Hatch starts its agent in the ticket's own copy of the code. Agents call the hatch command to plan, ask and hand in.")
+                Text("When a ticket is ready and a slot is free, Hatch starts its agent in the ticket's own copy of the code. Agents call the hatch command to plan, ask and hand in; Install in PATH also lets you use it in Terminal.")
                 Spacer(minLength: 16)
-                Button("Choose hatch Command…", action: chooseHatchCommand)
+                if !inPath { Button("Install in PATH…", action: installInPath).disabled(AppState.builtInHatch == nil) }
             }
         }
     }
@@ -134,16 +137,16 @@ struct AgentSettingsPage: View {
 
     private var hatchCommand: String? { _ = hatchCommandVersion; return AppState.hatchCommand(store: state.store) }
 
-    private func chooseHatchCommand() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.message = "Choose the hatch program, for example .build/debug/hatch in the hatch folder."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        guard FileManager.default.isExecutableFile(atPath: url.path) else { state.errorMessage = "\(url.lastPathComponent) is not a program."; return }
-        state.hxSaveSetting(AppState.hatchCommandSetting, url.path)
+    private var inPath: Bool { _ = hatchCommandVersion; return AppState.hatchInPath }
+
+    private var hatchCommandLabel: String {
+        guard let path = hatchCommand else { return "Not found" }
+        return path == AppState.builtInHatch ? "Built into Hatch" : hxAbbreviated(path)
+    }
+
+    private func installInPath() {
+        if let problem = state.installHatchInPath() { state.errorMessage = problem }
         hatchCommandVersion += 1
-        state.tickLauncher()
     }
 
     /// What uses a provider, in plain words: the tasks that run on it, their own or through the default.

@@ -28,6 +28,22 @@ targets:
         product: HatchAPI
       - package: hatch
         product: HatchImport
+    postCompileScripts:
+      - name: Build the hatch command
+        basedOnDependencyAnalysis: false
+        script: |
+          # Builds the hatch command line tool and puts it in Hatch.app, signed like the app, so agents and the
+          # Install in PATH button always use the hatch that matches this app.
+          set -e
+          CONFIG=$( [ "$CONFIGURATION" = "Release" ] && echo release || echo debug )
+          cd "$SRCROOT"
+          env -u SDKROOT -u TOOLCHAINS xcrun --sdk macosx swift build -c "$CONFIG" --product hatch
+          DEST="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+          mkdir -p "$DEST"
+          cp -f ".build/$CONFIG/hatch" "$DEST/hatch"
+          if [ -n "$EXPANDED_CODE_SIGN_IDENTITY" ]; then
+            codesign --force --options runtime --timestamp=none --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$DEST/hatch"
+          fi
     info:
       path: App/Info.plist
       properties:
@@ -48,6 +64,8 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         # Hatch starts git, claude and xcodebuild, so it cannot run in the App Sandbox.
         ENABLE_APP_SANDBOX: NO
+        # The build script below runs swift build in the package folder.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Automatic
         # A real team, so every build has the same signature and the Keychain trusts it (ad-hoc builds prompt on each launch).

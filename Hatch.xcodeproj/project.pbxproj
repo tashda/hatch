@@ -286,6 +286,7 @@
 				B4EF24811435F56E934DA437 /* Sources */,
 				DACE2ECB39737447C680FC80 /* Resources */,
 				C5FE190495FB7C3D3DE5526F /* Frameworks */,
+				21D9D3252F2BB8C76DA5615C /* Build the hatch command */,
 			);
 			buildRules = (
 			);
@@ -350,6 +351,30 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		21D9D3252F2BB8C76DA5615C /* Build the hatch command */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build the hatch command";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/hatch",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Builds the hatch command line tool and puts it in Hatch.app, signed like the app, so agents and the\n# Install in PATH button always use the hatch that matches this app.\nset -e\nCONFIG=$( [ \"$CONFIGURATION\" = \"Release\" ] && echo release || echo debug )\ncd \"$SRCROOT\"\nenv -u SDKROOT -u TOOLCHAINS xcrun --sdk macosx swift build -c \"$CONFIG\" --product hatch\nDEST=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers\"\nmkdir -p \"$DEST\" \"$DERIVED_FILE_DIR\"\n# Only a changed tool is copied and signed again, so an unchanged app keeps a valid signature.\nif ! cmp -s \".build/$CONFIG/hatch\" \"$DERIVED_FILE_DIR/hatch.last\" 2>/dev/null; then\n  cp -f \".build/$CONFIG/hatch\" \"$DERIVED_FILE_DIR/hatch.last\"\n  cp -f \".build/$CONFIG/hatch\" \"$DEST/hatch\"\n  if [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --options runtime --timestamp=none --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" \"$DEST/hatch\"\n  fi\nfi\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		B4EF24811435F56E934DA437 /* Sources */ = {
@@ -424,6 +449,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
@@ -568,6 +594,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
