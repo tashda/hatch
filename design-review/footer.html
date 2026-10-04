@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Footer design</title>
+<style>
+  :root {
+    --page: #ececee; --sheet: #fbfbfd; --group: #f2f2f5; --row-line: #e1e1e6; --text: #1d1d1f; --secondary: #6e6e73;
+    --tertiary: #a1a1a6; --blue: #0a66d8; --blue-soft: #e7f0fd; --green: #248a3d; --green-soft: #e6f4ea; --amber: #a05a00;
+    --amber-soft: #fdf1df; --field: #ffffff; --line: #d6d6db; --side: #f4f4f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #161618; --sheet: #232326; --group: #2c2c30; --row-line: #3a3a3f; --text: #f2f2f4; --secondary: #a3a3aa;
+      --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+      --amber-soft: #3d2e14; --field: #1b1b1e; --line: #46464c; --side: #29292c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1060px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; font-weight: 600; margin: 56px 0 6px; }
+  h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--secondary); font-size: 14px; max-width: 720px; }
+  .muted { color: var(--secondary); }
+  .small { font-size: 11.5px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .note { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 12px; padding: 16px 18px; }
+  .rec { border: 2px solid var(--blue); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--blue-soft); color: var(--blue); margin-bottom: 8px; }
+  .badge.green { background: var(--green-soft); color: var(--green); }
+  .badge.amber { background: var(--amber-soft); color: var(--amber); }
+
+  .sheet { background: var(--sheet); border-radius: 16px; border: 1px solid var(--row-line); box-shadow: 0 20px 50px rgba(0,0,0,.14); overflow: hidden; }
+  .sheet-title { font-size: 15px; font-weight: 600; padding: 20px 24px 4px; }
+  .group-h { font-size: 12px; font-weight: 600; margin: 16px 24px 6px; }
+  .group { background: var(--group); border-radius: 10px; margin: 0 16px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; min-height: 38px; }
+  .row + .row { border-top: 1px solid var(--row-line); margin: 0 0; }
+  .row .val { color: var(--secondary); text-align: right; }
+  .inline-field { color: var(--text); text-align: right; min-width: 160px; outline: none; }
+  .inline-field.ph { color: var(--tertiary); }
+  .boxed { background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; width: 55%; min-height: 24px; }
+  .footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--row-line); margin-top: 18px; }
+  .btn { font: inherit; border: 0; border-radius: 7px; padding: 5px 14px; background: var(--group); color: var(--text); box-shadow: inset 0 0 0 0.5px var(--line); cursor: pointer; }
+  .btn.primary { background: var(--blue); color: #fff; box-shadow: none; }
+  .popup { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; padding: 3px 6px 3px 9px; background: var(--field); box-shadow: 0 0 0 0.5px var(--line), 0 1px 1px rgba(0,0,0,.05); }
+  .popup::after { content: "⌃⌄"; font-size: 9px; letter-spacing: -2px; writing-mode: vertical-lr; color: var(--secondary); }
+  .check { color: var(--green); font-weight: 600; }
+  .info { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--tertiary); color: var(--secondary); font-size: 10px; font-weight: 600; margin-left: 4px; vertical-align: 1px; }
+  .radio { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; }
+  .radio + .radio { border-top: 1px solid var(--row-line); }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--field); flex: none; margin-top: 2px; }
+  .dot.on { border: 4px solid var(--blue); }
+  .icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-size: 17px; flex: none; color: #fff; }
+  .i-tickets { background: #5e5ce6; } .i-code { background: #0a84ff; } .i-design { background: #ff6482; } .i-branch { background: #30a46c; } .i-gh { background: #1d1d1f; }
+  @media (prefers-color-scheme: dark) { .i-gh { background: #f2f2f4; color: #1d1d1f; } }
+
+  /* Concept A: assistant */
+  .assistant { display: grid; grid-template-columns: 200px 1fr; min-height: 520px; }
+  .steps { background: var(--side); padding: 18px 10px; border-right: 1px solid var(--row-line); }
+  .step { display: flex; gap: 9px; align-items: center; padding: 7px 10px; border-radius: 7px; cursor: pointer; color: var(--secondary); }
+  .step .n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); }
+  .step.done .n { background: var(--green); color: #fff; box-shadow: none; }
+  .step.on { background: var(--blue-soft); color: var(--text); font-weight: 600; }
+  .step.on .n { background: var(--blue); color: #fff; box-shadow: none; }
+  .pane { display: none; flex-direction: column; }
+  .pane.on { display: flex; }
+  .pane-body { padding: 26px 28px 0; flex: 1; }
+  .pane-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+  .pane-head h3 { font-size: 17px; margin: 0; }
+  .example { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; margin: 14px 0 0; background: var(--sheet); }
+  .example .label { font-size: 11px; font-weight: 600; color: var(--secondary); margin-bottom: 6px; }
+  .issue { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; }
+  .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; background: var(--group); color: var(--secondary); box-shadow: inset 0 0 0 0.5px var(--line); }
+  .swatches { display: flex; gap: 6px; margin-top: 4px; }
+  .swatches span { width: 22px; height: 22px; border-radius: 6px; }
+  .flow { display: flex; align-items: center; gap: 0; margin: 18px 0 6px; flex-wrap: wrap; row-gap: 10px; }
+  .node { padding: 7px 12px; border-radius: 9px; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .node.hatch { background: var(--green-soft); color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+  .node.base { background: var(--blue-soft); color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+  .arrow { display: flex; flex-direction: column; align-items: center; padding: 0 8px; color: var(--secondary); font-size: 11px; min-width: 96px; }
+  .arrow .line { height: 1px; background: var(--secondary); width: 100%; position: relative; margin: 4px 0; }
+  .arrow .line::after { content: ""; position: absolute; right: -1px; top: -4px; border-left: 7px solid var(--secondary); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; }
+
+  /* Concept B: cards */
+  .card { background: var(--group); border-radius: 12px; margin: 0 16px 12px; padding: 14px; }
+  .card-head { display: flex; gap: 12px; align-items: center; }
+  .card-head .grow { flex: 1; }
+  .card .sub { color: var(--secondary); font-size: 12px; }
+  .card .row { padding: 8px 0 0; min-height: 0; }
+  .card .row + .row { border-top: 0; }
+
+  /* Compare */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .qa { counter-reset: q; }
+  .qa .q { display: grid; grid-template-columns: 28px 1fr; gap: 6px 10px; padding: 14px 0; border-top: 1px solid var(--row-line); }
+  .qa .q::before { counter-increment: q; content: counter(q); width: 22px; height: 22px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); font-weight: 600; font-size: 12px; display: grid; place-items: center; }
+  .qa .q > div { grid-column: 2; }
+  .qa .q > div:first-of-type { grid-row: 1; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--group); padding: 1px 5px; border-radius: 4px; }
+  .qform { padding: 16px 0; border-top: 1px solid var(--row-line); }
+  .qform:first-child { border-top: 0; padding-top: 4px; }
+  .qform h3 { font-size: 14px; margin-bottom: 2px; }
+  .qform .why { color: var(--secondary); margin-bottom: 10px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+  .opt { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--group); box-shadow: inset 0 0 0 1px transparent; cursor: pointer; }
+  .opt:hover { box-shadow: inset 0 0 0 1px var(--line); }
+  .opt.on { background: var(--blue-soft); box-shadow: inset 0 0 0 1.5px var(--blue); }
+  .opt input { display: none; }
+  .opt .rec-tag { font-size: 10.5px; font-weight: 600; color: var(--blue); margin-left: 4px; }
+  .opt .d { color: var(--secondary); font-size: 12px; }
+  .qnote { width: 100%; margin-top: 8px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; resize: vertical; min-height: 34px; }
+
+  .win { display: grid; grid-template-columns: 210px 1fr; min-height: 560px; }
+  .sb { background: var(--side); padding: 16px 10px; border-right: 1px solid var(--row-line); }
+  .sb .it { display:flex; gap:9px; align-items:center; padding:6px 10px; border-radius:7px; color: var(--text); }
+  .sb .it.on { background: var(--blue-soft); font-weight:600; }
+  .pg { padding: 22px 26px 26px; }
+  .pg h4 { font-size: 20px; margin: 0 0 14px; font-weight: 600; }
+  .sec-h { font-size: 12.5px; font-weight: 600; margin: 18px 4px 6px; }
+  .sec-f { font-size: 11.5px; color: var(--secondary); margin: 6px 4px 0; line-height: 1.45; }
+  .frm { background: var(--group); border-radius: 10px; }
+  .frow { display:flex; align-items:center; justify-content:space-between; gap: 12px; padding: 8px 12px; min-height: 40px; }
+  .frow + .frow { border-top: 1px solid var(--row-line); }
+  .frow .t { display:flex; flex-direction:column; }
+  .frow .s { font-size: 11.5px; color: var(--secondary); }
+  .pv { display:inline-flex; align-items:center; gap:8px; color: var(--text); }
+  .chev { width: 20px; height: 20px; border-radius: 50%; display:inline-grid; place-items:center; font-size: 9px; color: var(--secondary); background: transparent; }
+  .pv:hover .chev, .chev.hov { background: var(--row-line); }
+  .chev::before { content: "⌃\A⌄"; white-space: pre; line-height: 6px; display:block; text-align:center; margin-top:-1px; }
+  .sw { width: 32px; height: 19px; border-radius: 10px; background: var(--blue); position: relative; display:inline-block; }
+  .sw::after { content:""; position:absolute; right:2px; top:2px; width:15px; height:15px; border-radius:50%; background:#fff; }
+  .sw.off { background: var(--line); } .sw.off::after { right:auto; left:2px; }
+  .ib { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--tertiary); display:inline-grid; place-items:center; font-size: 11px; color: var(--secondary); font-weight:600; }
+  .tile { width: 26px; height: 26px; border-radius: 7px; display:grid; place-items:center; color:#fff; font-size: 13px; font-weight: 700; flex:none; }
+  .menu { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 9px; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 5px; min-width: 230px; font-size: 13px; }
+  .menu .mh { font-size: 11px; font-weight: 600; color: var(--secondary); padding: 6px 10px 2px; }
+  .menu .mi { padding: 4px 10px 4px 24px; border-radius: 5px; position: relative; display:flex; justify-content:space-between; gap: 16px; }
+  .menu .mi.ck::before { content: "✓"; position:absolute; left: 8px; }
+  .menu .mi.hl { background: var(--blue); color: #fff; }
+  .menu .mi .r { color: var(--secondary); font-size: 11.5px; }
+  .menu .mi.hl .r { color: #dbe8ff; }
+  .menu .sep { height: 1px; background: var(--row-line); margin: 4px 8px; }
+  .bad { border: 2px solid #e5484d; }
+  .lbl { font-size: 11px; font-weight: 700; letter-spacing: .02em; margin-bottom: 8px; }
+  .lbl.bad-t { color: #e5484d; } .lbl.good-t { color: var(--green); }
+  .stp { display:inline-flex; flex-direction:column; border: 1px solid var(--line); border-radius: 6px; overflow:hidden; font-size: 8px; line-height: 9px; background: var(--field); }
+  .stp span { padding: 0 4px; } .stp span + span { border-top: 1px solid var(--line); }
+  .pick-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pick { background: var(--group); border-radius: 10px; padding: 10px 12px; display:flex; gap: 10px; align-items:flex-start; }
+  .pick.on { box-shadow: inset 0 0 0 2px var(--blue); background: var(--blue-soft); }
+  .pick .d { font-size: 11.5px; color: var(--secondary); }
+  .ok { color: var(--green); font-weight: 600; }
+  table.rules { width:100%; border-collapse: collapse; font-size: 12.5px; }
+  table.rules td, table.rules th { text-align:left; padding: 8px 8px; border-top: 1px solid var(--row-line); vertical-align: top; }
+  table.rules th { color: var(--secondary); font-weight: 600; border-top: 0; }
+  .pv { white-space: nowrap; }
+  @media (max-width: 900px) { .win { grid-template-columns: 1fr; } .sb { display: none; } }
+  .opt3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(270px,1fr)); gap: 14px; margin-top: 12px; }
+  .cap { font-size: 11px; font-weight: 700; margin-bottom: 6px; color: var(--secondary); }
+  .cap.capr { color: var(--blue); }
+  .dot-ok { width:8px; height:8px; border-radius:50%; background: var(--green); display:inline-block; margin-right:6px; }
+  .dot-bad { width:8px; height:8px; border-radius:50%; background:#e5484d; display:inline-block; margin-right:6px; }
+  .pushbtn { font: inherit; font-size: 12.5px; border: 0; border-radius: 6px; padding: 3px 10px; background: var(--field); box-shadow: 0 0 0 .5px var(--line), 0 1px 1px rgba(0,0,0,.06); }
+  .pm { display:inline-flex; border-radius: 5px; box-shadow: 0 0 0 .5px var(--line); background: var(--field); font-size: 13px; }
+  .pm span { padding: 1px 9px; } .pm span + span { border-left: .5px solid var(--line); }
+  .chevr { color: var(--tertiary); }
+  #summary { width: 100%; min-height: 150px; font: 12px ui-monospace, Menlo, monospace; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--text); }
+  .tilei { width: 26px; height: 26px; border-radius: 7px; display:grid; place-items:center; color:#fff; font-size: 13px; flex:none; }
+  .warn { color: #c77700; }
+  .seg { display:inline-flex; border-radius: 7px; background: var(--row-line); padding: 2px; font-size: 12px; }
+  .seg span { padding: 2px 10px; border-radius: 5px; } .seg span.on { background: var(--field); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .cap.capr { color: var(--blue); }
+
+  .foot { display:flex; align-items:center; gap: 14px; padding: 8px 16px; border-radius: 0 0 14px 14px; background: var(--side); border: 1px solid var(--row-line); font-size: 12px; color: var(--secondary); min-height: 34px; }
+  .slot { width: 11px; height: 11px; border-radius: 50%; display:inline-block; border: 1px solid var(--tertiary); }
+  .slot.on { background: linear-gradient(#22a5b8, #0b6e80); border: 3px solid rgba(11,110,128,.3); box-shadow: 0 0 4px rgba(11,110,128,.5); width: 11px; height: 11px; box-sizing: border-box; }
+  .slot.ring { background: conic-gradient(#0b6e80 0 65%, var(--row-line) 65% 100%); border: 0; }
+  .slots { display:inline-flex; gap: 7px; align-items:center; }
+  .spin { display:inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--row-line); border-top-color: var(--secondary); }
+  .okc { color: var(--green); } .attn { color: #c77700; } .bad { color: #e5484d; }
+  .pill { display:inline-flex; align-items:center; gap: 6px; padding: 2px 9px; border-radius: 10px; background: var(--group); box-shadow: inset 0 0 0 .5px var(--line); font-size: 11.5px; color: var(--text); }
+  .card { background: color-mix(in srgb, var(--sheet) 82%, transparent); backdrop-filter: blur(20px); border: 1px solid var(--row-line); border-radius: 16px; box-shadow: 0 14px 40px rgba(0,0,0,.18); padding: 14px 16px; font-size: 12.5px; max-width: 340px; }
+  .card h5 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+  .card .ln { display:flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+  .card .ln span:first-child { color: var(--secondary); }
+  .ev { display:flex; gap: 8px; padding: 3px 0; } .ev .t { color: var(--tertiary); min-width: 46px; }
+  .meter { height: 6px; border-radius: 3px; background: var(--row-line); overflow: hidden; } .meter i { display:block; height: 100%; background: #0b6e80; }
+  .grow { flex: 1; }
+  .elem { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 760px) { .elem { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>The footer</h1>
+  <p class="lead">The footer is always in view, so it can tell you at a glance that everything is calm, or that something needs you. One rule for all of it: <b>quiet when calm, specific when not</b>. Each element is a glyph or a few words; hovering shows a glass card with the details; clicking goes where you act on it. Below: the elements, four complete footers, then the pause control.</p>
+
+  <h2>The elements</h2>
+
+  <h3 style="margin-top:20px">1. Agent slots</h3>
+  <div class="elem">
+    <div class="note">
+      <div class="foot"><span class="slots"><span class="slot on"></span><span class="slot ring" title="progress"></span><span class="slot"></span></span></div>
+      <p class="muted small" style="margin-top:8px">The circles stay: one per slot, filled while an agent works. New: a <b>progress ring</b> fills around a working agent's circle by time against the usual time for that kind of work, so you see "nearly done" without hovering. Hover: the agent card you have now. Click: keeps it open.</p>
+    </div>
+    <div class="card"><h5>Build · Agent on #151</h5><div class="ln"><span>Doing</span><span>Editing ToastView.swift</span></div><div class="ln"><span>Time</span><span>12:34 of about 18 min</span></div><div class="ln"><span>Tokens</span><span>184k in · 13k out</span></div></div>
+  </div>
+
+  <h3 style="margin-top:20px">2. One status glyph</h3>
+  <div class="elem">
+    <div class="note">
+      <div class="foot"><span class="okc">✓</span> All saved <span class="grow"></span><span class="spin"></span> Syncing <span class="grow"></span><span class="attn">⚠︎</span> 1 to look at</div>
+      <p class="muted small" style="margin-top:8px">Replaces "Not synced yet". One glyph for everything that moves data: GitHub sync, the notebook (saved and pushed), the database. A checkmark when all is saved, a spinner while something moves, orange when something needs a look, red when something failed. Click: Health.</p>
+    </div>
+    <div class="card"><h5>Everything is saved</h5>
+      <div class="ln"><span>GitHub</span><span class="okc">✓ synced 1 min ago</span></div>
+      <div class="ln"><span>Notebook</span><span class="okc">✓ pushed 3 min ago</span></div>
+      <div class="ln"><span>Decisions</span><span>12, all in the notebook</span></div>
+      <div class="ln"><span>CI on hatch</span><span class="okc">✓ passing</span></div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:20px">3. Where you are</h3>
+  <div class="elem">
+    <div class="note">
+      <div class="foot"><span class="pill">⑂ Echo · hatch → dev</span></div>
+      <p class="muted small" style="margin-top:8px">The project and how work flows: Hatch's branch into your base branch. Hover: each repository with its branch, clone state and last commit (what Health shows, in small). Click: Health. With All projects selected it says "3 projects".</p>
+    </div>
+    <div class="card"><h5>Echo</h5>
+      <div class="ln"><span>App</span><span>tashda/echo · dev · in step</span></div>
+      <div class="ln"><span>Notebook</span><span>echo-notebook · 1 to push</span></div>
+      <div class="ln"><span>Components</span><span>echo-design-system · in step</span></div>
+      <div class="ln"><span>Tickets</span><span>hatch-tickets · 14 open</span></div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:20px">4. Activity line</h3>
+  <div class="elem">
+    <div class="note">
+      <div class="foot"><span>#151 moved to To verify</span><span style="color:var(--tertiary)">· 2 min</span></div>
+      <p class="muted small" style="margin-top:8px">The latest thing that happened, in a few words, fading in when it changes and fading to grey after a minute. Hover: the last ten events. Click: the Log.</p>
+    </div>
+    <div class="card"><h5>Latest</h5>
+      <div class="ev"><span class="t">2 min</span><span>#151 moved to To verify</span></div>
+      <div class="ev"><span class="t">5 min</span><span>Decision recorded: toast spacing</span></div>
+      <div class="ev"><span class="t">9 min</span><span>Agent on #152 started Build</span></div>
+      <div class="ev"><span class="t">14 min</span><span>Notebook pushed</span></div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:20px">5. Tokens today</h3>
+  <div class="elem">
+    <div class="note">
+      <div class="foot"><span style="width:60px" class="meter"><i style="width:38%"></i></span><span>212k today</span></div>
+      <p class="muted small" style="margin-top:8px">How much model work today, as a small bar and a number. Hover: by task (Iris, Ask, Build…) and by ticket. Click: Agents.</p>
+    </div>
+    <div class="card"><h5>Today</h5><div class="ln"><span>Build</span><span>148k</span></div><div class="ln"><span>Prepare</span><span>51k</span></div><div class="ln"><span>Iris</span><span>9k</span></div><div class="ln"><span>Ask</span><span>4k</span></div></div>
+  </div>
+
+  <h3 style="margin-top:20px">6. Waiting for you</h3>
+  <div class="elem">
+    <div class="note">
+      <div class="foot"><span class="pill" style="color:#b4540a">3 for you</span></div>
+      <p class="muted small" style="margin-top:8px">How many tickets wait for you. Hover: the three, with what each needs. Click: Desk. The Dock badge and the sidebar already show the count, so this repeats them.</p>
+    </div>
+    <div class="card"><h5>Waiting for you</h5><div class="ev"><span class="t">#142</span><span>Choose a direction</span></div><div class="ev"><span class="t">#143</span><span>Verify in Previews</span></div><div class="ev"><span class="t">#146</span><span>Answer 1 question</span></div></div>
+  </div>
+
+  <h2>Four complete footers</h2>
+  <div class="note rec" style="margin-top:12px"><div class="cap capr">A · RECOMMENDED: CALM STATUS BAR</div>
+    <div class="foot"><span class="slots"><span class="slot on"></span><span class="slot ring"></span><span class="slot"></span></span><span>#151 moved to To verify <span style="color:var(--tertiary)">· 2 min</span></span><span class="grow"></span><span class="pill">⑂ Echo · hatch → dev</span><span class="okc">✓</span></div>
+    <p class="muted small" style="margin-top:8px">Agents on the left with the activity line beside them; where you are and one status glyph on the right. Four things, each with a card. Calm: grey text and a green check. Busy: rings fill, the line changes, the glyph spins.</p></div>
+  <div class="opt3">
+    <div class="note"><div class="cap">B · MISSION CONTROL</div>
+      <div class="foot"><span class="slots"><span class="slot on"></span><span class="slot"></span><span class="slot"></span></span><span style="width:44px" class="meter"><i style="width:38%"></i></span><span>212k</span><span class="pill" style="color:#b4540a">3 for you</span><span class="grow"></span><span class="okc">✓ CI</span><span class="okc">✓</span></div>
+      <p class="muted small" style="margin-top:8px">Everything measurable at once: agents, tokens, waiting, CI, status. Dense; good if you like numbers.</p></div>
+    <div class="note"><div class="cap">C · MINIMAL</div>
+      <div class="foot"><span class="slots"><span class="slot on"></span><span class="slot"></span><span class="slot"></span></span><span class="grow"></span><span class="okc">✓</span></div>
+      <p class="muted small" style="margin-top:8px">Only agents and the status glyph; everything else lives in their cards. The quietest.</p></div>
+    <div class="note"><div class="cap">D · BREADCRUMB</div>
+      <div class="foot"><span>Echo</span><span>›</span><span>tashda/echo</span><span>›</span><span>hatch → dev</span><span class="grow"></span><span class="slots"><span class="slot on"></span><span class="slot"></span><span class="slot"></span></span><span class="okc">✓</span></div>
+      <p class="muted small" style="margin-top:8px">Like Xcode's path bar: where you are reads left to right, agents and status on the right.</p></div>
+  </div>
+
+  <h2>The pause control</h2>
+  <p class="lead">The pause bars sit next to the circles like a media control, which is not what they do. Alternatives:</p>
+  <div class="opt3">
+    <div class="note rec"><div class="cap capr">A · RECOMMENDED: IN THE SLOTS' MENU</div>
+      <div class="foot"><span class="slots"><span class="slot on"></span><span class="slot"></span><span class="slot"></span></span></div>
+      <div class="menu" style="min-width:0;margin-top:8px"><div class="mi hl"><span>Pause Agents</span></div><div class="mi"><span>Open Agents</span></div><div class="sep"></div><div class="mi"><span>Agents at Once</span><span class="r">3 ▸</span></div></div>
+      <p class="muted small" style="margin-top:8px">Right-click (or click empty space) on the circles opens a small menu. No extra icon. While paused, the empty circles turn dashed and the activity line says "Agents paused", so it is never forgotten.</p></div>
+    <div class="note"><div class="cap">B · IN THE AGENT CARD</div>
+      <p class="muted small" style="margin:0">A "Pause new agents" switch in the header of every agent card and on the Agents page. Out of sight until you hover.</p></div>
+    <div class="note"><div class="cap">C · A WORD WHEN PAUSED</div>
+      <div class="foot"><span class="slots"><span class="slot" style="border-style:dashed"></span><span class="slot" style="border-style:dashed"></span><span class="slot" style="border-style:dashed"></span></span><span class="attn">Paused</span></div>
+      <p class="muted small" style="margin-top:8px">Nothing shows while running; "Paused" with Resume appears only while paused. Combines with A.</p></div>
+  </div>
+
+  <h2>Decisions I need from you</h2>
+  <p class="lead">My recommendation is already selected. Your answers appear as text in the box at the bottom, ready to copy; or just tell me in chat.</p>
+  <form id="answers" class="note" style="margin-top:12px"></form>
+  <textarea id="summary" readonly></textarea>
+</main>
+<script>
+  const QUESTIONS = [
+    { id: 'layout', title: 'The footer as a whole', why: 'Four things, each with a card: agents and what just happened on the left, where you are and whether all is saved on the right. Calm by default.', rec: 'calm', options: [
+      ['calm', 'A: calm status bar', 'Slots, activity line, project and branch, status glyph'], ['mission', 'B: mission control', 'Adds tokens, waiting and CI'],
+      ['minimal', 'C: minimal', 'Slots and status glyph only'], ['crumb', 'D: breadcrumb', 'Project › repository › branch'] ] },
+    { id: 'pause', title: 'The pause control', why: 'No icon that looks like a media control; the menu is where Pause belongs, and the paused state stays visible.', rec: 'menu', options: [
+      ['menu', 'A: in the slots\' menu, with a visible paused state', 'Dashed circles and "Agents paused"'], ['card', 'B: a switch in the agent card', 'Hidden until hover'], ['word', 'C: only a word while paused', 'With Resume'] ] },
+    { id: 'rings', title: 'Progress rings on agent slots', why: 'You see that an agent is nearly done without hovering.', rec: 'yes', options: [
+      ['yes', 'Yes', 'Time against the usual time for that work'], ['no', 'No', 'Filled circles as today'] ] },
+    { id: 'status', title: 'One status glyph for sync, notebook and database', why: 'One place answers "is everything saved?"; the card says what is where.', rec: 'one', options: [
+      ['one', 'Yes, one glyph with a card', 'Check, spinner, orange, red'], ['separate', 'Separate items for GitHub and the notebook', 'More to read'] ] },
+    { id: 'activity', title: 'The activity line', why: 'Hatch does a lot in the background; one quiet line shows it is alive and what just happened.', rec: 'yes', options: [
+      ['yes', 'Yes', 'Latest event, ten in the card'], ['no', 'No', 'Only in the Log'] ] },
+    { id: 'where', title: 'Project and branch on the right', why: 'Where work flows (hatch into dev) is the context for everything else, and its card is a small Health.', rec: 'yes', options: [
+      ['yes', 'Yes', 'Echo · hatch → dev'], ['no', 'No', 'The toolbar shows the project'] ] },
+    { id: 'tokens', title: 'Tokens today in the footer', why: 'Useful, but it belongs in the agent card and on the Agents page rather than always on screen.', rec: 'card', options: [
+      ['card', 'In the agent card only', 'Not in the footer itself'], ['footer', 'In the footer', 'Bar and number'] ] },
+    { id: 'waiting', title: 'Waiting-for-you count in the footer', why: 'The Dock badge and the sidebar already show it; three places is noise.', rec: 'no', options: [
+      ['no', 'No', 'Dock and sidebar are enough'], ['yes', 'Yes', 'With the list on hover'] ] }
+  ];
+  const KEY = 'hatch.footer';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  const form = document.getElementById('answers');
+  function render() {
+    form.innerHTML = '';
+    QUESTIONS.forEach(q => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const box = document.createElement('div');
+      box.className = 'qform';
+      box.innerHTML = `<h3>${q.title}</h3><div class="why">Why I recommend it: ${q.why}</div><div class="opts"></div><textarea class="qnote" rows="1" placeholder="Note (optional)"></textarea>`;
+      const opts = box.querySelector('.opts');
+      q.options.forEach(([value, label, detail]) => {
+        const o = document.createElement('label');
+        o.className = 'opt' + (a.choice === value ? ' on' : '');
+        o.innerHTML = `<input type="radio" name="${q.id}" value="${value}" ${a.choice === value ? 'checked' : ''}><span class="dot ${a.choice === value ? 'on' : ''}"></span><span><b>${label}</b>${value === q.rec ? '<span class="rec-tag">Recommended</span>' : ''}<br><span class="d">${detail}</span></span>`;
+        o.addEventListener('click', () => { saved[q.id] = { choice: value, note: box.querySelector('.qnote').value }; store(); render(); });
+        opts.appendChild(o);
+      });
+      const note = box.querySelector('.qnote');
+      note.value = a.note || '';
+      note.addEventListener('input', () => { saved[q.id] = { choice: (saved[q.id] || a).choice, note: note.value }; store(); });
+      form.appendChild(box);
+    });
+  }
+  function store() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} }
+  function summary() {
+    return QUESTIONS.map(q => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const label = q.options.find(o => o[0] === a.choice)[1];
+      return `- ${q.title}: ${label}${a.choice === q.rec ? ' (recommended)' : ''}${a.note ? ' | Note: ' + a.note : ''}`;
+    }).join('\n');
+  }
+  window.hatchAnswers = summary;
+  (document.getElementById('copy')||{addEventListener(){}}).addEventListener('click', async () => {
+    const status = document.getElementById('status');
+    try { await navigator.clipboard.writeText(summary()); status.textContent = 'Copied. Paste it in chat.'; }
+    catch (e) { status.textContent = 'Could not copy here. Tell me in chat that you are done and I will read them.'; }
+  });
+  (document.getElementById('reset')||{addEventListener(){}}).addEventListener('click', () => { saved = {}; store(); render(); });
+  render();
+  const sumBox = document.getElementById('summary');
+  const showSummary = () => { sumBox.value = summary(); };
+  document.addEventListener('click', () => setTimeout(showSummary, 0));
+  document.addEventListener('input', () => setTimeout(showSummary, 0));
+  showSummary();
+</script>
+</body>
+</html>
