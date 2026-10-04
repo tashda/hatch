@@ -8,6 +8,8 @@ import HatchCore
 /// label and one value, saved as it changes (`Preference`).
 struct GeneralSettingsPage: View {
     @EnvironmentObject var state: AppState
+    @AppStorage(DecideFeedback.hapticsKey) private var haptics = true
+    @AppStorage(DecideFeedback.soundKey) private var sound = false
     @State private var loginStatus: SMAppService.Status = .notRegistered
 
     var body: some View {
@@ -22,7 +24,7 @@ struct GeneralSettingsPage: View {
 
             Section {
                 Picker("Dock badge", selection: state.preferenceBinding(Preference.dockBadge, default: "waiting")) {
-                    Text("Tickets waiting for you").tag("waiting")
+                    Text("Decisions waiting for you").tag("waiting")
                     Text("Off").tag("off")
                 }
                 Toggle(isOn: state.flagBinding(Preference.menuBar)) {
@@ -42,6 +44,15 @@ struct GeneralSettingsPage: View {
                 }
             } header: {
                 Text("Tickets")
+            }
+
+            Section {
+                Toggle("Trackpad tap", isOn: $haptics)
+                Toggle("Sound", isOn: $sound)
+            } header: {
+                Text("Decide")
+            } footer: {
+                Text("What you feel and hear when you decide a card in a Decide session (decision DC7).")
             }
         }
         .formStyle(.grouped)

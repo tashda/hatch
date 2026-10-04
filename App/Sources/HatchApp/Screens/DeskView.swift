@@ -37,6 +37,8 @@ struct DeskView: View {
     @State private var notice: String?
     @State private var loaded = false
     @State private var projectNames: [Int: String] = [:]
+    /// Everything waiting for the owner, for the Decide card at the top (DC1).
+    @State private var decisions: [PendingDecision] = []
 
     private var allQueued: [Ticket] { groups.flatMap { $0.tickets } }
     private var selectedTicket: Ticket? {
@@ -46,7 +48,7 @@ struct DeskView: View {
 
     var body: some View {
         Group {
-            if loaded && groups.isEmpty {
+            if loaded && groups.isEmpty && decisions.isEmpty {
                 allClear.floatingCard()
             } else {
                 splitContent
@@ -88,6 +90,10 @@ struct DeskView: View {
     private var listPane: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
+                if !decisions.isEmpty {
+                    // The way into a Decide session over this same queue (DC1).
+                    DecideIrisCard(items: decisions).floatingCard()
+                }
                 ForEach(groups) { group in
                     statusCard(title: group.status.displayName, count: group.tickets.count, color: Theme.you) {
                         ForEach(Array(group.tickets.enumerated()), id: \.element.id) { index, ticket in
@@ -336,6 +342,7 @@ struct DeskView: View {
         }
         groups = newGroups
         waiting = newWaiting
+        decisions = (try? state.store.pendingDecisions(projectId: pid)) ?? []
         infos = newInfos
         questions = newQuestions
         loaded = true

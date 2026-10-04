@@ -11,7 +11,7 @@ enum Preference {
     static let openProject = "open_project"         // "last" or "all"
     static let lastRoute = "last_route"             // Route.storageKey, kept as you move
     static let lastProject = "last_project"         // a project key; empty for All projects
-    static let dockBadge = "dock_badge"             // "waiting" or "off"
+    static let dockBadge = "dock_badge"             // "waiting" (decisions waiting) or "off"
     static let menuBar = "menu_bar"                 // on by default
     static let confirmDrop = "confirm_drop"         // on by default
     static let newTicketType = "new_ticket_type"    // empty asks; otherwise a TicketType raw value
@@ -89,7 +89,7 @@ extension AppState {
         case Preference.menuBar: showMenuBarItem = flag(Preference.menuBar)
         case Preference.dockBadge:
             dockBadgeShown = value != "off"
-            updateWaitingCount()
+            refreshDecisionCount()
         default: break
         }
     }

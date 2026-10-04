@@ -9,7 +9,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 3. No glass on glass. Selection inside a glass control is a fill.
 4. Everything through tokens (`HX`): no literal sizes, radii or colours in views.
 5. Motion explains change. Reduce Motion, Reduce Transparency and Increase Contrast must look right.
-6. Colour means whose turn it is (amber you, teal agent, slate Hatch, green finished, grey paused) or a real problem (red). Types, areas and projects are neutral. The one exception is the project tile colour in the project card.
+6. Colour means whose turn it is (amber you, teal agent, slate Hatch, green finished, grey paused) or a real problem (red). Types, areas and projects are neutral. Exceptions: the project tile colour in the project card, and the count badge on the Decide toolbar button, which is the system's red badge like the Dock icon's (DC11).
 7. One prominent action per screen.
 8. Text: system font and text styles only. Monospaced only for ticket numbers and code.
 9. Every suggestion shows one recommendation and its reason.
@@ -38,6 +38,8 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 | Filter or search | Search field with tokens, saved views | `.searchable` |
 | Search and commands across the app | Floating glass command palette, scoped by prefix or shortcut (CP1 to CP8) | `commandPaletteOverlay()`, `.glassEffect` |
 | A project's own colors, type and sizes (Components page) | Swatches (light beside dark), a type sample in its own font, size bars. The one other place colour that is not turn or a problem appears: it is the project's data, not Hatch's look | `ComponentSwatch`, `ComponentRender` |
+| Everything that waits for the owner | A Decide session: full window, one card at a time, quick decisions first; the same keys on every card; an undo toast before Hatch acts | `DecideSessionView`, `.decideOverlay()` |
+| The way into Decide | A card with the count, time and kinds, one prominent Decide button (Desk top, Iris top); a toolbar button in its own group with the count badge, hidden at zero | `DecideIrisCard`, `DecideToolbarButton` |
 | Nothing to show | Empty state with next step | `ContentUnavailableView` |
 | Work in progress | Spinner in the row, text says what | `ProgressView` |
 | Short feedback | Toast capsule | `HXToast` |

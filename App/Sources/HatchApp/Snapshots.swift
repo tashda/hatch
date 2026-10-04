@@ -158,6 +158,15 @@ enum Snapshots {
         }
         try! store.logPull(summary: "17 issues updated", ok: true)
         try! store.logPull(summary: "Preview status unavailable", ok: false, error: "Checks are still running.")
+        // Decide: a Question Hatch prepared about the components, and a plan over the limit (decisions CO11, DC8).
+        let clash = try! store.createTicket(projectId: p.id, type: .question, title: "Two values for Color.accent", body: "", area: "Components", ghNumber: 170)
+        try! store.setQuestionOptions(ticketId: clash.id, [
+            QuestionOption(key: "A", title: "Keep AcmeComponents' values", detail: "The other values change to match", recommended: true,
+                           why: "AcmeComponents is the set the project uses and Proposals import.", gain: "One value per name, matching the package", cost: "12 views change slightly"),
+            QuestionOption(key: "B", title: "Keep the other set's values", detail: "AcmeComponents changes to match", gain: "Views that use the folder do not change", cost: "40 views change slightly"),
+            QuestionOption(key: "C", title: "Keep both, rename the other set's", gain: "Nothing changes now", cost: "Two names that look alike")])
+        try! store.requestPlanReview(ticketId: building.id, files: ["Sources/Connections/ConnectionTest.swift", "Sources/Connections/HostCheck.swift",
+                                                                  "Sources/Editor/Toolbar.swift"], reason: "a Bug")
         let paths = AppPaths(root: FileManager.default.temporaryDirectory.appendingPathComponent("hatch-snapshots-\(getpid())"))
         return AppState(store: store, paths: paths)
     }
@@ -298,6 +307,8 @@ enum Snapshots {
             NSApp.appearance = NSAppearance(named: appearance)
             if let route = routes[name] {
                 state.route = route
+            } else if name == "decide" || name == "decide-components" {
+                state.decideSession = AppState.DecideRequest(area: name == "decide" ? nil : "Components")
             } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count)) {
                 state.snapshotSetupStep = n - 1
                 state.snapshotPresentation = .addProject

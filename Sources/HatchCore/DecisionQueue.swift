@@ -95,7 +95,7 @@ public extension HatchStore {
     /// normal path, each move validated and logged, then is answered like any Question; the GitHub issue is made when
     /// it leaves Draft, as for every ticket.
     @discardableResult
-    func decidePreparedQuestion(ticketId: Int, choice: String, reason: String?) throws -> (ticket: Ticket, decisionId: Int) {
+    func decidePreparedQuestion(ticketId: Int, choice: String, reason: String?, kind: DecisionKind? = nil) throws -> (ticket: Ticket, decisionId: Int) {
         try db.transaction {
             guard let t = try ticket(id: ticketId) else { throw StoreError.notFound("ticket \(ticketId)") }
             guard t.type == .question, !(try questionOptions(ticketId: ticketId)).isEmpty else {
@@ -107,7 +107,7 @@ public extension HatchStore {
                     try move(ticketId, to: next, actor: .hatch, reason: "prepared by Hatch: options ready")
                 }
             }
-            return try decideQuestion(ticketId: ticketId, choice: choice, reason: reason, kind: t.area == ComponentsSetup.area ? .design : .architecture)
+            return try decideQuestion(ticketId: ticketId, choice: choice, reason: reason, kind: kind ?? (t.area == ComponentsSetup.area ? .design : .architecture))
         }
     }
 

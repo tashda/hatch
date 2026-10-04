@@ -68,6 +68,8 @@ final class ProjectSetupModel: ObservableObject {
     /// Where new components go; follows the project name until the owner types their own.
     @Published var startPath = ""
     @Published var startPathEdited = false
+    /// With more than one set found: add a draft ticket to merge the others into the chosen one (CO9).
+    @Published var mergeOthers = true
     @Published var designExisting: String? { didSet { if designExisting != oldValue { designPath = nil; findClone(of: designExisting) { [weak self] in self?.designPath = $0 } } } }
     /// The clone of a separate components repository on this Mac; agents building a ticket work in it too.
     @Published var designPath: String?
@@ -166,6 +168,22 @@ final class ProjectSetupModel: ObservableObject {
         case .separate, .none:
             return nil
         }
+    }
+
+    /// The components folder chosen among those found, and the other sets beside it.
+    var chosenCandidate: ComponentsCandidate? { designChoice == .found ? componentsScan?.candidates.first { $0.path == foundPath } : nil }
+    var otherCandidates: [ComponentsCandidate] { (componentsScan?.candidates ?? []).filter { $0.path != chosenCandidate?.path } }
+
+    /// Names with two values between the chosen set and the others (CO11).
+    var clashes: [NameClash] {
+        guard let chosen = chosenCandidate else { return [] }
+        return ComponentConflicts.clashes(chosen: chosen, others: otherCandidates)
+    }
+
+    /// What the Add makes for the components, worked out off the main thread once the project exists.
+    var componentTicketPlan: HXComponentTicketPlan {
+        HXComponentTicketPlan(choice: designChoice, appName: displayName, config: componentsConfig, scan: componentsScan,
+                              chosen: chosenCandidate, others: designChoice == .found && mergeOthers ? otherCandidates : [], clashes: clashes)
     }
 
     func chooseDesign(_ choice: DesignChoice) {
@@ -390,8 +408,7 @@ final class ProjectSetupModel: ObservableObject {
         let base = baseBranch, integration = integrationBranch.trimmingCharacters(in: .whitespaces)
         let design = designRepo, components = componentsConfig
         let designFolder = designPath ?? design.map(siblingFolder(for:))
-        let componentDrafts = designChoice == .start && components != nil
-            ? ComponentsSetup.drafts(appName: displayName, config: components!, scan: componentsScan) : []
+        let componentPlan = componentTicketPlan
         let createNotebook = notebookChoice == .create
         let notebookFolder = notebookPath ?? siblingFolder(for: notebook)
         let login = login, name = displayName, promotion = promotion, agents = effectiveAgents
@@ -471,8 +488,9 @@ final class ProjectSetupModel: ObservableObject {
                 return project
             }
             if let created {
-                // Drafts, so the owner reads them before any agent touches the app (decision CO3).
-                if !componentDrafts.isEmpty { state.addComponentTickets(projectId: created.id, drafts: componentDrafts) }
+                // Drafts, so the owner reads them before any agent touches the app (decisions CO3, CO9 to CO11).
+                let drafts = await Task.detached { componentPlan.drafts(appRoot: appPath) }.value
+                if !drafts.isEmpty { state.addComponentTickets(projectId: created.id, drafts: drafts) }
                 state.selectedProjectKey = created.key
                 state.navigate(to: .desk)
                 done()
@@ -791,6 +809,20 @@ struct ProjectSetupAssistant: View {
                         }
                     }
                 }
+                if model.designChoice == .found && !model.otherCandidates.isEmpty {
+                    HXSetupRow("Other sets") {
+                        Toggle(isOn: $model.mergeOthers) {
+                            Text("Merge \(model.otherCandidates.map(\.path).joined(separator: ", ")) into it later")
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                    if !model.clashes.isEmpty {
+                        HXSetupRow("Two values") {
+                            Text("\(model.clashes.count) name\(model.clashes.count == 1 ? " has" : "s have") different values. Hatch adds a Question for you to choose.")
+                                .foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
                 HXRadioRow(selected: model.designChoice == .start, title: "Hatch starts them",
                            detail: startDetail, recommended: candidates.isEmpty && !model.scanningComponents) { model.chooseDesign(.start) } trailing: {
                     TextField("Folder", text: Binding(get: { model.startPathEdited ? model.startPath : ComponentsConfig.suggested(appName: model.displayName).path },
@@ -928,7 +960,16 @@ struct ProjectSetupAssistant: View {
                     HXReviewRow(verb: model.designChoice == .start ? "Adds" : "Uses",
                                 text: model.designChoice == .start
                                     ? "draft tickets to start the components in \(c.path)"
+                                      + (model.componentsScan?.candidates.isEmpty == false ? ", beside the \(model.componentsScan!.candidates.count) set(s) already in the app" : "")
                                     : "\(c.path) as the components")
+                    if model.designChoice == .found {
+                        if !model.clashes.isEmpty {
+                            HXReviewRow(verb: "Adds", text: "1 question: \(model.clashes.count) name\(model.clashes.count == 1 ? "" : "s") with two values")
+                        }
+                        if model.mergeOthers && !model.otherCandidates.isEmpty {
+                            HXReviewRow(verb: "Adds", text: "\(model.otherCandidates.count) draft ticket\(model.otherCandidates.count == 1 ? "" : "s") to merge the other set\(model.otherCandidates.count == 1 ? "" : "s") in")
+                        }
+                    }
                 }
                 if let n = model.notebookRepo {
                     HXReviewRow(verb: model.notebookChoice == .create ? "Creates" : "Uses",
@@ -1231,6 +1272,33 @@ extension Promotion {
         case .pullRequest: "pull request"
         case .automatic: "merged"
         case .manual: "you merge"
+        }
+    }
+}
+
+/// The component tickets setup adds once the project exists (decisions CO3, CO9 to CO11). Kept as plain values so
+/// the usage counts for the Question can be read off the main thread.
+struct HXComponentTicketPlan: Sendable {
+    let choice: ProjectSetupModel.DesignChoice
+    let appName: String
+    let config: ComponentsConfig?
+    let scan: ComponentsScan?
+    let chosen: ComponentsCandidate?
+    let others: [ComponentsCandidate]
+    let clashes: [NameClash]
+
+    func drafts(appRoot: String) -> [ComponentsSetup.Draft] {
+        switch choice {
+        case .start:
+            guard let config else { return [] }
+            return ComponentsSetup.drafts(appName: appName, config: config, scan: scan, existing: scan?.candidates.map(\.path) ?? [])
+        case .found:
+            guard let chosen else { return [] }
+            let usage = clashes.isEmpty ? [:] : ComponentConflicts.usage(of: clashes.map(\.name), appRoot: appRoot)
+            let question = ComponentsSetup.clashQuestion(clashes, chosen: chosen, usage: usage)
+            return [question].compactMap { $0 } + others.map { ComponentsSetup.mergeDraft(into: chosen, from: $0) }
+        case .separate, .none:
+            return []
         }
     }
 }

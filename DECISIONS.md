@@ -1327,7 +1327,7 @@ The owner asked why setup made both a components and a notebook repository, and 
 | CO7 | What counts as a component | Read from Swift text and asset catalogs: `static let` colors, fonts and sizes in extensions or enums, public views, styles and View modifiers (any name in a plain folder of the app target), and color sets. Packages count only public names. |
 | CO8 | A folder in the app target | Allowed (many large apps have a `DesignSystem` folder), but marked "not a package yet": the app can use it, a Proposal cannot import it. Moving it into a package is a ticket like any other. |
 
-Conflicts (agreed 2026-10-04, not built yet). The principle: Hatch finds conflicts for free, settles only the mechanical ones, and asks the owner about anything that changes the look, with one recommendation. It never guesses what a value means.
+Conflicts (agreed 2026-10-04, built the same day). The principle: Hatch finds conflicts for free, settles only the mechanical ones, and asks the owner about anything that changes the look, with one recommendation. It never guesses what a value means.
 
 | Id | Question | Choice |
 |---|---|---|
@@ -1399,7 +1399,7 @@ Risk for all of these: the components are compiled once per base commit and cach
 
 ## V. Decide: one place for everything that needs the owner (answered 2026-10-04, ids DC1 to DC12)
 
-Concept page with a playable mockup: `design-review/decide-concepts.html`. All answers were the recommendation (1A to 9A); DC10 to DC12 are the owner's additions. Not built yet. The owner asked for one place to go over everything that needs a decision, with this against that, gains and costs, accept, reject, note or refine, and to make it fun. Today the Desk lists what waits, but the deciding happens in five other places (the Stage, the ticket's Question banner, Iris review, answer cards, Previews), plan approval has no screen, and component conflicts (CO9 to CO13) have none either.
+Concept page with a playable mockup: `design-review/decide-concepts.html`. All answers were the recommendation (1A to 9A); DC10 to DC12 are the owner's additions. Built the same day. The owner asked for one place to go over everything that needs a decision, with this against that, gains and costs, accept, reject, note or refine, and to make it fun. Today the Desk lists what waits, but the deciding happens in five other places (the Stage, the ticket's Question banner, Iris review, answer cards, Previews), plan approval has no screen, and component conflicts (CO9 to CO13) have none either.
 
 | Id | Question | Choice | Reason |
 |---|---|---|---|
