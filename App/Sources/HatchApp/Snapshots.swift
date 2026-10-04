@@ -289,7 +289,9 @@ enum Snapshots {
                 state.snapshotPresentation = .agentCard
             } else if name.hasPrefix("settings") {
                 state.snapshotPresentation = .settings
-                if name == "settings-agents" { state.settingsPage = .agents }
+                // settings-<page>, by the page's title: settings-github, settings-general, settings-storage…
+                let page = name.dropFirst("settings-".count)
+                state.settingsPage = SettingsPage.allCases.first { $0.title.lowercased() == page } ?? .general
             } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count).prefix { $0.isNumber }) {
                 // add-project-5: one step of the setup assistant, numbered as in the full run.
                 state.snapshotPresentation = .addProject
