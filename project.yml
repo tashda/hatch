@@ -50,6 +50,8 @@ targets:
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Automatic
+        # A real team, so every build has the same signature and the Keychain trusts it (ad-hoc builds prompt on each launch).
+        DEVELOPMENT_TEAM: JQU2HR44D8
         GENERATE_INFOPLIST_FILE: NO
 schemes:
   Hatch:
