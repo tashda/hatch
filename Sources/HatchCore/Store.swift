@@ -189,6 +189,7 @@ public final class HatchStore: @unchecked Sendable {
             let from = t.status
             if from == newStatus { return t }
             try Workflow.validate(type: t.type, from: from, to: newStatus, actor: actor)
+            if newStatus == .toVerify { try checkSpecBeforeVerify(t) }
             var prev: Status? = nil
             if newStatus == .blocked || newStatus == .parked { prev = from == .blocked || from == .parked ? t.prevStatus : from }
             let takenBy: SQLValue = (newStatus == .ready || newStatus == .yourCall || newStatus == .toVerify || newStatus == .draft || newStatus.isTerminal) ? .null : .opt(t.takenBy)
@@ -203,6 +204,18 @@ public final class HatchStore: @unchecked Sendable {
             t = try ticket(id: id)!
             if let parent = t.parentId, newStatus == .done { try completeThemeIfFinished(parent) }
             return t
+        }
+    }
+
+    /// The Spec follows the code (decisions L5, PS13): in a project with a notebook, built work reaches To verify, and
+    /// so Done, only after `hatch ready` recorded which Spec items changed, or that none did, since the work began.
+    func checkSpecBeforeVerify(_ t: Ticket) throws {
+        guard try project(id: t.projectId)?.config?.repo(.notebook) != nil else { return }
+        let all = try events(ticketId: t.id)
+        let began = all.last { e in e.kind == "status" && ["building", "fixing"].contains(e.payload["to"]?.stringValue ?? "") }
+        let spec = all.last { $0.kind == "spec" && $0.payload["ok"]?.boolValue == true }
+        guard let spec, began.map({ spec.id > $0.id }) ?? true else {
+            throw StoreError.invalid("\(t.displayNumber) cannot go to To verify before its Spec is updated or marked unchanged. Run hatch ready with --spec <IDs> or --spec unchanged.")
         }
     }
 

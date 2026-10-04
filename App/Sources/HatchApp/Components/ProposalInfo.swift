@@ -26,6 +26,8 @@ struct ProposalInfo {
     static func load(store: HatchStore, ticket: Ticket) -> ProposalInfo {
         var info = ProposalInfo()
         info.revision = ticket.revision
+        // A Question's options, offered by an agent or prepared by Hatch (PS16, CO11), count as its options too.
+        if ticket.type == .question { info.optionCount = ((try? store.questionOptions(ticketId: ticket.id)) ?? []).count }
         guard ticket.type == .proposal else { return info }
         guard let json = try? store.proposalManifest(ticketId: ticket.id) else { return info }
         guard let manifest = try? ProposalManifest.parse(json: json) else { return info }
@@ -66,6 +68,8 @@ struct DeskCopy {
                 return DeskCopy(action: "Judge \(Format.count(n, "option"))", minutes: max(2, n * 2))
             case .sketch:
                 return DeskCopy(action: "Choose a direction", minutes: 3)
+            case .question where info.optionCount > 0:
+                return DeskCopy(action: "Choose one of \(info.optionCount) options", minutes: 1)
             default:
                 return DeskCopy(action: "Reply needed", minutes: 2)
             }
@@ -75,6 +79,9 @@ struct DeskCopy {
         case .toVerify:
             return DeskCopy(action: "Verify in Previews", minutes: 3)
         case .draft:
+            if ticket.type == .question && info.optionCount > 0 {
+                return DeskCopy(action: "Choose one of \(info.optionCount) options Hatch prepared", minutes: 1)
+            }
             return DeskCopy(action: "Finish and submit", minutes: 2)
         default:
             return DeskCopy(action: ticket.status.displayName, minutes: 0)

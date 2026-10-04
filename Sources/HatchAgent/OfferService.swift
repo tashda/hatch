@@ -55,7 +55,7 @@ public struct OfferService {
         let moved = try store.db.transaction { () -> Ticket in
             if revising { try store.recordRevision(ticketId: ticketId, summary: manifest.summary, added: Self.added(in: manifest, since: previous)) }
             try store.saveProposal(ticketId: ticketId, manifestJSON: json)
-            return try finish(t, summary: manifest.summary, revision: manifest.revision, warnings: issues.count)
+            return try finish(t, summary: manifest.summary, revision: manifest.revision, warnings: issues.count, issues: issues)
         }
         return .offered(ticket: moved, revision: manifest.revision, warnings: issues)
     }
@@ -109,16 +109,22 @@ public struct OfferService {
     }
 
     private func reject(_ t: Ticket, _ issues: [GateIssue]) throws -> OfferResult {
-        try store.record(t.id, actor: "hatch", kind: "offer-rejected", payload: ["codes": .array(issues.errors.map { .string($0.code) })])
+        try store.record(t.id, actor: "hatch", kind: "offer-rejected", payload: ["codes": .array(issues.errors.map { .string($0.code) }),
+                                                                                 "issues": Self.payload(issues)])
         return .rejected(issues)
     }
 
+    /// The findings as an event payload, so the ticket can show what the gate said (decision H19).
+    static func payload(_ issues: [GateIssue]) -> JSONValue {
+        .array(issues.map { ["severity": .string($0.severity.rawValue), "code": .string($0.code), "message": .string($0.message)] })
+    }
+
     /// Posts the summary, records the offer, and lets Hatch (not the agent) move the ticket to Your call and release it.
-    private func finish(_ t: Ticket, summary: String, revision: Int, warnings: Int) throws -> Ticket {
+    private func finish(_ t: Ticket, summary: String, revision: Int, warnings: Int, issues: [GateIssue] = []) throws -> Ticket {
         if !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             try store.addNote(t.id, kind: .agent, author: agent, body: summary)
         }
-        try store.record(t.id, actor: agent, kind: "offer", payload: ["revision": .int(revision), "warnings": .int(warnings)])
+        try store.record(t.id, actor: agent, kind: "offer", payload: ["revision": .int(revision), "warnings": .int(warnings), "issues": Self.payload(issues)])
         return try store.move(t.id, to: .yourCall, actor: .hatch, reason: "offered")
     }
 
