@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings design</title>
+<style>
+  :root {
+    --page: #ececee; --sheet: #fbfbfd; --group: #f2f2f5; --row-line: #e1e1e6; --text: #1d1d1f; --secondary: #6e6e73;
+    --tertiary: #a1a1a6; --blue: #0a66d8; --blue-soft: #e7f0fd; --green: #248a3d; --green-soft: #e6f4ea; --amber: #a05a00;
+    --amber-soft: #fdf1df; --field: #ffffff; --line: #d6d6db; --side: #f4f4f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #161618; --sheet: #232326; --group: #2c2c30; --row-line: #3a3a3f; --text: #f2f2f4; --secondary: #a3a3aa;
+      --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+      --amber-soft: #3d2e14; --field: #1b1b1e; --line: #46464c; --side: #29292c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1060px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; font-weight: 600; margin: 56px 0 6px; }
+  h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--secondary); font-size: 14px; max-width: 720px; }
+  .muted { color: var(--secondary); }
+  .small { font-size: 11.5px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .note { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 12px; padding: 16px 18px; }
+  .rec { border: 2px solid var(--blue); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--blue-soft); color: var(--blue); margin-bottom: 8px; }
+  .badge.green { background: var(--green-soft); color: var(--green); }
+  .badge.amber { background: var(--amber-soft); color: var(--amber); }
+
+  .sheet { background: var(--sheet); border-radius: 16px; border: 1px solid var(--row-line); box-shadow: 0 20px 50px rgba(0,0,0,.14); overflow: hidden; }
+  .sheet-title { font-size: 15px; font-weight: 600; padding: 20px 24px 4px; }
+  .group-h { font-size: 12px; font-weight: 600; margin: 16px 24px 6px; }
+  .group { background: var(--group); border-radius: 10px; margin: 0 16px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; min-height: 38px; }
+  .row + .row { border-top: 1px solid var(--row-line); margin: 0 0; }
+  .row .val { color: var(--secondary); text-align: right; }
+  .inline-field { color: var(--text); text-align: right; min-width: 160px; outline: none; }
+  .inline-field.ph { color: var(--tertiary); }
+  .boxed { background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; width: 55%; min-height: 24px; }
+  .footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--row-line); margin-top: 18px; }
+  .btn { font: inherit; border: 0; border-radius: 7px; padding: 5px 14px; background: var(--group); color: var(--text); box-shadow: inset 0 0 0 0.5px var(--line); cursor: pointer; }
+  .btn.primary { background: var(--blue); color: #fff; box-shadow: none; }
+  .popup { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; padding: 3px 6px 3px 9px; background: var(--field); box-shadow: 0 0 0 0.5px var(--line), 0 1px 1px rgba(0,0,0,.05); }
+  .popup::after { content: "⌃⌄"; font-size: 9px; letter-spacing: -2px; writing-mode: vertical-lr; color: var(--secondary); }
+  .check { color: var(--green); font-weight: 600; }
+  .info { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--tertiary); color: var(--secondary); font-size: 10px; font-weight: 600; margin-left: 4px; vertical-align: 1px; }
+  .radio { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; }
+  .radio + .radio { border-top: 1px solid var(--row-line); }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--field); flex: none; margin-top: 2px; }
+  .dot.on { border: 4px solid var(--blue); }
+  .icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-size: 17px; flex: none; color: #fff; }
+  .i-tickets { background: #5e5ce6; } .i-code { background: #0a84ff; } .i-design { background: #ff6482; } .i-branch { background: #30a46c; } .i-gh { background: #1d1d1f; }
+  @media (prefers-color-scheme: dark) { .i-gh { background: #f2f2f4; color: #1d1d1f; } }
+
+  /* Concept A: assistant */
+  .assistant { display: grid; grid-template-columns: 200px 1fr; min-height: 520px; }
+  .steps { background: var(--side); padding: 18px 10px; border-right: 1px solid var(--row-line); }
+  .step { display: flex; gap: 9px; align-items: center; padding: 7px 10px; border-radius: 7px; cursor: pointer; color: var(--secondary); }
+  .step .n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); }
+  .step.done .n { background: var(--green); color: #fff; box-shadow: none; }
+  .step.on { background: var(--blue-soft); color: var(--text); font-weight: 600; }
+  .step.on .n { background: var(--blue); color: #fff; box-shadow: none; }
+  .pane { display: none; flex-direction: column; }
+  .pane.on { display: flex; }
+  .pane-body { padding: 26px 28px 0; flex: 1; }
+  .pane-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+  .pane-head h3 { font-size: 17px; margin: 0; }
+  .example { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; margin: 14px 0 0; background: var(--sheet); }
+  .example .label { font-size: 11px; font-weight: 600; color: var(--secondary); margin-bottom: 6px; }
+  .issue { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; }
+  .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; background: var(--group); color: var(--secondary); box-shadow: inset 0 0 0 0.5px var(--line); }
+  .swatches { display: flex; gap: 6px; margin-top: 4px; }
+  .swatches span { width: 22px; height: 22px; border-radius: 6px; }
+  .flow { display: flex; align-items: center; gap: 0; margin: 18px 0 6px; flex-wrap: wrap; row-gap: 10px; }
+  .node { padding: 7px 12px; border-radius: 9px; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .node.hatch { background: var(--green-soft); color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+  .node.base { background: var(--blue-soft); color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+  .arrow { display: flex; flex-direction: column; align-items: center; padding: 0 8px; color: var(--secondary); font-size: 11px; min-width: 96px; }
+  .arrow .line { height: 1px; background: var(--secondary); width: 100%; position: relative; margin: 4px 0; }
+  .arrow .line::after { content: ""; position: absolute; right: -1px; top: -4px; border-left: 7px solid var(--secondary); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; }
+
+  /* Concept B: cards */
+  .card { background: var(--group); border-radius: 12px; margin: 0 16px 12px; padding: 14px; }
+  .card-head { display: flex; gap: 12px; align-items: center; }
+  .card-head .grow { flex: 1; }
+  .card .sub { color: var(--secondary); font-size: 12px; }
+  .card .row { padding: 8px 0 0; min-height: 0; }
+  .card .row + .row { border-top: 0; }
+
+  /* Compare */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .qa { counter-reset: q; }
+  .qa .q { display: grid; grid-template-columns: 28px 1fr; gap: 6px 10px; padding: 14px 0; border-top: 1px solid var(--row-line); }
+  .qa .q::before { counter-increment: q; content: counter(q); width: 22px; height: 22px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); font-weight: 600; font-size: 12px; display: grid; place-items: center; }
+  .qa .q > div { grid-column: 2; }
+  .qa .q > div:first-of-type { grid-row: 1; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--group); padding: 1px 5px; border-radius: 4px; }
+  .qform { padding: 16px 0; border-top: 1px solid var(--row-line); }
+  .qform:first-child { border-top: 0; padding-top: 4px; }
+  .qform h3 { font-size: 14px; margin-bottom: 2px; }
+  .qform .why { color: var(--secondary); margin-bottom: 10px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+  .opt { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--group); box-shadow: inset 0 0 0 1px transparent; cursor: pointer; }
+  .opt:hover { box-shadow: inset 0 0 0 1px var(--line); }
+  .opt.on { background: var(--blue-soft); box-shadow: inset 0 0 0 1.5px var(--blue); }
+  .opt input { display: none; }
+  .opt .rec-tag { font-size: 10.5px; font-weight: 600; color: var(--blue); margin-left: 4px; }
+  .opt .d { color: var(--secondary); font-size: 12px; }
+  .qnote { width: 100%; margin-top: 8px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; resize: vertical; min-height: 34px; }
+
+  .win { display: grid; grid-template-columns: 210px 1fr; min-height: 560px; }
+  .sb { background: var(--side); padding: 16px 10px; border-right: 1px solid var(--row-line); }
+  .sb .it { display:flex; gap:9px; align-items:center; padding:6px 10px; border-radius:7px; color: var(--text); }
+  .sb .it.on { background: var(--blue-soft); font-weight:600; }
+  .pg { padding: 22px 26px 26px; }
+  .pg h4 { font-size: 20px; margin: 0 0 14px; font-weight: 600; }
+  .sec-h { font-size: 12.5px; font-weight: 600; margin: 18px 4px 6px; }
+  .sec-f { font-size: 11.5px; color: var(--secondary); margin: 6px 4px 0; line-height: 1.45; }
+  .frm { background: var(--group); border-radius: 10px; }
+  .frow { display:flex; align-items:center; justify-content:space-between; gap: 12px; padding: 8px 12px; min-height: 40px; }
+  .frow + .frow { border-top: 1px solid var(--row-line); }
+  .frow .t { display:flex; flex-direction:column; }
+  .frow .s { font-size: 11.5px; color: var(--secondary); }
+  .pv { display:inline-flex; align-items:center; gap:8px; color: var(--text); }
+  .chev { width: 20px; height: 20px; border-radius: 50%; display:inline-grid; place-items:center; font-size: 9px; color: var(--secondary); background: transparent; }
+  .pv:hover .chev, .chev.hov { background: var(--row-line); }
+  .chev::before { content: "⌃\A⌄"; white-space: pre; line-height: 6px; display:block; text-align:center; margin-top:-1px; }
+  .sw { width: 32px; height: 19px; border-radius: 10px; background: var(--blue); position: relative; display:inline-block; }
+  .sw::after { content:""; position:absolute; right:2px; top:2px; width:15px; height:15px; border-radius:50%; background:#fff; }
+  .sw.off { background: var(--line); } .sw.off::after { right:auto; left:2px; }
+  .ib { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--tertiary); display:inline-grid; place-items:center; font-size: 11px; color: var(--secondary); font-weight:600; }
+  .tile { width: 26px; height: 26px; border-radius: 7px; display:grid; place-items:center; color:#fff; font-size: 13px; font-weight: 700; flex:none; }
+  .menu { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 9px; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 5px; min-width: 230px; font-size: 13px; }
+  .menu .mh { font-size: 11px; font-weight: 600; color: var(--secondary); padding: 6px 10px 2px; }
+  .menu .mi { padding: 4px 10px 4px 24px; border-radius: 5px; position: relative; display:flex; justify-content:space-between; gap: 16px; }
+  .menu .mi.ck::before { content: "✓"; position:absolute; left: 8px; }
+  .menu .mi.hl { background: var(--blue); color: #fff; }
+  .menu .mi .r { color: var(--secondary); font-size: 11.5px; }
+  .menu .mi.hl .r { color: #dbe8ff; }
+  .menu .sep { height: 1px; background: var(--row-line); margin: 4px 8px; }
+  .bad { border: 2px solid #e5484d; }
+  .lbl { font-size: 11px; font-weight: 700; letter-spacing: .02em; margin-bottom: 8px; }
+  .lbl.bad-t { color: #e5484d; } .lbl.good-t { color: var(--green); }
+  .stp { display:inline-flex; flex-direction:column; border: 1px solid var(--line); border-radius: 6px; overflow:hidden; font-size: 8px; line-height: 9px; background: var(--field); }
+  .stp span { padding: 0 4px; } .stp span + span { border-top: 1px solid var(--line); }
+  .pick-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pick { background: var(--group); border-radius: 10px; padding: 10px 12px; display:flex; gap: 10px; align-items:flex-start; }
+  .pick.on { box-shadow: inset 0 0 0 2px var(--blue); background: var(--blue-soft); }
+  .pick .d { font-size: 11.5px; color: var(--secondary); }
+  .ok { color: var(--green); font-weight: 600; }
+  table.rules { width:100%; border-collapse: collapse; font-size: 12.5px; }
+  table.rules td, table.rules th { text-align:left; padding: 8px 8px; border-top: 1px solid var(--row-line); vertical-align: top; }
+  table.rules th { color: var(--secondary); font-weight: 600; border-top: 0; }
+  .pv { white-space: nowrap; }
+  @media (max-width: 900px) { .win { grid-template-columns: 1fr; } .sb { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Settings: the Agents page</h1>
+  <p class="lead">A proposal for how the Agents page should look and behave, and the rules for macOS controls that every Settings page will follow. First what is wrong today, then the proposed page, the menus behind each control, a general way to organise providers that works for everyone, Add provider as a sheet, and "agents at once". The questions at the bottom can be answered on the page.</p>
+
+  <h2>What is wrong today</h2>
+  <div class="grid2" style="margin-top:12px">
+    <div class="note"><h3>Too much in each row</h3><p class="muted" style="margin:0">A task has a title, a description, a Test button, two pickers, a billing line, and a paragraph of recommendation, all in one block. A provider row has a switch, two status lines, refresh, Test, Edit… and a ⋯ menu. The eye has nowhere to rest.</p></div>
+    <div class="note"><h3>Paragraphs inside rows</h3><p class="muted" style="margin:0">The four-line recommendation under Iris is useful the first time and noise every time after. System Settings keeps rows to a label and a value, and puts explanations in one short footer under the section.</p></div>
+    <div class="note"><h3>Two pickers for one choice</h3><p class="muted" style="margin:0">Provider and model are picked separately, but you think of them as one thing ("Haiku via Claude Code"). The model menu shows ids like "haiku (typed)" and "Program default", which mean nothing without reading the code.</p></div>
+    <div class="note"><h3>Controls that are not Apple's</h3><p class="muted" style="margin:0">"Max agents at once: 3" puts the value in the label, with a tall stepper at the far edge. "Add provider" is a split button with a long, unsorted menu of 13 items. Edit… opens a form that mixes program paths, keys and models.</p></div>
+  </div>
+
+  <h2>The rules for every Settings page</h2>
+  <p class="lead">Apple's own grammar, as System Settings uses it. Once agreed, every page follows it and new pages need no design round.</p>
+  <div class="note" style="margin-top:12px;overflow-x:auto">
+    <table class="rules">
+      <tr><th style="width:22%">Need</th><th style="width:38%">Control</th><th>Rule</th></tr>
+      <tr><td>The page</td><td>One grouped <code>Form</code></td><td>Sections with a short title. At most one footer sentence or two per section, never paragraphs in rows.</td></tr>
+      <tr><td>Choose one of a list</td><td><span class="pv">Haiku <span class="chev hov"></span></span> Picker in a Form row</td><td>Label on the left, value and the round chevron on the right, with hover. Never a bordered box, never a value inside the label.</td></tr>
+      <tr><td>On or off</td><td><span class="sw"></span> Switch</td><td>Trailing in the row. For a whole thing (a provider) the switch sits on its row.</td></tr>
+      <tr><td>A small number</td><td><span class="pv">3 <span class="chev"></span></span> Picker with the useful values</td><td>A few sensible numbers in a menu, the recommended one marked. A stepper only for numbers that change by one many times.</td></tr>
+      <tr><td>A thing with details</td><td>Row with <span class="ib">i</span> or "Details…"</td><td>Opens a sheet with everything about that thing: settings, Test, Remove. The row itself shows only name, status and its switch. This is how Internet Accounts and Users &amp; Groups work.</td></tr>
+      <tr><td>Adding a thing</td><td>"Add…" button at the end of the list → sheet</td><td>A sheet that asks only what is needed for the kind chosen. Never a long menu.</td></tr>
+      <tr><td>Status</td><td>Secondary text under the row title</td><td>Plain words ("Signed in with your Claude plan"). Colour only when something is wrong.</td></tr>
+      <tr><td>Recommendation</td><td>"Recommended" in the menu item, reason in the footer</td><td>The owner's rule (one recommendation and its reason) kept, in one line, where the choice is made.</td></tr>
+      <tr><td>Test</td><td>Inside the details sheet, and one "Test All" per section</td><td>The result appears as the row's status, not as an extra block.</td></tr>
+    </table>
+  </div>
+
+  <h2>Proposed Agents page</h2>
+  <p class="lead">Three sections: what Hatch uses AI for, how coding agents work, and the providers that do the work. Each row is one line plus a status.</p>
+  <div class="sheet" style="margin-top:16px">
+    <div class="win">
+      <div class="sb">
+        <div class="it">▤ Local data</div><div class="it">&lt;/&gt; GitHub</div><div class="it on">⌘ Agents</div><div class="it">▢ Apps</div>
+      </div>
+      <div class="pg">
+        <h4>Agents</h4>
+        <div class="sec-h">Tasks</div>
+        <div class="frm">
+          <div class="frow"><div class="t"><span>Check new tickets (Iris)</span><span class="s">Last test: answered in 6 s</span></div><span class="pv">Haiku · Claude Code <span class="chev hov"></span></span></div>
+          <div class="frow"><div class="t"><span>Thinking for Iris</span></div><span class="sw off"></span></div>
+          <div class="frow"><div class="t"><span>Answer questions (Ask)</span><span class="s">Last test: answered in 4 s</span></div><span class="pv">Sonnet · Claude Code <span class="chev"></span></span></div>
+        </div>
+        <div class="sec-f">Recommended: Haiku with thinking off for Iris, about 6 seconds per check; Sonnet for Ask. <a style="color:var(--blue)">Test All</a></div>
+
+        <div class="sec-h">Coding agents</div>
+        <div class="frm">
+          <div class="frow"><span>Run agents with</span><span class="pv">Claude Code <span class="chev"></span></span></div>
+          <div class="frow"><span>Agents at once</span><span class="pv">3 <span class="chev"></span></span></div>
+        </div>
+        <div class="sec-f">Each agent works on one ticket in its own copy of the code. More at once finishes sooner and uses your plan faster.</div>
+
+        <div class="sec-h">Providers</div>
+        <div class="frm">
+          <div class="frow"><div style="display:flex;gap:10px;align-items:center"><span class="tile" style="background:#d97757">C</span><div class="t"><span>Claude Code</span><span class="s">Your Claude plan · used by Iris, Ask, coding agents</span></div></div><span style="display:flex;gap:10px;align-items:center"><span class="sw"></span><span class="ib">i</span></span></div>
+          <div class="frow"><div style="display:flex;gap:10px;align-items:center"><span class="tile" style="background:#10a37f">O</span><div class="t"><span>Codex</span><span class="s">Your ChatGPT plan · not used</span></div></div><span style="display:flex;gap:10px;align-items:center"><span class="sw off"></span><span class="ib">i</span></span></div>
+          <div class="frow"><div style="display:flex;gap:10px;align-items:center"><span class="tile" style="background:#5e5ce6">⌘</span><div class="t"><span>Claude Code · Z.ai</span><span class="s">Through Z.ai's Anthropic-compatible API · not used</span></div></div><span style="display:flex;gap:10px;align-items:center"><span class="sw"></span><span class="ib">i</span></span></div>
+          <div class="frow"><div style="display:flex;gap:10px;align-items:center"><span class="tile" style="background:#30a46c">▣</span><div class="t"><span>Ollama</span><span class="s">On this Mac · 4 models · not used</span></div></div><span style="display:flex;gap:10px;align-items:center"><span class="sw off"></span><span class="ib">i</span></span></div>
+          <div class="frow" style="justify-content:flex-start"><span style="color:var(--blue)">Add Provider…</span></div>
+        </div>
+        <div class="sec-f">A subscription uses the plan its program is signed in with. An API key is billed per token; keys are kept in the Keychain.</div>
+      </div>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="note"><h3>What moved where</h3><p class="muted" style="margin:0">Provider and model are one picker. Effort and thinking show as their own row only when the chosen model has them. Recommendations are one footer line. Test, refresh, Edit and Remove live in the provider's details sheet. "Used by" is the provider's status line.</p></div>
+    <div class="note"><h3>Why "Coding agents" is its own section</h3><p class="muted" style="margin:0">The agents that build tickets are a different job from Iris and Ask. They run a program in a copy of your code, and you choose which program and how many at once. Today that choice is hidden; only the number is shown.</p></div>
+  </div>
+
+  <h2>What each picker offers</h2>
+  <div class="grid3" style="margin-top:12px">
+    <div>
+      <div class="lbl good-t">TASK PICKER (IRIS)</div>
+      <div class="menu">
+        <div class="mh">Claude Code</div>
+        <div class="mi ck hl"><span>Haiku</span><span class="r">Recommended</span></div>
+        <div class="mi"><span>Sonnet</span><span class="r">Slower, better rewrites</span></div>
+        <div class="mi"><span>Opus</span><span class="r">Slowest</span></div>
+        <div class="mh">Codex</div>
+        <div class="mi"><span>GPT-5 mini</span><span class="r"></span></div>
+        <div class="sep"></div>
+        <div class="mi"><span>Other Model…</span></div>
+        <div class="sep"></div>
+        <div class="mi"><span>Off</span><span class="r">Iris does not run</span></div>
+      </div>
+      <p class="muted small" style="margin-top:8px">Grouped by provider, only providers that are on. Short plain names ("Haiku", not "haiku (typed)" or "Program default"). One "Recommended". "Off" is explicit instead of "None".</p>
+    </div>
+    <div>
+      <div class="lbl good-t">AGENTS AT ONCE</div>
+      <div class="menu">
+        <div class="mi"><span>1</span><span class="r">One ticket at a time</span></div>
+        <div class="mi"><span>2</span></div>
+        <div class="mi ck hl"><span>3</span><span class="r">Recommended</span></div>
+        <div class="mi"><span>4</span></div>
+        <div class="mi"><span>6</span></div>
+        <div class="mi"><span>8</span><span class="r">Uses your plan fastest</span></div>
+      </div>
+      <p class="muted small" style="margin-top:8px">A few useful values, not 1 to 12. Same picker as every other row, so the page reads as one system. Replaces "Max agents at once: 3" with its tall stepper.</p>
+    </div>
+    <div>
+      <div class="lbl good-t">RUN AGENTS WITH</div>
+      <div class="menu">
+        <div class="mi ck hl"><span>Claude Code</span><span class="r">Recommended</span></div>
+        <div class="mi"><span>Codex</span></div>
+        <div class="mi" style="color:var(--tertiary)"><span>Gemini CLI</span><span class="r">Off</span></div>
+      </div>
+      <p class="muted small" style="margin-top:8px">Only providers that run a program can build tickets: they edit files in a worktree. API-only providers are not offered here.</p>
+    </div>
+  </div>
+
+  <h2>Providers for everyone, not one setup</h2>
+  <p class="lead">Today's Add menu is a list of setups: "Claude Code with GLM (Z.ai Coding Plan)", "Z.ai GLM API key", "Gemini API key". Each new service or combination would need another item, and the list reflects one person's setup. Instead, every provider is one of <b>three ways to reach a model</b>, and the services are data under them. Your setup (Claude plan, GLM through Claude Code, Z.ai key) is then just three ordinary entries.</p>
+  <div class="grid3" style="margin-top:16px">
+    <div class="note rec">
+      <div class="pane-head" style="margin-bottom:8px"><span class="tile" style="background:#5e5ce6">⌘</span><h3>A program you are signed in to</h3></div>
+      <p class="muted">An agent program on this Mac: Claude Code, Codex, Gemini CLI, opencode. It uses its own sign-in (your plan), or is pointed at an API (see below). Only programs can be coding agents: they edit files.</p>
+      <p class="muted small" style="margin:0"><b>Your GLM setup:</b> Claude Code, signed in through an <i>Anthropic-compatible endpoint</i>, with Z.ai chosen from the known services.</p>
+    </div>
+    <div class="note">
+      <div class="pane-head" style="margin-bottom:8px"><span class="tile" style="background:#0a84ff">⇄</span><h3>An API service with a key</h3></div>
+      <p class="muted">Billed per token. A service speaks one of two languages: <b>Anthropic</b> or <b>OpenAI-compatible</b>. Known services (Anthropic, OpenAI, OpenRouter, Z.ai, Gemini, Mistral, DeepSeek, Groq and more) fill in the address, the key's variable name and a link to create a key. Anything else is "Custom" with an address.</p>
+    </div>
+    <div class="note">
+      <div class="pane-head" style="margin-bottom:8px"><span class="tile" style="background:#30a46c">▣</span><h3>A server on this Mac or network</h3></div>
+      <p class="muted">Ollama, LM Studio, llama.cpp and other OpenAI-compatible servers. Hatch looks for them on their usual ports and lists what it finds with its models. Anything else is "Custom" with an address. No bill.</p>
+    </div>
+  </div>
+  <div class="note" style="margin-top:12px">
+    <h3>Why this holds up</h3>
+    <p class="muted" style="margin:0">A new service is a line of data (name, language, address, key variable, link), not new screens. A program can be pointed at any service that speaks its language, so "Claude Code with GLM", "Claude Code with Kimi" or "Claude Code through a company proxy" all work without special cases. The list of services ships with Hatch and can be updated without changing the app's design.</p>
+  </div>
+
+  <h2>Add Provider: a sheet in three short steps</h2>
+  <p class="lead">Replaces the 13-item menu. Step 1 asks how to reach the model, step 2 which one (found ones first), and step 3 connects, checks and puts it to work.</p>
+  <div class="grid3" style="margin-top:16px">
+    <div class="sheet">
+      <div class="sheet-title">Add a provider</div>
+      <div class="group-h">How should Hatch reach the model?</div>
+      <div style="margin:0 16px;display:flex;flex-direction:column;gap:8px">
+        <div class="pick on"><span class="tile" style="background:#5e5ce6">⌘</span><div><b>A program you are signed in to</b><div class="d">Claude Code, Codex, Gemini CLI, opencode. Uses your plan.</div></div></div>
+        <div class="pick"><span class="tile" style="background:#0a84ff">⇄</span><div><b>An API service with a key</b><div class="d">Anthropic, OpenAI, OpenRouter, Z.ai and more. Billed per token.</div></div></div>
+        <div class="pick"><span class="tile" style="background:#30a46c">▣</span><div><b>A server on this Mac or network</b><div class="d">Ollama, LM Studio and others. No bill.</div></div></div>
+      </div>
+      <div class="footer"><span></span><span><button class="btn">Cancel</button> <button class="btn primary">Continue</button></span></div>
+    </div>
+    <div class="sheet">
+      <div class="sheet-title">Which program?</div>
+      <div class="group-h">Found on this Mac</div>
+      <div class="group">
+        <div class="radio"><span class="dot on"></span><div><b>Claude Code</b><div class="muted small">/opt/homebrew/bin/claude</div></div></div>
+        <div class="radio"><span class="dot"></span><div><b>Codex</b><div class="muted small">/usr/local/bin/codex</div></div></div>
+      </div>
+      <div class="group-h">Not installed</div>
+      <div class="group">
+        <div class="radio"><span class="dot"></span><div><b>Gemini CLI</b> <a class="small" style="color:var(--blue)">How to install</a></div></div>
+        <div class="radio"><span class="dot"></span><div><b>opencode</b> <a class="small" style="color:var(--blue)">How to install</a></div></div>
+      </div>
+      <p class="muted small" style="margin:8px 24px 0">For an API service this step is a searchable list of services plus "Custom"; for a server, the servers found and "Custom address".</p>
+      <div class="footer"><button class="btn">Back</button><span><button class="btn">Cancel</button> <button class="btn primary">Continue</button></span></div>
+    </div>
+    <div class="sheet">
+      <div class="sheet-title">Claude Code</div>
+      <div class="group-h">Sign in with</div>
+      <div class="group">
+        <div class="radio"><span class="dot on"></span><div><b>Its own sign-in</b><div class="muted small"><span class="ok">✓</span> Signed in with a Claude plan</div></div></div>
+        <div class="radio"><span class="dot"></span><div style="flex:1"><b>An Anthropic-compatible service</b><div class="muted small">For example Z.ai, Kimi, DeepSeek or a proxy</div></div><span class="pv">Z.ai <span class="chev"></span></span></div>
+      </div>
+      <div class="group-h">Use it for</div>
+      <div class="group">
+        <div class="row"><span>Check new tickets (Iris)</span><span class="sw"></span></div>
+        <div class="row"><span>Answer questions (Ask)</span><span class="sw"></span></div>
+        <div class="row"><span>Coding agents</span><span class="sw"></span></div>
+      </div>
+      <div class="footer"><button class="btn">Back</button><span><button class="btn">Cancel</button> <button class="btn primary">Add</button></span></div>
+    </div>
+  </div>
+  <p class="muted small" style="margin-top:10px">Choosing "An Anthropic-compatible service" adds a key field for that service. Its address and key variable come from the services list. The provider is named after both, for example "Claude Code · Z.ai", so two Claude Code providers are never confused.</p>
+
+  <h2>A provider's details sheet</h2>
+  <p class="lead">Opened with <span class="ib">i</span> on its row. Everything that was spread over the row (refresh, Test, Edit…, ⋯) is here, in sections.</p>
+  <div class="sheet" style="margin-top:16px;max-width:620px">
+    <div class="sheet-title">Claude Code</div>
+    <div class="group-h">Status</div>
+    <div class="group">
+      <div class="row"><span>On</span><span class="sw"></span></div>
+      <div class="row"><span>Signed in</span><span class="val"><span class="ok">✓</span> Claude Max plan</span></div>
+      <div class="row"><span>Used by</span><span class="val">Iris, Ask, coding agents</span></div>
+      <div class="row"><span>Last test</span><span class="val">Answered in 4 s, today 15:02 &nbsp;<button class="btn">Test</button></span></div>
+    </div>
+    <div class="group-h">Models</div>
+    <div class="group">
+      <div class="row"><span>Default model</span><span class="pv">Sonnet <span class="chev"></span></span></div>
+      <div class="row"><span>Available</span><span class="val">Opus, Sonnet, Haiku &nbsp;<button class="btn">Refresh</button></span></div>
+    </div>
+    <div class="group-h">Advanced</div>
+    <div class="group">
+      <div class="row"><span>Sign in with</span><span class="pv">Claude account <span class="chev"></span></span></div>
+      <div class="row"><span>Program</span><span class="val">Found automatically &nbsp;<button class="btn">Choose…</button></span></div>
+      <div class="row"><span>Extra arguments</span><span class="val" style="color:var(--tertiary)">None</span></div>
+    </div>
+    <div class="footer"><button class="btn" style="color:#e5484d">Remove Provider…</button><span><button class="btn primary">Done</button></span></div>
+  </div>
+
+  <h2>Decisions I need from you</h2>
+  <p class="lead">My recommendation is already selected. Change what you disagree with and add notes, then tell me in chat that you're done. I read the answers from this page.</p>
+  <form id="answers" class="note" style="margin-top:12px"></form>
+  <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
+    <button class="btn primary" id="copy" type="button">Copy answers</button>
+    <button class="btn" id="reset" type="button">Reset to recommendations</button>
+    <span class="muted small" id="status"></span>
+  </div>
+</main>
+<script>
+  const QUESTIONS = [
+    { id: 'rules', title: 'Adopt the control rules for every Settings page', why: 'One grammar, Apple\'s own, so every page reads the same and new pages need no design round.', rec: 'yes', options: [
+      ['yes', 'Yes, as in the table', 'Applied to all Settings pages and Project settings'],
+      ['partly', 'Yes, with changes', 'Say which in the note'] ] },
+    { id: 'layout', title: 'Sections of the Agents page', why: 'Tasks, coding agents and providers are three different questions; today coding agents are a lone stepper at the bottom.', rec: 'three', options: [
+      ['three', 'Tasks, Coding agents, Providers', 'One scrolling page'],
+      ['tabs', 'Two pages: Tasks and Providers', 'Coding agents under Tasks'] ] },
+    { id: 'picker', title: 'Choosing a task\'s model', why: 'You think of it as one choice; one menu grouped by provider shows every option with one recommended.', rec: 'one', options: [
+      ['one', 'One picker: "Haiku · Claude Code"', 'Grouped by provider, with Off and Other Model…'],
+      ['two', 'Two pickers: provider, then model', 'As today, with better names'] ] },
+    { id: 'details', title: 'Where a provider\'s settings live', why: 'Rows stay calm (name, status, switch) and everything else is in one place, as in Internet Accounts.', rec: 'sheet', options: [
+      ['sheet', 'An i button opens a details sheet', 'Test, refresh, models, Remove inside'],
+      ['push', 'The row opens a page of its own', 'Like General › About'],
+      ['inline', 'Expand the row in place', 'Disclosure triangle'] ] },
+    { id: 'add', title: 'Adding a provider', why: 'Sorted by how you pay, and the second step asks only what that kind needs and checks it.', rec: 'sheet', options: [
+      ['sheet', 'A three-step sheet', 'How to reach it, which one, then connect and use it for'],
+      ['menu', 'A sorted menu, then the editor', 'Today\'s flow with sections'] ] },
+    { id: 'general', title: 'How providers are organised', why: 'Three ways to reach a model, with services as data, so any setup (yours included) is an ordinary entry and new services need no new screens.', rec: 'three', options: [
+      ['three', 'Program, API service, local server', 'Services and endpoints as a shipped list'],
+      ['presets', 'A list of ready-made setups', 'As today, grows with every combination'] ] },
+    { id: 'count', title: 'Agents at once', why: 'The same picker as every other row, with the useful values and one recommended.', rec: 'picker', options: [
+      ['picker', 'Picker: 1, 2, 3, 4, 6, 8', '3 recommended'],
+      ['stepper', 'Value and a small stepper on the right', '1 to 12'] ] },
+    { id: 'runwith', title: 'Choose which program runs coding agents', why: 'Today it is implicit. Making it a choice lets Codex or Gemini build tickets when you have those plans.', rec: 'yes', options: [
+      ['yes', 'Yes, "Run agents with" in Coding agents', 'Program providers only'],
+      ['no', 'No, always Claude Code', 'Simpler for now'] ] }
+  ];
+  const KEY = 'hatch.agentsSettingsAnswers';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  const form = document.getElementById('answers');
+  function render() {
+    form.innerHTML = '';
+    QUESTIONS.forEach(q => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const box = document.createElement('div');
+      box.className = 'qform';
+      box.innerHTML = `<h3>${q.title}</h3><div class="why">Why I recommend it: ${q.why}</div><div class="opts"></div><textarea class="qnote" rows="1" placeholder="Note (optional)"></textarea>`;
+      const opts = box.querySelector('.opts');
+      q.options.forEach(([value, label, detail]) => {
+        const o = document.createElement('label');
+        o.className = 'opt' + (a.choice === value ? ' on' : '');
+        o.innerHTML = `<input type="radio" name="${q.id}" value="${value}" ${a.choice === value ? 'checked' : ''}><span class="dot ${a.choice === value ? 'on' : ''}"></span><span><b>${label}</b>${value === q.rec ? '<span class="rec-tag">Recommended</span>' : ''}<br><span class="d">${detail}</span></span>`;
+        o.addEventListener('click', () => { saved[q.id] = { choice: value, note: box.querySelector('.qnote').value }; store(); render(); });
+        opts.appendChild(o);
+      });
+      const note = box.querySelector('.qnote');
+      note.value = a.note || '';
+      note.addEventListener('input', () => { saved[q.id] = { choice: (saved[q.id] || a).choice, note: note.value }; store(); });
+      form.appendChild(box);
+    });
+  }
+  function store() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} }
+  function summary() {
+    return QUESTIONS.map(q => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const label = q.options.find(o => o[0] === a.choice)[1];
+      return `- ${q.title}: ${label}${a.choice === q.rec ? ' (recommended)' : ''}${a.note ? ' | Note: ' + a.note : ''}`;
+    }).join('\n');
+  }
+  window.hatchAnswers = summary;
+  document.getElementById('copy').addEventListener('click', async () => {
+    const status = document.getElementById('status');
+    try { await navigator.clipboard.writeText(summary()); status.textContent = 'Copied. Paste it in chat.'; }
+    catch (e) { status.textContent = 'Could not copy here. Tell me in chat that you are done and I will read them.'; }
+  });
+  document.getElementById('reset').addEventListener('click', () => { saved = {}; store(); render(); });
+  render();
+</script>
+</body>
+</html>
