@@ -1487,3 +1487,10 @@ Page: https://claude.ai/artifact/WLEm158ifiUuQdPNuGjxzs (source `design-review/d
 | WF-A3 | Digest | Daily, on the Desk and in the menu bar | Trust needs a place to look | |
 | WF-A4 | Issues opened on GitHub | Filed by Iris like a prompt | Same path from anywhere | |
 | WF-T8 | Design work against components and decisions (owner's addition, 2026-10-04) | For visual and design work Iris also checks the app's components (colours, type, sizes, views and styles from the components catalog) and the earlier design decisions. A conflict, such as a change to a shared component or a value that differs from a component, or one that contradicts a recorded design decision, becomes one of her questions with suggested answers (for example: change the component everywhere, add a variant here, or keep it), handled like any other clarification | A design change that silently forks a component or undoes a decision is the drift the components and the notebook exist to stop | |
+
+## Y. Xcode tests in the app (asked by the owner 2026-10-04, ids TS1 to TS4)
+
+- **TS1 · Scope: each project's repos.** The Tests page shows the tests of the project's app repository (Echo and any other project), not only Hatch's own. Reason: that is where the agents work.
+- **TS2 · Source of truth: `.xcresult` bundles**, read with `xcresulttool`. While a run goes, XCTest output lines give live progress; when it ends the bundle replaces them. Reason: only the bundle has every test, suite, duration, failure message and file:line, including Swift Testing.
+- **TS3 · Attribution through `hatch check`.** `hatch check` records each test run (ticket, agent holding it, branch, commit, scope, counts, result path) and reports failing tests from the record. Runs started outside `hatch check` are not watched; `hatch tests record <x.xcresult>` adds one by hand.
+- **TS4 · The catalog is read from the test sources** (free, no build): bundle, suite, test. Tests that ran but were not found by the scan are added after the run. Page: Runs and Tests (by bundle and suite, last result, who ran it, history), plus a card for the run in progress. Failed is the only coloured state.

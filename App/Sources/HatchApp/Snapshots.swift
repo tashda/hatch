@@ -221,7 +221,7 @@ enum Snapshots {
         let first = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Toast spacing and corner radius" })?.id
         var routes: [(String, Route, TicketTab?)] = [("desk", .desk, nil), ("tickets", .tickets, nil), ("board", .board, nil),
                                                       ("previews", .previews, nil), ("specs", .specs, nil), ("decisions", .decisions, nil), ("components", .components, nil),
-                                                      ("agents", .agents, nil), ("health", .health, nil), ("log", .log, nil), ("project", .projects, nil),
+                                                      ("agents", .agents, nil), ("tests", .tests, nil), ("health", .health, nil), ("log", .log, nil), ("project", .projects, nil),
                                                       ("new-ticket", .newTicket, nil)]
         if let first {
             routes.insert(("ticket-overview", .ticket(first), .overview), at: 3)
@@ -326,7 +326,7 @@ enum Snapshots {
     /// or "settings-agents".
     @MainActor private static func runOne(_ name: String, state: AppState, into folder: URL) async {
         let routes: [String: Route] = ["desk": .desk, "tickets": .tickets, "board": .board, "previews": .previews, "specs": .specs,
-                                       "decisions": .decisions, "components": .components, "agents": .agents, "reports": .reports, "health": .health, "log": .log, "project": .projects,
+                                       "decisions": .decisions, "components": .components, "agents": .agents, "tests": .tests, "reports": .reports, "health": .health, "log": .log, "project": .projects,
                                        "new-ticket": .newTicket]
         if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {

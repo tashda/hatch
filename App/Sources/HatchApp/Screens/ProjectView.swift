@@ -757,10 +757,9 @@ extension HXSettingsCard where Accessory == EmptyView {
     }
 }
 
-/// The first thing a new owner sees: what a project is made of, and one button to set it up.
+/// The first thing a new owner sees: one button. GitHub, repositories and the folder are all handled in the setup sheet.
 struct WelcomeView: View {
     @EnvironmentObject var state: AppState
-    @StateObject private var account = GitHubAccountModel()
 
     var body: some View {
         VStack(spacing: 24) {
@@ -768,16 +767,6 @@ struct WelcomeView: View {
                 Image(systemName: "square.stack.3d.up").font(.system(size: 34)).foregroundStyle(.tertiary)
                 Text("Let's set up a project").font(.title2.weight(.semibold))
             }
-            VStack(alignment: .leading, spacing: 12) {
-                if let user = account.user {
-                    step(1, "GitHub connected", "Signed in as \(user.login).", done: true)
-                } else {
-                    step(1, "Connect GitHub", "Hatch lists the repositories your account can see.")
-                }
-                step(2, "Choose repositories", "A private one for tickets; the app and design system if you have them.")
-                step(3, "Choose the app's folder", "The local checkout agents build and test in.")
-            }
-            .frame(maxWidth: 420, alignment: .leading)
             Button("Set up a project") { state.showAddProject = true }
                 .buttonStyle(.glassProminent)
                 .controlSize(.large)
@@ -785,30 +774,6 @@ struct WelcomeView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { if !Snapshots.demoMode { account.refresh() } }
-        .onReceive(NotificationCenter.default.publisher(for: .hxGitHubAccountChanged)) { _ in account.refresh() }
-    }
-
-    private func step(_ number: Int, _ title: String, _ detail: String, done: Bool = false) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Group {
-                if done {
-                    Image(systemName: "checkmark").font(.callout.weight(.bold)).foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
-                        .background(Theme.finished, in: Circle())
-                } else {
-                    Text("\(number)")
-                        .font(.callout.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22, height: 22)
-                        .background(.quaternary, in: Circle())
-                }
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).fontWeight(.medium)
-                Text(detail).font(.callout).foregroundStyle(.secondary)
-            }
-        }
     }
 }
 

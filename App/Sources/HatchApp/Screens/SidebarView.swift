@@ -44,6 +44,7 @@ struct SidebarView: View {
                 }
                 Section("Machine") {
                     SidebarRow(route: .agents).tag(Route.agents)
+                SidebarRow(route: .tests).tag(Route.tests)
                 }
             } else {
             Section("Work") {

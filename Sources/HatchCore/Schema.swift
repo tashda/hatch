@@ -312,6 +312,61 @@ public enum Schema {
         ALTER TABLE question ADD COLUMN purpose TEXT;
         ALTER TABLE question ADD COLUMN payload TEXT;
         """,
+        // 7: Xcode tests (section Y). `test_case` is the catalog read from the test sources, `test_run` one run of a
+        // project's tests (made by an agent through `hatch check`, or recorded from an .xcresult) and `test_result` one
+        // test's outcome in a run. A run's counts are kept on the row so the page needs no sums.
+        """
+        CREATE TABLE test_case(
+            project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+            repo_id INTEGER REFERENCES repo(id) ON DELETE SET NULL,
+            bundle TEXT NOT NULL,
+            suite TEXT NOT NULL,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'xctest',
+            file TEXT,
+            line INTEGER,
+            seen_at REAL NOT NULL,
+            PRIMARY KEY(project_id, bundle, suite, name)
+        );
+        CREATE TABLE test_run(
+            id INTEGER PRIMARY KEY,
+            project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+            repo_id INTEGER REFERENCES repo(id) ON DELETE SET NULL,
+            ticket_id INTEGER REFERENCES ticket(id) ON DELETE SET NULL,
+            agent TEXT,
+            command TEXT,
+            scope TEXT,
+            branch TEXT,
+            commit_sha TEXT,
+            pid INTEGER,
+            state TEXT NOT NULL DEFAULT 'running',
+            total INTEGER NOT NULL DEFAULT 0,
+            passed INTEGER NOT NULL DEFAULT 0,
+            failed INTEGER NOT NULL DEFAULT 0,
+            skipped INTEGER NOT NULL DEFAULT 0,
+            running_name TEXT,
+            started_at REAL NOT NULL,
+            ended_at REAL,
+            result_path TEXT,
+            source TEXT NOT NULL DEFAULT 'log',
+            error TEXT
+        );
+        CREATE INDEX test_run_project ON test_run(project_id, started_at);
+        CREATE INDEX test_run_ticket ON test_run(ticket_id);
+        CREATE TABLE test_result(
+            run_id INTEGER NOT NULL REFERENCES test_run(id) ON DELETE CASCADE,
+            bundle TEXT NOT NULL,
+            suite TEXT NOT NULL,
+            name TEXT NOT NULL,
+            status TEXT NOT NULL,
+            duration REAL,
+            message TEXT,
+            file TEXT,
+            line INTEGER,
+            PRIMARY KEY(run_id, bundle, suite, name)
+        );
+        CREATE INDEX test_result_name ON test_result(bundle, suite, name);
+        """,
     ]
 
     public static func migrate(_ db: Database) throws {

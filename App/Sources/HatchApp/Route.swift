@@ -2,7 +2,7 @@ import Foundation
 
 /// Where the user is in the app. The sidebar sets it (decision B1); a ticket opens full width (decision C1).
 enum Route: Hashable {
-    case desk, tickets, board, previews, specs, decisions, components, agents, reports, health, log, projects
+    case desk, tickets, board, previews, specs, decisions, components, agents, tests, reports, health, log, projects
     case ticket(Int)
     case newTicket
 
@@ -16,6 +16,7 @@ enum Route: Hashable {
         case .decisions: "Decisions"
         case .components: "Components"
         case .agents: "Agents"
+        case .tests: "Tests"
         case .reports: "Reports"
         case .health: "Health"
         case .log: "Log"
@@ -35,6 +36,7 @@ enum Route: Hashable {
         case .decisions: "flag"
         case .components: "paintpalette"
         case .agents: "cpu"
+        case .tests: "checkmark.diamond"
         case .reports: "chart.bar.xaxis"
         case .health: "stethoscope"
         case .log: "list.bullet.rectangle"
@@ -55,6 +57,7 @@ enum Route: Hashable {
         case .decisions: "page.decisions"
         case .components: "page.components"
         case .agents: "page.agents"
+        case .tests: "page.tests"
         case .reports: "page.reports"
         case .health: "page.health"
         case .log: "page.log"
@@ -65,7 +68,7 @@ enum Route: Hashable {
     }
 
     /// The pages in the order the Go menu lists them.
-    static let pages: [Route] = [.desk, .tickets, .board, .previews, .specs, .decisions, .agents, .log, .projects, .components, .health, .reports]
+    static let pages: [Route] = [.desk, .tickets, .board, .previews, .specs, .decisions, .agents, .tests, .log, .projects, .components, .health, .reports]
 }
 
 extension Route {
@@ -87,6 +90,6 @@ extension Route {
 
     private static let plain: [String: Route] = [
         "desk": .desk, "tickets": .tickets, "board": .board, "previews": .previews, "specs": .specs, "decisions": .decisions,
-        "components": .components, "agents": .agents, "health": .health, "log": .log, "projects": .projects,
+        "components": .components, "agents": .agents, "tests": .tests, "health": .health, "log": .log, "projects": .projects,
     ]
 }

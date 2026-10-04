@@ -141,6 +141,7 @@ public enum ShortcutCatalog {
         .init("page.log", "Log", .pages, .app, .init("8", cmd)),
         .init("page.projects", "Project Settings", .pages, .app, .init("9", cmd)),
         .init("page.components", "Components", .pages, .app, .init("0", cmd)),
+        .init("page.tests", "Tests", .pages, .app, .init("t", [.control, .command])),
         .init("page.health", "Health", .pages, .app, .init("h", [.control, .command])),
         .init("page.reports", "Reports", .pages, .app, .init("r", [.control, .command])),
         // A ticket from anywhere on the Mac (WF-C2). ⌃⌥H: H for Hatch, two modifiers no common app or macOS uses, and
