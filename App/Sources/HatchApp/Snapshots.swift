@@ -236,7 +236,7 @@ enum Snapshots {
             if let window = NSApp.windows.first(where: { $0.isVisible }) {
                 save(window, name: "settings-agents", mode: mode, into: folder)
             }
-            state.settingsPage = .workspace
+            state.settingsPage = .general
             state.snapshotPresentation = nil
             try? await Task.sleep(nanoseconds: 250_000_000)
 
