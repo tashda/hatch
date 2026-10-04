@@ -81,6 +81,8 @@ struct TicketsView: View {
     @State private var queryText: String = ""
     @State private var tickets: [Ticket] = []
     @State private var selection: Set<Int> = []
+    @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var keys = ShortcutStore.shared
     @State private var groupByTheme = false
     @State private var sort: TicketSort = .newest
     @State private var views: [SavedView] = []
@@ -268,14 +270,38 @@ struct TicketsView: View {
         }
         .alternatingRowBackgrounds(.disabled)
         .scrollContentBackground(.hidden)
+        .background(listKeys)
+        .onChange(of: selection) { _, ids in state.selectedTicketId = ids.count == 1 ? ids.first : nil }
         .contextMenu(forSelectionType: Int.self) { ids in
             if let id = ids.first {
                 Button("Open") { openTicket(id) }
+                Button("Open in New Window") { openWindow(id: "ticket", value: id) }
                 Button("Park") { parkTicket(id) }
             }
         } primaryAction: { ids in
             if let id = ids.first { openTicket(id) }
         }
+    }
+
+    /// The list keys of the shortcut table, live while the table has focus. Arrow keys already move the selection.
+    private var listKeys: some View {
+        ZStack {
+            Button("Next") { moveSelection(by: 1) }.shortcut("list.next", keys)
+            Button("Previous") { moveSelection(by: -1) }.shortcut("list.previous", keys)
+            Button("Open") { if let id = selection.first { openTicket(id) } }.shortcut("list.open", keys)
+            Button("Open in New Window") { if let id = selection.first { openWindow(id: "ticket", value: id) } }.shortcut("list.openWindow", keys)
+            Button("Park") { if let id = selection.first { parkTicket(id) } }.shortcut("list.park", keys)
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
+    }
+
+    private func moveSelection(by delta: Int) {
+        let ids = tickets.map(\.id)
+        guard !ids.isEmpty else { return }
+        guard let current = selection.first, let index = ids.firstIndex(of: current) else { selection = [ids[delta < 0 ? ids.count - 1 : 0]]; return }
+        selection = [ids[min(max(index + delta, 0), ids.count - 1)]]
     }
 
     // MARK: Grouped by Theme

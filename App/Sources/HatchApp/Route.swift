@@ -41,6 +41,28 @@ enum Route: Hashable {
         case .newTicket: "plus"
         }
     }
+
+    /// The command in `ShortcutCatalog` that opens this page. Exhaustive on purpose: a new page must say whether it has one.
+    var shortcutId: String? {
+        switch self {
+        case .desk: "page.desk"
+        case .tickets: "page.tickets"
+        case .board: "page.board"
+        case .previews: "page.previews"
+        case .specs: "page.specs"
+        case .decisions: "page.decisions"
+        case .components: "page.components"
+        case .agents: "page.agents"
+        case .health: "page.health"
+        case .log: "page.log"
+        case .projects: "page.projects"
+        case .newTicket: "page.newTicket"
+        case .ticket: nil
+        }
+    }
+
+    /// The pages in the order the Go menu lists them.
+    static let pages: [Route] = [.desk, .tickets, .board, .previews, .specs, .decisions, .agents, .log, .projects, .components, .health]
 }
 
 extension Route {

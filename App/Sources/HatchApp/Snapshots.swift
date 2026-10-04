@@ -167,6 +167,7 @@ enum Snapshots {
             QuestionOption(key: "C", title: "Keep both, rename the other set's", gain: "Nothing changes now", cost: "Two names that look alike")])
         try! store.requestPlanReview(ticketId: building.id, files: ["Sources/Connections/ConnectionTest.swift", "Sources/Connections/HostCheck.swift",
                                                                   "Sources/Editor/Toolbar.swift"], reason: "a Bug")
+        try! store.setCIRecord(projectId: p.id, CIRecord(state: .failed, failed: ["Build & Test"], ref: "hatch", checkedAt: Date()))
         let paths = AppPaths(root: FileManager.default.temporaryDirectory.appendingPathComponent("hatch-snapshots-\(getpid())"))
         return AppState(store: store, paths: paths)
     }

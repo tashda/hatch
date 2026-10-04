@@ -76,6 +76,14 @@
 		F5F821314834FAC30E7C33A3 /* TicketOverviewTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 501F8478F0F8743977F822BD /* TicketOverviewTab.swift */; };
 		FB3275F17A1D0DDE28ABE554 /* BoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870C6888D33DD0120ECB7462 /* BoardView.swift */; };
 		FF36134FE7C8BE5D86DABFD1 /* TicketThreadTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1327B5DCB74BF38378614A /* TicketThreadTab.swift */; };
+		147E3FF10CC68562F146B894 /* ShortcutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105A976E5B602C3536C9932A /* ShortcutStore.swift */; };
+		D2324FF39CBEB98E8BD46EC4 /* KeyRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E189CBC1FF08DF90487535 /* KeyRecorder.swift */; };
+		CE59ACD98B9CE5CCC457E5ED /* WindowNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8CC8E47730FE331E15142D6 /* WindowNavigation.swift */; };
+		81B5EDC5D3BBD54B0E2C6C07 /* HatchWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11CCAFEC9CF80E7B4EDF18D3 /* HatchWindows.swift */; };
+		5EDA23FAFD9A114B8AAB385E /* TicketWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DFECE1691B761BD9216AEFE /* TicketWindowView.swift */; };
+		4F887E0E6B9B7F1C51B1CD43 /* ShortcutsSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A262251AD4554A76DEA1DD /* ShortcutsSettingsPage.swift */; };
+		8A5B40651E53A0D81FF33F37 /* SavedViewCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1802C48F88E9EF3AD729D2CE /* SavedViewCommands.swift */; };
+		093939DF8FDCC3344878D598 /* ShortcutCheatSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89026453DB8DADA5CBC8A4BE /* ShortcutCheatSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -144,6 +152,14 @@
 		F4B2D75F35E1444F13624804 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		F78355C404242719FFEB0295 /* TicketHistoryTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketHistoryTab.swift; sourceTree = "<group>"; };
 		FA1327B5DCB74BF38378614A /* TicketThreadTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketThreadTab.swift; sourceTree = "<group>"; };
+		105A976E5B602C3536C9932A /* ShortcutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutStore.swift; sourceTree = "<group>"; };
+		27E189CBC1FF08DF90487535 /* KeyRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyRecorder.swift; sourceTree = "<group>"; };
+		A8CC8E47730FE331E15142D6 /* WindowNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowNavigation.swift; sourceTree = "<group>"; };
+		11CCAFEC9CF80E7B4EDF18D3 /* HatchWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HatchWindows.swift; sourceTree = "<group>"; };
+		9DFECE1691B761BD9216AEFE /* TicketWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketWindowView.swift; sourceTree = "<group>"; };
+		F3A262251AD4554A76DEA1DD /* ShortcutsSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsSettingsPage.swift; sourceTree = "<group>"; };
+		1802C48F88E9EF3AD729D2CE /* SavedViewCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedViewCommands.swift; sourceTree = "<group>"; };
+		89026453DB8DADA5CBC8A4BE /* ShortcutCheatSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutCheatSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -166,6 +182,7 @@
 		84B416AA0D31A8BC44103D3D /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				F3A262251AD4554A76DEA1DD /* ShortcutsSettingsPage.swift */,
 				9BF56B54871E1C11A5F849C0 /* GeneralSettingsPage.swift */,
 				12F922E6FEFEFC6CED4FF435 /* NotificationsSettingsPage.swift */,
 				03C7D889257FBF44ED32AA37 /* GitHubSettingsPage.swift */,
@@ -234,6 +251,8 @@
 		97AD98D72F8959CEBB480779 /* HatchApp */ = {
 			isa = PBXGroup;
 			children = (
+				BE7587D8F9AC81F6E32675A9 /* Windows */,
+				6AC92F9C8D0358C8FDD4FA6F /* Shortcuts */,
 				211BC59B762AD8A3B0EB98B0 /* AppState.swift */,
 				0B0CFDAD1AD73457B63235D3 /* AppState+Notifications.swift */,
 				71617872CD744FB39971D7F9 /* AppState+Preferences.swift */,
@@ -280,6 +299,8 @@
 		CBA38A810E7270CFE5AE6D11 /* Screens */ = {
 			isa = PBXGroup;
 			children = (
+				89026453DB8DADA5CBC8A4BE /* ShortcutCheatSheet.swift */,
+				9DFECE1691B761BD9216AEFE /* TicketWindowView.swift */,
 				B08CBB6E28A0112DD7F8C511 /* Adapters.swift */,
 				198272DA0A12BD567C54E381 /* AgentsView.swift */,
 				6D9CAAC677BE273CA35AC7A4 /* AskPanel.swift */,
@@ -312,6 +333,25 @@
 				A8AD0B9B94859C4732FE0A01 /* Ticket */,
 			);
 			path = Screens;
+			sourceTree = "<group>";
+		};
+		6AC92F9C8D0358C8FDD4FA6F /* Shortcuts */ = {
+			isa = PBXGroup;
+			children = (
+				1802C48F88E9EF3AD729D2CE /* SavedViewCommands.swift */,
+				A8CC8E47730FE331E15142D6 /* WindowNavigation.swift */,
+				27E189CBC1FF08DF90487535 /* KeyRecorder.swift */,
+				105A976E5B602C3536C9932A /* ShortcutStore.swift */,
+			);
+			path = Shortcuts;
+			sourceTree = "<group>";
+		};
+		BE7587D8F9AC81F6E32675A9 /* Windows */ = {
+			isa = PBXGroup;
+			children = (
+				11CCAFEC9CF80E7B4EDF18D3 /* HatchWindows.swift */,
+			);
+			path = Windows;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -419,6 +459,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				093939DF8FDCC3344878D598 /* ShortcutCheatSheet.swift in Sources */,
+				8A5B40651E53A0D81FF33F37 /* SavedViewCommands.swift in Sources */,
+				4F887E0E6B9B7F1C51B1CD43 /* ShortcutsSettingsPage.swift in Sources */,
+				5EDA23FAFD9A114B8AAB385E /* TicketWindowView.swift in Sources */,
+				81B5EDC5D3BBD54B0E2C6C07 /* HatchWindows.swift in Sources */,
+				CE59ACD98B9CE5CCC457E5ED /* WindowNavigation.swift in Sources */,
+				D2324FF39CBEB98E8BD46EC4 /* KeyRecorder.swift in Sources */,
+				147E3FF10CC68562F146B894 /* ShortcutStore.swift in Sources */,
 				DD98B4574A12C14073E2357C /* Adapters.swift in Sources */,
 				437B449283ADBC928D57C174 /* AgentsView.swift in Sources */,
 				E82E2F2DD0373D41928DBA39 /* AnswerCards.swift in Sources */,

@@ -25,10 +25,15 @@ final class AppState: ObservableObject {
     private var notebookDirty: Set<Int> = []
     private var notebookDebounce: DispatchWorkItem?
 
-    /// Remembered as it changes, so "When Hatch opens: The last page" can return to it (Settings › General).
-    @Published var route: Route = .desk { didSet { rememberPlace() } }
-    @Published private(set) var backStack: [Route] = []
-    @Published private(set) var forwardStack: [Route] = []
+    /// Where the main window is, with its Back and Forward. Settings and ticket windows keep their own history.
+    /// The page is remembered as it changes, so "When Hatch opens: The last page" can return to it (Settings › General).
+    @Published private(set) var history = PageHistory<Route>(start: .desk) {
+        didSet { if history.current != oldValue.current { rememberPlace() } }
+    }
+    var route: Route {
+        get { history.current }
+        set { history.replaceCurrent(with: newValue) }
+    }
     /// A card the current page asks the Iris inspector to show at its top (the Desk's decision brief).
     @Published var inspectorTop: AnyView?
     @Published var selectedProjectKey: String? {        // nil means "All projects" (decision B2, B3)
@@ -181,9 +186,12 @@ final class AppState: ObservableObject {
 
     func syncNow() {
         guard !syncing else { return }
-        let targets: [(repo: String, projectId: Int)] = projects.compactMap { p in
+        let targets: [(repo: String, projectId: Int, ci: (remote: String, ref: String)?)] = projects.compactMap { p in
             guard let repo = p.config?.ticketsRepo, !repo.isEmpty else { return nil }
-            return (repo, p.id)
+            // CI on the integration branch is read only while something merged waits for it (decision I6).
+            let merged = !((try? store.tickets(TicketFilter(projectId: p.id, statuses: [.merged]))) ?? []).isEmpty
+            let ci = merged ? p.config?.repo(.app).map { ($0.remote, p.config?.integrationBranch ?? "hatch") } : nil
+            return (repo, p.id, ci)
         }
         guard !targets.isEmpty else { return }
         syncing = true
@@ -199,6 +207,7 @@ final class AppState: ObservableObject {
                     do {
                         _ = try engine.pushPending(repo: target.repo)
                         _ = try engine.pull(repo: target.repo, projectId: target.projectId)
+                        if let ci = target.ci { try engine.checkCI(projectId: target.projectId, repo: ci.remote, ref: ci.ref) }
                     } catch {
                         message = "\(target.repo): \(error)"
                     }
@@ -401,10 +410,7 @@ final class AppState: ObservableObject {
     /// Every page change goes through here, so Back and Forward always return to where you were.
     func navigate(to destination: Route) {
         if case .ticket(let id) = destination { noteRecent(id) }
-        guard destination != route else { return }
-        backStack.append(route)
-        forwardStack.removeAll()
-        route = destination
+        history.visit(destination)
     }
 
     /// Opens the palette on a scope; the same shortcut again closes it, as Spotlight does.
@@ -419,21 +425,12 @@ final class AppState: ObservableObject {
         UserDefaults.standard.set(recentTicketIds, forKey: "hatch.recentTickets")
     }
 
-    var canGoBack: Bool { !backStack.isEmpty }
-    var canGoForward: Bool { !forwardStack.isEmpty }
-    var backTitle: String? { backStack.last?.title }
+    var canGoBack: Bool { history.canGoBack }
+    var canGoForward: Bool { history.canGoForward }
+    var backTitle: String? { history.backPage?.title }
 
-    func goBack() {
-        guard let previous = backStack.popLast() else { return }
-        forwardStack.append(route)
-        route = previous
-    }
-
-    func goForward() {
-        guard let next = forwardStack.popLast() else { return }
-        backStack.append(route)
-        route = next
-    }
+    func goBack() { history.goBack() }
+    func goForward() { history.goForward() }
 }
 
 /// Where Hatch keeps its files (database, token, caches). Overridable with HATCH_HOME for tests and the CLI.

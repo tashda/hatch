@@ -8,6 +8,9 @@ struct SettingsView: View {
     @EnvironmentObject var state: AppState
     @State private var selection: SettingsPage? = .general
     @State private var searchText = ""
+    /// Back and Forward for this window only: switching pages is navigation, as in the main window.
+    @State private var history = PageHistory<SettingsPage>(start: .general)
+    @ObservedObject private var keys = ShortcutStore.shared
 
     var body: some View {
         NavigationSplitView {
@@ -39,6 +42,7 @@ struct SettingsView: View {
                 case .tools: ToolsSettingsPage()
                 case .storage: StorageSettingsPage()
                 case .usage: UsageSettingsPage()
+                case .shortcuts: ShortcutsSettingsPage(filter: searchText)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -47,6 +51,30 @@ struct SettingsView: View {
         .frame(minWidth: 680, minHeight: 480)
         .onAppear(perform: showRequestedPage)
         .onChange(of: state.settingsPage) { _, _ in showRequestedPage() }
+        .onChange(of: selection) { _, page in
+            if let page { history.visit(page) }
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                ControlGroup {
+                    Button { go(history.goBack()) } label: { Label("Back", systemImage: "chevron.left") }
+                        .disabled(!history.canGoBack)
+                        .help(keys.help(history.backPage.map { "Back to \($0.title)" } ?? "Go Back", "back"))
+                    Button { go(history.goForward()) } label: { Label("Forward", systemImage: "chevron.right") }
+                        .disabled(!history.canGoForward)
+                        .help(keys.help("Go Forward", "forward"))
+                }
+                .controlGroupStyle(.navigation)
+            }
+        }
+        .focusedSceneValue(\.windowNavigation, WindowNavigation(
+            canGoBack: history.canGoBack, canGoForward: history.canGoForward,
+            goBack: { go(history.goBack()) }, goForward: { go(history.goForward()) }))
+    }
+
+    /// Shows the page Back or Forward landed on. The selection change that follows is already the current page, so it adds no history.
+    private func go(_ page: SettingsPage?) {
+        if let page { selection = page }
     }
 
     /// Another screen (Cmd-K's Connect GitHub) can ask for a page; the window may already be open.
@@ -64,11 +92,12 @@ struct SettingsView: View {
 
     private func matches(_ page: SettingsPage) -> Bool {
         searchText.isEmpty || page.title.localizedCaseInsensitiveContains(searchText)
+            || (page == .shortcuts && ShortcutCatalog.all.contains { $0.title.localizedCaseInsensitiveContains(searchText) })
     }
 }
 
 enum SettingsPage: Hashable, CaseIterable {
-    case general, notifications, agents, github, tools, storage, usage
+    case general, notifications, agents, github, tools, storage, usage, shortcuts
 
     enum Group: CaseIterable {
         case hatch, connections, thisMac
@@ -83,7 +112,7 @@ enum SettingsPage: Hashable, CaseIterable {
 
     var group: Group {
         switch self {
-        case .general, .notifications, .agents: .hatch
+        case .general, .notifications, .agents, .shortcuts: .hatch
         case .github: .connections
         case .tools, .storage, .usage: .thisMac
         }
@@ -98,6 +127,7 @@ enum SettingsPage: Hashable, CaseIterable {
         case .tools: "Tools"
         case .storage: "Storage"
         case .usage: "Usage"
+        case .shortcuts: "Shortcuts"
         }
     }
 
@@ -110,6 +140,7 @@ enum SettingsPage: Hashable, CaseIterable {
         case .tools: "hammer"
         case .storage: "internaldrive"
         case .usage: "chart.bar"
+        case .shortcuts: "keyboard"
         }
     }
 }

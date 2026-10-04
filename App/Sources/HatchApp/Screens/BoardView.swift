@@ -131,6 +131,7 @@ struct BoardColumn: View {
 
 struct BoardCard: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.openWindow) private var openWindow
     let ticket: Ticket
     let projectName: String
     let showProject: Bool
@@ -161,6 +162,12 @@ struct BoardCard: View {
                         PlainChip(text: projectName)
                     }
                 }
+                // A failing CI run on the branch a merged ticket went into is a real problem, so it is red (I6).
+                if ticket.status == .merged, let ci = state.store.ciRecord(projectId: ticket.projectId), ci.state == .failed {
+                    Label("CI failing", systemImage: "xmark.octagon.fill")
+                        .font(.caption.weight(.medium)).foregroundStyle(Theme.critical)
+                        .help(ci.summary)
+                }
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -168,6 +175,10 @@ struct BoardCard: View {
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.2)))
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button("Open") { state.open(ticket) }
+            Button("Open in New Window") { openWindow(id: "ticket", value: ticket.id) }
+        }
     }
 }
 
