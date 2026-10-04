@@ -2,6 +2,15 @@
 
 Updated 2026-10-04 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
 
+## Local verification (macOS, 2026-10-04): gate findings, Spec before To verify, CI on merged tickets
+
+- **H19**: each offer keeps the quality gate's findings (severity, code, message) in its event; `gateResults` reads them; the Work tab shows the last result and how many offers were rejected before it.
+- **L5**: `HatchStore.move` refuses To verify for built work in a project with a notebook until a passing `spec` step was recorded since the work or the fix began (`hatch ready` records it). Projects without a notebook are not checked.
+- **I6**: sync reads the integration branch's check runs while a ticket is Merged (`SyncEngine.checkCI`), keeps the result per project (setting `ci.<project>`), logs a `ci` event on merged tickets when it changes; the merged banner says "CI is passing / running / failing: …", the Board card shows a red "CI failing".
+- **Decide**: the session bookkeeping is `DecideRun` in core (tested); the Desk says "Choose one of N options" for Questions with options.
+- **Verified**: `swift test` (0 failures, 5 new tests), `tools/smoke.sh`, `ShortcutsTests`, Xcode app build after the merge of `keyboard-and-ticket-window`; Board snapshot with the CI chip on demo data.
+- **Not verified**: CI against real GitHub check runs; the Work tab's gate section with a real Proposal offer.
+
 ## Local verification (macOS, 2026-10-04): Decide and component conflicts
 
 Decisions DC1 to DC12 and CO9 to CO13 (DECISIONS.md sections T and V).
