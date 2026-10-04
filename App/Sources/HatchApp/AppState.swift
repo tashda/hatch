@@ -226,14 +226,45 @@ final class AppState: ObservableObject {
         guard let project = project(id: projectId) else { return false }
         var config = project.config ?? ProjectConfig(name: project.name, ticketsRepo: "")
         assignments.apply(to: &config)
-        let configURL = config.repo(.app)?.localPath.map {
-            URL(fileURLWithPath: $0).appendingPathComponent(".hatch/project.json")
+        return saveProject(key: project.key, name: project.name, config: config, label: "Save repositories") != nil
+    }
+
+    /// What became of the notebook's copy of a project's settings.
+    enum NotebookSave: Equatable {
+        case committed, unchanged, noNotebook
+        case failed(String)
+    }
+
+    /// Saves a project's settings in Hatch, then as `project.json` in its notebook, never in the app repository (PS13).
+    /// The notebook's copy leaves out the folders on this Mac, since they are not shared. The file is written and
+    /// committed off the main thread; the push follows with the batched notebook export.
+    @discardableResult
+    func saveProject(key: String, name: String, config: ProjectConfig, label: String = "Save project",
+                     notebook: @escaping @MainActor (NotebookSave) -> Void = { _ in }) -> Project? {
+        guard let project = perform(label, { try store.upsertProject(key: key, name: name, config: config) }) else { return nil }
+        guard let folder = config.repo(.notebook)?.localPath, !folder.isEmpty else {
+            notebook(.noNotebook)
+            return project
         }
-        return perform("Save repositories") {
-            try store.upsertProject(key: project.key, name: project.name, config: config)
-            if let configURL { try config.save(to: configURL) }
-            return true
-        } ?? false
+        var shared = config
+        shared.repos = shared.repos.map { var repo = $0; repo.localPath = nil; return repo }
+        let projectId = project.id
+        Task {
+            let result = await Task.detached { () -> Result<Bool, Error> in
+                Result {
+                    try shared.save(to: URL(fileURLWithPath: folder).appendingPathComponent(Notebook.configPath))
+                    return try NotebookWriter.commit("Update project settings", in: folder)
+                }
+            }.value
+            switch result {
+            case .success(let committed):
+                if committed { notebookChanged(projectId: projectId) }
+                notebook(committed ? .committed : .unchanged)
+            case .failure(let error):
+                notebook(.failed((error as? GitError)?.description ?? "\(error)"))
+            }
+        }
+        return project
     }
 
     /// Tickets waiting for the owner, for the Dock badge and the sidebar (decision B6).

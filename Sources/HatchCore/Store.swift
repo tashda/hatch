@@ -312,4 +312,9 @@ public final class HatchStore: @unchecked Sendable {
     public func setSetting(_ key: String, _ value: String) throws {
         try db.execute("INSERT INTO setting(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [.text(key), .text(value)])
     }
+
+    /// Forgets a setting, so readers fall back to their default instead of an empty value.
+    public func removeSetting(_ key: String) throws {
+        try db.execute("DELETE FROM setting WHERE key = ?", [.text(key)])
+    }
 }
