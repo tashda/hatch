@@ -211,7 +211,7 @@ struct ProjectForm: View {
                         if !branches.contains(baseBranch) { Text(baseBranch).tag(baseBranch) }
                         ForEach(branches, id: \.self) { Text($0).tag($0) }
                     }
-                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                    .labelsHidden().fixedSize()
                 }
             }
         }
@@ -407,7 +407,7 @@ struct ProjectForm: View {
                 Text(repo.isPrivate ? repo.fullName : "\(repo.fullName) (public)").tag(String?.some(repo.fullName))
             }
         }
-        .labelsHidden().pickerStyle(.menu).fixedSize()
+        .labelsHidden().fixedSize()
         .disabled(!githubReady)
     }
 

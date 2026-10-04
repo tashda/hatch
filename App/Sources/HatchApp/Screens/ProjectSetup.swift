@@ -702,7 +702,7 @@ struct ProjectSetupAssistant: View {
                         Text("Choose…").tag(String?.none)
                         ForEach(model.privateRepos) { Text($0.fullName).tag(String?.some($0.fullName)) }
                     }
-                    .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
+                    .labelsHidden().fixedSize()
                 }
             }
             if model.ticketsChoice != .useDefault {
@@ -747,7 +747,7 @@ struct ProjectSetupAssistant: View {
                         Picker("Clone", selection: Binding(get: { model.localPath }, set: { model.localPath = $0 })) {
                             ForEach(model.clones, id: \.self) { Text(hxAbbreviated($0)).tag(String?.some($0)) }
                         }
-                        .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
+                        .labelsHidden().fixedSize()
                     }
                 }
             }
@@ -804,7 +804,7 @@ struct ProjectSetupAssistant: View {
                         Text("Choose…").tag(String?.none)
                         ForEach(model.account.repos.filter { $0.fullName != model.appRepo }) { Text($0.fullName).tag(String?.some($0.fullName)) }
                     }
-                    .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
+                    .labelsHidden().fixedSize()
                 }
                 HXRadioRow(selected: model.designChoice == .none, title: "Not now",
                            detail: "Proposals use plain SwiftUI and only look roughly like the app. You can start them later on the Components page.") { model.chooseDesign(.none) }
@@ -858,7 +858,7 @@ struct ProjectSetupAssistant: View {
                         Text("Choose…").tag(String?.none)
                         ForEach(model.privateRepos.filter { $0.fullName != model.appRepo }) { Text($0.fullName).tag(String?.some($0.fullName)) }
                     }
-                    .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
+                    .labelsHidden().fixedSize()
                 }
                 if let repo = model.notebookRepo {
                     HXSetupRow("On this Mac") {
@@ -902,7 +902,7 @@ struct ProjectSetupAssistant: View {
                         Picker("Base branch", selection: $model.baseBranch) {
                             ForEach(model.branches, id: \.self) { Text($0).tag($0) }
                         }
-                        .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
+                        .labelsHidden().fixedSize()
                     }
                 }
                 HXSetupRow("Hatch's branch") {
@@ -1005,7 +1005,7 @@ struct ProjectSetupAssistant: View {
             Text(account.busy ? "Loading…" : "Choose…").tag(String?.none)
             ForEach(account.repos) { Text($0.fullName).tag(String?.some($0.fullName)) }
         }
-        .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
+        .labelsHidden().fixedSize()
     }
 }
 
@@ -1045,34 +1045,30 @@ struct HXIconTile: View {
     }
 }
 
-/// A grouped inset section, as in a grouped Form, for pages that are not a Form.
+/// A grouped inset section: a real grouped Form, so rows, separators and pickers look and behave as in System
+/// Settings (a picker shows its value and the round chevron button that highlights on hover).
 struct HXSetupGroup<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
-        VStack(spacing: 0) {
-            Group(subviews: content) { subviews in
-                ForEach(Array(subviews.enumerated()), id: \.offset) { index, view in
-                    if index > 0 { Divider().padding(.leading, 12) }
-                    view
-                }
-            }
-        }
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        Form { Section { content } }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
+            .scrollContentBackground(.hidden)
+            .fixedSize(horizontal: false, vertical: true)
+            // A grouped Form keeps a 20pt margin around its section that content margins do not remove; take it
+            // back so the section lines up with the text above and below it.
+            .padding(-20)
     }
 }
 
+/// One row: the label on the left, the value or control on the right, drawn by the Form.
 struct HXSetupRow<Value: View>: View {
     let title: String
     @ViewBuilder let value: Value
     init(_ title: String, @ViewBuilder value: () -> Value) { self.title = title; self.value = value() }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text(title)
-            Spacer(minLength: 12)
-            value
-        }
-        .padding(.horizontal, 12).frame(minHeight: 40)
+        LabeledContent(title) { value }
     }
 }
 
@@ -1106,7 +1102,7 @@ struct HXRadioRow<Trailing: View>: View {
             .buttonStyle(.plain)
             trailing
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
+        .padding(.vertical, 3)
     }
 }
 

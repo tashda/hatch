@@ -282,6 +282,9 @@ enum Snapshots {
             NSApp.appearance = NSAppearance(named: appearance)
             if let route = routes[name] {
                 state.route = route
+            } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count)) {
+                state.snapshotSetupStep = n - 1
+                state.snapshotPresentation = .addProject
             } else if name == "agent-card" {
                 state.snapshotPresentation = .agentCard
             } else if name.hasPrefix("settings") {
