@@ -8,18 +8,8 @@ struct RootView: View {
     @AppStorage("hatch.irisWidth") private var irisWidth = 344.0
 
     var body: some View {
-        Group {
-            if Snapshots.folder == nil {
-                liveShell
-            } else {
-                NavigationSplitView {
-                    SidebarView()
-                        .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
-                } detail: {
-                    detailContent
-                }
-            }
-        }
+        // Snapshot runs use the same window as the live app, so what they show is what you see.
+        liveShell
         .sheet(isPresented: $state.showPalette) { CommandPalette() }
         .sheet(isPresented: $state.showAddProject) { ProjectSetupAssistant(store: state.store) }
         .alert("Something went wrong", isPresented: Binding(get: { state.errorMessage != nil }, set: { if !$0 { state.errorMessage = nil } })) {
@@ -104,14 +94,6 @@ struct RootView: View {
                 HXRepositorySelectionSheet(account: GitHubAccountModel(), projectName: "Acme",
                                            initial: [.tickets: "acme/hatch-tickets", .app: "acme/app",
                                                      .designSystem: "acme/design-system"]) { _ in true }
-            } else if Snapshots.folder != nil && state.showAskPanel {
-                HSplitView {
-                    content
-                        .frame(minWidth: 500, maxWidth: .infinity, maxHeight: .infinity)
-                    IrisPanel()
-                        .frame(minWidth: 280, idealWidth: 320, maxWidth: 420, maxHeight: .infinity)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -119,9 +101,6 @@ struct RootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle(snapshotTitle)
-        .toolbar {
-            if state.snapshotPresentation == nil && Snapshots.folder != nil { MainToolbar() }
-        }
     }
 
     private var snapshotTitle: String {
@@ -169,14 +148,6 @@ private struct ToolbarActions: View {
         }
             .help(state.showAskPanel ? "Hide Iris (\u{2325}\u{2318}A)" : "Show Iris (\u{2325}\u{2318}A)")
             .accessibilityLabel(state.showAskPanel ? "Hide Iris" : "Show Iris")
-    }
-}
-
-/// Snapshot runs: the same buttons inside NavigationSplitView, which supplies its own sidebar button.
-struct MainToolbar: ToolbarContent {
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .navigation) { ProjectTitleMenu() }
-        ToolbarItemGroup(placement: .primaryAction) { ToolbarActions() }
     }
 }
 

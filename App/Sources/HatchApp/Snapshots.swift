@@ -132,7 +132,17 @@ enum Snapshots {
         return AppState(store: store, paths: paths)
     }
 
+    /// A snapshot run shares preferences with the real app, so its window must not save its frame or state:
+    /// otherwise the app the owner runs next opens where the snapshot window was.
+    @MainActor private static func keepWindowStateOut() {
+        for w in NSApp.windows {
+            w.setFrameAutosaveName("")
+            w.isRestorable = false
+        }
+    }
+
     @MainActor static func run(state: AppState, into folder: URL) async {
+        keepWindowStateOut()
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let first = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Toast spacing and corner radius" })?.id
         var routes: [(String, Route, TicketTab?)] = [("desk", .desk, nil), ("tickets", .tickets, nil), ("board", .board, nil),
@@ -154,6 +164,7 @@ enum Snapshots {
             routes.append(("building-work", .ticket(ticket.id), .work))
         }
         try? await Task.sleep(nanoseconds: 2_500_000_000)
+        keepWindowStateOut()
         if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         try? await Task.sleep(nanoseconds: 800_000_000)
         let irisTicket = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Results grid loses scroll position after sort" })

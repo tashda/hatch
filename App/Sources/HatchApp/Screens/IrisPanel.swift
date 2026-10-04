@@ -29,7 +29,8 @@ struct IrisPanel: View {
                     }
                     if !waiting.isEmpty { section("Needs your decision", count: waiting.count) { ForEach(waiting) { reviewCard($0) } } }
                     if !checking.isEmpty { section("Checking now", count: checking.count) { ForEach(checking) { checkingCard($0) } } }
-                    if waiting.isEmpty && checking.isEmpty { quiet }
+                    if state.projects.isEmpty { addProject }
+                    else if waiting.isEmpty && checking.isEmpty { quiet }
                 }
                 .padding(.horizontal, 3)
                 .padding(.vertical, 4)
@@ -42,6 +43,19 @@ struct IrisPanel: View {
     }
 
     // MARK: Parts
+
+    /// With no project there is nothing for Iris to review, so the first card points at the one thing to do.
+    private var addProject: some View {
+        card {
+            Text("Add a project")
+                .font(.subheadline.weight(.semibold))
+            Text("Iris reviews a project's tickets. Set one up to start.")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Set up a project") { state.showAddProject = true }
+                .buttonStyle(.glassProminent)
+        }
+    }
 
     private var quiet: some View {
         card {
