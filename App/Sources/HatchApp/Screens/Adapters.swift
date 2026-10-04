@@ -177,6 +177,10 @@ struct HXPreviewOutcome: Sendable {
     var conflictAgainst: Int?
     var conflictFiles: [String] = []
     var buildOK: Bool = false
+    /// False when the repo has no build command: nothing was built, so there is nothing to open.
+    var didBuild: Bool = false
+    /// The app this Preview built, found in its own build folder. nil when the build made none.
+    var builtAppPath: String?
     var buildLog: String = ""
     var errorText: String?
 }
@@ -205,18 +209,40 @@ enum HXPreviewAdapter {
                 return outcome
             }
             if let path = result.worktreePath, let cmd = repo.buildCommand, !cmd.isEmpty {
-                let out = HXShell.shell(cmd, cwd: path)
+                outcome.didBuild = true
+                let out = HXShell.shell(previewBuildCommand(cmd, worktree: path), cwd: path)
                 outcome.buildOK = (out?.status == 0)
                 let text = out?.text ?? "Could not start the build command."
                 outcome.buildLog = String(text.suffix(4000))
                 try? store.setPreview(result.preview.id, state: "merged", log: outcome.buildLog, built: outcome.buildOK)
-            } else {
-                outcome.buildOK = true
+                if outcome.buildOK { outcome.builtAppPath = builtApp(in: previewBuildFolder(path)) }
             }
         } catch {
             outcome.errorText = "\(error)"
         }
         return outcome
+    }
+
+    /// Where a Preview's build goes, so it never overwrites the app you run every day.
+    static func previewBuildFolder(_ worktree: String) -> String { worktree + "/.preview-build" }
+
+    /// An xcodebuild command gets its own derived data folder, so the built app can be found. Other commands run as written.
+    static func previewBuildCommand(_ cmd: String, worktree: String) -> String {
+        guard cmd.contains("xcodebuild"), !cmd.contains("-derivedDataPath") else { return cmd }
+        return cmd + " -derivedDataPath '\(previewBuildFolder(worktree))'"
+    }
+
+    /// The first .app in the build's products (Debug or Release), skipping helper apps inside other apps.
+    static func builtApp(in folder: String) -> String? {
+        let products = folder + "/Build/Products"
+        let configs = (try? FileManager.default.contentsOfDirectory(atPath: products)) ?? []
+        for config in configs.sorted() {
+            let dir = products + "/" + config
+            if let app = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).sorted().first(where: { $0.hasSuffix(".app") }) {
+                return dir + "/" + app
+            }
+        }
+        return nil
     }
 
     static func discard(store: HatchStore, preview: HatchCore.Preview, repo: Repo) -> String? {

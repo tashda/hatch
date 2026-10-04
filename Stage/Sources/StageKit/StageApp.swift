@@ -8,6 +8,7 @@ import StageCore
 ///     HatchStageToast --ticket 151                 talks to Hatch's local API (HatchAPIStageDataSource)
 ///     HatchStageToast --manifest /path/m.json      uses that manifest instead of the one compiled into the round
 ///     HatchStageToast --home /path/to/Hatch        Hatch's support directory (token and port), as the launching app passes it
+///     HatchStageToast --render-icon out.png [--ticket 151]   writes the Stage icon (with the number when given) and exits
 ///     HatchStageToast --check                      headless: draws every specimen in every scenario, prints JSON, exits 0 or 1
 public struct StageLaunchOptions: Equatable {
     public var demo: Bool = false
@@ -16,6 +17,7 @@ public struct StageLaunchOptions: Equatable {
     public var home: String? = nil
     public var check: Bool = false
     public var snapshotDirectory: URL? = nil
+    public var renderIconPath: String? = nil
 
     public init() {}
 
@@ -34,6 +36,9 @@ public struct StageLaunchOptions: Equatable {
                 i += 1
             } else if a == "--home", i + 1 < arguments.count {
                 o.home = arguments[i + 1]
+                i += 1
+            } else if a == "--render-icon", i + 1 < arguments.count {
+                o.renderIconPath = arguments[i + 1]
                 i += 1
             } else if a == "--check" {
                 o.check = true
@@ -62,6 +67,9 @@ public enum StageApp {
     public static func run(provider: any SpecimenProvider, manifest: StageManifest,
                            dataSource: StageDataSource? = nil, arguments: [String] = CommandLine.arguments) {
         let options = StageLaunchOptions.parse(Array(arguments.dropFirst()))
+        if let path = options.renderIconPath {
+            exit(StageIcon.writePNG(to: URL(fileURLWithPath: path), number: StageIcon.digits(from: options.ticket)) ? 0 : 1)
+        }
         var effective = manifest
         if let path = options.manifestPath {
             do {
@@ -89,7 +97,8 @@ public enum StageApp {
         }
         let model = StageModel(manifest: effective, provider: provider, dataSource: source)
         model.captureView = { StageSnapshot.jpegOfFrontStageWindow() }
-        let d = StageAppDelegate(model: model, title: windowTitle(effective, options), snapshotDirectory: options.snapshotDirectory)
+        let d = StageAppDelegate(model: model, title: windowTitle(effective, options), snapshotDirectory: options.snapshotDirectory,
+                                ticketNumber: StageIcon.digits(from: options.ticket))
         delegate = d
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
@@ -99,7 +108,7 @@ public enum StageApp {
 
     private static func windowTitle(_ manifest: StageManifest, _ options: StageLaunchOptions) -> String {
         let name = manifest.title.isEmpty ? "Proposal" : manifest.title
-        return "Hatch Stage · \(name) · rev \(manifest.revision)"
+        return "Stage · \(name) · rev \(manifest.revision)"
     }
 }
 
@@ -113,17 +122,21 @@ final class StageAppDelegate: NSObject, NSApplicationDelegate {
     private let model: StageModel
     private let title: String
     private let snapshotDirectory: URL?
+    private let ticketNumber: String?
     private var window: NSWindow? = nil
 
-    init(model: StageModel, title: String, snapshotDirectory: URL? = nil) {
+    init(model: StageModel, title: String, snapshotDirectory: URL? = nil, ticketNumber: String? = nil) {
         self.model = model
         self.title = title
         self.snapshotDirectory = snapshotDirectory
+        self.ticketNumber = ticketNumber
         super.init()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMenu()
+        // The Dock icon carries this Proposal's ticket number, so two open Stages can be told apart. Drawn locally, lasts until quit.
+        if ticketNumber != nil, let icon = StageIcon.image(number: ticketNumber) { NSApp.applicationIconImage = icon }
         let hosting = NSHostingView(rootView: StageView(model: model))
         let w = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1320, height: 820),
@@ -240,7 +253,7 @@ final class StageAppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         mainMenu.addItem(appItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Quit Hatch Stage", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit Stage", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 
         let editItem = NSMenuItem()

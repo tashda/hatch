@@ -380,7 +380,7 @@ enum ProjectApp: CaseIterable {
     var title: String {
         switch self {
         case .preview: "Preview copy"
-        case .stage: "Hatch Stage"
+        case .stage: "Stage"
         case .spec: "Spec app"
         }
     }
@@ -388,7 +388,7 @@ enum ProjectApp: CaseIterable {
     var menuTitle: String {
         switch self {
         case .preview: "Choose Preview Copy…"
-        case .stage: "Choose Hatch Stage…"
+        case .stage: "Choose Stage…"
         case .spec: "Choose Spec App…"
         }
     }

@@ -44,6 +44,24 @@ targets:
           if [ -n "$EXPANDED_CODE_SIGN_IDENTITY" ]; then
             codesign --force --options runtime --timestamp=none --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$DEST/hatch"
           fi
+      - name: Build the Stage app
+        basedOnDependencyAnalysis: false
+        script: |
+          # Builds Stage.app (the Stage with the toast round, its own name and icon in the Dock) and puts it in Hatch.app, so one
+          # download holds both. Only a changed Stage is copied and signed again.
+          set -e
+          CONFIG=$( [ "$CONFIGURATION" = "Release" ] && echo release || echo debug )
+          BUILT="$DERIVED_FILE_DIR/stage-app"
+          SIGN=""
+          [ -n "$EXPANDED_CODE_SIGN_IDENTITY" ] && SIGN="--sign $EXPANDED_CODE_SIGN_IDENTITY"
+          "$SRCROOT/tools/build-stage.sh" --dest "$BUILT" --config "$CONFIG" $SIGN
+          DEST="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
+          mkdir -p "$DEST"
+          if ! cmp -s "$BUILT/.stage.last" "$DERIVED_FILE_DIR/stage.copied" 2>/dev/null || [ ! -d "$DEST/Stage.app" ]; then
+            rm -rf "$DEST/Stage.app"
+            cp -R "$BUILT/Stage.app" "$DEST/Stage.app"
+            cp -f "$BUILT/.stage.last" "$DERIVED_FILE_DIR/stage.copied"
+          fi
     info:
       path: App/Info.plist
       properties:

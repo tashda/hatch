@@ -195,13 +195,15 @@ struct PreviewsView: View {
                 HStack(spacing: 8) {
                     Text(o.name).font(.headline)
                     HXChip(text: "Merged cleanly", turn: .finished)
-                    if o.buildOK {
+                    if o.buildOK && o.didBuild {
                         HXChip(text: "Built", turn: .finished)
+                    } else if o.buildOK {
+                        HXChip(text: "Not built", turn: .paused)
                     } else {
                         HXProblemChip(text: "Build failed")
                     }
                     Spacer()
-                    openButton(name: o.name)
+                    openButton(o)
                 }
                 if !o.buildOK && !o.buildLog.isEmpty {
                     Text(o.buildLog).font(.caption.monospaced()).textSelection(.enabled).lineLimit(12)
@@ -210,20 +212,36 @@ struct PreviewsView: View {
         }
     }
 
-    private func openButton(name: String) -> some View {
-        let path = state.hxSetting("preview_app_path")
+    private func openButton(_ o: HXPreviewOutcome) -> some View {
+        let path = o.builtAppPath ?? state.hxSetting("preview_app_path")
         let appName = state.hxProject?.name ?? "app"
         return HStack(spacing: 8) {
-            if path == nil {
-                Text("Set the Preview app path in Settings.").font(.caption).foregroundStyle(.secondary)
+            if !o.didBuild {
+                Text("No build command is set for this repo (Project settings).").font(.caption).foregroundStyle(.secondary)
+            } else if o.buildOK && o.builtAppPath == nil {
+                Text("The build made no app to open.").font(.caption).foregroundStyle(.secondary)
             }
             Button {
-                if let path { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+                if let path { Self.launchPreview(appPath: path, worktree: o.worktreePath) }
             } label: {
-                Label("Open \(appName) (\(name))", systemImage: "play")
+                Label("Open \(appName) (\(o.name))", systemImage: "play")
             }
             .buttonStyle(.glass)
-            .disabled(path == nil)
+            .disabled(path == nil || !o.buildOK)
+        }
+    }
+
+    /// Opens the built app next to the one in use: a new instance with its own data folder, so a Preview never touches your real database.
+    static func launchPreview(appPath: String, worktree: String?) {
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        if let worktree {
+            let home = worktree + "/.preview-home"
+            try? FileManager.default.createDirectory(atPath: home, withIntermediateDirectories: true)
+            config.environment = ["HATCH_HOME": home]
+        }
+        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: appPath), configuration: config) { _, error in
+            if let error { NSLog("Preview did not open: \(error.localizedDescription)") }
         }
     }
 
@@ -295,6 +313,7 @@ struct PreviewsView: View {
             outcome = result
             building = false
             state.refresh()
+            if result.buildOK, let app = result.builtAppPath { Self.launchPreview(appPath: app, worktree: result.worktreePath) }
         }
     }
 

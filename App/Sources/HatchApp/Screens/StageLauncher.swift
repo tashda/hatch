@@ -26,7 +26,8 @@ final class StageLauncher {
             }
         }
 
-        guard let executable = resolveExecutable(setting: state.hxSetting("stage_executable")) else {
+        // A path chosen in Settings wins (a Stage built by hand); otherwise the Stage.app that comes inside Hatch.app.
+        guard let executable = resolveExecutable(setting: state.hxSetting("stage_executable")) ?? bundledStage() else {
             showNotBuilt(ticket: ticket)
             return
         }
@@ -59,6 +60,11 @@ final class StageLauncher {
 
     // MARK: Helpers
 
+    private func bundledStage() -> URL? {
+        let app = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/Stage.app")
+        return Bundle(url: app)?.executableURL
+    }
+
     private func resolveExecutable(setting: String?) -> URL? {
         guard let path = setting, !path.isEmpty else { return nil }
         let fm = FileManager.default
@@ -76,7 +82,7 @@ final class StageLauncher {
     private func showNotBuilt(ticket: Ticket) {
         let alert = NSAlert()
         alert.messageText = "The Stage is not built yet"
-        alert.informativeText = "Hatch Stage opens \(ticket.displayNumber) in its own window. Build the Stage app, then choose it in Settings › Tools, under Project apps."
+        alert.informativeText = "Stage opens \(ticket.displayNumber) in its own window. Build the Stage app (tools/build-stage.sh), then choose it in Settings › Tools, under Project apps."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
