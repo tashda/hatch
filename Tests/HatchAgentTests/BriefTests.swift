@@ -22,6 +22,8 @@ final class BriefTests: XCTestCase {
         var t = try Fixture.ticket(store, project, status: .checking)
         let q = try store.ask(t.id, text: "Which toast kind?", suggestions: ["Success", "Error"], by: "Iris")
         try store.answer(questionId: q.id, text: "Both")
+        // Iris checks again with the answer and files it.
+        try store.move(t.id, to: .ready, actor: .hatch)
         try store.take(t.id, agent: "Agent on #151")
         t = try store.ticket(id: t.id)!
         let expected = """

@@ -192,7 +192,10 @@ public final class HatchStore: @unchecked Sendable {
             if newStatus == .toVerify { try checkSpecBeforeVerify(t) }
             var prev: Status? = nil
             if newStatus == .blocked || newStatus == .parked { prev = from == .blocked || from == .parked ? t.prevStatus : from }
-            let takenBy: SQLValue = (newStatus == .ready || newStatus == .yourCall || newStatus == .toVerify || newStatus == .draft || newStatus.isTerminal) ? .null : .opt(t.takenBy)
+            // The agent's run ends whenever the ticket leaves its hands, so the taker is cleared; a ticket that comes back
+            // to Preparing or Building without one is taken up again by the launcher (gap G22).
+            let released: Set<Status> = [.ready, .yourCall, .toVerify, .draft, .needsAnswers, .blocked, .parked]
+            let takenBy: SQLValue = (released.contains(newStatus) || newStatus.isTerminal) ? .null : .opt(t.takenBy)
             try db.execute("UPDATE ticket SET status = ?, prev_status = ?, turn = ?, taken_by = ?, updated_at = ? WHERE id = ?",
                            [.text(newStatus.rawValue), .opt(prev?.rawValue), .text(newStatus.turn.rawValue), takenBy, .date(now()), .int(id)])
             try record(id, actor: actor.rawValue, kind: "status", payload: ["from": .string(from.rawValue), "to": .string(newStatus.rawValue), "reason": reason.map { .string($0) } ?? .null])
@@ -200,7 +203,8 @@ public final class HatchStore: @unchecked Sendable {
             if newStatus == .done { try enqueueClose(id, reason: "completed") }
             if newStatus == .dropped { try enqueueClose(id, reason: "not_planned") }
             if from.isTerminal && !newStatus.isTerminal { try enqueue(op: "issue.reopen", ticketId: id, payload: [:]) }
-            if newStatus.isTerminal || newStatus == .parked { try releaseClaims(ticketId: id) }
+            // Handed in to verify, nobody edits those files on that branch any more: the next ticket may start (WF-B2).
+            if newStatus.isTerminal || newStatus == .parked || newStatus == .toVerify { try releaseClaims(ticketId: id) }
             t = try ticket(id: id)!
             if let parent = t.parentId, newStatus == .done { try completeThemeIfFinished(parent) }
             return t
@@ -225,7 +229,13 @@ public final class HatchStore: @unchecked Sendable {
         guard let t = try ticket(id: id), t.status == .blocked || t.status == .parked, let prev = t.prevStatus else {
             throw StoreError.invalid("Only a Blocked or Parked ticket can be resumed.")
         }
-        return try move(id, to: prev, actor: actor, reason: "resumed")
+        return try db.transaction {
+            // The owner resuming a ticket that waits for another's files goes ahead on them anyway, as "Stack on" does.
+            if actor == .owner && t.status == .blocked {
+                try db.execute("UPDATE claim SET state = 'stacked' WHERE ticket_id = ? AND state = 'queued'", [.int(id)])
+            }
+            return try move(id, to: prev, actor: actor, reason: "resumed")
+        }
     }
 
     /// Changes the ticket type while it is still in intake (decision E9). The owner decides; the vetting agent only suggests.

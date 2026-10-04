@@ -102,7 +102,7 @@ final class StoreTests: XCTestCase {
         XCTAssertThrowsError(try store.changeType(t.id, to: .sketch, actor: .owner))
     }
 
-    func testQuestionsMoveTheTurnAndAnsweringAllMovesToReady() throws {
+    func testQuestionsMoveTheTurnAndAnsweringAllSendsItBackToIris() throws {
         let t = try ticket()
         _ = try store.move(t.id, to: .checking, actor: .owner)
         let q1 = try store.ask(t.id, text: "Also at Compact density?", suggestions: ["Yes", "No"], by: "Iris")
@@ -112,7 +112,7 @@ final class StoreTests: XCTestCase {
         _ = try store.answer(questionId: q1.id, text: "Yes")
         XCTAssertEqual(try store.ticket(id: t.id)?.status, .needsAnswers, "one question is still open")
         let done = try store.answer(questionId: q2.id, text: "No")
-        XCTAssertEqual(done.status, .ready)
+        XCTAssertEqual(done.status, .checking, "Iris checks again with the answers (WF-Q2)")
         XCTAssertEqual(q1.suggestions, ["Yes", "No"])
     }
 
@@ -178,12 +178,13 @@ final class StoreTests: XCTestCase {
         let blocked = try store.ticket(id: b.id)!
         XCTAssertEqual(blocked.status, .blocked)
         XCTAssertEqual(blocked.prevStatus, .building)
-        // A finishes: B is released and resumes by itself.
+        // A is handed in to verify: its files are free, and B resumes by itself (WF-B2, gap G22).
         _ = try store.move(a.id, to: .toVerify, actor: .hatch)
-        try store.releaseClaims(ticketId: a.id)
         let woken = try store.ticket(id: b.id)!
         XCTAssertEqual(woken.status, .building)
+        XCTAssertNil(woken.takenBy, "the launcher takes it up again")
         XCTAssertEqual(try store.claims(ticketId: b.id).first?.state, "held")
+        XCTAssertTrue(try store.agentWork().contains { $0.ticket.id == b.id && $0.kind == .build })
     }
 
     func testStackLetsTheLaterTicketProceed() throws {
@@ -284,6 +285,61 @@ final class StoreTests: XCTestCase {
 
     // Walks a ticket along its normal path using the actors the design assigns.
     @discardableResult
+    func testAnAgentsQuestionAnsweredLetsTheWorkCarryOn() throws {
+        let t = try walk(ticket(.tweak, "Row hover"), to: .ready)
+        _ = try store.take(t.id, agent: "Agent on #1")
+        let q = try store.ask(t.id, text: "Keep the old colour in dark mode?", suggestions: ["Yes", "No"], by: "Agent on #1")
+        XCTAssertEqual(try store.ticket(id: t.id)?.status, .needsAnswers)
+        XCTAssertNil(try store.ticket(id: t.id)?.takenBy)
+        let after = try store.answer(questionId: q.id, text: "Yes")
+        XCTAssertEqual(after.status, .building, "back to the work, not to Ready (gap G21)")
+        XCTAssertTrue(try store.agentWork().contains { $0.ticket.id == t.id && $0.kind == .build })
+        let again = try store.take(t.id, agent: "Agent on #1")
+        XCTAssertEqual(again.ticket.status, .building)
+    }
+
+    func testAQuestionWhileRevisingReturnsToRevising() throws {
+        let t = try walk(ticket(.proposal), to: .yourCall)
+        _ = try store.move(t.id, to: .revising, actor: .owner)
+        let q = try store.ask(t.id, text: "Keep option B?", by: "Agent on #1")
+        XCTAssertEqual(try store.answer(questionId: q.id, text: "Yes").status, .revising)
+    }
+
+    func testAgentStoppedTwiceAnswers() throws {
+        let a = try walk(ticket(.tweak, "A"), to: .building)
+        let qa = try store.ask(a.id, text: "Stopped twice. Try again?", suggestions: [HatchStore.agentStoppedTryAgain, HatchStore.agentStoppedStop], by: "Hatch")
+        XCTAssertEqual(try store.answer(questionId: qa.id, text: HatchStore.agentStoppedTryAgain).status, .building)
+
+        let b = try walk(ticket(.tweak, "B"), to: .building)
+        let qb = try store.ask(b.id, text: "Stopped twice. Try again?", suggestions: [HatchStore.agentStoppedTryAgain, HatchStore.agentStoppedStop], by: "Hatch")
+        let parked = try store.answer(questionId: qb.id, text: HatchStore.agentStoppedStop)
+        XCTAssertEqual(parked.status, .parked, "gap G27")
+        XCTAssertEqual(parked.prevStatus, .building, "Resume starts the work again")
+    }
+
+    func testTheOwnerCanResumeABlockedTicket() throws {
+        let a = try walk(ticket(.tweak, "A"), to: .building)
+        let b = try walk(ticket(.tweak, "B"), to: .building)
+        try store.claim(ticketId: a.id, repoId: nil, paths: ["x/File.swift"])
+        try store.claim(ticketId: b.id, repoId: nil, paths: ["x/File.swift"])
+        XCTAssertEqual(try store.ticket(id: b.id)?.status, .blocked)
+        let back = try store.resume(b.id, actor: .owner)
+        XCTAssertEqual(back.status, .building, "gap G24")
+        XCTAssertEqual(try store.claims(ticketId: b.id).first?.state, "stacked")
+    }
+
+    func testPromotedTicketsBecomeDoneAndFinishTheirTheme() throws {
+        let theme = try ticket(.theme, "Toasts")
+        let a = try store.createTicket(projectId: project.id, type: .tweak, title: "A", parentId: theme.id)
+        let b = try store.createTicket(projectId: project.id, type: .tweak, title: "B", parentId: theme.id)
+        for child in [a, b] { _ = try walk(child, to: .merged) }
+        XCTAssertEqual(try store.ticket(id: a.id)?.status, .merged)
+        let landed = try store.finishLanded(projectId: project.id, reason: "in dev")
+        XCTAssertEqual(Set(landed.map(\.id)), [a.id, b.id])
+        XCTAssertEqual(try store.ticket(id: a.id)?.status, .done)
+        XCTAssertEqual(try store.ticket(id: theme.id)?.status, .done, "gap G23")
+    }
+
     func walk(_ t: Ticket, to target: Status) throws -> Ticket {
         var current = t
         let path = Workflow.path(for: t.type)

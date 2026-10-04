@@ -33,13 +33,13 @@ enum HXSketchLoader {
 
     static func isInline(_ s: String) -> Bool { s.contains("<") }
 
-    /// Looks for the variant's file in the manifest's folder, then in Hatch's own sketches folder.
-    static func resolve(_ variant: HXSketchVariant, ticket: Ticket?, hint: String?, home: URL) -> (file: URL, base: URL)? {
+    /// Looks for the variant's file in Hatch's own folder for the ticket, where `hatch offer` copies it, then in a folder
+    /// the manifest names (older and hand-made manifests).
+    static func resolve(_ variant: HXSketchVariant, ticket: Ticket?, hint: String?, store: HatchStore) -> (file: URL, base: URL)? {
         if variant.htmlPath.isEmpty || isInline(variant.htmlPath) { return nil }
         var bases: [URL] = []
+        if let id = ticket?.id, let folder = store.sketchFolder(ticketId: id) { bases.append(folder) }
         if let hint { bases.append(URL(fileURLWithPath: hint, isDirectory: true)) }
-        if let n = ticket?.ghNumber { bases.append(home.appendingPathComponent("sketches/\(n)", isDirectory: true)) }
-        if let id = ticket?.id { bases.append(home.appendingPathComponent("sketches/\(id)", isDirectory: true)) }
         for base in bases {
             let file = base.appendingPathComponent(variant.htmlPath)
             if FileManager.default.fileExists(atPath: file.path) { return (file, base) }
@@ -305,7 +305,7 @@ struct SketchBoard: View {
     }
 
     private func web(for v: HXSketchVariant) -> some View {
-        let resolved = HXSketchLoader.resolve(v, ticket: ticket, hint: HXSketchLoader.directoryHint(from: manifestJSON), home: state.paths.root)
+        let resolved = HXSketchLoader.resolve(v, ticket: ticket, hint: HXSketchLoader.directoryHint(from: manifestJSON), store: state.store)
         let inline: String? = HXSketchLoader.isInline(v.htmlPath) ? v.htmlPath : nil
         let key = v.id + "|" + (resolved?.file.path ?? inline ?? "none")
         return HXSketchWeb(loadKey: key, fileURL: resolved?.file, baseURL: resolved?.base, inlineHTML: inline, pins: marks(for: v),

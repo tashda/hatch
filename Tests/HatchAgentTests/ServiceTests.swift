@@ -242,6 +242,24 @@ final class OfferServiceTests: XCTestCase {
         XCTAssertEqual(codes(result.issues), ["sketch.html-not-found"])
     }
 
+    func testSketchFilesAreKeptInHatch() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("hatch-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let disk = try HatchStore(path: dir.appendingPathComponent("hatch.sqlite").path)
+        let p = try disk.upsertProject(key: "echo", name: "Echo", config: Fixture.config)
+        let s = try Fixture.preparing(disk, p, type: .sketch)
+        let work = dir.appendingPathComponent("workspace/sketch", isDirectory: true)
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        for i in 0..<2 { try "<html>v\(i)</html>".write(to: work.appendingPathComponent("v\(i).html"), atomically: true, encoding: .utf8) }
+        let result = try OfferService(store: disk).offer(ticketId: s.id, sketch: sketch(2), baseDirectory: work)
+        XCTAssertTrue(result.isOffered)
+        // The workspace goes away; Hatch's copy stays (gap G11).
+        try FileManager.default.removeItem(at: work)
+        let kept = try XCTUnwrap(disk.sketchFolder(ticketId: s.id)).appendingPathComponent("v1.html")
+        XCTAssertEqual(try String(contentsOf: kept, encoding: .utf8), "<html>v1</html>")
+    }
+
     func testQuestionAnswerGoesToTheOwner() throws {
         let q = try Fixture.preparing(store, project, type: .question)
         XCTAssertEqual(codes(try offers.offerAnswer(ticketId: q.id, answer: "  ").issues), ["answer.empty"])

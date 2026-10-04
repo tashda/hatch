@@ -30,6 +30,11 @@ public struct VettingRequest: Codable, Equatable, Sendable {
         public var title: String
         public var why: String
     }
+    /// A question already answered, so a second check uses the answer instead of asking again (decision WF-Q2).
+    public struct Answered: Codable, Equatable, Sendable {
+        public var question: String
+        public var answer: String
+    }
     public struct AreaInfo: Codable, Equatable, Sendable {
         public var name: String
         public var specPrefix: String?
@@ -40,6 +45,8 @@ public struct VettingRequest: Codable, Equatable, Sendable {
     /// Earlier decisions that match, so Iris can flag a ticket that would undo one. Optional for older saved requests.
     public var decisions: [DecisionHit]? = nil
     public var areas: [AreaInfo]
+    /// The owner's answers to earlier questions on this ticket. Optional for older saved requests.
+    public var answered: [Answered]? = nil
 
     public init(ticket: TicketInfo, similar: [Candidate] = [], specHits: [SpecHit] = [], areas: [AreaInfo] = []) {
         self.ticket = ticket; self.similar = similar; self.specHits = specHits; self.areas = areas
@@ -59,6 +66,9 @@ public struct VettingRequest: Codable, Equatable, Sendable {
                                          title: $0.ticket.title, snippet: Text.clip($0.ticket.body.replacingOccurrences(of: "\n", with: " "), 160)) },
             specHits: hits.map { .init(code: $0.code, text: Text.clip($0.text, 200)) },
             areas: areas.map { .init(name: $0.name, specPrefix: $0.specPrefix) })
+        request.answered = try store.questions(ticketId: ticketId).compactMap { q in
+            q.answer.map { Answered(question: Text.clip(q.text, 200), answer: Text.clip($0, 300)) }
+        }
         request.decisions = decided.map { .init(number: $0.ticketNumber, kind: $0.kind.rawValue, title: Text.clip($0.title.isEmpty ? $0.summary : $0.title, 120),
                                                 why: Text.clip($0.reason ?? $0.summary, 160)) }
         return request
@@ -115,7 +125,7 @@ public enum IrisError: Error, CustomStringConvertible, Equatable {
 
 public enum IrisPrompt {
     /// Caps that keep the owner's attention and the token bill small.
-    public static let maxQuestions = 5
+    public static let maxQuestions = 3
     public static let maxSuggestions = 4
 
     /// A compact prompt that demands one JSON object and nothing else.
@@ -144,6 +154,10 @@ public enum IrisPrompt {
         s += r.similar.isEmpty ? " none" : "\n" + r.similar.map { "- \($0.number) [\($0.type), \($0.status)] \($0.title): \($0.snippet)" }.joined(separator: "\n")
         s += "\n\nSpec items:"
         s += r.specHits.isEmpty ? " none" : "\n" + r.specHits.map { "- \($0.code): \($0.text)" }.joined(separator: "\n")
+        let answered = r.answered ?? []
+        if !answered.isEmpty {
+            s += "\n\nAlready answered by the owner (use these; never ask them again):\n" + answered.map { "- \($0.question) → \($0.answer)" }.joined(separator: "\n")
+        }
         s += "\n\nEarlier decisions:"
         let decided = r.decisions ?? []
         s += decided.isEmpty ? " none" : "\n" + decided.map { "- \($0.number) [\($0.kind)] \($0.title). Why: \($0.why)" }.joined(separator: "\n")

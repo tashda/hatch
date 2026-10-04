@@ -73,6 +73,9 @@ public struct OfferService {
             }
         }
         if issues.hasErrors { return try reject(t, issues) }
+        if let base = baseDirectory, let folder = store.sketchFolder(ticketId: ticketId) {
+            try Self.keep(sketch, from: base, in: folder)
+        }
         let json = String(decoding: try JSONEncoder().encode(sketch), as: UTF8.self)
         let moved = try store.db.transaction { () -> Ticket in
             if revising {
@@ -96,6 +99,19 @@ public struct OfferService {
     }
 
     // MARK: Pieces
+
+    /// Copies each variant's file into Hatch's own folder for the ticket, keeping its relative path. Earlier variants'
+    /// files stay, since the owner's pins refer to them.
+    static func keep(_ sketch: SketchManifest, from base: URL, in folder: URL) throws {
+        let fm = FileManager.default
+        for v in sketch.variants {
+            let source = base.appendingPathComponent(v.html)
+            let target = folder.appendingPathComponent(v.html)
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
+            try fm.copyItem(at: source, to: target)
+        }
+    }
 
     private func offerable(_ id: Int, types: Set<TicketType>) throws -> Ticket {
         guard let t = try store.ticket(id: id) else { throw StoreError.notFound("ticket \(id)") }

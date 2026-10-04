@@ -12,6 +12,21 @@ enum VettingBridge {
 
     static var isAvailable: Bool { true }
 
+    /// Starts Iris for every ticket waiting in Checking that nobody is checking: tickets made with `hatch new` or
+    /// `hatch ticket new --submit`, issues pulled from GitHub, and tickets back from Needs answers (gaps G6, G7).
+    /// A check that failed is not retried here until the ticket enters Checking again; "Check again" does that.
+    static func sweep(state: AppState) {
+        let store = state.store
+        guard let waiting = try? store.tickets(TicketFilter(statuses: [.checking])) else { return }
+        for t in waiting where !running.contains(t.id) {
+            let events = (try? store.events(ticketId: t.id, kinds: ["status", "vetting-failed"])) ?? []
+            let entered = events.last { $0.kind == "status" && $0.payload["to"]?.stringValue == Status.checking.rawValue }
+            let failed = events.last { $0.kind == "vetting-failed" }
+            if let failed, failed.id > (entered?.id ?? 0) { continue }
+            start(ticketId: t.id, state: state)
+        }
+    }
+
     static func start(ticketId: Int, state: AppState) {
         guard !running.contains(ticketId) else { return }
         let store = state.store

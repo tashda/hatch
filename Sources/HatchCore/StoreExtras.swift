@@ -99,7 +99,13 @@ public extension HatchStore {
         }
     }
 
-    /// Records an answer. When the last open question is answered the ticket goes to Ready, by Hatch, not by an agent.
+    /// The answers Hatch offers when an agent stopped twice before handing in (decision WF-B3, gap G27).
+    static let agentStoppedTryAgain = "Try again"
+    static let agentStoppedStop = "Stop working on it"
+
+    /// Records an answer. When the last open question is answered, Hatch (not an agent) moves the ticket on: back to the
+    /// work that asked, so the agent carries on where it stopped (WF-Q4); back to Checking when Iris asked, so she checks
+    /// again with the answers (WF-Q2); otherwise to Ready.
     @discardableResult
     func answer(questionId: Int, text: String) throws -> Ticket {
         try db.transaction {
@@ -111,11 +117,29 @@ public extension HatchStore {
             try db.execute("UPDATE ticket SET updated_at = ? WHERE id = ?", [.date(now()), .int(ticketId)])
             try indexTicket(ticketId)
             let t = try ticket(id: ticketId)!
-            if t.status == .needsAnswers, try questions(ticketId: ticketId, openOnly: true).isEmpty {
-                return try move(ticketId, to: .ready, actor: .hatch, reason: "all questions answered")
+            guard t.status == .needsAnswers, try questions(ticketId: ticketId, openOnly: true).isEmpty else { return t }
+            let asked = try questions(ticketId: ticketId).first { $0.id == questionId }
+            let from = try statusBeforeQuestions(ticketId)
+            if asked?.askedBy == "Hatch", text == Self.agentStoppedStop {
+                // Parked where the work was, so Resume starts it again later.
+                if let from, Workflow.isAllowed(type: t.type, from: .needsAnswers, to: from, actor: .hatch) {
+                    try move(ticketId, to: from, actor: .hatch, reason: "the owner stopped the work")
+                }
+                return try move(ticketId, to: .parked, actor: .owner, reason: "stopped after the agent failed twice")
             }
-            return t
+            if let from, from != .needsAnswers, Workflow.isAllowed(type: t.type, from: .needsAnswers, to: from, actor: .hatch) {
+                let reason = from == .checking ? "answered; Iris checks again" : "answered; the work carries on"
+                return try move(ticketId, to: from, actor: .hatch, reason: reason)
+            }
+            return try move(ticketId, to: .ready, actor: .hatch, reason: "all questions answered")
         }
+    }
+
+    /// Where the ticket was when it last went to Needs answers, from its history.
+    func statusBeforeQuestions(_ ticketId: Int) throws -> Status? {
+        let moves = try events(ticketId: ticketId, kinds: ["status"])
+        guard let last = moves.last(where: { $0.payload["to"]?.stringValue == Status.needsAnswers.rawValue }) else { return nil }
+        return last.payload["from"]?.stringValue.flatMap(Status.init(rawValue:))
     }
 
     // Links (decision E5)
@@ -166,6 +190,12 @@ public extension HatchStore {
     /// The folder relative attachment paths are under: the Hatch folder, next to the database. Nil for an in-memory store.
     var attachmentsRoot: URL? {
         db.path.isEmpty || db.path == ":memory:" ? nil : URL(fileURLWithPath: db.path).deletingLastPathComponent()
+    }
+
+    /// Where Hatch keeps the HTML of a ticket's web draft, copied there at `hatch offer` so it outlives the agent's
+    /// workspace (gap G11). Nil for an in-memory store.
+    func sketchFolder(ticketId: Int) -> URL? {
+        attachmentsRoot?.appendingPathComponent("sketches/\(ticketId)", isDirectory: true)
     }
 
     /// The file of an attachment on this Mac.
@@ -389,4 +419,19 @@ public struct RunRecord: Equatable, Sendable {
     public var endedAt: Date?
     public var outcome: String?
     public var tokens: Int { tokensIn + tokensOut }
+}
+
+// MARK: Landing (gap G23)
+
+public extension HatchStore {
+    /// After the integration branch reached the base branch on green CI, every Merged ticket of the project is in it, so
+    /// Hatch moves them to Done (decision WF-L3). Themes whose last child this was finish too, through `move`.
+    @discardableResult
+    func finishLanded(projectId: Int, reason: String) throws -> [Ticket] {
+        try db.transaction {
+            try tickets(TicketFilter(projectId: projectId, statuses: [.merged])).map {
+                try move($0.id, to: .done, actor: .hatch, reason: reason)
+            }
+        }
+    }
 }

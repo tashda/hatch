@@ -149,6 +149,7 @@ extension AppState {
         guard let l = launcher else { return }
         // Above the daily pause limit, running agents finish but nothing new starts until tomorrow.
         if checkUsage() == .pause { return }
+        VettingBridge.sweep(state: self)
         l.update(.init(home: paths.root, hatchPath: Self.hatchCommand(store: store), context: agentContext))
         DispatchQueue.global(qos: .utility).async { l.tick() }
     }

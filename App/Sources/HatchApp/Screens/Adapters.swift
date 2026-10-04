@@ -270,7 +270,10 @@ enum HXMergeAdapter {
         do {
             let executor = MergeExecutor(workspaces: WorkspaceManager(store: store))
             let result = try executor.promote(repo: repo, integration: integration, into: repo.defaultBranch, ciPassed: ciPassed)
-            return Step(title: "Promoted \(integration) to \(repo.defaultBranch)", ok: true, detail: String(result.sha.prefix(8)))
+            // Everything merged is now in the base branch with green CI, so it is done (WF-L3, gap G23).
+            let landed = try store.finishLanded(projectId: repo.projectId, reason: "in \(repo.defaultBranch) with green CI")
+            let detail = String(result.sha.prefix(8)) + (landed.isEmpty ? "" : " · " + Format.count(landed.count, "ticket") + " done")
+            return Step(title: "Promoted \(integration) to \(repo.defaultBranch)", ok: true, detail: detail)
         } catch {
             return Step(title: "Could not promote \(integration)", ok: false, detail: "\(error)")
         }

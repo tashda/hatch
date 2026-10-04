@@ -12,6 +12,8 @@ public struct IrisOutcome: Equatable, Sendable {
 /// is only a pending suggestion (E8, E9), and nothing about the ticket's text or type changes until the owner decides.
 public enum IrisApplier {
     public static let name = "Iris"
+    /// Rounds of questions before Iris must file with what she has (decision WF-Q1).
+    public static let maxRounds = 2
 
     @discardableResult
     public static func apply(_ result: VettingResult, to ticketId: Int, store: HatchStore) throws -> IrisOutcome {
@@ -20,6 +22,12 @@ public enum IrisApplier {
             guard t.status == .checking else {
                 throw StoreError.invalid("\(t.displayNumber) is \(t.status.displayName), not Checking, so Iris's answer was not applied.")
             }
+            // At most two rounds of questions (decision WF-Q1): after that Iris files with what she has.
+            let rounds = try store.events(ticketId: ticketId, kinds: ["status"]).filter {
+                $0.payload["from"]?.stringValue == Status.checking.rawValue && $0.payload["to"]?.stringValue == Status.needsAnswers.rawValue
+            }.count
+            var result = result
+            if rounds >= maxRounds { result.questions = [] }
             // The first question moves the ticket to Needs answers, by the agent.
             for q in result.questions { try store.ask(ticketId, text: q.text, suggestions: q.suggestions, by: name, actor: .agent) }
 

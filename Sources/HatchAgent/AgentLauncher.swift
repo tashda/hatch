@@ -381,9 +381,11 @@ public final class AgentLauncher: @unchecked Sendable {
             do { try launch(again, attempt: attempt + 1) } catch { lock.withLock { lastError[plan.ticketId] = "\(error)" } }
             return
         }
-        try? store.release(plan.ticketId, reason: "stopped twice")
+        // Ask first, so the ticket is out of the agent's hands before it is released and no tick takes it up again.
+        // "Try again" sends it back to the work; "Stop working on it" parks it there (HatchStore.answer).
         _ = try? store.ask(plan.ticketId, text: "The agent stopped twice before handing in (exit \(exitCode)). Its last lines are in the thread. Should it try again?",
-                           suggestions: ["Try again", "Stop working on it"], by: "Hatch")
+                           suggestions: [HatchStore.agentStoppedTryAgain, HatchStore.agentStoppedStop], by: "Hatch")
+        try? store.release(plan.ticketId, reason: "stopped twice")
         _ = try? store.addNote(plan.ticketId, kind: .system, author: "hatch", body: tail)
     }
 

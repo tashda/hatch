@@ -24,6 +24,9 @@ public extension HatchStore {
         switch status {
         case .checking: .vet
         case .ready: type == .tweak || type == .bug ? .build : .prepare
+        // Work that was under way and lost its agent (a question answered, a ticket resumed): taken up again where it was.
+        case .preparing: .prepare
+        case .building: .build
         case .accepted: .build
         case .revising: .revise
         case .fixing: .fix
@@ -33,7 +36,7 @@ public extension HatchStore {
 
     /// Work waiting for an agent, highest priority and oldest first. Honors the agent limit.
     func agentWork(projectId: Int? = nil) throws -> [AgentTask] {
-        var sql = "SELECT * FROM ticket WHERE taken_by IS NULL AND status IN ('checking','ready','accepted','revising','fixing')"
+        var sql = "SELECT * FROM ticket WHERE taken_by IS NULL AND status IN ('checking','ready','preparing','accepted','building','revising','fixing')"
         var params: [SQLValue] = []
         if let projectId { sql += " AND project_id = ?"; params.append(.int(projectId)) }
         sql += " ORDER BY priority DESC, updated_at ASC"

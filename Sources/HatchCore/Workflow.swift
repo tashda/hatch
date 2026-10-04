@@ -131,6 +131,11 @@ public enum Workflow {
         add(.checking, .ready, [.agent, .hatch], pipeline)
         add(.needsAnswers, .ready, [.hatch], pipeline)
         add(.needsAnswers, .checking, [.owner, .hatch], pipeline)
+        // An agent's question answered: the work carries on where it stopped (decision WF-Q4, gap G21).
+        add(.needsAnswers, .preparing, [.hatch], explore)
+        add(.needsAnswers, .revising, [.hatch], [.sketch, .proposal])
+        add(.needsAnswers, .building, [.hatch], build)
+        add(.needsAnswers, .fixing, [.hatch], build)
         add(.ready, .preparing, [.agent, .hatch], explore)
         add(.ready, .building, [.agent, .hatch], buildFirst)
         // Exploring
@@ -170,8 +175,9 @@ public enum Workflow {
     public static func canResume(_ type: TicketType, to status: Status, from current: Status, actor: Actor) -> Bool {
         guard current == .blocked || current == .parked else { return false }
         guard status != .blocked, status != .parked, status != .dropped, status != .done else { return false }
-        let allowedActor: Actor = current == .blocked ? .hatch : .owner
-        return actor == allowedActor && rules.contains { $0.to == status && $0.types.contains(type) }
+        // Hatch resumes a ticket it blocked; the owner may resume anything they parked or stopped (gap G24).
+        let allowed: Set<Actor> = current == .blocked ? [.hatch, .owner] : [.owner]
+        return allowed.contains(actor) && rules.contains { $0.to == status && $0.types.contains(type) }
     }
 
     public static func isAllowed(type: TicketType, from: Status, to: Status, actor: Actor) -> Bool {

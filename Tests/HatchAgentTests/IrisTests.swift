@@ -183,6 +183,22 @@ final class IrisApplierTests: XCTestCase {
         let after = try IrisApplier.accept(ticketId: t.id, store: store)
         XCTAssertEqual(after.status, .needsAnswers)
         try store.answer(questionId: try store.questions(ticketId: t.id)[0].id, text: "yes")
+        XCTAssertEqual(try status(), .checking, "Iris checks again with the answer (WF-Q2)")
+    }
+
+    func testASecondCheckSeesTheAnswersAndAThirdRoundAsksNothing() throws {
+        try IrisApplier.apply(VettingResult(questions: [.init(text: "Which toast?", suggestions: ["Error", "Info"])]), to: t.id, store: store)
+        try store.answer(questionId: try store.questions(ticketId: t.id)[0].id, text: "Error")
+        XCTAssertEqual(try status(), .checking)
+        let request = try VettingRequest.build(store: store, ticketId: t.id)
+        XCTAssertEqual(request.answered, [.init(question: "Which toast?", answer: "Error")])
+        XCTAssertTrue(IrisPrompt.make(request).contains("Which toast? → Error"))
+
+        try IrisApplier.apply(VettingResult(questions: [.init(text: "Light or dark?")]), to: t.id, store: store)
+        try store.answer(questionId: try store.questions(ticketId: t.id, openOnly: true)[0].id, text: "Dark")
+        XCTAssertEqual(try status(), .checking)
+        let third = try IrisApplier.apply(VettingResult(questions: [.init(text: "Which size?")]), to: t.id, store: store)
+        XCTAssertEqual(third.questionsAsked, 0, "at most two rounds (WF-Q1)")
         XCTAssertEqual(try status(), .ready)
     }
 
