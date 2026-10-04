@@ -40,6 +40,8 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 | A project's own colors, type and sizes (Components page) | Swatches (light beside dark), a type sample in its own font, size bars. The one other place colour that is not turn or a problem appears: it is the project's data, not Hatch's look | `ComponentSwatch`, `ComponentRender` |
 | Everything that waits for the owner | A Decide session: full window, one card at a time, quick decisions first; the same keys on every card; an undo toast before Hatch acts | `DecideSessionView`, `.decideOverlay()` |
 | The way into Decide | A card with the count, time and kinds, one prominent Decide button (Desk top, Iris top); a toolbar button in its own group with the count badge, hidden at zero | `DecideIrisCard`, `DecideToolbarButton` |
+| Pointing at something in a screenshot | Mark-up sheet: Box, Arrow and Note in a segmented control, Undo, Save flattens the marks into the image. Marks are one fixed red so they read the same in light, dark and the saved file | `ScreenshotMarkupSheet`, `ShotMarksLayer` |
+| Where model work went (Reports) | Figures in one card, a stacked bar per day with hover, breakdown cards with a thin share bar per row, CSV export. Tokens only | `Chart` `BarMark` `.chartXSelection`, `Grid`, `NSSavePanel` |
 | Nothing to show | Empty state with next step | `ContentUnavailableView` |
 | Work in progress | Spinner in the row, text says what | `ProgressView` |
 | Short feedback | Toast capsule | `HXToast` |

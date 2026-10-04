@@ -73,6 +73,7 @@ struct SidebarView: View {
             }
             Section("Machine") {
                 SidebarRow(route: .agents).tag(Route.agents)
+                SidebarRow(route: .reports).tag(Route.reports)
                 SidebarRow(route: .health).tag(Route.health)
                 SidebarRow(route: .log).tag(Route.log)
             }

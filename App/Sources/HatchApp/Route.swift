@@ -2,7 +2,7 @@ import Foundation
 
 /// Where the user is in the app. The sidebar sets it (decision B1); a ticket opens full width (decision C1).
 enum Route: Hashable {
-    case desk, tickets, board, previews, specs, decisions, components, agents, health, log, projects
+    case desk, tickets, board, previews, specs, decisions, components, agents, reports, health, log, projects
     case ticket(Int)
     case newTicket
 
@@ -16,6 +16,7 @@ enum Route: Hashable {
         case .decisions: "Decisions"
         case .components: "Components"
         case .agents: "Agents"
+        case .reports: "Reports"
         case .health: "Health"
         case .log: "Log"
         case .projects: "Project"
@@ -34,6 +35,7 @@ enum Route: Hashable {
         case .decisions: "flag"
         case .components: "paintpalette"
         case .agents: "cpu"
+        case .reports: "chart.bar.xaxis"
         case .health: "stethoscope"
         case .log: "list.bullet.rectangle"
         case .projects: "gearshape"
@@ -53,6 +55,7 @@ enum Route: Hashable {
         case .decisions: "page.decisions"
         case .components: "page.components"
         case .agents: "page.agents"
+        case .reports: "page.reports"
         case .health: "page.health"
         case .log: "page.log"
         case .projects: "page.projects"
@@ -62,7 +65,7 @@ enum Route: Hashable {
     }
 
     /// The pages in the order the Go menu lists them.
-    static let pages: [Route] = [.desk, .tickets, .board, .previews, .specs, .decisions, .agents, .log, .projects, .components, .health]
+    static let pages: [Route] = [.desk, .tickets, .board, .previews, .specs, .decisions, .agents, .log, .projects, .components, .health, .reports]
 }
 
 extension Route {

@@ -2,6 +2,13 @@
 
 Updated 2026-10-04 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
 
+## Local verification (macOS, 2026-10-04): screenshots, paste anywhere and mark-up (E3)
+
+- **⌘V anywhere**: one app-wide watcher (`ScreenshotPasteCenter`). With an image on the clipboard and no text, ⌘V hands it to the newest view that takes screenshots in that window: the composer (adds a thumbnail), a ticket page or ticket window, including while typing in the Thread (attaches to the ticket), and a Decide card (attaches to its ticket and opens the note). Text on the clipboard, or a window nobody registered for, pastes as usual. Image files copied in Finder count too.
+- **Mark-up** (`ScreenshotMarkupSheet`): Box, Arrow, Note, Undo; Save draws the marks into a PNG at the image's own size. Click a thumbnail in the composer, or the pencil on (or right-click) an attached screenshot, which then replaces its file and checksum (`setAttachmentSha`).
+- **Verified**: Xcode app build; snapshot of the mark-up sheet with one mark of each kind; the saved file at full size (1280 × 800) with the marks in it; clipboard reading on a private pasteboard (image, image file, text only, empty).
+- **Not verified**: the ⌘V watcher in the live app (it needs a real key press); dragging marks with the mouse. Screenshots still stay in the Hatch folder: uploading them to the tickets repository (M3, `SyncEngine.commitAttachment`) is not wired.
+
 ## Local verification (macOS, 2026-10-04): gate findings, Spec before To verify, CI on merged tickets
 
 - **H19**: each offer keeps the quality gate's findings (severity, code, message) in its event; `gateResults` reads them; the Work tab shows the last result and how many offers were rejected before it.
@@ -50,6 +57,19 @@ Settings has three groups: Hatch (General, Notifications, Agents, Shortcuts), Co
 - **Usage**: each run records its provider, model, task and cache reads (migration 4). The page shows tokens per day for 14 days by provider (or by model for one), this week by task and by model, and the daily limits. Above the warning the footer turns orange; above the pause limit no new agent starts until tomorrow.
 
 Built and tested: `swift test` (0 failures), the Xcode build, and one snapshot per page in light and dark (`--only settings-<page>`, `--only menu-bar`). Not tried live: the menu bar item in the real menu bar, real notifications, the login item, GitHub against a real account (permissions, label repair, Add, Disconnect), Clean Up Now and the daily backup on real data, and the limits pausing a real agent.
+
+## Reports (2026-10-04)
+
+A page under Machine (⌃⌘R), tokens only, per design-review/reports.html. It has a period of 7, 14, 30 or 90 days, follows the project in the title, and can be filtered by provider; clicking a model filters by model.
+- **Figures**: tokens with the change against the period before, tokens per finished ticket, runs and cache reads, and waste.
+- **Chart**: tokens per day by provider (or by model for one provider); hovering a bar gives that day's numbers.
+- **Breakdowns**: model, task, area and ticket, each row with a share bar. A ticket opens on click; its retries are runs that ended without handing in.
+- **Waste**: stopped or retried runs, and Prepare runs whose options were sent back (every Prepare on a ticket before its latest).
+- **Model against outcome**: per model, the tickets whose first handed-in Build needed no Fix.
+- **Iris value**: tokens per check, tickets checked, Iris's questions answered, duplicates linked.
+- **Export CSV…** saves the filtered runs, one row each.
+
+The numbers come from `RunReport` and `reportOutcomes` in `HatchCore/Reports.swift` (tested in `ReportsTests`). Checked with demo data in light and dark snapshots (`--only reports`). Not tried: Export CSV's save panel, hovering in the live app, and real runs, which are recorded only from 2026-10-04.
 
 ## Local verification (macOS, 2026-10-04): agent providers and models per task
 

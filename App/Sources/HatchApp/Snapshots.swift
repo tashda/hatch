@@ -153,9 +153,12 @@ enum Snapshots {
                 let tokens = k.tokens * (1 + (day * 7 + i * 3) % 5) / 3
                 try! store.recordRun(ticketId: tickets[(day + i) % tickets.count].id, agent: k.role == "iris" ? "Iris" : "Agent", step: nil,
                                      provider: k.provider, model: k.model, role: k.role, tokensIn: tokens * 4 / 5, tokensOut: tokens / 5,
-                                     cacheTokens: tokens * 3, outcome: "ok", startedAt: start, endedAt: start.addingTimeInterval(600))
+                                     cacheTokens: tokens * 3, outcome: k.role == "build" && day % 4 == 1 ? "stopped early (exit 1)" : "ok",
+                                     startedAt: start, endedAt: start.addingTimeInterval(600))
             }
         }
+        // Finished tickets, for Reports' tokens per finished ticket.
+        for t in tickets.prefix(4) { try! store.record(t.id, actor: "hatch", kind: "status", payload: ["from": "toVerify", "to": "done"]) }
         try! store.logPull(summary: "17 issues updated", ok: true)
         try! store.logPull(summary: "Preview status unavailable", ok: false, error: "Checks are still running.")
         // Decide: a Question Hatch prepared about the components, and a plan over the limit (decisions CO11, DC8).
@@ -301,7 +304,7 @@ enum Snapshots {
     /// or "settings-agents".
     @MainActor private static func runOne(_ name: String, state: AppState, into folder: URL) async {
         let routes: [String: Route] = ["desk": .desk, "tickets": .tickets, "board": .board, "previews": .previews, "specs": .specs,
-                                       "decisions": .decisions, "components": .components, "agents": .agents, "health": .health, "log": .log, "project": .projects,
+                                       "decisions": .decisions, "components": .components, "agents": .agents, "reports": .reports, "health": .health, "log": .log, "project": .projects,
                                        "new-ticket": .newTicket]
         if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {

@@ -136,6 +136,7 @@ struct RootView: View {
         case .decisions: DecisionsView()
         case .components: ComponentsView()
         case .agents: AgentsView()
+        case .reports: ReportsView()
         case .health: HealthView()
         case .log: LogView()
         case .projects: ProjectView()

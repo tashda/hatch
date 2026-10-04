@@ -132,6 +132,7 @@ public enum ShortcutCatalog {
         .init("page.projects", "Project Settings", .pages, .app, .init("9", cmd)),
         .init("page.components", "Components", .pages, .app, .init("0", cmd)),
         .init("page.health", "Health", .pages, .app, .init("h", [.control, .command])),
+        .init("page.reports", "Reports", .pages, .app, .init("r", [.control, .command])),
         .init("page.newTicket", "New Ticket", .pages, .app, .init("n", cmd)),
         .init("go.places", "Go to…", .pages, .app, .init("k", [.shift, .command])),
         .init("decide.open", "Decide", .pages, .app, .init("d", [.shift, .command])),

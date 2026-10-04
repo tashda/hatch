@@ -36,6 +36,7 @@
 		53D4579D6537437B4BEB40CC /* HatchSync in Frameworks */ = {isa = PBXBuildFile; productRef = C92A8B1F523538756CBE6D69 /* HatchSync */; };
 		60932597CB89763A211708DD /* ProjectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B110069306661FF4A2E42165 /* ProjectView.swift */; };
 		19F61CE806C5B4F33F330E19 /* HealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D60054C58D600A0D4F7948C /* HealthView.swift */; };
+		A3A8CA0DB3EA785DAC586F74 /* ReportsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 234A96746E00206D4CA44AE8 /* ReportsView.swift */; };
 		0777649DBDC4D7BE1E4B60F0 /* ProjectSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52EE6B8F7D46F8CA386D6410 /* ProjectSetup.swift */; };
 		6382CD856210B2FBD375405E /* GitHubAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E374A9B62BB42A52EAAC221 /* GitHubAccount.swift */; };
 		71F5869499C32324C434C580 /* AgentCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA53B185D376C44F5D5D861E /* AgentCard.swift */; };
@@ -131,6 +132,7 @@
 		B08CBB6E28A0112DD7F8C511 /* Adapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Adapters.swift; sourceTree = "<group>"; };
 		B110069306661FF4A2E42165 /* ProjectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectView.swift; sourceTree = "<group>"; };
 		4D60054C58D600A0D4F7948C /* HealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthView.swift; sourceTree = "<group>"; };
+		234A96746E00206D4CA44AE8 /* ReportsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportsView.swift; sourceTree = "<group>"; };
 		52EE6B8F7D46F8CA386D6410 /* ProjectSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSetup.swift; sourceTree = "<group>"; };
 		B6D728C148F7A1D0026394FA /* LogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogView.swift; sourceTree = "<group>"; };
 		C55062C4CDC76CEA05F19695 /* ProblemChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProblemChip.swift; sourceTree = "<group>"; };
@@ -320,6 +322,7 @@
 				5E6CDB9CB2F56F175AE2B0EC /* PreviewsView.swift */,
 				B110069306661FF4A2E42165 /* ProjectView.swift */,
 				4D60054C58D600A0D4F7948C /* HealthView.swift */,
+				234A96746E00206D4CA44AE8 /* ReportsView.swift */,
 				52EE6B8F7D46F8CA386D6410 /* ProjectSetup.swift */,
 				C9D5911E86EACB3736BFBE8D /* SettingsView.swift */,
 				84B416AA0D31A8BC44103D3D /* Settings */,
@@ -501,6 +504,7 @@
 				33B2E39998A1C0165DEDA212 /* ProblemChip.swift in Sources */,
 				60932597CB89763A211708DD /* ProjectView.swift in Sources */,
 				19F61CE806C5B4F33F330E19 /* HealthView.swift in Sources */,
+				A3A8CA0DB3EA785DAC586F74 /* ReportsView.swift in Sources */,
 				0777649DBDC4D7BE1E4B60F0 /* ProjectSetup.swift in Sources */,
 				4A44215470CE3D13640307C4 /* ProposalInfo.swift in Sources */,
 				ECF777578FF6A8D373CCEB2D /* RootView.swift in Sources */,
