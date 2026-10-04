@@ -19,19 +19,6 @@ public struct VettingService {
     /// The provider and model behind `runner`, recorded with each run for Usage and Reports.
     public var provider: String?
     public var model: String?
-    /// The stronger model for tickets Iris is unsure about (decision WF-T7): run once more before the owner is asked.
-    public var unsure: Escalation?
-
-    public struct Escalation: Sendable {
-        public var runner: AgentRunner
-        public var label: String?
-        public var provider: String?
-        public var model: String?
-        public init(runner: AgentRunner, label: String?, provider: String?, model: String?) {
-            self.runner = runner; self.label = label; self.provider = provider; self.model = model
-        }
-    }
-
     public init(store: HatchStore, runner: AgentRunner, options: AgentOptions = AgentOptions(), label: String? = nil,
                 provider: String? = nil, model: String? = nil) {
         self.store = store; self.runner = runner; self.options = options; self.label = label
@@ -57,12 +44,14 @@ public struct VettingService {
             return try fail(ticketId, runId, tokensIn: 0, tokensOut: 0, outcome: "failed", reason: "\(error)")
         }
         do {
-            var result = try IrisResult.parse(output.text)
+            let result = try IrisResult.parse(output.text)
             try store.endRun(runId, tokensIn: output.tokensIn, tokensOut: output.tokensOut, outcome: "ok")
-            if !result.isSure("path"), let unsure, let better = try escalate(ticketId, prompt: prompt, options: options, with: unsure) {
-                result = better
-            }
-            let applied = try IrisApplier.apply(result, to: ticketId, store: store)
+            // Only tickets she was shown can be linked or closed onto (decision IR8), and what she said is kept (IR5).
+            let shown = request.similar.compactMap { try? store.resolve($0.number).id }
+            var anchors: SourceAnchors?
+            if let root = try store.repo(projectId: t.projectId, role: .app)?.localPath { anchors = SourceAnchors(appRoot: root) }
+            let applied = try IrisApplier.apply(result, to: ticketId, store: store, candidates: shown, anchors: anchors,
+                                                reply: keepReply(output.text, ticketId: ticketId))
             return .vetted(applied)
         } catch {
             // The tokens were spent even though the answer was unusable, so they are still counted.
@@ -71,17 +60,15 @@ public struct VettingService {
         }
     }
 
-    /// Runs the same check on the stronger model. Its answer is used when it parses; otherwise the first one stands.
-    private func escalate(_ ticketId: Int, prompt: String, options: AgentOptions, with e: Escalation) throws -> VettingResult? {
-        let runId = try store.startRun(ticketId: ticketId, agent: IrisApplier.name, step: "unsure, vet again" + (e.label.map { " with \($0)" } ?? ""),
-                                       provider: e.provider, model: e.model, role: AgentRole.irisUnsure.rawValue)
-        guard let output = try? e.runner.run(prompt: prompt, options: options) else {
-            try store.endRun(runId, tokensIn: 0, tokensOut: 0, outcome: "failed")
-            return nil
-        }
-        let result = try? IrisResult.parse(output.text)
-        try store.endRun(runId, tokensIn: output.tokensIn, tokensOut: output.tokensOut, outcome: result == nil ? "unusable" : "ok")
-        return result
+    /// Keeps her raw reply next to the database so what she said can be compared with what Hatch applied. Nil without a folder.
+    private func keepReply(_ text: String, ticketId: Int) -> String? {
+        guard let root = store.attachmentsRoot?.appendingPathComponent("iris-replies", isDirectory: true) else { return nil }
+        let file = root.appendingPathComponent("\(ticketId)-\(Int(Date().timeIntervalSince1970)).json")
+        do {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            try text.write(to: file, atomically: true, encoding: .utf8)
+            return file.path
+        } catch { return nil }
     }
 
     /// `answer` keeps the start of an unusable reply, so the owner can see what the model sent.

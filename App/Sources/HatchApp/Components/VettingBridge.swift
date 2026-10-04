@@ -39,11 +39,7 @@ enum VettingBridge {
                     // provider is a failure with a reason, never a silent fallback to another model.
                     let settings = AgentSettings.load(from: store)
                     let iris = try AgentFactory.resolve(.iris, settings: settings, context: context)
-                    var service = VettingService(store: store, runner: iris.runner, label: iris.label, provider: iris.provider.name, model: iris.model)
-                    // A stronger model for tickets she is unsure about (WF-T7); off or the same model means no second run.
-                    if let unsure = try? AgentFactory.resolve(.irisUnsure, settings: settings, context: context), unsure.label != iris.label {
-                        service.unsure = .init(runner: unsure.runner, label: unsure.label, provider: unsure.provider.name, model: unsure.model)
-                    }
+                    let service = VettingService(store: store, runner: iris.runner, label: iris.label, provider: iris.provider.name, model: iris.model)
                     _ = try service.vet(ticketId: ticketId)
                 } catch {
                     try? store.record(ticketId, actor: "Iris", kind: "vetting-failed", payload: ["reason": .string("\(error)")])

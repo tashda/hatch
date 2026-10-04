@@ -222,10 +222,13 @@ public struct ProviderPreset: Identifiable, Sendable {
 /// Iris and Ask send one prompt; the coding tasks run an agent program in a ticket's workspace.
 public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
     case iris, ask, prepare, build, fix
-    /// Iris again, on a stronger model, when she is unsure about a ticket's path (decision WF-T7).
+    /// Retired (decision IR14): Iris no longer asks a stronger model for a second opinion. The case stays so the 4 runs and
+    /// any saved setting with this name still read; it is left out of `allCases`, so Settings no longer offers it.
     case irisUnsure
     /// An agent that stopped twice gets one more run on this model before it is blocked (decision WF-B3).
     case rescue
+
+    public static var allCases: [AgentRole] { [.iris, .ask, .prepare, .build, .fix, .rescue] }
 
     public var id: String { rawValue }
 
@@ -398,7 +401,6 @@ public struct AgentSettings: Codable, Equatable, Sendable {
             AgentRole.iris.rawValue: RoleChoice(providerId: claudeProviderId, model: "haiku", thinking: false),
             // Options are judged side by side, so they get the strongest model; building and fixing follow the default.
             AgentRole.prepare.rawValue: RoleChoice(providerId: claudeProviderId, model: "opus", effort: "high"),
-            AgentRole.irisUnsure.rawValue: RoleChoice(providerId: claudeProviderId, model: "sonnet"),
             AgentRole.rescue.rawValue: RoleChoice(providerId: claudeProviderId, model: "opus"),
         ])
         s.defaultChoice = RoleChoice(providerId: claudeProviderId)

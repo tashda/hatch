@@ -135,6 +135,15 @@ public enum QuestionPurpose {
     }
 }
 
+/// How much a wrong guess would cost (decision IR12). Low: Iris goes ahead with her default if the owner does not answer.
+/// High: the ticket waits.
+public enum QuestionStakes {
+    public static let low = "low"
+    public static let high = "high"
+    /// How long a low-stakes question waits before Hatch answers it with Iris's default.
+    public static let waitSeconds = 30 * 60
+}
+
 /// The answers Iris offers on the questions Hatch acts on, so the answer can be matched exactly.
 public enum IrisChoices {
     public static let splitYes = "Split it"
@@ -161,6 +170,8 @@ public struct Filing: Equatable, Sendable {
     public var priority: Int?
     public var verify: VerifyKind?
     public var related: [Int] = []
+    /// One line for each related link, by ticket id. Iris's links carry one (decision IR9); the owner's need not.
+    public var relatedWhy: [Int: String] = [:]
     public var parentId: Int?
     public var blocks: [Int] = []
     public var specTouches: [String] = []
@@ -226,7 +237,7 @@ public extension HatchStore {
     /// original), area, priority, verification and links. A `filed` event keeps each field's old and new value, for the
     /// ticket's "Filed by Iris" card and the digest.
     @discardableResult
-    func file(_ id: Int, _ f: Filing, by: String) throws -> Ticket {
+    func file(_ id: Int, _ f: Filing, by: String, guessed: [String] = [], reply: String? = nil) throws -> Ticket {
         try db.transaction {
             guard var t = try ticket(id: id) else { throw StoreError.notFound("ticket \(id)") }
             var changed: [String: JSONValue] = [:]
@@ -270,12 +281,17 @@ public extension HatchStore {
                 try db.execute("UPDATE ticket SET parent_id = ? WHERE id = ?", [.int(parent), .int(id)])
                 changed["parent"] = ["to": .int(parent)]
             }
-            for other in Set(f.related) where other != id { try link(from: id, to: other, kind: .related) }
-            for other in Set(f.blocks) where other != id { try link(from: id, to: other, kind: .blocks) }
+            for other in Set(f.related) where other != id { try link(from: id, to: other, kind: .related, by: by, why: f.relatedWhy[other]) }
+            for other in Set(f.blocks) where other != id { try link(from: id, to: other, kind: .blocks, by: by) }
             if !f.related.isEmpty { changed["related"] = .array(f.related.map { .int($0) }) }
+            if !f.relatedWhy.isEmpty { changed["relatedWhy"] = .object(Dictionary(uniqueKeysWithValues: f.relatedWhy.map { ("\($0.key)", JSONValue.string($0.value)) })) }
             if !f.blocks.isEmpty { changed["blocks"] = .array(f.blocks.map { .int($0) }) }
             if !f.specTouches.isEmpty { changed["specTouches"] = .array(f.specTouches.map { .string($0) }) }
-            try record(id, actor: by, kind: "filed", payload: ["fields": .object(changed)])
+            var payload: [String: JSONValue] = ["fields": .object(changed)]
+            // Fields she set on a weak reading, so the owner can see which ones to check; and her raw reply, kept for audit (IR5).
+            if !guessed.isEmpty { payload["guessed"] = .array(guessed.map { .string($0) }) }
+            if let reply { payload["reply"] = .string(reply) }
+            try record(id, actor: by, kind: "filed", payload: .object(payload))
             return try ticket(id: id)!
         }
     }
@@ -333,7 +349,7 @@ public extension HatchStore {
     /// The same request said again (decision WF-T5): the new text goes onto the original as a note, the two are linked,
     /// and this ticket closes. Reopen undoes it.
     @discardableResult
-    func closeAsDuplicate(_ id: Int, of originalId: Int, by: String) throws -> Ticket {
+    func closeAsDuplicate(_ id: Int, of originalId: Int, by: String, why: String? = nil) throws -> Ticket {
         try db.transaction {
             guard let t = try ticket(id: id), let original = try ticket(id: originalId), id != originalId else {
                 throw StoreError.notFound("ticket \(id) or \(originalId)")
@@ -341,14 +357,17 @@ public extension HatchStore {
             let words = (t.originalBody ?? t.body).trimmingCharacters(in: .whitespacesAndNewlines)
             let text = "Asked again in \(t.displayNumber): \(t.originalTitle ?? t.title)" + (words.isEmpty ? "" : "\n\n\(words)")
             try addNote(original.id, kind: .note, author: by, body: text)
-            try link(from: id, to: original.id, kind: .duplicates)
-            try record(id, actor: by, kind: "duplicate", payload: ["of": .int(original.id)])
+            try link(from: id, to: original.id, kind: .duplicates, by: by)
+            var payload: [String: JSONValue] = ["of": .int(original.id)]
+            if let why, !why.isEmpty { payload["why"] = .string(why) }
+            try record(id, actor: by, kind: "duplicate", payload: .object(payload))
             return try move(id, to: .dropped, actor: .hatch, reason: "duplicate of \(original.displayNumber)")
         }
     }
 
-    /// One prompt with several things in it becomes a Theme with one child per part (decision WF-T4). Each child goes to
-    /// Iris on its own.
+    /// One prompt with several things in it becomes a Theme with one child per part (decision WF-T4, IR5). The parts keep
+    /// what the split gave them (title, text, path) and are not vetted again (decision IR6): a part with a path is filed
+    /// and Ready at once, its area from the Theme. A part without a path goes to Iris like a new ticket.
     @discardableResult
     func splitIntoTheme(_ id: Int, children: [FilingChild], by: String) throws -> [Ticket] {
         try db.transaction {
@@ -359,13 +378,61 @@ public extension HatchStore {
             if try ticket(id: id)!.status != .draft { try move(id, to: .draft, actor: .hatch, reason: "split into \(children.count) tickets") }
             var made: [Ticket] = []
             for c in children {
-                let child = try createTicket(projectId: t.projectId, type: c.path?.type ?? .question, title: c.title, body: c.body,
+                let body = c.body.isEmpty ? "From \(t.displayNumber)." : c.body + "\n\nFrom \(t.displayNumber), where the owner's own words are."
+                let child = try createTicket(projectId: t.projectId, type: c.path?.type ?? .question, title: c.title, body: body,
                                              area: t.area, parentId: id, status: .draft, actor: .hatch)
-                made.append(try move(child.id, to: .checking, actor: .hatch, reason: "part of \(t.displayNumber)"))
+                var moved = try move(child.id, to: .checking, actor: .hatch, reason: "part of \(t.displayNumber)")
+                if let path = c.path, path != .split {
+                    try file(child.id, Filing(path: path), by: by)
+                    moved = try move(child.id, to: .ready, actor: .hatch, reason: "part of \(t.displayNumber), filed by \(by)")
+                }
+                made.append(moved)
             }
             try record(id, actor: by, kind: "split", payload: ["children": .array(made.map { .int($0.id) })])
+            let numbers = made.map(\.displayNumber).joined(separator: ", ")
+            _ = try addNote(id, kind: .note, author: by, body: "Split into \(numbers). Undo split puts it back as one ticket.")
             return made
         }
+    }
+
+    /// Puts a split back as one ticket (decision IR5): the parts are dropped, the Theme is checked again and Iris is told
+    /// not to split it this time. Refused once a part has started.
+    @discardableResult
+    func undoSplit(_ id: Int, by: String = "owner") throws -> Ticket {
+        try db.transaction {
+            guard let t = try ticket(id: id), t.type == .theme else { throw StoreError.invalid("That ticket is not a split.") }
+            let parts = try tickets(TicketFilter(parentId: id)).filter { $0.status != .dropped }
+            let started: Set<Status> = [.preparing, .building, .revising, .fixing, .toVerify, .done, .merged]
+            if let busy = parts.first(where: { started.contains($0.status) || $0.takenBy != nil }) {
+                throw StoreError.invalid("\(busy.displayNumber) has started, so the split cannot be undone.")
+            }
+            for p in parts { try move(p.id, to: .dropped, actor: .hatch, reason: "split undone on \(t.displayNumber)") }
+            try db.execute("UPDATE ticket SET path = NULL, updated_at = ? WHERE id = ?", [.date(now()), .int(id)])
+            try changeType(id, to: .question, actor: .hatch, reason: "split undone")
+            try record(id, actor: by, kind: "split-undone", payload: ["parts": .array(parts.map { .int($0.id) })])
+            return try move(id, to: .checking, actor: .hatch, reason: "split undone; Iris checks it as one ticket")
+        }
+    }
+
+    /// Whether the owner undid a split of this ticket, so Iris must not split it again.
+    func splitWasUndone(_ id: Int) throws -> Bool { !(try events(ticketId: id, kinds: ["split-undone"]).isEmpty) }
+
+    /// A question Iris marked low-stakes carries her default answer and a deadline (decision IR12). Past the deadline Hatch
+    /// answers with the default and says so on the ticket; the owner can still change anything she assumed. Returns how many.
+    @discardableResult
+    func answerLapsedAssumptions(at date: Date? = nil) throws -> Int {
+        let moment = (date ?? now()).timeIntervalSince1970
+        var count = 0
+        for t in try tickets(TicketFilter(statuses: [.needsAnswers])) {
+            for q in try questions(ticketId: t.id, openOnly: true) {
+                guard q.payload?["stakes"]?.stringValue == QuestionStakes.low, let by = q.payload?["by"]?.intValue, Double(by) <= moment,
+                      let fallback = q.payload?["default"]?.stringValue, !fallback.isEmpty else { continue }
+                try answer(questionId: q.id, text: fallback, by: "hatch")
+                _ = try addNote(t.id, kind: .note, author: "Iris", body: "Iris assumed \u{201C}\(fallback)\u{201D}: no answer in time. Change it any time before work starts.")
+                count += 1
+            }
+        }
+        return count
     }
 
     /// Acts on the answer to a question Hatch understands (field, duplicate, split). Returns false when the ticket left

@@ -155,7 +155,7 @@ public enum ComponentReader {
         var stack: [Scope] = []
         var pending: Scope?
         var depth = 0
-        for raw in text.components(separatedBy: "\n") {
+        for raw in withoutMultilineStrings(text).components(separatedBy: "\n") {
             let line = stripComment(raw)
             let code = stripStrings(line)
             let before = depth
@@ -196,6 +196,25 @@ public enum ComponentReader {
             }
             stack.removeAll { $0.level > depth }
         }
+    }
+
+    /// Sample code inside a `"""` literal (a preview fixture, a test string) is text, not the app's own declarations. Without
+    /// this the scanner listed a fixture's `Font.badge` and `QuietButtonStyle` as real components, and Iris asked about them.
+    static func withoutMultilineStrings(_ text: String) -> String {
+        guard text.contains("\"\"\"") else { return text }
+        var inside = false
+        var out: [String] = []
+        for line in text.components(separatedBy: "\n") {
+            let parts = line.components(separatedBy: "\"\"\"")
+            if parts.count == 1 { if !inside { out.append(line) }; continue }
+            // parts.count - 1 delimiters on this line: text before the first and after the last is code when outside.
+            var kept = ""
+            if !inside { kept += parts.first! }
+            if (parts.count - 1) % 2 == 1 { inside.toggle() }
+            if !inside { kept += parts.last! }
+            out.append(kept)
+        }
+        return out.joined(separator: "\n")
     }
 
     // MARK: Declarations

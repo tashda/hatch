@@ -102,18 +102,23 @@ final class StoreTests: XCTestCase {
         XCTAssertThrowsError(try store.changeType(t.id, to: .sketch, actor: .owner))
     }
 
-    func testQuestionsMoveTheTurnAndAnsweringAllSendsItBackToIris() throws {
+    func testQuestionsMoveTheTurnAndAnsweringAllSendsItOnOrBackToIrisWhenTheAnswerCouldChangeTheWork() throws {
         let t = try ticket()
         _ = try store.move(t.id, to: .checking, actor: .owner)
         let q1 = try store.ask(t.id, text: "Also at Compact density?", suggestions: ["Yes", "No"], by: "Iris")
-        let q2 = try store.ask(t.id, text: "Does this replace #118?", by: "Iris")
+        let q2 = try store.ask(t.id, text: "Does this replace #118?", by: "Iris", payload: ["rerun": true])
         XCTAssertEqual(try store.ticket(id: t.id)?.status, .needsAnswers)
         XCTAssertEqual(try store.ticket(id: t.id)?.turn, .you)
         _ = try store.answer(questionId: q1.id, text: "Yes")
         XCTAssertEqual(try store.ticket(id: t.id)?.status, .needsAnswers, "one question is still open")
         let done = try store.answer(questionId: q2.id, text: "No")
-        XCTAssertEqual(done.status, .checking, "Iris checks again with the answers (WF-Q2)")
+        XCTAssertEqual(done.status, .checking, "an answer that could change the work: Iris checks again with the answers (WF-Q2)")
         XCTAssertEqual(q1.suggestions, ["Yes", "No"])
+
+        let plain = try ticket()
+        _ = try store.move(plain.id, to: .checking, actor: .owner)
+        let q3 = try store.ask(plain.id, text: "Show it on the Dock too?", by: "Iris")
+        XCTAssertEqual(try store.answer(questionId: q3.id, text: "Yes").status, .ready, "any other answer is applied here: no second model call (IR13)")
     }
 
     func testAskFromYourCallSendsItBackToTheAgent() throws {

@@ -6,6 +6,8 @@ public struct IrisOutcome: Equatable, Sendable {
     public var suggestionStored: Bool
     /// The ticket's status after Iris's result was applied.
     public var status: Status
+    /// The parts, when she split the ticket.
+    public var split: [Int] = []
 }
 
 /// Turns Iris's answer into store changes (decision WF-T1): what she is sure of is filed at once and recorded with its old
@@ -25,80 +27,124 @@ public enum IrisApplier {
         var payload: JSONValue?
     }
 
+    /// The question as she asked it, without the sentence Hatch adds about what happens if the owner does not answer.
+    static func plainQuestion(_ text: String) -> String {
+        for marker in [" I will wait for your answer.", " If you do not answer in "] {
+            if let r = text.range(of: marker) { return String(text[..<r.lowerBound]) }
+        }
+        return text
+    }
+
+    /// How many related links Iris may make on one ticket (decision IR9).
+    public static let maxRelated = 2
+    /// Questions on one ticket (decision IR10).
+    public static let maxQuestions = 1
+
+    /// `candidates` are the tickets she was shown, most alike first. A number outside them is dropped, so she cannot close
+    /// onto a ticket she never saw (decision IR8); nil allows any, for callers with no request. `anchors` lets Hatch find
+    /// related tickets itself from the screens and files they name (IR9). `reply` is where her raw answer was kept.
     @discardableResult
-    public static func apply(_ result: VettingResult, to ticketId: Int, store: HatchStore) throws -> IrisOutcome {
+    public static func apply(_ result: VettingResult, to ticketId: Int, store: HatchStore, candidates: [Int]? = nil, anchors: SourceAnchors? = nil,
+                             reply: String? = nil) throws -> IrisOutcome {
         try store.db.transaction {
             guard let t = try store.ticket(id: ticketId) else { throw StoreError.notFound("ticket \(ticketId)") }
             guard t.status == .checking else {
                 throw StoreError.invalid("\(t.displayNumber) is \(t.status.displayName), not Checking, so Iris's answer was not applied.")
             }
-            // At most two rounds of questions (decision WF-Q1): after that Iris files with what she has.
+            let config = try store.project(id: t.projectId)?.config
+            func shown(_ ref: String?) -> Ticket? {
+                guard let ref, let found = try? store.resolve(ref), found.id != t.id else { return nil }
+                return candidates == nil || candidates!.contains(found.id) ? found : nil
+            }
+
+            // She decides the kind of work, area and priority; the owner changes them in the Filed by Iris box (IR3, IR4).
+            // She never moves a ticket to another project, and never sets High or Urgent.
+            var filing = Filing()
+            let path = result.effectivePath
+            if let path, path != .split || result.split.count >= 2 { filing.path = path }
+            if let area = result.area, let known = config?.areas.first(where: { $0.name.caseInsensitiveCompare(area) == .orderedSame }) { filing.area = known.name }
+            filing.priority = result.priority.flatMap(TicketPriority.value).map { min($0, TicketPriority.normal) }
+            filing.verify = result.verify
+
+            // The owner's words stay the ticket; her reading is a labelled section after them (IR2).
+            if let r = result.rewrite {
+                filing.title = r.title.isEmpty ? nil : r.title
+                let words = IrisReading.ownerWords(title: t.originalTitle ?? t.title, body: t.originalBody ?? IrisReading.split(t.body).words)
+                let composed = IrisReading.compose(words: words, reading: r.body, assumed: result.assumed)
+                filing.body = r.body.isEmpty && result.assumed.isEmpty ? nil : composed
+            }
+
+            // Related tickets are found by Hatch, not by her (IR9): two tickets are related when the owner's own words point at
+            // the same file or name the same screen. The link says which. At most two, the strongest first.
+            let thisText = IrisReading.ownerWords(title: t.originalTitle ?? t.title, body: t.originalBody ?? IrisReading.split(t.body).words)
+            var evidence: [(ticket: Ticket, weight: Int, why: String)] = []
+            if let anchors, !anchors.isEmpty {
+                for id in candidates ?? [] {
+                    guard let other = try store.ticket(id: id), other.id != t.id, other.status != .dropped,
+                          let found = anchors.shared(thisText, IrisReading.ownerWords(title: other.originalTitle ?? other.title, body: other.originalBody ?? IrisReading.split(other.body).words))
+                    else { continue }
+                    evidence.append((other, found.weight, found.why))
+                }
+            }
+            // A ticket about to be closed as a repeat gets the duplicate link only, not a related one as well.
+            let dupe = shown(result.duplicateOf).flatMap { $0.status.isTerminal && $0.status != .done ? nil : $0 }
+            let dupText = dupe.map { IrisReading.ownerWords(title: $0.originalTitle ?? $0.title, body: $0.originalBody ?? IrisReading.split($0.body).words) } ?? ""
+            let corroborated = dupe != nil && (anchors?.shared(thisText, dupText) != nil || TextLikeness.overlap(thisText, dupText) >= TextLikeness.repeatThreshold)
+            let closing = corroborated && result.duplicateSure && !(result.duplicateWhy ?? "").isEmpty
+            if closing { evidence.removeAll { $0.ticket.id == dupe!.id } }
+            for e in evidence.enumerated().sorted(by: { ($1.element.weight, $0.offset) < ($0.element.weight, $1.offset) }).prefix(maxRelated).map(\.element) {
+                filing.related.append(e.ticket.id); filing.relatedWhy[e.ticket.id] = e.why
+            }
+            let linked = filing.related.count
+            filing.blocks = result.blocks.compactMap { shown($0)?.id }
+            if let parent = shown(result.parent), parent.type == .theme { filing.parentId = parent.id }
+            filing.specTouches = result.specTouches
+            let weak = result.confidence["path"].map { $0 < IrisPrompt.sureThreshold } ?? false
+            try store.file(ticketId, filing, by: name, guessed: weak && filing.path != nil ? ["path"] : [], reply: reply)
+
+            // A repeat is closed only when it names the same screen and the same problem, and says which (IR7). Anything less
+            // certain is filed as it is with a link to the other ticket, and no question.
+            if let dup = dupe {
+                // Her word is not enough to close a ticket: Hatch must see the same screen or file named, or nearly the same words.
+                if closing, let why = result.duplicateWhy {
+                    let closed = try store.closeAsDuplicate(ticketId, of: dup.id, by: name, why: why)
+                    return IrisOutcome(questionsAsked: 0, suggestionStored: false, status: closed.status)
+                }
+                // Not closed: filed as it is, with a link that says only what Hatch could check.
+                if linked < maxRelated, !filing.related.contains(dup.id), corroborated {
+                    try store.link(from: ticketId, to: dup.id, kind: .related, by: name,
+                                   why: anchors?.shared(thisText, dupText)?.why ?? "nearly the same words")
+                }
+            }
+
+            // Several things in one prompt: split at once, say so in one line, and Undo split puts it back (IR5).
+            if path == .split, result.split.count >= 2, result.split.allSatisfy({ $0.path != .split }) {
+                let parts = try store.splitIntoTheme(ticketId, children: result.split, by: name)
+                return IrisOutcome(questionsAsked: 0, suggestionStored: false, status: try store.ticket(id: ticketId)?.status ?? .draft,
+                                   split: parts.map(\.id))
+            }
+
+            // At most one question, and the rounds are capped (IR10). A low-stakes one carries her default and a deadline.
+            var asks: [Ask] = []
             let rounds = try store.events(ticketId: ticketId, kinds: ["status"]).filter {
                 $0.payload["from"]?.stringValue == Status.checking.rawValue && $0.payload["to"]?.stringValue == Status.needsAnswers.rawValue
             }.count
-            let mayAsk = rounds < maxRounds
-            let config = try store.project(id: t.projectId)?.config
-            var asks: [Ask] = []
-
-            // What she is sure of is filed now.
-            var filing = Filing()
-            let path = result.effectivePath
-            if let path, path != .split {
-                if result.isSure("path") || !mayAsk { filing.path = path }
-                else { asks.append(fieldQuestion(QuestionPurpose.path, "Is this a \(path.displayName.lowercased())?", guess: path.displayName,
-                                                 others: alternatives(to: path).map(\.displayName))) }
-            }
-            if let r = result.rewrite {
-                filing.title = r.title.isEmpty ? nil : r.title
-                filing.body = r.body.isEmpty ? nil : r.body
-            }
-            if let area = result.area, let known = config?.areas.first(where: { $0.name.caseInsensitiveCompare(area) == .orderedSame }) {
-                if result.isSure("area") || !mayAsk { filing.area = known.name }
-                else {
-                    let others = (config?.areas ?? []).map(\.name).filter { $0 != known.name }.prefix(2)
-                    asks.append(fieldQuestion(QuestionPurpose.area, "Which part of the app is this about?", guess: known.name, others: Array(others)))
+            if rounds < maxRounds, let q = result.questions.first {
+                let low = q.about == nil && q.stakes == QuestionStakes.low && !q.suggestions.isEmpty
+                var payload: [String: JSONValue] = [:]
+                if let about = q.about { payload["about"] = .string(about) }
+                if q.rerun { payload["rerun"] = .bool(true) }
+                var text = q.text
+                if low, let fallback = q.suggestions.first {
+                    let deadline = Int(Date().timeIntervalSince1970) + QuestionStakes.waitSeconds
+                    payload["stakes"] = .string(QuestionStakes.low); payload["default"] = .string(fallback); payload["by"] = .int(deadline)
+                    text += " If you do not answer in \(QuestionStakes.waitSeconds / 60) minutes I will go ahead with \u{201C}\(fallback)\u{201D}."
+                } else {
+                    payload["stakes"] = .string(QuestionStakes.high)
+                    text += " I will wait for your answer."
                 }
+                asks.append(Ask(text: text, suggestions: q.suggestions, purpose: q.about == nil ? nil : QuestionPurpose.conflict, payload: .object(payload)))
             }
-            filing.priority = result.priority.flatMap(TicketPriority.value)
-            filing.verify = result.verify
-            if let key = result.project, let target = try store.projects().first(where: { $0.key == key }), target.id != t.projectId,
-               try store.canMoveProject(t, to: target.id) {
-                if result.isSure("project") || !mayAsk { filing.projectId = target.id }
-                else { asks.append(fieldQuestion(QuestionPurpose.project, "Does this belong to \(target.name)?", guess: target.key, others: [IrisChoices.keepProject])) }
-            }
-            filing.related = result.related.compactMap { (try? store.resolve($0))?.id }.filter { $0 != t.id }
-            filing.blocks = result.blocks.compactMap { (try? store.resolve($0))?.id }.filter { $0 != t.id }
-            if let ref = result.parent, let parent = try? store.resolve(ref), parent.type == .theme { filing.parentId = parent.id }
-            filing.specTouches = result.specTouches
-            try store.file(ticketId, filing, by: name)
-
-            // A plain repeat is closed onto the original; a likely one is asked (decision WF-T5).
-            if let ref = result.duplicateOf, let dup = try? store.resolve(ref), dup.id != t.id, !dup.status.isTerminal || dup.status == .done {
-                if result.duplicateSure {
-                    let closed = try store.closeAsDuplicate(ticketId, of: dup.id, by: name)
-                    return IrisOutcome(questionsAsked: 0, suggestionStored: false, status: closed.status)
-                }
-                if mayAsk {
-                    asks.insert(Ask(text: "Is this the same as \(dup.displayNumber) \(dup.title)?", suggestions: [IrisChoices.duplicateYes, IrisChoices.duplicateNo],
-                                    purpose: QuestionPurpose.duplicate, payload: ["of": .int(dup.id)]), at: 0)
-                }
-            }
-            // Several things in one prompt: one card to confirm the split (decision WF-T4).
-            if path == .split, result.split.count >= 2, mayAsk {
-                let names = result.split.map(\.title).joined(separator: "; ")
-                let children: JSONValue = .array(result.split.map { ["title": .string($0.title), "body": .string($0.body),
-                                                                    "path": $0.path.map { .string($0.rawValue) } ?? .null] })
-                asks.insert(Ask(text: "This reads as \(result.split.count) separate things: \(names). Split it into a Theme with one ticket each?",
-                                suggestions: [IrisChoices.splitYes, IrisChoices.splitNo], purpose: QuestionPurpose.split, payload: ["children": children]), at: 0)
-            }
-            // Her own questions; a clash with a decision or a component says what it is about (WF-T6, WF-T8).
-            if mayAsk {
-                for q in result.questions {
-                    asks.append(Ask(text: q.text, suggestions: q.suggestions, purpose: q.about == nil ? nil : QuestionPurpose.conflict,
-                                    payload: q.about.map { ["about": .string($0)] }))
-                }
-            }
-            asks = Array(asks.prefix(IrisPrompt.maxQuestions))
             // The first question moves the ticket to Needs answers, by the agent.
             for a in asks { try store.ask(ticketId, text: a.text, suggestions: a.suggestions, by: name, actor: .agent, purpose: a.purpose, payload: a.payload) }
 

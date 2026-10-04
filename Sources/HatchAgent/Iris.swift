@@ -60,6 +60,8 @@ public struct VettingRequest: Codable, Equatable, Sendable {
     public var components: [String]? = nil
     /// Screenshots on the ticket as files on this Mac; Iris looks at them where the provider can (decision WF-C5).
     public var screenshots: [String]? = nil
+    /// True when the owner undid a split of this ticket: Iris must not split it again (IR5).
+    public var noSplit: Bool? = nil
 
     public init(ticket: TicketInfo, similar: [Candidate] = [], specHits: [SpecHit] = [], areas: [AreaInfo] = []) {
         self.ticket = ticket; self.similar = similar; self.specHits = specHits; self.areas = areas
@@ -68,21 +70,27 @@ public struct VettingRequest: Codable, Equatable, Sendable {
     /// Gathers the candidates from the store: up to 8 similar tickets, 8 Spec items, 5 decisions and the components.
     public static func build(store: HatchStore, ticketId: Int) throws -> VettingRequest {
         guard let t = try store.ticket(id: ticketId) else { throw StoreError.notFound("ticket \(ticketId)") }
-        let text = t.title + " " + t.body
-        let similar = try store.similarTickets(projectId: t.projectId, title: t.title, body: t.body, excluding: t.id, limit: 8)
-            .filter { $0.ticket.status != .dropped }
+        // Her own earlier reading is not the owner's text: a second check starts from the owner's words.
+        let words = IrisReading.split(t.body).words
+        let text = t.title + " " + words
+        // A ticket is never compared with the Theme it was split from or its sibling parts (decision IR6).
+        var family: Set<Int> = Set(t.parentId.map { [$0] } ?? [])
+        if let parent = t.parentId { family.formUnion(try store.tickets(TicketFilter(parentId: parent)).map(\.id)) }
+        family.formUnion(try store.tickets(TicketFilter(parentId: t.id)).map(\.id))
+        let similar = try store.similarTickets(projectId: t.projectId, title: t.title, body: words, excluding: t.id, limit: 8 + family.count)
+            .filter { $0.ticket.status != .dropped && !family.contains($0.ticket.id) }.prefix(8)
         let hits = try store.searchSpec(projectId: t.projectId, query: text, limit: 8)
         let project = try store.project(id: t.projectId)
         let config = project?.config
         let decided = try store.searchDecisions(projectId: t.projectId, query: text, area: t.area, limit: 5)
         var request = VettingRequest(
-            ticket: .init(number: t.displayNumber, type: t.type.rawValue, title: t.title, body: Text.clip(t.body, 2000), area: t.area),
+            ticket: .init(number: t.displayNumber, type: t.type.rawValue, title: t.title, body: Text.clip(words, 2000), area: t.area),
             similar: similar.map { .init(number: $0.ticket.displayNumber, type: $0.ticket.type.rawValue, status: $0.ticket.status.rawValue,
                                          title: $0.ticket.title, snippet: Text.clip($0.ticket.body.replacingOccurrences(of: "\n", with: " "), 160)) },
             specHits: hits.map { .init(code: $0.code, text: Text.clip($0.text, 200)) },
             areas: (config?.areas ?? []).map { .init(name: $0.name, specPrefix: $0.specPrefix) })
         request.answered = try store.questions(ticketId: ticketId).compactMap { q in
-            q.answer.map { Answered(question: Text.clip(q.text, 200), answer: Text.clip($0, 300)) }
+            q.answer.map { Answered(question: Text.clip(IrisApplier.plainQuestion(q.text), 200), answer: Text.clip($0, 300)) }
         }
         request.decisions = decided.map { .init(number: $0.ticketNumber, kind: $0.kind.rawValue, title: Text.clip($0.title.isEmpty ? $0.summary : $0.title, 120),
                                                 why: Text.clip($0.reason ?? $0.summary, 160)) }
@@ -98,6 +106,7 @@ public struct VettingRequest: Codable, Equatable, Sendable {
         let shots = try store.attachments(ticketId: ticketId).filter { $0.kind == "screenshot" }.prefix(3)
         let files = shots.compactMap { store.attachmentFile($0)?.path }.filter { FileManager.default.fileExists(atPath: $0) }
         if !files.isEmpty { request.screenshots = Array(files) }
+        if try store.splitWasUndone(ticketId) { request.noSplit = true }
         return request
     }
 }
@@ -109,7 +118,14 @@ public struct VettingResult: Codable, Equatable, Sendable {
         public var suggestions: [String]
         /// What the question is about when it is a clash: "decision #12" or "component PrimaryButton" (WF-T6, WF-T8).
         public var about: String?
-        public init(text: String, suggestions: [String] = [], about: String? = nil) { self.text = text; self.suggestions = suggestions; self.about = about }
+        /// "low": a wrong guess is cheap, so Iris goes ahead with her first suggestion if the owner does not answer.
+        /// "high" (and any clash): the ticket waits (decision IR12).
+        public var stakes: String?
+        /// True when the answer could change what kind of work the ticket is, so Iris must run again after it (IR13).
+        public var rerun: Bool = false
+        public init(text: String, suggestions: [String] = [], about: String? = nil, stakes: String? = nil, rerun: Bool = false) {
+            self.text = text; self.suggestions = suggestions; self.about = about; self.stakes = stakes; self.rerun = rerun
+        }
     }
     public struct Rewrite: Codable, Equatable, Sendable {
         public var title: String
@@ -145,8 +161,14 @@ public struct VettingResult: Codable, Equatable, Sendable {
     public var parent: String?
     /// Tickets this one must finish before.
     public var blocks: [String] = []
-    /// True when Iris is sure the duplicate is the same request (WF-T5).
+    /// True when the ticket names the same screen and the same problem as the duplicate (WF-T5, IR7).
     public var duplicateSure: Bool = false
+    /// Which screen and which problem, in one line. Without it a duplicate is never closed.
+    public var duplicateWhy: String?
+    /// One line for each related ticket, keyed by the number she gave: the screen or file both name (IR9).
+    public var relatedWhy: [String: String] = [:]
+    /// What she read into the ticket that the owner did not say (IR2).
+    public var assumed: [String] = []
     /// The parts of a prompt with several things in it (WF-T4).
     public var split: [FilingChild] = []
     /// How sure Iris is about a field, 0 to 1: "path", "area", "project". Missing means sure.
@@ -194,33 +216,39 @@ public enum IrisPrompt {
     /// Below this confidence a field becomes a question with Iris's guess picked (decision WF-T3).
     public static let sureThreshold = 0.7
 
-    /// A compact prompt that demands one JSON object and nothing else.
+    /// A compact prompt that demands one JSON object and nothing else. The rules at the top come from the owner's answers on
+    /// the Iris scenarios page (decisions IR1 to IR15).
     public static func make(_ r: VettingRequest) -> String {
         let paths = WorkPath.allCases.map(\.rawValue).joined(separator: ", ")
         var s = """
-        You are Iris, who files new tickets in Hatch. The owner wrote the ticket below as a plain prompt. Work out what it is and file it, so the owner does not have to. Reply with ONE JSON object and nothing else (no prose, no code fence).
+        You are Iris, who files new tickets in Hatch. The owner wrote the ticket below as a plain prompt. File it so the owner does not have to. Reply with ONE JSON object and nothing else (no prose, no code fence).
+
+        Rules that outrank everything below:
+        - Use only what the owner wrote, their answers, the screenshots and the lists below. Never invent a fact, a name, a step, a number or a mark on a screenshot. Describe only what you can see. What you read into the ticket that the owner did not say goes in "assumed".
+        - Decide; do not ask. You file the kind of work, the title and the reading yourself, and the owner can change them. Ask only if two readings of the ticket lead to different work, or it would undo a decision listed below. At most one question. Never ask how to build something (the builder decides), what kind of ticket it is, what the owner already said, or what is visible in a screenshot.
 
         Fields:
         - path: one of \(paths). question: asks, wonders, compares. visual: how something looks, is laid out or feels. approaches: changes behaviour or structure with more than one sensible way. bug: something wrong with a known cause (steps, an error, a crash log). investigate: something wrong whose cause is unclear (slow, sometimes, after a while). small: one obvious change. chore: maintenance (dependency, CI, docs, Spec text). split: several separate things.
-        - rewrite: the ticket in its shape, keeping every fact and inventing nothing. Bug and investigate: Steps, Expected, Actual. small and chore: Element, Change. visual and approaches: What, Why, Scope. question: the question and its context. Give "title" (short, plain), "body" and "changes".
-        - area: one of the areas below, or "" if none fits. priority: urgent (crash, data loss, security), high, normal or low. verify: preview (it can be seen), numbers (speed), or ci (tests cover it).
-        - project: only if the ticket clearly belongs to one of the other projects below: its key.
-        - confidence: how sure you are, 0 to 1, of "path", "area" and "project". Be honest; below \(sureThreshold) the owner is asked with your guess picked.
-        - questions: only what blocks the work and cannot be guessed. At most \(maxQuestions). Each has "text" and 2 to \(maxSuggestions) short "suggestions", your best guess first. None is fine and usual.
-        - If the ticket would undo or contradict an earlier decision below, ask about it, naming the decision ("about": "decision #12"), with suggestions to keep the decision or replace it.
-        - For visual work, check it against the components below: if it changes a shared component, or needs a colour, font or size the components do not have or that differs from one, ask about it ("about": "component NAME"), with suggestions such as changing the component everywhere, adding a variant here, or keeping the component.
-        - related: numbers of related tickets from the list below. parent: a Theme from the list it belongs under. blocks: tickets it must finish before.
-        - duplicateOf: a ticket number only if it is very probably the same request; duplicateSure: true only if it is plainly the same thing said again.
-        - split: only for path split, the separate parts as [{"title","body","path"}], 2 to 6 of them.
+        - title: short and plain, in the owner's own words where you can.
+        - reading: your reading of the ticket in its shape, kept apart from the owner's words. Bug and investigate: Steps, Expected, Actual. small and chore: Element, Change. visual and approaches: What, Why, Scope. question: the question and its context. Only facts from the owner, their answers or the screenshots.
+        - assumed: a list of what you read into the ticket that was not said. [] if nothing.
+        - area: one of the areas below, or "" if none fits. priority: low or normal; never high or urgent, the owner sets those. verify: preview (it can be seen), numbers (speed), or ci (tests cover it).
+        - confidence: how sure you are, 0 to 1, of "path". It only marks a weak guess for the owner to check.
+        - questions: usually none. Each has "text", 2 to \(maxSuggestions) short "suggestions" with your best answer first, "stakes" ("low" if a wrong guess is cheap and your first suggestion is fine to go ahead with, "high" if not), and "rerun": true only if the answer could change what kind of work this is.
+        - If the ticket would undo or contradict an earlier decision below, ask about it, naming the decision ("about": "decision #12"), stakes high, with suggestions to keep the decision or replace it.
+        - If a visual change would alter a component listed below for everyone who uses it, ask once ("about": "component NAME"), stakes high. Do not ask about a colour, font or size the list lacks; the builder adds those.
+        - Do not list related tickets: Hatch links tickets that name the same screen or file by itself.
+        - duplicateOf: a ticket number from the list below if it may be the same request. duplicateSure: true only if this ticket names the same screen and the same problem as that ticket; then duplicateWhy says which screen and which problem in one line.
+        - split: only for path split, the separate parts as [{"title","body","path"}], 2 to 6 of them, each part's path never split.\(r.noSplit == true ? " The owner undid a split of this ticket: do not use path split." : "")
         - specTouches: Spec codes from the list below that this ticket would change.
 
-        Shape: {"path":"","rewrite":{"title":"","body":"","changes":[""]},"area":"","priority":"normal","verify":"","project":"","confidence":{"path":1,"area":1,"project":1},"questions":[{"text":"","suggestions":[""],"about":""}],"related":[""],"parent":"","blocks":[""],"duplicateOf":"","duplicateSure":false,"split":[],"specTouches":[""]}
+        Shape: {"path":"","title":"","reading":"","assumed":[""],"area":"","priority":"normal","verify":"","confidence":{"path":1},"questions":[{"text":"","suggestions":[""],"stakes":"low","about":"","rerun":false}],"duplicateOf":"","duplicateSure":false,"duplicateWhy":"","split":[],"specTouches":[""]}
 
         Ticket \(r.ticket.number)\(r.ticket.area.map { " (area \($0))" } ?? ""): \(r.ticket.title)
         \(r.ticket.body.isEmpty ? "(no more text)" : r.ticket.body)
         """
         if let shots = r.screenshots, !shots.isEmpty {
-            s += "\n\nScreenshots (red marks point at what matters): " + shots.joined(separator: ", ")
+            s += "\n\nScreenshots (attached to this message; any marks on them point at what matters): " + shots.joined(separator: ", ")
         }
         if !r.areas.isEmpty {
             s += "\n\nAreas: " + r.areas.map { $0.name + ($0.specPrefix.map { " (\($0))" } ?? "") }.joined(separator: ", ")
@@ -249,7 +277,8 @@ public enum IrisPrompt {
 /// Reads Iris's answer. Models wrap JSON in prose and code fences, so this finds the object instead of trusting the text.
 public enum IrisResult {
     static let knownKeys: Set<String> = ["questions", "rewrite", "typeSuggestion", "type_suggestion", "related", "specTouches", "spec_touches",
-                                         "duplicateOf", "duplicate_of", "path", "area", "priority", "split", "confidence"]
+                                         "duplicateOf", "duplicate_of", "path", "area", "priority", "split", "confidence", "reading", "assumed", "title",
+                                         "duplicateWhy"]
 
     public static func parse(_ text: String) throws -> VettingResult {
         let objects = jsonObjects(in: text)
@@ -329,8 +358,10 @@ public enum IrisResult {
                 guard let d = item as? [String: Any] else { throw IrisError.invalid("each question must be an object with \"text\"") }
                 let text = ((d["text"] ?? d["question"]) as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if text.isEmpty { continue }
+                let stakes = Self.text(d["stakes"])?.lowercased()
                 result.questions.append(.init(text: text, suggestions: Array(strings(d["suggestions"]).prefix(IrisPrompt.maxSuggestions)),
-                                              about: Self.text(d["about"])))
+                                              about: Self.text(d["about"]), stakes: stakes == QuestionStakes.low || stakes == QuestionStakes.high ? stakes : nil,
+                                              rerun: (d["rerun"] as? Bool) ?? false))
             }
             result.questions = Array(result.questions.prefix(IrisPrompt.maxQuestions))
         }
@@ -342,6 +373,11 @@ public enum IrisResult {
             if title.isEmpty && body.isEmpty { throw IrisError.invalid("\"rewrite\" has neither a title nor a body") }
             result.rewrite = .init(title: title, body: body, changes: strings(d["changes"]))
         }
+        // The newer shape: a title, her reading and what she assumed. It fills `rewrite`, which the applier keeps apart from
+        // the owner's words.
+        let newTitle = text(o["title"]) ?? "", reading = text(o["reading"]) ?? ""
+        if result.rewrite == nil, !newTitle.isEmpty || !reading.isEmpty { result.rewrite = .init(title: newTitle, body: reading) }
+        result.assumed = strings(o["assumed"])
         if let ts = o["typeSuggestion"] ?? o["type_suggestion"], !(ts is NSNull), !isBlank(ts) {
             guard let d = ts as? [String: Any], let raw = d["type"] as? String else { throw IrisError.invalid("\"typeSuggestion\" needs a \"type\"") }
             guard let type = TicketType(rawValue: raw.lowercased().trimmingCharacters(in: .whitespaces)) else {
@@ -361,10 +397,18 @@ public enum IrisResult {
         result.project = text(o["project"])
         result.parent = number(o["parent"])
         result.blocks = strings(o["blocks"])
-        result.related = strings(o["related"])
+        // Related tickets are `[{"ticket","why"}]`; plain numbers are read too, but without a reason they are not linked.
+        for item in (o["related"] as? [Any]) ?? [] {
+            if let d = item as? [String: Any], let ref = number(d["ticket"] ?? d["number"]) {
+                result.related.append(ref)
+                if let why = text(d["why"]) { result.relatedWhy[ref] = why }
+            } else if let ref = number(item) { result.related.append(ref) }
+        }
+        if o["related"] is String, let ref = number(o["related"]) { result.related.append(ref) }
         result.specTouches = strings(o["specTouches"] ?? o["spec_touches"])
         result.duplicateOf = number(o["duplicateOf"] ?? o["duplicate_of"])
         result.duplicateSure = (o["duplicateSure"] as? Bool) ?? (o["duplicate_sure"] as? Bool) ?? false
+        result.duplicateWhy = text(o["duplicateWhy"])
         if let parts = o["split"] as? [Any] {
             result.split = parts.compactMap { item -> FilingChild? in
                 guard let d = item as? [String: Any], let title = text(d["title"]) else { return nil }

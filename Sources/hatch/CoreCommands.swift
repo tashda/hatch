@@ -107,14 +107,15 @@ enum CoreCommands {
         c.out.emit(json, text: text)
     }
 
-    // hatch ticket new|list|show|link
+    // hatch ticket new|list|show|link|undo-split
     static func ticket(_ c: Context) throws {
         switch c.args.pos(1) {
         case "new": try ticketNew(c)
         case "list": try ticketList(c)
         case "show": try ticketShow(c)
         case "link": try ticketLink(c)
-        default: throw CLIError("Usage: hatch ticket new|list|show|link ...")
+        case "undo-split": try ticketUndoSplit(c)
+        default: throw CLIError("Usage: hatch ticket new|list|show|link|undo-split ...")
         }
     }
 
@@ -153,6 +154,13 @@ enum CoreCommands {
         json["notes"] = .array(notes.map { ["kind": .string($0.kind.rawValue), "author": .string($0.author), "body": .string($0.body)] })
         json["questions"] = .array(questions.map { ["id": .int($0.id), "text": .string($0.text), "answer": $0.answer.map { .string($0) } ?? .null] })
         c.out.emit(.object(json), text: text)
+    }
+
+    // hatch ticket undo-split #151: puts a split back as one ticket (decision IR5). Refused once a part has started.
+    static func ticketUndoSplit(_ c: Context) throws {
+        let t = try c.ticket(c.args.pos(2))
+        let back = try c.store.undoSplit(t.id)
+        c.out.emit(["ticket": .string(back.displayNumber), "status": .string(back.status.rawValue)], text: "\(back.displayNumber) is one ticket again; Iris checks it without splitting.")
     }
 
     static func ticketLink(_ c: Context) throws {

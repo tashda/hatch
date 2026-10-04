@@ -61,6 +61,16 @@ final class IrisParseTests: XCTestCase {
         XCTAssertEqual(r.split, [FilingChild(title: "A", path: .visual)])
         XCTAssertEqual(r.questions.first?.about, "decision #12")
     }
+    func testTheNewShapeFillsTheReadingAssumptionsAndReasons() throws {
+        let r = try IrisResult.parse(##"{"path":"visual","title":"Specs empty state","reading":"What: narrow card.","assumed":["the card is meant to be wide"],"related":[{"ticket":"#4","why":"same empty state"},{"ticket":"#9"},"#11"],"duplicateOf":"#4","duplicateSure":true,"duplicateWhy":"same screen, same problem","questions":[{"text":"Q?","suggestions":["a","b"],"stakes":"low","rerun":true}]}"##)
+        XCTAssertEqual(r.rewrite, .init(title: "Specs empty state", body: "What: narrow card."))
+        XCTAssertEqual(r.assumed, ["the card is meant to be wide"])
+        XCTAssertEqual(r.related, ["#4", "#9", "#11"])
+        XCTAssertEqual(r.relatedWhy, ["#4": "same empty state"], "a link with no reason carries none, so it is not made")
+        XCTAssertEqual(r.duplicateWhy, "same screen, same problem")
+        XCTAssertEqual(r.questions.first?.stakes, QuestionStakes.low)
+        XCTAssertEqual(r.questions.first?.rerun, true)
+    }
     func testPathNamesModelsUse() {
         XCTAssertEqual(WorkPath.parse("Bug, cause known"), .bug)
         XCTAssertEqual(WorkPath.parse("bug_known"), .bug)
@@ -108,6 +118,31 @@ final class IrisPromptTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Notifications (NOTIF)"))
         XCTAssertFalse(prompt.contains("\(t.displayNumber) [proposal"), "the ticket is not its own candidate")
     }
+    func testThePromptStatesTheRulesAndNeverAssumesRedMarks() throws {
+        let (store, p) = try Fixture.store()
+        let t = try Fixture.ticket(store, p, title: "Panel odd", body: "Looks odd.")
+        let prompt = IrisPrompt.make(try VettingRequest.build(store: store, ticketId: t.id))
+        XCTAssertTrue(prompt.contains("Never invent a fact"))
+        XCTAssertTrue(prompt.contains("At most one question"))
+        XCTAssertTrue(prompt.contains("Never ask how to build"))
+        XCTAssertTrue(prompt.contains("never high or urgent"))
+        XCTAssertFalse(prompt.contains("red marks point at what matters"))
+    }
+    func testASecondCheckStartsFromTheOwnersWordsNotHerEarlierReading() throws {
+        let (store, p) = try Fixture.store()
+        let t = try Fixture.ticket(store, p, title: "Panel odd", body: "Looks odd.")
+        try store.update(t.id, body: IrisReading.compose(words: "Looks odd.", reading: "What: invented detail.", assumed: []), actor: .agent)
+        let request = try VettingRequest.build(store: store, ticketId: t.id)
+        XCTAssertEqual(request.ticket.body, "Looks odd.")
+    }
+    func testAParentAndItsPartsAreNotEachOthersCandidates() throws {
+        let (store, p) = try Fixture.store()
+        let parent = try Fixture.ticket(store, p, type: .theme, title: "Footer hover is unstable", body: "Footer hover circles jump", status: .draft)
+        let a = try store.createTicket(projectId: p.id, type: .bug, title: "Footer hover circles jump", body: "Footer hover circles jump", parentId: parent.id, status: .checking, actor: .hatch)
+        _ = try store.createTicket(projectId: p.id, type: .bug, title: "Footer hover log redraws", body: "Footer hover log", parentId: parent.id, status: .checking, actor: .hatch)
+        let request = try VettingRequest.build(store: store, ticketId: a.id)
+        XCTAssertTrue(request.similar.isEmpty, "IR6: it would otherwise ask 'same as \(parent.displayNumber)?' about its own parent")
+    }
     func testLongBodiesAreCut() throws {
         let (store, p) = try Fixture.store()
         let t = try Fixture.ticket(store, p, body: String(repeating: "word ", count: 1000))
@@ -130,13 +165,24 @@ final class IrisApplierTests: XCTestCase {
 
     func status() throws -> Status { try store.ticket(id: t.id)!.status }
 
-    func testQuestionsGoToTheOwner() throws {
+    /// A small app: a Toast screen, a Footer screen, and a Decide screen that shows "Needs a sitting".
+    var anchors: SourceAnchors {
+        SourceAnchors(files: [
+            ("App/Screens/ToastView.swift", "struct ToastView: View {}"),
+            ("App/Components/FooterParts.swift", "struct FooterLog: View {}"),
+            ("App/Screens/DecideView.swift", "struct DecideView: View { Text(\"Needs a sitting\") }"),
+        ])
+    }
+
+
+    func testOneQuestionAtMostGoesToTheOwner() throws {
         let out = try IrisApplier.apply(VettingResult(questions: [.init(text: "Which toast?", suggestions: ["A", "B"]), .init(text: "Which OS?")]), to: t.id, store: store)
-        XCTAssertEqual(out.questionsAsked, 2)
+        XCTAssertEqual(out.questionsAsked, 1, "IR10: one question at most")
         XCTAssertEqual(try status(), .needsAnswers)
         let qs = try store.questions(ticketId: t.id)
-        XCTAssertEqual(qs.map(\.askedBy), ["Iris", "Iris"])
+        XCTAssertEqual(qs.map(\.askedBy), ["Iris"])
         XCTAssertEqual(qs[0].suggestions, ["A", "B"])
+        XCTAssertTrue(qs[0].text.hasSuffix("I will wait for your answer."), "a question with no stakes named waits, and says so")
     }
 
     func testNothingToSayMovesToReadyByHatch() throws {
@@ -146,14 +192,17 @@ final class IrisApplierTests: XCTestCase {
         XCTAssertEqual(move.actor, "hatch")
     }
 
-    func testIrisFilesWhatSheIsSureOf() throws {
-        let other = try Fixture.ticket(store, project, type: .bug, title: "Toast timer", body: "x", status: .draft)
-        var r = VettingResult(rewrite: .init(title: "Toast clipped at large text", body: "Steps: ...", changes: ["structure"]),
+    func testIrisFilesWhatSheDecidesAndNeverSetsHighPriority() throws {
+        let other = try Fixture.ticket(store, project, type: .bug, title: "Toast timer", body: "The toast disappears too fast.", status: .draft)
+        var r = VettingResult(rewrite: .init(title: "Toast clipped at large text", body: "Steps: ...", changes: []),
                               related: ["new-\(other.id)"], specTouches: ["NOTIF-1.2"])
+        r.relatedWhy = ["new-\(other.id)": "her own reason"]
+        r.assumed = ["the toast is the notification toast"]
         r.path = .bug
         r.area = "notifications"
-        r.priority = "high"
-        let out = try IrisApplier.apply(r, to: t.id, store: store)
+        r.priority = "urgent"
+        r.project = "echo-tools"
+        let out = try IrisApplier.apply(r, to: t.id, store: store, candidates: [other.id], anchors: anchors)
         XCTAssertEqual(out.status, .ready, "nothing to ask: filed and on its way (WF-T1)")
         let after = try store.ticket(id: t.id)!
         XCTAssertEqual(after.title, "Toast clipped at large text")
@@ -161,12 +210,28 @@ final class IrisApplierTests: XCTestCase {
         XCTAssertEqual(after.path, .bug)
         XCTAssertEqual(after.verify, .preview)
         XCTAssertEqual(after.area, "Notifications")
-        XCTAssertEqual(after.priority, TicketPriority.high)
+        XCTAssertEqual(after.priority, TicketPriority.normal, "IR4: never High or Urgent; the owner sets those")
+        XCTAssertEqual(after.projectId, project.id, "IR4: she never moves a ticket to another project")
         XCTAssertEqual(try store.links(ticketId: t.id).map { $0.link.kind }, [.related])
         let filed = try XCTUnwrap(try store.lastFiling(ticketId: t.id))
         XCTAssertEqual(filed.by, "Iris")
         XCTAssertEqual(filed.fields["path"]?["to"]?.stringValue, "bug")
-        XCTAssertEqual(filed.fields["priority"]?["to"]?.stringValue, "High")
+        XCTAssertEqual(filed.fields["relatedWhy"]?["\(other.id)"]?.stringValue, "both name the toast screen", "the reason is Hatch's, from what both tickets name, not hers")
+        let link = try XCTUnwrap(try store.events(ticketId: t.id, kinds: ["link"]).first)
+        XCTAssertEqual(link.actor, "Iris", "IR8: history says who linked")
+        XCTAssertFalse(try store.events(ticketId: other.id, kinds: ["link"]).isEmpty, "the reason is recorded on both tickets")
+    }
+
+    func testTheOwnersWordsStayTheTicketAndHerReadingIsALabelledSection() throws {
+        var r = VettingResult(rewrite: .init(title: "Toast clipped", body: "What: the toast is cut off.", changes: []))
+        r.assumed = ["it happens at large text sizes"]
+        try IrisApplier.apply(r, to: t.id, store: store)
+        let body = try XCTUnwrap(try store.ticket(id: t.id)?.body)
+        let parts = IrisReading.split(body)
+        XCTAssertEqual(parts.words, "Toast broken\n\nIt looks wrong.", "IR2: the owner's words, as written")
+        XCTAssertEqual(parts.reading, "What: the toast is cut off.\n\nAssumed: it happens at large text sizes")
+        XCTAssertEqual(IrisReading.ownerWords(title: "Whenever I go to Specs it looks odd", body: ""), "Whenever I go to Specs it looks odd")
+        XCTAssertEqual(IrisReading.ownerWords(title: "In components I have a bottom…", body: "In components I have a bottom bar"), "In components I have a bottom bar")
     }
 
     func testThePathSetsTheType() throws {
@@ -184,78 +249,125 @@ final class IrisApplierTests: XCTestCase {
         XCTAssertEqual(try store.ticket(id: t2.id)?.verify, .ci)
     }
 
-    func testAnUnsureAreaIsAskedWithHerGuessFirstAndAppliedOnTheAnswer() throws {
-        var r = VettingResult()
-        r.path = .bug
-        r.area = "Notifications"
-        r.confidence = ["area": 0.4]
-        let out = try IrisApplier.apply(r, to: t.id, store: store)
-        XCTAssertEqual(out.questionsAsked, 1)
-        let q = try store.questions(ticketId: t.id)[0]
-        XCTAssertEqual(q.purpose, QuestionPurpose.area)
-        XCTAssertEqual(q.suggestions.first, "Notifications", "her guess is first (WF-T3)")
-        try store.update(t.id, actor: .owner, area: .some(nil))
-        let after = try store.answer(questionId: q.id, text: "Notifications")
-        XCTAssertEqual(after.area, "Notifications")
-        XCTAssertEqual(after.status, .ready, "only field questions: filed without a second check")
-    }
-
-    func testAnUnsurePathIsAsked() throws {
+    func testAnUnsureAreaOrPathIsFiledNotAsked() throws {
         var r = VettingResult()
         r.path = .investigate
-        r.confidence = ["path": 0.5]
-        try IrisApplier.apply(r, to: t.id, store: store)
-        let q = try store.questions(ticketId: t.id)[0]
-        XCTAssertEqual(q.purpose, QuestionPurpose.path)
-        XCTAssertEqual(q.suggestions.first, WorkPath.investigate.displayName)
-        XCTAssertNil(try store.ticket(id: t.id)?.path, "not filed until answered")
-        let after = try store.answer(questionId: q.id, text: WorkPath.bug.displayName)
-        XCTAssertEqual(after.path, .bug)
+        r.area = "Notifications"
+        r.confidence = ["path": 0.4, "area": 0.4]
+        let out = try IrisApplier.apply(r, to: t.id, store: store)
+        XCTAssertEqual(out.questionsAsked, 0, "IR3: she never asks the owner to pick a category")
+        XCTAssertEqual(out.status, .ready)
+        let after = try store.ticket(id: t.id)!
+        XCTAssertEqual(after.path, .investigate)
+        XCTAssertEqual(after.area, "Notifications")
+        let filed = try XCTUnwrap(try store.events(ticketId: t.id, kinds: ["filed"]).last)
+        XCTAssertEqual(filed.payload["guessed"]?.arrayValue?.compactMap(\.stringValue), ["path"], "a weak guess is marked, so the owner can check it")
     }
 
-    func testAPlainDuplicateIsClosedOntoTheOriginal() throws {
-        let original = try Fixture.ticket(store, project, type: .bug, title: "Toast clipped", body: "x", status: .draft)
+    func testOnlyTicketsSheWasShownCanBeClosedOnto() throws {
+        let hidden = try Fixture.ticket(store, project, type: .bug, title: "Toast broken", body: "It looks wrong.", status: .draft)
+        var r = VettingResult(duplicateOf: "new-\(hidden.id)")
+        r.duplicateSure = true; r.duplicateWhy = "same screen, same problem"
+        let out = try IrisApplier.apply(r, to: t.id, store: store, candidates: [], anchors: anchors)
+        XCTAssertEqual(out.status, .ready, "IR8: a ticket she was not shown is not closed onto, even when the words match")
+        XCTAssertTrue(try store.links(ticketId: t.id).isEmpty)
+    }
+
+    func testAtMostTwoRelatedLinksTheStrongestFirst() throws {
+        let weak = try Fixture.ticket(store, project, type: .bug, title: "Toast odd", body: "A toast.", status: .draft)
+        let strong = try Fixture.ticket(store, project, type: .bug, title: "Toast timer", body: "The \"Needs a sitting\" toast.", status: .draft)
+        let third = try Fixture.ticket(store, project, type: .bug, title: "Toast again", body: "Another toast.", status: .draft)
+        let mine = try Fixture.ticket(store, project, type: .bug, title: "Toast broken", body: "The toast says \"Needs a sitting\" and looks wrong.", status: .draft)
+        try store.move(mine.id, to: .checking, actor: .owner)
+        try IrisApplier.apply(VettingResult(), to: mine.id, store: store, candidates: [weak.id, third.id, strong.id], anchors: anchors)
+        let linked = try store.links(ticketId: mine.id).map(\.link.toId)
+        XCTAssertEqual(linked.count, 2, "IR9: two at most")
+        XCTAssertTrue(linked.contains(strong.id), "a shared quoted label outranks a shared screen word")
+    }
+
+    func testAShortcutWordAloneNeverLinksTwoTickets() throws {
+        let unlike = try Fixture.ticket(store, project, type: .tweak, title: "Another shortcut", body: "Add a keyboard shortcut to open the page.", status: .draft)
+        let mine = try Fixture.ticket(store, project, type: .tweak, title: "Jump to it", body: "I want a keyboard shortcut to jump straight to the page.", status: .draft)
+        try store.move(mine.id, to: .checking, actor: .owner)
+        try IrisApplier.apply(VettingResult(related: ["new-\(unlike.id)"]), to: mine.id, store: store, candidates: [unlike.id], anchors: anchors)
+        XCTAssertTrue(try store.links(ticketId: mine.id).isEmpty, "everyday words prove nothing; only a named screen, a file or a quoted label does")
+    }
+
+    func testARepeatIsClosedOnlyWhenHatchCanCorroborateIt() throws {
+        let original = try Fixture.ticket(store, project, type: .bug, title: "Toast clipped", body: "The toast is cut off at the edge.", status: .draft)
         var r = VettingResult(duplicateOf: "new-\(original.id)")
         r.duplicateSure = true
-        let out = try IrisApplier.apply(r, to: t.id, store: store)
-        XCTAssertEqual(out.status, .dropped, "WF-T5")
-        XCTAssertEqual(try store.links(ticketId: t.id).map { $0.link.kind }, [.duplicates])
-        XCTAssertTrue(try store.notes(ticketId: original.id).contains { $0.body.contains("It looks wrong.") }, "the prompt is kept on the original")
-        XCTAssertEqual(try store.move(t.id, to: .draft, actor: .owner).status, .draft, "Reopen undoes it")
-    }
+        let noReason = try IrisApplier.apply(r, to: t.id, store: store, candidates: [original.id], anchors: anchors)
+        XCTAssertEqual(noReason.status, .ready, "IR7: sure, but she cannot say which screen and problem: not closed")
 
-    func testALikelyDuplicateIsAsked() throws {
-        let original = try Fixture.ticket(store, project, type: .bug, title: "Toast clipped", body: "x", status: .draft)
-        try IrisApplier.apply(VettingResult(duplicateOf: "new-\(original.id)"), to: t.id, store: store)
-        let q = try store.questions(ticketId: t.id)[0]
-        XCTAssertEqual(q.purpose, QuestionPurpose.duplicate)
-        XCTAssertEqual(q.suggestions, [IrisChoices.duplicateYes, IrisChoices.duplicateNo])
-        XCTAssertEqual(try store.answer(questionId: q.id, text: IrisChoices.duplicateYes).status, .dropped)
-
-        let t2 = try Fixture.ticket(store, project, type: .bug, title: "Toast clipped again", body: "y", status: .draft)
+        let t2 = try Fixture.ticket(store, project, type: .bug, title: "Footer log slow", body: "The footer log lags.", status: .draft)
         try store.move(t2.id, to: .checking, actor: .owner)
-        try IrisApplier.apply(VettingResult(duplicateOf: "new-\(original.id)"), to: t2.id, store: store)
-        let q2 = try store.questions(ticketId: t2.id)[0]
-        XCTAssertEqual(try store.answer(questionId: q2.id, text: IrisChoices.duplicateNo).status, .ready, "kept, and filed")
+        r.duplicateWhy = "same screen, same problem"
+        let uncorroborated = try IrisApplier.apply(r, to: t2.id, store: store, candidates: [original.id], anchors: anchors)
+        XCTAssertEqual(uncorroborated.status, .ready, "her reason alone does not close a ticket: the two do not name one screen or use the same words")
+
+        let t3 = try Fixture.ticket(store, project, type: .bug, title: "Toast clipped again", body: "The toast is cut off at the edge.", status: .draft)
+        try store.move(t3.id, to: .checking, actor: .owner)
+        let out = try IrisApplier.apply(r, to: t3.id, store: store, candidates: [original.id], anchors: anchors)
+        XCTAssertEqual(out.status, .dropped, "WF-T5")
+        XCTAssertEqual(try store.links(ticketId: t3.id).map { $0.link.kind }, [.duplicates])
+        XCTAssertTrue(try store.notes(ticketId: original.id).contains { $0.body.contains("cut off at the edge") }, "the prompt is kept on the original")
+        XCTAssertEqual(try store.events(ticketId: t3.id, kinds: ["duplicate"]).last?.payload["why"]?.stringValue, "same screen, same problem")
+        XCTAssertEqual(try store.move(t3.id, to: .draft, actor: .owner).status, .draft, "Reopen undoes it")
     }
 
-    func testASplitIsConfirmedAndMakesAThemeWithChildren() throws {
+    func testALikelyDuplicateIsLinkedNotAsked() throws {
+        let original = try Fixture.ticket(store, project, type: .bug, title: "Toast clipped", body: "It looks wrong.", status: .draft)
+        let out = try IrisApplier.apply(VettingResult(duplicateOf: "new-\(original.id)"), to: t.id, store: store, candidates: [original.id], anchors: anchors)
+        XCTAssertEqual(out.questionsAsked, 0)
+        XCTAssertEqual(out.status, .ready)
+        XCTAssertEqual(try store.links(ticketId: t.id).map { $0.link.kind }, [.related], "linked, because both name the toast screen")
+    }
+
+    func testASplitHappensAtOnceAndThePartsAreNotCheckedAgain() throws {
+        try store.update(t.id, actor: .owner, area: .some("Notifications"))
         var r = VettingResult()
         r.path = .split
         r.split = [FilingChild(title: "Tabs", path: .visual), FilingChild(title: "History", path: .question), FilingChild(title: "Pinned columns", path: .visual)]
-        try IrisApplier.apply(r, to: t.id, store: store)
-        let q = try store.questions(ticketId: t.id)[0]
-        XCTAssertEqual(q.purpose, QuestionPurpose.split)
-        XCTAssertTrue(q.text.contains("Tabs; History; Pinned columns"))
-        let theme = try store.answer(questionId: q.id, text: IrisChoices.splitYes)
+        let out = try IrisApplier.apply(r, to: t.id, store: store)
+        XCTAssertEqual(out.questionsAsked, 0, "IR5: no question")
+        XCTAssertEqual(out.split.count, 3)
+        let theme = try store.ticket(id: t.id)!
         XCTAssertEqual(theme.type, .theme)
         XCTAssertEqual(theme.status, .draft)
+        XCTAssertTrue(try store.notes(ticketId: t.id).contains { $0.author == "Iris" && $0.body.hasPrefix("Split into") }, "one line says so")
         let children = try store.tickets(TicketFilter(parentId: t.id))
         XCTAssertEqual(children.map(\.title).sorted(), ["History", "Pinned columns", "Tabs"])
-        XCTAssertTrue(children.allSatisfy { $0.status == .checking }, "each child goes to Iris on its own")
+        XCTAssertTrue(children.allSatisfy { $0.status == .ready && $0.path != nil && $0.area == "Notifications" }, "IR6: filed from the split, area from the Theme, no second vetting")
+        XCTAssertTrue(try store.events(ticketId: children[0].id, kinds: ["question"]).isEmpty)
     }
 
-    func testAClashWithADecisionOrComponentIsAQuestionAndTheAnswerGoesBackToIris() throws {
+    func testUndoSplitPutsItBackAndIrisIsToldNotToSplitAgain() throws {
+        var r = VettingResult()
+        r.path = .split
+        r.split = [FilingChild(title: "Tabs", path: .visual), FilingChild(title: "History", path: .question)]
+        try IrisApplier.apply(r, to: t.id, store: store)
+        let back = try store.undoSplit(t.id)
+        XCTAssertEqual(back.status, .checking)
+        XCTAssertEqual(back.type, .question)
+        XCTAssertNil(back.path)
+        XCTAssertTrue(try store.tickets(TicketFilter(parentId: t.id)).allSatisfy { $0.status == .dropped })
+        let request = try VettingRequest.build(store: store, ticketId: t.id)
+        XCTAssertEqual(request.noSplit, true)
+        XCTAssertTrue(IrisPrompt.make(request).contains("do not use path split"))
+    }
+
+    func testASplitCannotBeUndoneOnceAPartHasStarted() throws {
+        var r = VettingResult()
+        r.path = .split
+        r.split = [FilingChild(title: "Tabs", path: .visual), FilingChild(title: "History", path: .question)]
+        try IrisApplier.apply(r, to: t.id, store: store)
+        let part = try store.tickets(TicketFilter(parentId: t.id))[0]
+        try store.setTakenBy(part.id, "Agent on \(part.displayNumber)")
+        XCTAssertThrowsError(try store.undoSplit(t.id))
+    }
+
+    func testAClashWithADecisionOrComponentWaitsAndTheAnswerOnlyReRunsIrisWhenItCouldChangeTheWork() throws {
         var r = VettingResult(questions: [.init(text: "This changes PrimaryButton, used in 14 places. Change it everywhere?",
                                                 suggestions: ["Change it everywhere", "Add a variant here", "Keep the component"], about: "component PrimaryButton")])
         r.path = .visual
@@ -263,40 +375,64 @@ final class IrisApplierTests: XCTestCase {
         let q = try store.questions(ticketId: t.id)[0]
         XCTAssertEqual(q.purpose, QuestionPurpose.conflict)
         XCTAssertEqual(q.payload?["about"]?.stringValue, "component PrimaryButton")
-        XCTAssertEqual(try store.answer(questionId: q.id, text: "Add a variant here").status, .checking, "Iris files it with the answer")
+        XCTAssertEqual(q.payload?["stakes"]?.stringValue, QuestionStakes.high)
+        XCTAssertEqual(try store.answer(questionId: q.id, text: "Add a variant here").status, .ready, "IR13: applied here; no second model call")
+
+        let t2 = try Fixture.ticket(store, project, type: .bug, title: "Toast odd", body: "x", status: .draft)
+        try store.move(t2.id, to: .checking, actor: .owner)
+        try IrisApplier.apply(VettingResult(questions: [.init(text: "A bug or a redesign?", suggestions: ["Bug", "Redesign"], rerun: true)]), to: t2.id, store: store)
+        let q2 = try store.questions(ticketId: t2.id)[0]
+        XCTAssertEqual(try store.answer(questionId: q2.id, text: "Redesign").status, .checking, "an answer that changes what the ticket is runs her again")
     }
 
-    func testAtMostThreeQuestions() throws {
-        var r = VettingResult(questions: [.init(text: "A?"), .init(text: "B?"), .init(text: "C?")])
-        r.path = .bug
-        r.area = "Notifications"
-        r.confidence = ["area": 0.2]
-        XCTAssertEqual(try IrisApplier.apply(r, to: t.id, store: store).questionsAsked, 3)
+    func testALowStakesQuestionCarriesADefaultAndIsAnsweredWhenItLapses() throws {
+        let out = try IrisApplier.apply(VettingResult(questions: [.init(text: "Show the count on the Dock too?", suggestions: ["Yes", "No"], stakes: QuestionStakes.low)]), to: t.id, store: store)
+        XCTAssertEqual(out.status, .needsAnswers)
+        let q = try store.questions(ticketId: t.id)[0]
+        XCTAssertTrue(q.text.contains("I will go ahead with \u{201C}Yes\u{201D}"))
+        XCTAssertEqual(try store.answerLapsedAssumptions(), 0, "not yet")
+        XCTAssertEqual(try store.answerLapsedAssumptions(at: Date().addingTimeInterval(Double(QuestionStakes.waitSeconds) + 5)), 1)
+        let after = try store.ticket(id: t.id)!
+        XCTAssertEqual(after.status, .ready)
+        XCTAssertEqual(try store.questions(ticketId: t.id)[0].answer, "Yes")
+        XCTAssertTrue(try store.notes(ticketId: t.id).contains { $0.author == "Iris" && $0.body.contains("Iris assumed") })
+        XCTAssertEqual(try store.events(ticketId: t.id, kinds: ["answer"]).last?.actor, "hatch", "history does not say the owner answered")
     }
 
-    func testOpenQuestionsKeepTheTicketWaitingAndTheRewriteIsApplied() throws {
+    func testAHighStakesQuestionIsNeverAnsweredForTheOwner() throws {
+        try IrisApplier.apply(VettingResult(questions: [.init(text: "Replace decision #4?", suggestions: ["Keep it", "Replace it"], about: "decision #4", stakes: QuestionStakes.low)]), to: t.id, store: store)
+        XCTAssertEqual(try store.answerLapsedAssumptions(at: Date().addingTimeInterval(86_400)), 0, "a clash with a decision always waits")
+        XCTAssertEqual(try status(), .needsAnswers)
+    }
+
+    func testOpenQuestionsKeepTheTicketWaitingAndTheReadingIsApplied() throws {
         try IrisApplier.apply(VettingResult(questions: [.init(text: "Q?")], rewrite: .init(title: "N", body: "B")), to: t.id, store: store)
         let after = try store.ticket(id: t.id)!
         XCTAssertEqual(after.status, .needsAnswers)
         XCTAssertEqual(after.title, "N")
         try store.answer(questionId: try store.questions(ticketId: t.id)[0].id, text: "yes")
-        XCTAssertEqual(try status(), .checking, "Iris checks again with the answer (WF-Q2)")
+        XCTAssertEqual(try status(), .ready, "IR13: no second check unless the answer could change the work")
     }
 
     func testASecondCheckSeesTheAnswersAndAThirdRoundAsksNothing() throws {
-        try IrisApplier.apply(VettingResult(questions: [.init(text: "Which toast?", suggestions: ["Error", "Info"])]), to: t.id, store: store)
+        try IrisApplier.apply(VettingResult(questions: [.init(text: "Which toast?", suggestions: ["Error", "Info"], rerun: true)]), to: t.id, store: store)
         try store.answer(questionId: try store.questions(ticketId: t.id)[0].id, text: "Error")
         XCTAssertEqual(try status(), .checking)
         let request = try VettingRequest.build(store: store, ticketId: t.id)
         XCTAssertEqual(request.answered, [.init(question: "Which toast?", answer: "Error")])
         XCTAssertTrue(IrisPrompt.make(request).contains("Which toast? → Error"))
 
-        try IrisApplier.apply(VettingResult(questions: [.init(text: "Light or dark?")]), to: t.id, store: store)
+        try IrisApplier.apply(VettingResult(questions: [.init(text: "Light or dark?", rerun: true)]), to: t.id, store: store)
         try store.answer(questionId: try store.questions(ticketId: t.id, openOnly: true)[0].id, text: "Dark")
         XCTAssertEqual(try status(), .checking)
         let third = try IrisApplier.apply(VettingResult(questions: [.init(text: "Which size?")]), to: t.id, store: store)
         XCTAssertEqual(third.questionsAsked, 0, "at most two rounds (WF-Q1)")
         XCTAssertEqual(try status(), .ready)
+    }
+
+    func testTheSecondOpinionRunIsRetired() {
+        XCTAssertFalse(AgentRole.allCases.contains(.irisUnsure), "IR14: Settings no longer offers it")
+        XCTAssertEqual(AgentRole(rawValue: "irisUnsure"), .irisUnsure, "old runs and saved settings still read")
     }
 
     // Older suggestions, still decided with Accept, Edit and Keep mine.

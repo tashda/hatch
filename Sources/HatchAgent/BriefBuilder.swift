@@ -36,7 +36,8 @@ public enum BriefBuilder {
 
         out.append("\n## Ticket")
         out.append(t.body.isEmpty ? "(no description)" : Text.clip(t.body, bodyLimit))
-        if t.originalTitle != t.title || t.originalBody != t.body {
+        // With Iris's reading, the body already starts with the owner's own words.
+        if (t.originalTitle != t.title || t.originalBody != t.body), !t.body.contains(IrisReading.marker) {
             out.append("\nOriginal text (the owner's own words, before the rewrite):")
             out.append(Text.indent("\(t.originalTitle ?? t.title)\n" + Text.clip(t.originalBody ?? "", 600)))
         }

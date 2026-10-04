@@ -172,6 +172,8 @@ public final class AgentLauncher: @unchecked Sendable {
     public func tick() {
         guard !isPaused, tickLock.try() else { return }
         defer { tickLock.unlock() }
+        // Low-stakes questions Iris asked and the owner left alone: Hatch answers with her default (decision IR12).
+        if (try? store.answerLapsedAssumptions()) ?? 0 > 0 { onChange() }
         let busy = lock.withLock { Set(runs.keys) }
         for task in (try? store.agentWork()) ?? [] where task.kind != .vet && !busy.contains(task.ticket.id) {
             guard (try? store.takeSlotAvailable(kind: task.kind, projectId: task.ticket.projectId)) == true else { break }

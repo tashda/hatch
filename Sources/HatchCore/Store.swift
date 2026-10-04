@@ -137,7 +137,7 @@ public final class HatchStore: @unchecked Sendable {
             let id = Int(db.lastInsertRowID)
             try indexTicket(id)
             try record(id, actor: actor.rawValue, kind: "created", payload: ["type": .string(type.rawValue), "status": .string(status.rawValue)])
-            if let parentId { try link(from: id, to: parentId, kind: .parent) }
+            if let parentId { try link(from: id, to: parentId, kind: .parent, by: actor.rawValue) }
             if status != .draft && ghNumber == nil { try enqueueCreateIssue(id) }
             return try ticket(id: id)!
         }

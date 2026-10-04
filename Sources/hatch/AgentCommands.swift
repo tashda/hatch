@@ -201,10 +201,7 @@ enum AgentCommands {
         if let m = c.args.option("model") {
             iris = try AgentFactory.make(iris.provider, model: m, effort: iris.effort, thinking: iris.thinking, context: ctx, timeout: AgentRole.iris.timeout)
         }
-        var service = VettingService(store: c.store, runner: iris.runner, label: iris.label, provider: iris.provider.name, model: iris.model)
-        if c.args.option("model") == nil, let unsure = try? AgentFactory.resolve(.irisUnsure, settings: settings, context: ctx), unsure.label != iris.label {
-            service.unsure = .init(runner: unsure.runner, label: unsure.label, provider: unsure.provider.name, model: unsure.model)
-        }
+        let service = VettingService(store: c.store, runner: iris.runner, label: iris.label, provider: iris.provider.name, model: iris.model)
         let outcome = try service.vet(ticketId: t.id)
         switch outcome {
         case .vetted(let o): c.out.emit(["vetted": true, "questions": .int(o.questionsAsked), "suggestion": .bool(o.suggestionStored), "status": .string(o.status.rawValue)], text: "Iris checked \(t.displayNumber): \(o.questionsAsked) question(s), \(o.suggestionStored ? "a suggestion to review" : "no suggestion"). Status: \(o.status.displayName).")

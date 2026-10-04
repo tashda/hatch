@@ -66,6 +66,25 @@ final class ComponentsTests: XCTestCase {
         XCTAssertEqual(cat.views.map(\.kind), [.view, .style, .modifier])
     }
 
+    func testSampleCodeInsideAMultilineStringIsNotACatalogEntry() {
+        let source = #"""
+        import SwiftUI
+        struct RealView: View { var body: some View { EmptyView() } }
+        extension Font { static let real = Font.body }
+        func fixture() {
+            read("""
+                public extension Font { static let badge = Font.system(size: 11) }
+                public struct QuietButtonStyle: ButtonStyle { }
+                """, file: "Tokens.swift")
+        }
+        struct AfterView: View { var body: some View { EmptyView() } }
+        """#
+        var catalog = ComponentCatalog()
+        ComponentReader.read(source, file: "A.swift", requirePublic: false, into: &catalog)
+        XCTAssertEqual(Set(catalog.views.map(\.name)), ["RealView", "AfterView"], "only code outside the literal is read")
+        XCTAssertEqual(catalog.fonts.map(\.name), ["Font.real"])
+    }
+
     func testOneLineDeclarationsAndSemicolonsAreRead() {
         var cat = ComponentCatalog()
         ComponentReader.read("public extension Spacing { static let s: CGFloat = 8; }\npublic extension View { func card() -> some View { self } }\n",

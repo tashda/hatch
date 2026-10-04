@@ -110,13 +110,13 @@ public extension HatchStore {
     /// work that asked, so the agent carries on where it stopped (WF-Q4); back to Checking when Iris asked, so she checks
     /// again with the answers (WF-Q2); otherwise to Ready.
     @discardableResult
-    func answer(questionId: Int, text: String) throws -> Ticket {
+    func answer(questionId: Int, text: String, by: String = "owner") throws -> Ticket {
         try db.transaction {
             guard let ticketId = try db.query("SELECT ticket_id FROM question WHERE id = ?", [.int(questionId)], map: { $0.int("ticket_id") }).first ?? nil else {
                 throw StoreError.notFound("question \(questionId)")
             }
             try db.execute("UPDATE question SET answer = ?, answered_at = ? WHERE id = ?", [.text(text), .date(now()), .int(questionId)])
-            try record(ticketId, actor: "owner", kind: "answer", payload: ["question": .int(questionId)])
+            try record(ticketId, actor: by, kind: "answer", payload: ["question": .int(questionId)])
             try db.execute("UPDATE ticket SET updated_at = ? WHERE id = ?", [.date(now()), .int(ticketId)])
             try indexTicket(ticketId)
             let asked = try questions(ticketId: ticketId).first { $0.id == questionId }
@@ -125,8 +125,9 @@ public extension HatchStore {
             let t = try ticket(id: ticketId)!
             guard t.status == .needsAnswers, try questions(ticketId: ticketId, openOnly: true).isEmpty else { return t }
             let from = try statusBeforeQuestions(ticketId)
-            // When Iris asked only things Hatch has now applied, the ticket is filed: no second check is needed.
-            if from == .checking, try roundQuestions(ticketId).allSatisfy({ QuestionPurpose.isActedOn($0.purpose) }) {
+            // Iris filed the ticket before she asked. The answer is applied here and agents read it in their brief, so she
+            // runs again only when an answer could change what the ticket is (decision IR13).
+            if from == .checking, try roundQuestions(ticketId).allSatisfy({ QuestionPurpose.isActedOn($0.purpose) || $0.payload?["rerun"]?.boolValue != true }) {
                 return try move(ticketId, to: .ready, actor: .hatch, reason: "answered; filed")
             }
             if asked?.askedBy == "Hatch", text == Self.agentStoppedStop {
@@ -163,10 +164,16 @@ public extension HatchStore {
 
     // Links (decision E5)
 
-    func link(from: Int, to: Int, kind: LinkKind) throws {
+    /// `by` is who made the link (history says so); `why` is the one line a link made by Iris carries, recorded on both tickets.
+    func link(from: Int, to: Int, kind: LinkKind, by: String = "owner", why: String? = nil) throws {
         guard from != to else { throw StoreError.invalid("A ticket cannot link to itself.") }
         try db.execute("INSERT OR IGNORE INTO ticket_link(from_id, to_id, kind) VALUES(?,?,?)", [.int(from), .int(to), .text(kind.rawValue)])
-        try record(from, actor: "owner", kind: "link", payload: ["to": .int(to), "kind": .string(kind.rawValue)])
+        var payload: [String: JSONValue] = ["to": .int(to), "kind": .string(kind.rawValue)]
+        if let why, !why.isEmpty { payload["why"] = .string(why) }
+        try record(from, actor: by, kind: "link", payload: .object(payload))
+        if let why, !why.isEmpty {
+            try record(to, actor: by, kind: "link", payload: .object(["from": .int(from), "kind": .string(kind.rawValue), "why": .string(why)]))
+        }
     }
 
     func unlink(from: Int, to: Int, kind: LinkKind) throws {
