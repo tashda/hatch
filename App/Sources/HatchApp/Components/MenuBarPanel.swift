@@ -16,33 +16,21 @@ struct MenuBarLabel: View {
             .accessibilityLabel(waiting ? "Hatch, tickets wait for you" : "Hatch")
     }
 
-    /// Drawn rather than an SF Symbol, so it is Hatch's own shape. A template image: the menu bar tints it.
+    /// Hatch's own arch and dot from the asset catalog (`MenuBarIcon`, drawn by design-page/app-icon/menubar_glyph.swift
+    /// on whole pixels), with a badge dot cut in when tickets wait. A template image: the menu bar tints it.
     static func glyph(waiting: Bool) -> NSImage {
-        let size = NSSize(width: 18, height: 16)
-        let image = NSImage(size: size, flipped: false) { _ in
-            let line: CGFloat = 2.1
-            let arch = NSBezierPath()
-            let left: CGFloat = 2.8, right: CGFloat = 12.0, bottom: CGFloat = 2.2
-            let radius = (right - left) / 2
-            let centerY: CGFloat = 9.2
-            arch.move(to: NSPoint(x: left, y: bottom))
-            arch.line(to: NSPoint(x: left, y: centerY))
-            arch.appendArc(withCenter: NSPoint(x: left + radius, y: centerY), radius: radius, startAngle: 180, endAngle: 0, clockwise: true)
-            arch.line(to: NSPoint(x: right, y: bottom))
-            arch.lineWidth = line
-            arch.lineCapStyle = .round
-            NSColor.black.setStroke()
-            arch.stroke()
+        guard let base = NSImage(named: "MenuBarIcon") else { return NSImage() }
+        guard waiting else { return base }
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            base.draw(in: rect)
+            // A gap around the badge keeps it apart from the arch at menu bar size.
+            let badge = NSRect(x: 12.6, y: 12.6, width: 5, height: 5)
             NSColor.black.setFill()
-            NSBezierPath(ovalIn: NSRect(x: left + radius - 2.1, y: 4.9, width: 4.2, height: 4.2)).fill()
-            if waiting {
-                // A gap around the badge keeps it apart from the arch at menu bar size.
-                let badge = NSRect(x: 12.9, y: 10.9, width: 4.8, height: 4.8)
-                NSGraphicsContext.current?.compositingOperation = .clear
-                NSBezierPath(ovalIn: badge.insetBy(dx: -1.2, dy: -1.2)).fill()
-                NSGraphicsContext.current?.compositingOperation = .sourceOver
-                NSBezierPath(ovalIn: badge).fill()
-            }
+            NSGraphicsContext.current?.compositingOperation = .clear
+            NSBezierPath(ovalIn: badge.insetBy(dx: -1.2, dy: -1.2)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSBezierPath(ovalIn: badge).fill()
             return true
         }
         image.isTemplate = true
