@@ -38,6 +38,18 @@ Built and tested: `swift test --filter "PageHistoryTests|ShortcutsTests"` (18 te
 
 Not checked in the running app: the key recorder on Settings › Shortcuts (the logic is tested, the keypress capture is not), Option-Return in the palette and lists, the ticket-page keys and the send-back sheet, a second ticket window for the same ticket, the Keyboard Shortcuts sheet. Command-[ and Command-] could not be tested on the Danish keyboard layout (the key equivalent for "[" shows as another character there); check them on the owner's Mac. The "Publishing changes from within view updates" warning was not reproduced; the sidebar selection now defers its change by one turn, which may or may not be the cause.
 
+## Settings pages and Usage (2026-10-04)
+
+Settings has three groups: Hatch (General, Notifications, Agents, Shortcuts), Connections (GitHub), This Mac (Tools, Storage, Usage), per design-review/settings-pages.html.
+- **General**: appearance, open at login, the page and project on opening, the Dock badge (decisions waiting), the menu bar item (on by default, `MenuBarIcon` asset with a waiting dot), how tickets are dropped and their type, and the Decide feedback.
+- **Notifications**: six "Tell me when" switches, sound, grouping, and Send a Test. The bridge reads new events, never your own moves.
+- **GitHub**: the account, the app's permissions, sync with its interval (`sync_interval`), tickets repositories (default, label repair, Add), and project repositories with CI.
+- **Tools**: Xcode, Git, hatch and Claude Code found on this Mac, and Open with (terminal, editor, git client) plus project apps.
+- **Storage**: sizes, clean-up rules for workspaces and logs, and a daily database backup (`VACUUM INTO`, checked hourly).
+- **Usage**: each run records its provider, model, task and cache reads (migration 4). The page shows tokens per day for 14 days by provider (or by model for one), this week by task and by model, and the daily limits. Above the warning the footer turns orange; above the pause limit no new agent starts until tomorrow.
+
+Built and tested: `swift test` (0 failures), the Xcode build, and one snapshot per page in light and dark (`--only settings-<page>`, `--only menu-bar`). Not tried live: the menu bar item in the real menu bar, real notifications, the login item, GitHub against a real account (permissions, label repair, Add, Disconnect), Clean Up Now and the daily backup on real data, and the limits pausing a real agent.
+
 ## Local verification (macOS, 2026-10-04): agent providers and models per task
 
 - **Providers** (`HatchAgent/Providers.swift`, `ProviderRunners.swift`, `AgentFactory.swift`, `ModelCatalog.swift`): Claude Code (Claude account, Anthropic key, or an Anthropic-compatible endpoint such as Z.ai's GLM Coding Plan), Codex, Gemini CLI, opencode, the Anthropic API, and any OpenAI-compatible API (OpenAI, OpenRouter, Z.ai, Gemini, Ollama, LM Studio). Presets for each in Settings, Agents. Providers can be switched on and off; a task set to a switched-off or removed provider fails with a message that says so, never a silent fallback.
