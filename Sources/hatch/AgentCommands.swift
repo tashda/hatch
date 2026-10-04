@@ -174,11 +174,19 @@ enum AgentCommands {
         }
     }
 
-    // hatch vet #151 [--claude path]  -> Iris checks a ticket in Checking (people or Hatch run this, it costs tokens)
+    // hatch vet #151 [--model m]  -> Iris checks a ticket in Checking with the provider chosen in Settings (it costs tokens)
     static func vet(_ c: Context) throws {
         let t = try c.ticket(c.args.pos(1))
-        let runner = ClaudeCLIRunner(executable: c.args.option("claude") ?? "claude", model: c.args.option("model"))
-        let outcome = try VettingService(store: c.store, runner: runner).vet(ticketId: t.id)
+        let ctx = AgentSetupCommands.context()
+        var settings = AgentSettings.load(from: c.store)
+        if let claude = c.args.option("claude"), let i = settings.providers.firstIndex(where: { $0.id == settings.choice(.iris)?.providerId }) {
+            settings.providers[i].executable = claude  // Older scripts pass the program's path.
+        }
+        var iris = try AgentFactory.resolve(.iris, settings: settings, context: ctx)
+        if let m = c.args.option("model") {
+            iris = try AgentFactory.make(iris.provider, model: m, effort: iris.effort, thinking: iris.thinking, context: ctx, timeout: AgentRole.iris.timeout)
+        }
+        let outcome = try VettingService(store: c.store, runner: iris.runner, label: iris.label).vet(ticketId: t.id)
         switch outcome {
         case .vetted(let o): c.out.emit(["vetted": true, "questions": .int(o.questionsAsked), "suggestion": .bool(o.suggestionStored), "status": .string(o.status.rawValue)], text: "Iris checked \(t.displayNumber): \(o.questionsAsked) question(s), \(o.suggestionStored ? "a suggestion to review" : "no suggestion"). Status: \(o.status.displayName).")
         case .failed(let why): c.out.emit(["vetted": false, "error": .string(why)], text: "Iris could not check \(t.displayNumber): \(why)"); exit(1)

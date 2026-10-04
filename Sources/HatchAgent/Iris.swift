@@ -208,6 +208,17 @@ public enum IrisResult {
         return nil
     }
 
+    /// An object whose every value is null, empty text or an empty list (the prompt's shape echoed back).
+    static func isBlank(_ v: Any) -> Bool {
+        guard let d = v as? [String: Any] else { return false }
+        return d.values.allSatisfy { value in
+            if value is NSNull { return true }
+            if let s = value as? String { return s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            if let a = value as? [Any] { return a.allSatisfy { ($0 as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? ($0 is NSNull) } }
+            return false
+        }
+    }
+
     static func build(_ o: [String: Any]) throws -> VettingResult {
         var result = VettingResult()
         if let qs = o["questions"] {
@@ -221,14 +232,15 @@ public enum IrisResult {
             }
             result.questions = Array(result.questions.prefix(IrisPrompt.maxQuestions))
         }
-        if let rw = o["rewrite"], !(rw is NSNull) {
+        // Models often echo the shape with empty fields; a wholly blank object means "none", not a broken answer.
+        if let rw = o["rewrite"], !(rw is NSNull), !isBlank(rw) {
             guard let d = rw as? [String: Any] else { throw IrisError.invalid("\"rewrite\" must be an object with \"title\" and \"body\"") }
             let title = (d["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             let body = (d["body"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if title.isEmpty && body.isEmpty { throw IrisError.invalid("\"rewrite\" has neither a title nor a body") }
             result.rewrite = .init(title: title, body: body, changes: strings(d["changes"]))
         }
-        if let ts = o["typeSuggestion"] ?? o["type_suggestion"], !(ts is NSNull) {
+        if let ts = o["typeSuggestion"] ?? o["type_suggestion"], !(ts is NSNull), !isBlank(ts) {
             guard let d = ts as? [String: Any], let raw = d["type"] as? String else { throw IrisError.invalid("\"typeSuggestion\" needs a \"type\"") }
             guard let type = TicketType(rawValue: raw.lowercased().trimmingCharacters(in: .whitespaces)) else {
                 throw IrisError.invalid("unknown ticket type '\(raw)' (use one of \(TicketType.allCases.map(\.rawValue).joined(separator: ", ")))")

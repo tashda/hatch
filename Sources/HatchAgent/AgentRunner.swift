@@ -26,7 +26,7 @@ public enum AgentRunnerError: Error, CustomStringConvertible, Equatable {
 
     public var description: String {
         switch self {
-        case .executableNotFound(let p): return "Could not find the agent program '\(p)'. Install Claude Code or set its path in Settings."
+        case .executableNotFound(let p): return "Could not find the agent program '\(p)'. Install it, or set its path in Settings, Agents."
         case .failed(let code, let err): return "The agent program stopped with exit code \(code): \(err.isEmpty ? "no message" : err)"
         case .timedOut(let s): return "The agent did not answer within \(Int(s)) seconds and was stopped."
         case .badOutput(let m): return "The agent program answered in a form Hatch could not read: \(m)"
@@ -41,45 +41,67 @@ public protocol AgentRunner: Sendable {
 }
 
 /// Runs `claude -p <prompt> --output-format json` and reads the answer and the token counts from its JSON.
+/// Running the official program is also how a Claude Pro or Max plan is used: Hatch never reads its login itself.
 public struct ClaudeCLIRunner: AgentRunner {
     public var executable: String
     public var model: String?
     public var workingDirectory: URL?
     public var timeout: TimeInterval
     public var extraArguments: [String]
+    /// Text-only work (Iris, Ask): no tools, no MCP servers, no slash commands, no saved session.
+    /// This cuts about 35k tokens of start-up context per call.
+    public var lean: Bool
+    public var effort: String?
+    /// The child's environment. Nil inherits this process's environment unchanged.
+    public var environment: [String: String]?
 
-    public init(executable: String = "claude", model: String? = nil, workingDirectory: URL? = nil, timeout: TimeInterval = 300, extraArguments: [String] = []) {
+    public init(executable: String = "claude", model: String? = nil, workingDirectory: URL? = nil, timeout: TimeInterval = 300,
+                extraArguments: [String] = [], lean: Bool = false, effort: String? = nil, environment: [String: String]? = nil) {
         self.executable = executable; self.model = model; self.workingDirectory = workingDirectory
         self.timeout = timeout; self.extraArguments = extraArguments
+        self.lean = lean; self.effort = effort; self.environment = environment
     }
 
-    /// Absolute path of the program, searching PATH for a bare name. Nil when it is not there.
-    public func resolvedExecutable() -> String? {
-        let fm = FileManager.default
-        if executable.contains("/") { return fm.isExecutableFile(atPath: executable) ? executable : nil }
-        let path = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/local/bin"
-        for dir in path.split(separator: ":") {
-            let candidate = "\(dir)/\(executable)"
-            if fm.isExecutableFile(atPath: candidate) { return candidate }
-        }
-        return nil
-    }
+    /// Absolute path of the program, searching PATH and the usual install places for a bare name. Nil when it is not there.
+    public func resolvedExecutable() -> String? { AgentProcess.locate(executable) }
 
     /// Prompts larger than this go to stdin, because one argument is limited to about 128 KB on Linux.
     static let maxArgumentBytes = 100_000
+    static let leanArguments = ["--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"]
 
     public func run(prompt: String, options: AgentOptions) throws -> AgentOutput {
         guard let program = resolvedExecutable() else { throw AgentRunnerError.executableNotFound(executable) }
+        do { return try attempt(program, prompt: prompt, options: options, lean: lean) }
+        catch AgentRunnerError.failed(_, let message) where lean && Self.isUnknownOption(message) {
+            // An older claude without one of the lean flags: still answer, just with the full start-up context.
+            return try attempt(program, prompt: prompt, options: options, lean: false)
+        }
+    }
+
+    static func isUnknownOption(_ message: String) -> Bool {
+        let m = message.lowercased()
+        return m.contains("unknown option") || m.contains("unknown argument")
+    }
+
+    private func attempt(_ program: String, prompt: String, options: AgentOptions, lean: Bool) throws -> AgentOutput {
         let useStdin = prompt.utf8.count > Self.maxArgumentBytes
         var args = useStdin ? ["-p"] : ["-p", prompt]
         args += ["--output-format", "json"]
         if let m = options.model ?? model { args += ["--model", m] }
+        if let effort, !effort.isEmpty { args += ["--effort", effort] }
+        if lean { args += Self.leanArguments }
         args += extraArguments
         let seconds = options.timeout ?? timeout
-        let result = try Self.spawn(program, args, stdin: useStdin ? prompt : nil, directory: options.workingDirectory ?? workingDirectory, timeout: seconds)
+        let result = try AgentProcess.spawn(program, args, stdin: useStdin ? prompt : nil, directory: options.workingDirectory ?? workingDirectory,
+                                            environment: environment, timeout: seconds)
         guard result.status == 0 else {
             // The CLI reports some errors as JSON on stdout; prefer that text when it is there.
-            let detail = (try? Self.parse(result.stdout))?.text ?? result.stderr
+            let fromJSON: String? = {
+                do { return try Self.parse(result.stdout).text }
+                catch AgentRunnerError.failed(_, let m) { return m }
+                catch { return nil }
+            }()
+            let detail = fromJSON ?? (result.stderr.isEmpty ? result.stdout : result.stderr)
             throw AgentRunnerError.failed(code: result.status, stderr: detail.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return try Self.parse(result.stdout)
@@ -100,50 +122,6 @@ public struct ClaudeCLIRunner: AgentRunner {
         let usage = obj["usage"] as? [String: Any] ?? [:]
         func n(_ k: String) -> Int { (usage[k] as? NSNumber)?.intValue ?? 0 }
         return AgentOutput(text: text, tokensIn: n("input_tokens") + n("cache_creation_input_tokens") + n("cache_read_input_tokens"), tokensOut: n("output_tokens"))
-    }
-
-    private final class Collector: @unchecked Sendable {
-        private let lock = NSLock()
-        private var data = Data()
-        func append(_ d: Data) { lock.lock(); data.append(d); lock.unlock() }
-        var string: String { lock.lock(); defer { lock.unlock() }; return String(decoding: data, as: UTF8.self) }
-    }
-
-    static func spawn(_ program: String, _ args: [String], stdin: String?, directory: URL?, timeout: TimeInterval) throws -> (status: Int32, stdout: String, stderr: String) {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: program)
-        p.arguments = args
-        if let directory { p.currentDirectoryURL = directory }
-        let out = Pipe(), err = Pipe(), inp = Pipe()
-        p.standardOutput = out; p.standardError = err
-        p.standardInput = stdin == nil ? FileHandle.nullDevice : inp
-        let outC = Collector(), errC = Collector()
-        let group = DispatchGroup()
-        for (pipe, collector) in [(out, outC), (err, errC)] {
-            group.enter()
-            DispatchQueue.global().async {
-                // Reading to the end in a thread keeps a chatty child from filling the pipe and blocking.
-                collector.append(pipe.fileHandleForReading.readDataToEndOfFile())
-                group.leave()
-            }
-        }
-        let finished = DispatchSemaphore(value: 0)
-        p.terminationHandler = { _ in finished.signal() }
-        do { try p.run() } catch { throw AgentRunnerError.executableNotFound(program) }
-        if let stdin {
-            DispatchQueue.global().async {
-                try? inp.fileHandleForWriting.write(contentsOf: Data(stdin.utf8))
-                try? inp.fileHandleForWriting.close()
-            }
-        }
-        if finished.wait(timeout: .now() + timeout) == .timedOut {
-            p.terminate()
-            _ = finished.wait(timeout: .now() + 2)
-            if p.isRunning { kill(p.processIdentifier, SIGKILL) }
-            throw AgentRunnerError.timedOut(seconds: timeout)
-        }
-        group.wait()
-        return (p.terminationStatus, outC.string, errC.string)
     }
 }
 

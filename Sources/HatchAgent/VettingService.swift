@@ -13,9 +13,11 @@ public struct VettingService {
     public let store: HatchStore
     public let runner: AgentRunner
     public var options: AgentOptions
+    /// Provider and model, such as "Claude Code · haiku", recorded with the run so the Agents screen shows what ran.
+    public var label: String?
 
-    public init(store: HatchStore, runner: AgentRunner, options: AgentOptions = AgentOptions()) {
-        self.store = store; self.runner = runner; self.options = options
+    public init(store: HatchStore, runner: AgentRunner, options: AgentOptions = AgentOptions(), label: String? = nil) {
+        self.store = store; self.runner = runner; self.options = options; self.label = label
     }
 
     @discardableResult
@@ -25,7 +27,7 @@ public struct VettingService {
             throw StoreError.invalid("\(t.displayNumber) is \(t.status.displayName); only a Checking ticket is vetted.")
         }
         let request = try VettingRequest.build(store: store, ticketId: ticketId)
-        let runId = try store.startRun(ticketId: ticketId, agent: IrisApplier.name, step: "vet")
+        let runId = try store.startRun(ticketId: ticketId, agent: IrisApplier.name, step: label.map { "vet with \($0)" } ?? "vet")
 
         let output: AgentOutput
         do { output = try runner.run(prompt: IrisPrompt.make(request), options: options) }
@@ -39,13 +41,17 @@ public struct VettingService {
             return .vetted(applied)
         } catch {
             // The tokens were spent even though the answer was unusable, so they are still counted.
-            return try fail(ticketId, runId, tokensIn: output.tokensIn, tokensOut: output.tokensOut, outcome: "unusable", reason: "\(error)")
+            return try fail(ticketId, runId, tokensIn: output.tokensIn, tokensOut: output.tokensOut, outcome: "unusable", reason: "\(error)",
+                            answer: Text.clip(output.text, 2000))
         }
     }
 
-    private func fail(_ ticketId: Int, _ runId: Int, tokensIn: Int, tokensOut: Int, outcome: String, reason: String) throws -> VettingOutcome {
+    /// `answer` keeps the start of an unusable reply, so the owner can see what the model sent.
+    private func fail(_ ticketId: Int, _ runId: Int, tokensIn: Int, tokensOut: Int, outcome: String, reason: String, answer: String? = nil) throws -> VettingOutcome {
         try store.endRun(runId, tokensIn: tokensIn, tokensOut: tokensOut, outcome: outcome)
-        try store.record(ticketId, actor: IrisApplier.name, kind: "vetting-failed", payload: ["reason": .string(reason)])
+        var payload: JSONValue = ["reason": .string(reason)]
+        if let answer { payload = ["reason": .string(reason), "answer": .string(answer)] }
+        try store.record(ticketId, actor: IrisApplier.name, kind: "vetting-failed", payload: payload)
         return .failed(reason)
     }
 }

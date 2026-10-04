@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"><defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e8edf7"/></linearGradient>
+<linearGradient id="ar" gradientUnits="userSpaceOnUse" x1="0" y1="225" x2="0" y2="790"><stop offset="0" stop-color="#4180f0"/><stop offset="1" stop-color="#1f49aa"/></linearGradient>
+<linearGradient id="dt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc65a"/><stop offset="1" stop-color="#ffa01c"/></linearGradient>
+<filter id="tsh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity=".32"/></filter>
+<clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="186"/></clipPath></defs>
+<rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)" filter="url(#tsh)"/>
+<rect x="101" y="101" width="822" height="822" rx="185" fill="none" stroke="rgba(20,40,90,.16)" stroke-width="2"/>
+<g clip-path="url(#tile)"><path d="M339.0 738.0 V450.0 A173.0 173.0 0 0 1 685.0 450.0 V738.0" fill="none" stroke="url(#ar)" stroke-width="104" stroke-linecap="round"/>
+<circle cx="512" cy="596" r="88" fill="url(#dt)"/></g></svg>

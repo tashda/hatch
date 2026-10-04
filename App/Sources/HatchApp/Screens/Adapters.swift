@@ -296,66 +296,6 @@ enum HXCIAdapter {
     }
 }
 
-// MARK: Claude CLI (Ask panel)
-
-enum HXAskAdapter {
-    enum Failure: Error, CustomStringConvertible {
-        case notFound
-        case failed(String)
-
-        var description: String {
-            switch self {
-            case .notFound: return "claude CLI not found"
-            case .failed(let m): return m
-            }
-        }
-    }
-
-    /// The setting wins; otherwise the usual install places, then whatever the login shell finds.
-    static func locateClaude(setting: String?) -> String? {
-        let fm = FileManager.default
-        if let s = setting, !s.isEmpty, fm.isExecutableFile(atPath: s) { return s }
-        let home = NSHomeDirectory()
-        let candidates = [
-            home + "/.claude/local/claude",
-            home + "/.local/bin/claude",
-            "/usr/local/bin/claude",
-            "/opt/homebrew/bin/claude",
-        ]
-        for c in candidates where fm.isExecutableFile(atPath: c) { return c }
-        if let out = HXShell.shell("command -v claude", cwd: nil), out.status == 0 {
-            let path = out.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !path.isEmpty, fm.isExecutableFile(atPath: path) { return path }
-        }
-        return nil
-    }
-
-    struct Answer: Sendable {
-        var text: String
-        var tokensIn: Int
-        var tokensOut: Int
-    }
-
-    /// Runs HatchAgent's ClaudeCLIRunner off the main thread.
-    static func ask(prompt: String, claudePath: String) async throws -> Answer {
-        let result: Result<Answer, Failure> = await Task.detached(priority: .userInitiated) { () -> Result<Answer, Failure> in
-            let runner = ClaudeCLIRunner(executable: claudePath, workingDirectory: URL(fileURLWithPath: NSHomeDirectory()), timeout: 180)
-            do {
-                let out = try runner.run(prompt: prompt, options: AgentOptions())
-                let text = out.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if text.isEmpty { return .failure(.failed("claude returned an empty answer.")) }
-                return .success(Answer(text: text, tokensIn: out.tokensIn, tokensOut: out.tokensOut))
-            } catch {
-                return .failure(.failed("\(error)"))
-            }
-        }.value
-        switch result {
-        case .success(let answer): return answer
-        case .failure(let f): throw f
-        }
-    }
-}
-
 // MARK: Area scan (L2): HatchImport first, a simple folder scan as fallback.
 
 enum HXAreasAdapter {

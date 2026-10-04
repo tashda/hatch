@@ -2,7 +2,7 @@ import SwiftUI
 import HatchCore
 
 /// Ask Hatch (decision B4): a right-side panel that keeps the current ticket as context.
-/// The exchange is also saved to the ticket thread. Claude runs in a background Task, never on the main thread.
+/// The exchange is also saved to the ticket thread. The model chosen for Ask in Settings runs in a background Task, never on the main thread.
 struct AskPanel: View {
     @EnvironmentObject var state: AppState
     /// Inside the Iris panel: no header, no suggested questions, no extra padding.
@@ -195,23 +195,17 @@ struct AskPanel: View {
         var prompt = "You are helping the owner of a software project use Hatch, a ticket and design-decision tool. Answer briefly and plainly.\n\n"
         if let ticket { prompt += "Context:\n" + contextText(ticket) + "\n\n" }
         prompt += "Question: " + question
-        let configured = state.hxSetting("claude_path")
         messages.append(Message(fromOwner: true, text: question))
         messagesTicketId = ticket?.id
         input = ""
         errorText = nil
         running = true
+        let store = state.store, context = state.agentContext
         Task {
-            let path = await Task.detached { HXAskAdapter.locateClaude(setting: configured) }.value
-            guard let path else {
-                errorText = "claude CLI not found. Install Claude Code, or set its path in Settings."
-                running = false
-                return
-            }
             do {
-                let answer = try await HXAskAdapter.ask(prompt: prompt, claudePath: path)
+                let answer = try await HXAskAdapter.ask(prompt: prompt, store: store, context: context)
                 messages.append(Message(fromOwner: false, text: answer.text))
-                save(ticket: ticket, question: question, answer: answer.text)
+                save(ticket: ticket, question: question, answer: answer)
                 recordCost(ticket: ticket, answer: answer)
             } catch {
                 errorText = "\(error)"
@@ -220,17 +214,17 @@ struct AskPanel: View {
         }
     }
 
-    private func save(ticket: Ticket?, question: String, answer: String) {
+    private func save(ticket: Ticket?, question: String, answer: HXAskAdapter.Answer) {
         guard let ticket else { return }
         state.perform("Save to thread") {
-            try state.store.addNote(ticket.id, kind: .note, author: "owner", body: "Asked Claude: " + question)
-            try state.store.addNote(ticket.id, kind: .agent, author: "Claude", body: answer)
+            try state.store.addNote(ticket.id, kind: .note, author: "owner", body: "Asked \(answer.author): " + question)
+            try state.store.addNote(ticket.id, kind: .agent, author: answer.author, body: answer.text)
         }
     }
 
     private func recordCost(ticket: Ticket?, answer: HXAskAdapter.Answer) {
         state.perform("Record cost") {
-            let runId = try state.store.startRun(ticketId: ticket?.id, agent: "ask", step: "ask")
+            let runId = try state.store.startRun(ticketId: ticket?.id, agent: "ask", step: "ask with \(answer.label)")
             try state.store.endRun(runId, tokensIn: answer.tokensIn, tokensOut: answer.tokensOut, outcome: "ok")
         }
     }

@@ -52,6 +52,13 @@ final class IrisParseTests: XCTestCase {
     func testUnknownTypeIsAnError() {
         XCTAssertThrowsError(try IrisResult.parse(#"{"typeSuggestion":{"type":"epic","reason":"x"}}"#)) { XCTAssertTrue("\($0)".contains("epic")) }
     }
+    func testTheEchoedEmptyShapeMeansNoSuggestion() throws {
+        let r = try IrisResult.parse(#"{"questions":[],"rewrite":{"title":"","body":"","changes":[""]},"typeSuggestion":{"type":"","reason":""},"related":[],"duplicateOf":""}"#)
+        XCTAssertNil(r.rewrite)
+        XCTAssertNil(r.typeSuggestion)
+        XCTAssertNil(try IrisResult.parse(#"{"typeSuggestion":{}}"#).typeSuggestion)
+        XCTAssertThrowsError(try IrisResult.parse(#"{"typeSuggestion":{"type":"","reason":"no steps"}}"#), "a reason without a type is inconsistent")
+    }
     func testRewriteWithoutTextIsAnError() {
         XCTAssertThrowsError(try IrisResult.parse(#"{"rewrite":{"changes":["x"]}}"#))
         XCTAssertThrowsError(try IrisResult.parse(#"{"rewrite":"just text"}"#))

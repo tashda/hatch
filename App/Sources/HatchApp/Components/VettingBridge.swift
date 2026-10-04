@@ -15,19 +15,15 @@ enum VettingBridge {
     static func start(ticketId: Int, state: AppState) {
         guard !running.contains(ticketId) else { return }
         let store = state.store
-        guard let claude = HXAskAdapter.locateClaude(setting: state.hxSetting("claude_path")) else {
-            try? store.record(ticketId, actor: "Iris", kind: "vetting-failed",
-                              payload: ["reason": .string("Could not find the claude program. Set its path in Settings.")])
-            state.refresh()
-            return
-        }
+        let context = state.agentContext
         running.insert(ticketId)
         Task { @MainActor in
             await Task.detached {
-                let runner = ClaudeCLIRunner(executable: claude, workingDirectory: URL(fileURLWithPath: NSHomeDirectory()), timeout: 240)
-                let service = VettingService(store: store, runner: runner)
                 do {
-                    _ = try service.vet(ticketId: ticketId)
+                    // Iris uses the provider and model chosen in Settings, Agents. A missing or switched-off
+                    // provider is a failure with a reason, never a silent fallback to another model.
+                    let iris = try AgentFactory.resolve(.iris, settings: AgentSettings.load(from: store), context: context)
+                    _ = try VettingService(store: store, runner: iris.runner, label: iris.label).vet(ticketId: ticketId)
                 } catch {
                     try? store.record(ticketId, actor: "Iris", kind: "vetting-failed", payload: ["reason": .string("\(error)")])
                 }

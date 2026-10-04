@@ -101,35 +101,6 @@ private struct SettingsPageForm<Content: View>: View {
     }
 }
 
-private struct AgentSettingsPage: View {
-    @EnvironmentObject var state: AppState
-    @State private var maxAgents = 3
-    @State private var claudeStatus = "Checking…"
-    @State private var loaded = false
-
-    var body: some View {
-        SettingsPageForm(section: "Agent work", footer: "Choose how Hatch runs local agent work.") {
-            Stepper(value: $maxAgents, in: 1...12) { Text("Max agents at once: \(maxAgents)") }
-                .onChange(of: maxAgents) { _, newValue in
-                    if loaded { state.hxSaveSetting("max_agents", String(newValue)) }
-                }
-            LabeledContent("Claude CLI", value: claudeStatus)
-            HXPathRow(title: "Claude CLI path", key: "claude_path", placeholder: "Found automatically", chooseApp: false)
-        }
-        .onAppear(perform: load)
-    }
-
-    private func load() {
-        guard !loaded else { return }
-        if let s = state.hxSetting("max_agents"), let n = Int(s) { maxAgents = n }
-        else { maxAgents = (try? state.store.maxAgents(projectId: state.projectFilterId)) ?? 3 }
-        loaded = true
-        guard !Snapshots.demoMode else { claudeStatus = "Not checked in demo mode"; return }
-        let configured = state.hxSetting("claude_path")
-        Task { claudeStatus = await Task.detached { HXSettingsProbe.claudeStatus(configured: configured) }.value }
-    }
-}
-
 private struct GitHubSettingsPage: View {
     @EnvironmentObject private var state: AppState
     @StateObject private var account = GitHubAccountModel()
@@ -303,13 +274,6 @@ private struct FileSettingsPage: View {
             LabeledContent("Hatch home") { Text(state.paths.root.path).textSelection(.enabled) }
             LabeledContent("Database") { Text(state.paths.database.path).textSelection(.enabled) }
         }
-    }
-}
-
-enum HXSettingsProbe {
-    static func claudeStatus(configured: String?) -> String {
-        if let path = HXAskAdapter.locateClaude(setting: configured) { return "Using \(path)" }
-        return "claude CLI not found. Install Claude Code or set its path."
     }
 }
 

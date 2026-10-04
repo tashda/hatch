@@ -30,6 +30,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 | Project | Title menu in the toolbar: tile, name, pull-down of projects | `ProjectTitleMenu` |
 | Facts about the selection | Details card | `LabeledContent` in `Form` |
 | Settings | Navigation sidebar with focused grouped forms | `NavigationSplitView`; detail `Form` `.formStyle(.grouped)` |
+| Provider and model per task | One row per task with menu pickers (provider, model, effort), a Test button and the recommendation as a caption; providers as rows with an on/off switch, Refresh, Test and Edit | `Picker` (menu), `Toggle` `.switch`, `.bordered` `.controlSize(.small)` |
 | Project settings | One card per part (tile, ⓘ popover, current value, rows edited in place), Save bar | `HXSettingsCard`, `HXSetupRow` |
 | Main action | One prominent glass capsule, first in the row | `.glassProminent`, `.controlSize(.large)` |
 | Other actions | Quiet glass capsules with icon and label; rare ones in a More menu | `.glass`, `Menu` |
