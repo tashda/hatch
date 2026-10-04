@@ -172,6 +172,15 @@ enum Snapshots {
                                                                   "Sources/Editor/Toolbar.swift"], reason: "a Bug")
         try! store.setCIRecord(projectId: p.id, CIRecord(state: .failed, failed: ["Build & Test"], ref: "hatch", checkedAt: Date()))
         let paths = AppPaths(root: FileManager.default.temporaryDirectory.appendingPathComponent("hatch-snapshots-\(getpid())"))
+        // Two screenshots on the first Proposal: one already in the tickets repo, one waiting for the next sync (M3).
+        let shotDir = paths.root.appendingPathComponent("attachments/\(proposal.id)")
+        try? FileManager.default.createDirectory(at: shotDir, withIntermediateDirectories: true)
+        let shot = sampleScreenshot()
+        for (i, uploaded) in [true, false].enumerated() {
+            try? shot.write(to: shotDir.appendingPathComponent("shot-\(i + 1).png"))
+            let a = try! store.addAttachment(proposal.id, path: "attachments/\(proposal.id)/shot-\(i + 1).png", sha: "s\(i)", caption: "toast-\(i + 1).png")
+            if uploaded { try! store.markAttachmentUploaded(a.id, remotePath: "attachments/140/shot-1.png", sha: "s\(i)") }
+        }
         return AppState(store: store, paths: paths)
     }
 
@@ -324,6 +333,11 @@ enum Snapshots {
             NSApp.appearance = NSAppearance(named: appearance)
             if let route = routes[name] {
                 state.route = route
+            } else if name.hasPrefix("ticket-"), let tab = TicketTab.allCases.first(where: { "ticket-\($0)" == name }),
+                      let first = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Toast spacing and corner radius" }) {
+                // ticket-overview, ticket-thread…: the first Proposal on that tab, as in the full run.
+                state.route = .ticket(first.id)
+                state.snapshotTicketTab = tab
             } else if name == "markup" {
                 state.snapshotPresentation = .markup
                 // The saved image too, to check that the marks land in the file at full size.

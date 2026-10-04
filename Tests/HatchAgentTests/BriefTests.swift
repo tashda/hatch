@@ -210,4 +210,12 @@ final class BriefTests: XCTestCase {
         config.components = ComponentsConfig(path: "Packages/Missing", product: "Missing")
         XCTAssertTrue(BriefBuilder.componentLines(config, proposal, .build).joined().contains("Not made yet"))
     }
+
+    func testScreenshotsAreListedAsFiles() throws {
+        let t = try Fixture.ticket(store, project, status: .ready)
+        XCTAssertTrue(try BriefBuilder.screenshotLines(store, t).isEmpty)
+        try store.addAttachment(t.id, path: "/tmp/hatch/attachments/1/shot-1.png", caption: "toast.png")
+        let lines = try BriefBuilder.screenshotLines(store, t).joined(separator: "\n")
+        XCTAssertTrue(lines.contains("- /tmp/hatch/attachments/1/shot-1.png (toast.png)"))
+    }
 }

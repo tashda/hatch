@@ -297,6 +297,13 @@ public enum Schema {
         ALTER TABLE agent_run ADD COLUMN cache_tokens INTEGER NOT NULL DEFAULT 0;
         CREATE INDEX agent_run_provider ON agent_run(provider, started_at);
         """,
+        // 5: screenshots go to the tickets repository (decision M3). `uploaded_sha` is the local checksum that was
+        // sent, so a marked-up file (new checksum) is sent again; `upload_error` keeps the last failure.
+        """
+        ALTER TABLE attachment ADD COLUMN remote_path TEXT;
+        ALTER TABLE attachment ADD COLUMN uploaded_sha TEXT;
+        ALTER TABLE attachment ADD COLUMN upload_error TEXT;
+        """,
     ]
 
     public static func migrate(_ db: Database) throws {

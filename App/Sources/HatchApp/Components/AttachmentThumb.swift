@@ -32,6 +32,7 @@ struct AttachmentThumb: View {
                     .help("Mark up: box, arrow or note")
             }
         }
+        .overlay(alignment: .topTrailing) { uploadBadge.padding(4) }
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Mark Up…") { markingUp = true }
@@ -43,6 +44,21 @@ struct AttachmentThumb: View {
                     state.perform("Could not save the marked-up screenshot") { try TicketScreenshots.replace(attachment, with: png, state: state) }
                 }
             }
+        }
+    }
+
+    /// Whether the screenshot is in the tickets repository yet (decision M3). A failure is the only red one.
+    @ViewBuilder private var uploadBadge: some View {
+        if let error = attachment.uploadError, !attachment.isUploaded {
+            Image(systemName: "exclamationmark.icloud.fill").foregroundStyle(.white, Theme.critical)
+                .help("Not uploaded: \(error). Hatch tries again at the next sync.")
+        } else if attachment.isUploaded {
+            Image(systemName: "checkmark.icloud.fill").foregroundStyle(.white, .secondary)
+                .help("In the tickets repository: \(attachment.remotePath ?? "")")
+        } else {
+            Image(systemName: "icloud.and.arrow.up").foregroundStyle(.secondary)
+                .padding(2).background(.regularMaterial, in: Circle())
+                .help("Uploads to the tickets repository at the next sync, once the ticket has an issue")
         }
     }
 

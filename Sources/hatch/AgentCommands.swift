@@ -221,7 +221,12 @@ enum AgentCommands {
         let engine = SyncEngine(store: c.store, tracker: try tracker(c))
         let mode = c.args.pos(1) ?? "all"
         var parts: [String] = []
-        if mode == "push" || mode == "all" { parts.append("push: \(try engine.pushPending(repo: repo))") }
+        if mode == "push" || mode == "all" {
+            parts.append("push: \(try engine.pushPending(repo: repo))")
+            // Screenshots to the tickets repo (decision M3), then the comments that show them.
+            let sent = try engine.uploadAttachments(repo: repo, projectId: p.id, branch: p.config?.repo(.tickets)?.branch ?? "main")
+            if sent > 0 { parts.append("screenshots: \(sent), comments: \(try engine.pushPending(repo: repo))") }
+        }
         if mode == "pull" || mode == "all" { parts.append("pull: \(try engine.pull(repo: repo, projectId: p.id))") }
         let counts = try c.store.syncCounts()
         c.out.emit(["pending": .int(counts.pending), "failed": .int(counts.failed)], text: parts.joined(separator: "\n") + "\nQueue: \(counts.pending) pending, \(counts.failed) failed.")

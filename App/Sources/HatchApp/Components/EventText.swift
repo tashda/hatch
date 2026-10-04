@@ -54,6 +54,10 @@ enum EventText {
             return "Taken for \(p["task"]?.stringValue ?? "work")"
         case "release":
             return "Released: \(p["reason"]?.stringValue ?? "")"
+        case "attachment-uploaded":
+            return "Screenshot uploaded to the tickets repository"
+        case "attachment-upload-failed":
+            return "Screenshot upload failed: \(p["error"]?.stringValue ?? "")"
         case "ci":
             return "CI on \(p["ref"]?.stringValue ?? "the integration branch"): \(p["state"]?.stringValue == "passed" ? "passing" : p["state"]?.stringValue == "failed" ? "failing" : "running")"
         case "plan-waiting":

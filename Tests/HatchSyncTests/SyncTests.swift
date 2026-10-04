@@ -321,15 +321,41 @@ final class SyncTests: XCTestCase {
         XCTAssertEqual(try store.events(ticketId: t.id, kinds: ["ci"]).last?.payload["state"]?.stringValue, "passed")
     }
 
-    func testCommitAttachment() throws {
-        let t = try synced()
+    func testScreenshotsGoToTheTicketsRepoWithAComment() throws {
+        let draft = try store.createTicket(projectId: project.id, type: .bug, title: "Crash on export")
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("shot-\(UUID().uuidString).png")
         try Data([1, 2, 3]).write(to: file)
         defer { try? FileManager.default.removeItem(at: file) }
-        let a = try engine.commitAttachment(ticket: t, localFile: file, repo: repo)
-        XCTAssertEqual(a.path, "attachments/1/\(file.lastPathComponent)")
-        XCTAssertEqual(tracker.files["\(repo)/\(a.path)"], Data([1, 2, 3]))
-        XCTAssertEqual(try store.attachments(ticketId: t.id).count, 1)
+        let a = try store.addAttachment(draft.id, path: file.path, sha: "one", caption: "export.png")
+        XCTAssertTrue(try store.pendingUploads(projectId: project.id).isEmpty, "a draft has no issue to show it on yet")
+
+        try store.move(draft.id, to: .checking, actor: .owner)
+        try engine.pushPending(repo: repo)
+        let t = try store.ticket(id: draft.id)!
+        XCTAssertEqual(try engine.uploadAttachments(repo: repo, projectId: project.id), 1)
+        let remote = "attachments/\(t.ghNumber!)/\(file.lastPathComponent)"
+        XCTAssertEqual(tracker.files["\(repo)/\(remote)"], Data([1, 2, 3]))
+        XCTAssertEqual(try store.attachments(ticketId: t.id).first?.remotePath, remote)
+        try engine.pushPending(repo: repo)
+        let comment = try XCTUnwrap(tracker.issues[repo]?[t.ghNumber!]?.comments.last?.body)
+        XCTAssertTrue(comment.contains("![export.png](https://github.com/\(repo)/blob/main/\(remote)?raw=true)"))
+        XCTAssertTrue(SyncEngine.isHatchComment(comment), "the pull does not import it back as a new comment")
+        XCTAssertEqual(try engine.uploadAttachments(repo: repo, projectId: project.id), 0, "nothing left to send")
+
+        // A marked-up file goes again, under the same name, without a second comment.
+        try Data([9, 9]).write(to: file)
+        try store.setAttachmentSha(a.id, sha: "two")
+        XCTAssertEqual(try engine.uploadAttachments(repo: repo, projectId: project.id), 1)
+        XCTAssertEqual(tracker.files["\(repo)/\(remote)"], Data([9, 9]))
+        try engine.pushPending(repo: repo)
+        XCTAssertEqual(tracker.issues[repo]?[t.ghNumber!]?.comments.count, 1)
+
+        // A failure stays on the screenshot and is logged once.
+        try store.setAttachmentSha(a.id, sha: "three")
+        tracker.failNext(1)
+        XCTAssertEqual(try engine.uploadAttachments(repo: repo, projectId: project.id), 0)
+        XCTAssertNotNil(try store.attachments(ticketId: t.id).first?.uploadError)
+        XCTAssertEqual(try store.events(ticketId: t.id, kinds: ["attachment-upload-failed"]).count, 1)
     }
 
     // MARK: Hatch comment detection

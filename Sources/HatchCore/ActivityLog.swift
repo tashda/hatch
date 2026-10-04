@@ -32,7 +32,7 @@ public extension HatchStore {
         // Oldest first, so each comment (one operation per note, never merged) goes to its own note.
         var out: [LogEntry] = events.reversed().map { e in
             let families = Self.syncFamilies[e.kind] ?? []
-            let oneToOne = e.kind == "note"
+            let oneToOne = e.kind == "note" || e.kind == "attachment-uploaded"
             let match = families.isEmpty ? nil : ops
                 .filter { $0.ticketId == e.ticketId && families.contains($0.op) && $0.at.timeIntervalSince(e.at) >= -0.5
                           && !(oneToOne && used.contains($0.id)) }
@@ -53,5 +53,6 @@ public extension HatchStore {
         "type": ["issue.labels", "issue.create"],
         "edit": ["issue.update", "issue.labels", "issue.create"],
         "note": ["issue.comment"],
+        "attachment-uploaded": ["issue.comment"],
     ]
 }

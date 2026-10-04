@@ -2,6 +2,13 @@
 
 Updated 2026-10-04 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
 
+## Local verification (macOS, 2026-10-04): screenshots in the tickets repository (M3)
+
+- **Upload** (`SyncEngine.uploadAttachments`, schema 5: `remote_path`, `uploaded_sha`, `upload_error` on `attachment`): after each push, the app's sync and `hatch sync` commit the project's new screenshots to `attachments/<issue>/` on the tickets repository's branch, once the ticket has an issue. The first upload queues an issue comment in Hatch's format with the image (`![caption](https://github.com/<repo>/blob/<branch>/<path>?raw=true)`), pushed right after; a marked-up file (new checksum) replaces the file under the same name without a second comment. A failure stays on the screenshot and is logged once; the next sync tries again.
+- **Where it shows**: a badge on each screenshot (uploaded, waiting, or a red failure with the error); the Log ("Screenshot uploaded to the tickets repository", paired with its comment); agents' briefs list the screenshots as files on this Mac.
+- **Verified**: `swift test` (0 failures; the upload, re-upload, no second comment, failure-once test against the in-memory GitHub), `tools/smoke.sh`, Xcode app build; snapshot of a ticket with one uploaded and one waiting screenshot.
+- **Not verified**: a real upload to GitHub, and whether the issue comment shows the image for people with access to the private repository.
+
 ## Local verification (macOS, 2026-10-04): screenshots, paste anywhere and mark-up (E3)
 
 - **⌘V anywhere**: one app-wide watcher (`ScreenshotPasteCenter`). With an image on the clipboard and no text, ⌘V hands it to the newest view that takes screenshots in that window: the composer (adds a thumbnail), a ticket page or ticket window, including while typing in the Thread (attaches to the ticket), and a Decide card (attaches to its ticket and opens the note). Text on the clipboard, or a window nobody registered for, pastes as usual. Image files copied in Finder count too.

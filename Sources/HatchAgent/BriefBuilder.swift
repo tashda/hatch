@@ -41,6 +41,8 @@ public enum BriefBuilder {
             out.append(Text.indent("\(t.originalTitle ?? t.title)\n" + Text.clip(t.originalBody ?? "", 600)))
         }
 
+        out += try screenshotLines(store, t)
+
         // The owner's answers to Iris's questions.
         let answered = try store.questions(ticketId: t.id).filter { !$0.isOpen }
         if !answered.isEmpty {
@@ -222,6 +224,20 @@ public enum BriefBuilder {
         var out = ["\n## Area\n\(a.name)" + (a.specPrefix.map { " (Spec \($0)-*)" } ?? "")]
         out.append("Files: " + a.paths.joined(separator: ", "))
         if let plans = a.testPlans, !plans.isEmpty { out.append("Tests: " + plans.joined(separator: ", ")) }
+        return out
+    }
+
+    /// The ticket's screenshots as files on this Mac, so an agent can open them (decisions E3, M3). Marks drawn on
+    /// them point at what matters.
+    static func screenshotLines(_ store: HatchStore, _ t: Ticket) throws -> [String] {
+        let shots = try store.attachments(ticketId: t.id).filter { $0.kind == "screenshot" }
+        guard !shots.isEmpty else { return [] }
+        var out = ["\n## Screenshots (open them; red marks point at what matters)"]
+        for a in shots.prefix(6) {
+            let file = store.attachmentFile(a)?.path ?? a.path
+            out.append("- \(file)" + (a.caption.map { " (\($0))" } ?? ""))
+        }
+        if shots.count > 6 { out.append("- and \(shots.count - 6) more (hatch show \(t.displayNumber))") }
         return out
     }
 

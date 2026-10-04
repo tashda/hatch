@@ -259,6 +259,13 @@ public struct Attachment: Identifiable, Equatable, Sendable {
     public let kind: String
     public let caption: String?
     public let at: Date
+    /// Where it is in the tickets repository once uploaded (decision M3), such as `attachments/151/shot-1.png`.
+    public var remotePath: String? = nil
+    public var uploadedSha: String? = nil
+    public var uploadError: String? = nil
+
+    /// Uploaded, and not changed since (a mark-up changes the checksum).
+    public var isUploaded: Bool { remotePath != nil && (sha == nil || uploadedSha == sha) }
 }
 
 public struct SpecItem: Identifiable, Equatable, Sendable {

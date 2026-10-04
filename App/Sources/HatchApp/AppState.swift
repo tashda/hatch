@@ -186,16 +186,16 @@ final class AppState: ObservableObject {
 
     func syncNow() {
         guard !syncing else { return }
-        let targets: [(repo: String, projectId: Int, ci: (remote: String, ref: String)?)] = projects.compactMap { p in
+        let targets: [(repo: String, projectId: Int, branch: String, ci: (remote: String, ref: String)?)] = projects.compactMap { p in
             guard let repo = p.config?.ticketsRepo, !repo.isEmpty else { return nil }
             // CI on the integration branch is read only while something merged waits for it (decision I6).
             let merged = !((try? store.tickets(TicketFilter(projectId: p.id, statuses: [.merged]))) ?? []).isEmpty
             let ci = merged ? p.config?.repo(.app).map { ($0.remote, p.config?.integrationBranch ?? "hatch") } : nil
-            return (repo, p.id, ci)
+            return (repo, p.id, p.config?.repo(.tickets)?.branch ?? "main", ci)
         }
         guard !targets.isEmpty else { return }
         syncing = true
-        let store = store
+        let store = store, root = paths.root
         Task {
             let outcome = await Task.detached { () -> (ok: Bool, message: String?) in
                 guard HXKeychain.read() != nil else {
@@ -206,6 +206,10 @@ final class AppState: ObservableObject {
                 for target in targets {
                     do {
                         _ = try engine.pushPending(repo: target.repo)
+                        // Screenshots go to the tickets repo once their issue exists; their comments go out right after (M3).
+                        if try engine.uploadAttachments(repo: target.repo, projectId: target.projectId, root: root, branch: target.branch) > 0 {
+                            _ = try engine.pushPending(repo: target.repo)
+                        }
                         _ = try engine.pull(repo: target.repo, projectId: target.projectId)
                         if let ci = target.ci { try engine.checkCI(projectId: target.projectId, repo: ci.remote, ref: ci.ref) }
                     } catch {

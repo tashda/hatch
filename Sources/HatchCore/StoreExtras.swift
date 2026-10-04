@@ -155,6 +155,56 @@ public extension HatchStore {
         return try attachments(ticketId: ticketId).last!
     }
 
+    static func attachment(_ r: Row) -> Attachment {
+        Attachment(id: r.int("id")!, ticketId: r.int("ticket_id")!, path: r.string("path")!, sha: r.string("sha"),
+                   kind: r.string("kind") ?? "screenshot", caption: r.string("caption"), at: r.date("at")!,
+                   remotePath: r.string("remote_path"), uploadedSha: r.string("uploaded_sha"), uploadError: r.string("upload_error"))
+    }
+
+    // MARK: Uploading screenshots (decision M3)
+
+    /// The folder relative attachment paths are under: the Hatch folder, next to the database. Nil for an in-memory store.
+    var attachmentsRoot: URL? {
+        db.path.isEmpty || db.path == ":memory:" ? nil : URL(fileURLWithPath: db.path).deletingLastPathComponent()
+    }
+
+    /// The file of an attachment on this Mac.
+    func attachmentFile(_ a: Attachment, root: URL? = nil) -> URL? {
+        if a.path.hasPrefix("/") { return URL(fileURLWithPath: a.path) }
+        return (root ?? attachmentsRoot)?.appendingPathComponent(a.path)
+    }
+
+    /// Screenshots not yet in the tickets repository, or changed since: only for tickets that have an issue.
+    func pendingUploads(projectId: Int? = nil) throws -> [Attachment] {
+        var sql = """
+            SELECT a.* FROM attachment a JOIN ticket t ON t.id = a.ticket_id
+            WHERE t.gh_number IS NOT NULL AND (a.remote_path IS NULL OR (a.sha IS NOT NULL AND a.uploaded_sha IS NOT a.sha))
+            """
+        var params: [SQLValue] = []
+        if let projectId { sql += " AND t.project_id = ?"; params.append(.int(projectId)) }
+        return try db.query(sql + " ORDER BY a.id", params, map: Self.attachment)
+    }
+
+    func markAttachmentUploaded(_ id: Int, remotePath: String, sha: String?) throws {
+        try db.execute("UPDATE attachment SET remote_path = ?, uploaded_sha = ?, upload_error = NULL WHERE id = ?",
+                       [.text(remotePath), .opt(sha), .int(id)])
+    }
+
+    /// Keeps the failure for the screenshot's badge; the Log gets an event only when the error is new.
+    func markAttachmentUploadFailed(_ id: Int, ticketId: Int, error: String) throws {
+        let before = try db.query("SELECT upload_error FROM attachment WHERE id = ?", [.int(id)]) { $0.string("upload_error") }.first ?? nil
+        try db.execute("UPDATE attachment SET upload_error = ? WHERE id = ?", [.text(error), .int(id)])
+        if before != error { try record(ticketId, actor: "hatch", kind: "attachment-upload-failed", payload: ["error": .string(error)]) }
+    }
+
+    /// The issue comment that shows an uploaded screenshot, queued like every comment Hatch posts.
+    func enqueueScreenshotComment(ticketId: Int, caption: String?, imageURL: String) throws {
+        let alt = (caption ?? "screenshot").replacingOccurrences(of: "]", with: ")")
+        _ = try enqueue(op: "issue.comment", ticketId: ticketId,
+                        payload: ["body": .string(Self.commentBody(kind: .system, author: "Hatch", text: "Screenshot\n\n![\(alt)](\(imageURL))"))])
+        try record(ticketId, actor: "hatch", kind: "attachment-uploaded", payload: ["url": .string(imageURL)])
+    }
+
     /// A screenshot's file changed (marked up): its checksum follows, so a later upload sends the new image.
     func setAttachmentSha(_ id: Int, sha: String) throws {
         try db.execute("UPDATE attachment SET sha = ? WHERE id = ?", [.text(sha), .int(id)])
@@ -162,8 +212,7 @@ public extension HatchStore {
 
     func attachments(ticketId: Int) throws -> [Attachment] {
         try db.query("SELECT * FROM attachment WHERE ticket_id = ? ORDER BY at, id", [.int(ticketId)]) {
-            Attachment(id: $0.int("id")!, ticketId: $0.int("ticket_id")!, path: $0.string("path")!, sha: $0.string("sha"),
-                       kind: $0.string("kind") ?? "screenshot", caption: $0.string("caption"), at: $0.date("at")!)
+            Self.attachment($0)
         }
     }
 

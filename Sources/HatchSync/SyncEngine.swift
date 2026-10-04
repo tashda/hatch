@@ -229,13 +229,30 @@ public final class SyncEngine {
         return state
     }
 
-    /// Commits a screenshot to `attachments/<ticket number>/<name>` in the tickets repo (decision M3) and records it.
+    /// Commits the project's new and marked-up screenshots to `attachments/<issue>/` in the tickets repo (decision M3).
+    /// The first upload of each queues an issue comment that shows the image, so it appears on GitHub with the ticket;
+    /// a marked-up file replaces the old one under the same name. Returns how many were sent; a failure is kept on the
+    /// screenshot and the others go on.
     @discardableResult
-    public func commitAttachment(ticket: Ticket, localFile: URL, repo: String, branch: String = "main", caption: String? = nil) throws -> Attachment {
-        let data = try Data(contentsOf: localFile)
-        let folder = ticket.ghNumber.map(String.init) ?? "new-\(ticket.id)"
-        let path = "attachments/\(folder)/\(localFile.lastPathComponent)"
-        let sha = try tracker.putFile(repo: repo, path: path, data: data, message: "Add \(localFile.lastPathComponent) to \(ticket.displayNumber)", branch: branch)
-        return try store.addAttachment(ticket.id, path: path, sha: sha, kind: "screenshot", caption: caption)
+    public func uploadAttachments(repo: String, projectId: Int, root: URL? = nil, branch: String = "main") throws -> Int {
+        var sent = 0
+        for a in try store.pendingUploads(projectId: projectId) {
+            guard let ticket = try store.ticket(id: a.ticketId), let number = ticket.ghNumber else { continue }
+            do {
+                guard let file = store.attachmentFile(a, root: root) else { throw TrackerError.validation("No folder for \(a.path)") }
+                let data = try Data(contentsOf: file)
+                let remote = a.remotePath ?? "attachments/\(number)/\(file.lastPathComponent)"
+                try tracker.putFile(repo: repo, path: remote, data: data, message: "Screenshot for #\(number)", branch: branch)
+                if a.remotePath == nil {
+                    try store.enqueueScreenshotComment(ticketId: ticket.id, caption: a.caption,
+                                                       imageURL: "https://github.com/\(repo)/blob/\(branch)/\(remote)?raw=true")
+                }
+                try store.markAttachmentUploaded(a.id, remotePath: remote, sha: a.sha)
+                sent += 1
+            } catch {
+                try store.markAttachmentUploadFailed(a.id, ticketId: a.ticketId, error: "\(error)")
+            }
+        }
+        return sent
     }
 }
