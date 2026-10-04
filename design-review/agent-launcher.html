@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent launcher</title>
+<style>
+  :root {
+    --page: #ececee; --sheet: #fbfbfd; --group: #f2f2f5; --row-line: #e1e1e6; --text: #1d1d1f; --secondary: #6e6e73;
+    --tertiary: #a1a1a6; --blue: #0a66d8; --blue-soft: #e7f0fd; --green: #248a3d; --green-soft: #e6f4ea; --amber: #a05a00;
+    --amber-soft: #fdf1df; --field: #ffffff; --line: #d6d6db; --side: #f4f4f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #161618; --sheet: #232326; --group: #2c2c30; --row-line: #3a3a3f; --text: #f2f2f4; --secondary: #a3a3aa;
+      --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+      --amber-soft: #3d2e14; --field: #1b1b1e; --line: #46464c; --side: #29292c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1060px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; font-weight: 600; margin: 56px 0 6px; }
+  h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--secondary); font-size: 14px; max-width: 720px; }
+  .muted { color: var(--secondary); }
+  .small { font-size: 11.5px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .note { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 12px; padding: 16px 18px; }
+  .rec { border: 2px solid var(--blue); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--blue-soft); color: var(--blue); margin-bottom: 8px; }
+  .badge.green { background: var(--green-soft); color: var(--green); }
+  .badge.amber { background: var(--amber-soft); color: var(--amber); }
+
+  .sheet { background: var(--sheet); border-radius: 16px; border: 1px solid var(--row-line); box-shadow: 0 20px 50px rgba(0,0,0,.14); overflow: hidden; }
+  .sheet-title { font-size: 15px; font-weight: 600; padding: 20px 24px 4px; }
+  .group-h { font-size: 12px; font-weight: 600; margin: 16px 24px 6px; }
+  .group { background: var(--group); border-radius: 10px; margin: 0 16px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; min-height: 38px; }
+  .row + .row { border-top: 1px solid var(--row-line); margin: 0 0; }
+  .row .val { color: var(--secondary); text-align: right; }
+  .inline-field { color: var(--text); text-align: right; min-width: 160px; outline: none; }
+  .inline-field.ph { color: var(--tertiary); }
+  .boxed { background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; width: 55%; min-height: 24px; }
+  .footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--row-line); margin-top: 18px; }
+  .btn { font: inherit; border: 0; border-radius: 7px; padding: 5px 14px; background: var(--group); color: var(--text); box-shadow: inset 0 0 0 0.5px var(--line); cursor: pointer; }
+  .btn.primary { background: var(--blue); color: #fff; box-shadow: none; }
+  .popup { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; padding: 3px 6px 3px 9px; background: var(--field); box-shadow: 0 0 0 0.5px var(--line), 0 1px 1px rgba(0,0,0,.05); }
+  .popup::after { content: "⌃⌄"; font-size: 9px; letter-spacing: -2px; writing-mode: vertical-lr; color: var(--secondary); }
+  .check { color: var(--green); font-weight: 600; }
+  .info { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--tertiary); color: var(--secondary); font-size: 10px; font-weight: 600; margin-left: 4px; vertical-align: 1px; }
+  .radio { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; }
+  .radio + .radio { border-top: 1px solid var(--row-line); }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--field); flex: none; margin-top: 2px; }
+  .dot.on { border: 4px solid var(--blue); }
+  .icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-size: 17px; flex: none; color: #fff; }
+  .i-tickets { background: #5e5ce6; } .i-code { background: #0a84ff; } .i-design { background: #ff6482; } .i-branch { background: #30a46c; } .i-gh { background: #1d1d1f; }
+  @media (prefers-color-scheme: dark) { .i-gh { background: #f2f2f4; color: #1d1d1f; } }
+
+  /* Concept A: assistant */
+  .assistant { display: grid; grid-template-columns: 200px 1fr; min-height: 520px; }
+  .steps { background: var(--side); padding: 18px 10px; border-right: 1px solid var(--row-line); }
+  .step { display: flex; gap: 9px; align-items: center; padding: 7px 10px; border-radius: 7px; cursor: pointer; color: var(--secondary); }
+  .step .n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); }
+  .step.done .n { background: var(--green); color: #fff; box-shadow: none; }
+  .step.on { background: var(--blue-soft); color: var(--text); font-weight: 600; }
+  .step.on .n { background: var(--blue); color: #fff; box-shadow: none; }
+  .pane { display: none; flex-direction: column; }
+  .pane.on { display: flex; }
+  .pane-body { padding: 26px 28px 0; flex: 1; }
+  .pane-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+  .pane-head h3 { font-size: 17px; margin: 0; }
+  .example { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; margin: 14px 0 0; background: var(--sheet); }
+  .example .label { font-size: 11px; font-weight: 600; color: var(--secondary); margin-bottom: 6px; }
+  .issue { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; }
+  .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; background: var(--group); color: var(--secondary); box-shadow: inset 0 0 0 0.5px var(--line); }
+  .swatches { display: flex; gap: 6px; margin-top: 4px; }
+  .swatches span { width: 22px; height: 22px; border-radius: 6px; }
+  .flow { display: flex; align-items: center; gap: 0; margin: 18px 0 6px; flex-wrap: wrap; row-gap: 10px; }
+  .node { padding: 7px 12px; border-radius: 9px; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .node.hatch { background: var(--green-soft); color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+  .node.base { background: var(--blue-soft); color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+  .arrow { display: flex; flex-direction: column; align-items: center; padding: 0 8px; color: var(--secondary); font-size: 11px; min-width: 96px; }
+  .arrow .line { height: 1px; background: var(--secondary); width: 100%; position: relative; margin: 4px 0; }
+  .arrow .line::after { content: ""; position: absolute; right: -1px; top: -4px; border-left: 7px solid var(--secondary); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; }
+
+  /* Concept B: cards */
+  .card { background: var(--group); border-radius: 12px; margin: 0 16px 12px; padding: 14px; }
+  .card-head { display: flex; gap: 12px; align-items: center; }
+  .card-head .grow { flex: 1; }
+  .card .sub { color: var(--secondary); font-size: 12px; }
+  .card .row { padding: 8px 0 0; min-height: 0; }
+  .card .row + .row { border-top: 0; }
+
+  /* Compare */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .qa { counter-reset: q; }
+  .qa .q { display: grid; grid-template-columns: 28px 1fr; gap: 6px 10px; padding: 14px 0; border-top: 1px solid var(--row-line); }
+  .qa .q::before { counter-increment: q; content: counter(q); width: 22px; height: 22px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); font-weight: 600; font-size: 12px; display: grid; place-items: center; }
+  .qa .q > div { grid-column: 2; }
+  .qa .q > div:first-of-type { grid-row: 1; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--group); padding: 1px 5px; border-radius: 4px; }
+  .qform { padding: 16px 0; border-top: 1px solid var(--row-line); }
+  .qform:first-child { border-top: 0; padding-top: 4px; }
+  .qform h3 { font-size: 14px; margin-bottom: 2px; }
+  .qform .why { color: var(--secondary); margin-bottom: 10px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+  .opt { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--group); box-shadow: inset 0 0 0 1px transparent; cursor: pointer; }
+  .opt:hover { box-shadow: inset 0 0 0 1px var(--line); }
+  .opt.on { background: var(--blue-soft); box-shadow: inset 0 0 0 1.5px var(--blue); }
+  .opt input { display: none; }
+  .opt .rec-tag { font-size: 10.5px; font-weight: 600; color: var(--blue); margin-left: 4px; }
+  .opt .d { color: var(--secondary); font-size: 12px; }
+  .qnote { width: 100%; margin-top: 8px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; resize: vertical; min-height: 34px; }
+
+  .win { display: grid; grid-template-columns: 210px 1fr; min-height: 560px; }
+  .sb { background: var(--side); padding: 16px 10px; border-right: 1px solid var(--row-line); }
+  .sb .it { display:flex; gap:9px; align-items:center; padding:6px 10px; border-radius:7px; color: var(--text); }
+  .sb .it.on { background: var(--blue-soft); font-weight:600; }
+  .pg { padding: 22px 26px 26px; }
+  .pg h4 { font-size: 20px; margin: 0 0 14px; font-weight: 600; }
+  .sec-h { font-size: 12.5px; font-weight: 600; margin: 18px 4px 6px; }
+  .sec-f { font-size: 11.5px; color: var(--secondary); margin: 6px 4px 0; line-height: 1.45; }
+  .frm { background: var(--group); border-radius: 10px; }
+  .frow { display:flex; align-items:center; justify-content:space-between; gap: 12px; padding: 8px 12px; min-height: 40px; }
+  .frow + .frow { border-top: 1px solid var(--row-line); }
+  .frow .t { display:flex; flex-direction:column; }
+  .frow .s { font-size: 11.5px; color: var(--secondary); }
+  .pv { display:inline-flex; align-items:center; gap:8px; color: var(--text); }
+  .chev { width: 20px; height: 20px; border-radius: 50%; display:inline-grid; place-items:center; font-size: 9px; color: var(--secondary); background: transparent; }
+  .pv:hover .chev, .chev.hov { background: var(--row-line); }
+  .chev::before { content: "⌃\A⌄"; white-space: pre; line-height: 6px; display:block; text-align:center; margin-top:-1px; }
+  .sw { width: 32px; height: 19px; border-radius: 10px; background: var(--blue); position: relative; display:inline-block; }
+  .sw::after { content:""; position:absolute; right:2px; top:2px; width:15px; height:15px; border-radius:50%; background:#fff; }
+  .sw.off { background: var(--line); } .sw.off::after { right:auto; left:2px; }
+  .ib { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--tertiary); display:inline-grid; place-items:center; font-size: 11px; color: var(--secondary); font-weight:600; }
+  .tile { width: 26px; height: 26px; border-radius: 7px; display:grid; place-items:center; color:#fff; font-size: 13px; font-weight: 700; flex:none; }
+  .menu { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 9px; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 5px; min-width: 230px; font-size: 13px; }
+  .menu .mh { font-size: 11px; font-weight: 600; color: var(--secondary); padding: 6px 10px 2px; }
+  .menu .mi { padding: 4px 10px 4px 24px; border-radius: 5px; position: relative; display:flex; justify-content:space-between; gap: 16px; }
+  .menu .mi.ck::before { content: "✓"; position:absolute; left: 8px; }
+  .menu .mi.hl { background: var(--blue); color: #fff; }
+  .menu .mi .r { color: var(--secondary); font-size: 11.5px; }
+  .menu .mi.hl .r { color: #dbe8ff; }
+  .menu .sep { height: 1px; background: var(--row-line); margin: 4px 8px; }
+  .bad { border: 2px solid #e5484d; }
+  .lbl { font-size: 11px; font-weight: 700; letter-spacing: .02em; margin-bottom: 8px; }
+  .lbl.bad-t { color: #e5484d; } .lbl.good-t { color: var(--green); }
+  .stp { display:inline-flex; flex-direction:column; border: 1px solid var(--line); border-radius: 6px; overflow:hidden; font-size: 8px; line-height: 9px; background: var(--field); }
+  .stp span { padding: 0 4px; } .stp span + span { border-top: 1px solid var(--line); }
+  .pick-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pick { background: var(--group); border-radius: 10px; padding: 10px 12px; display:flex; gap: 10px; align-items:flex-start; }
+  .pick.on { box-shadow: inset 0 0 0 2px var(--blue); background: var(--blue-soft); }
+  .pick .d { font-size: 11.5px; color: var(--secondary); }
+  .ok { color: var(--green); font-weight: 600; }
+  table.rules { width:100%; border-collapse: collapse; font-size: 12.5px; }
+  table.rules td, table.rules th { text-align:left; padding: 8px 8px; border-top: 1px solid var(--row-line); vertical-align: top; }
+  table.rules th { color: var(--secondary); font-weight: 600; border-top: 0; }
+  .pv { white-space: nowrap; }
+  @media (max-width: 900px) { .win { grid-template-columns: 1fr; } .sb { display: none; } }
+  .opt3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(270px,1fr)); gap: 14px; margin-top: 12px; }
+  .cap { font-size: 11px; font-weight: 700; margin-bottom: 6px; color: var(--secondary); }
+  .cap.capr { color: var(--blue); }
+  .dot-ok { width:8px; height:8px; border-radius:50%; background: var(--green); display:inline-block; margin-right:6px; }
+  .dot-bad { width:8px; height:8px; border-radius:50%; background:#e5484d; display:inline-block; margin-right:6px; }
+  .pushbtn { font: inherit; font-size: 12.5px; border: 0; border-radius: 6px; padding: 3px 10px; background: var(--field); box-shadow: 0 0 0 .5px var(--line), 0 1px 1px rgba(0,0,0,.06); }
+  .pm { display:inline-flex; border-radius: 5px; box-shadow: 0 0 0 .5px var(--line); background: var(--field); font-size: 13px; }
+  .pm span { padding: 1px 9px; } .pm span + span { border-left: .5px solid var(--line); }
+  .chevr { color: var(--tertiary); }
+  #summary { width: 100%; min-height: 150px; font: 12px ui-monospace, Menlo, monospace; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--text); }
+  .tilei { width: 26px; height: 26px; border-radius: 7px; display:grid; place-items:center; color:#fff; font-size: 13px; flex:none; }
+  .warn { color: #c77700; }
+  .seg { display:inline-flex; border-radius: 7px; background: var(--row-line); padding: 2px; font-size: 12px; }
+  .seg span { padding: 2px 10px; border-radius: 5px; } .seg span.on { background: var(--field); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .cap.capr { color: var(--blue); }
+</style>
+</head>
+<body>
+<main>
+  <h1>The agent launcher</h1>
+  <p class="lead">Today you start Claude Code yourself and it calls <code>hatch take</code>. With a launcher, Hatch starts the agent itself: it claims the ticket, makes its workspace, places the rules, writes the brief, and runs the program with the task's model and effort (Prepare, Build or Fix). What already exists and is reused: claiming and workspaces, the brief, the push guard that allows only <code>ticket/…</code> branches, "Agents at once", and the run records with tokens. Five decisions, each with my recommendation.</p>
+
+  <h2>1. When does an agent start?</h2>
+  <div class="opt3">
+    <div class="note rec"><div class="cap capr">A · RECOMMENDED: BY ITSELF, WITH A PAUSE SWITCH</div>
+      <p class="muted small" style="margin:0">When a ticket is ready for an agent (Ready, Accepted, or back from your review) and a slot is free, Hatch starts one. A Pause switch in the toolbar and in Settings stops new starts; running agents finish. This is what "Agents at once" was always for.</p></div>
+    <div class="note"><div class="cap">B · WHEN YOU PRESS START</div>
+      <p class="muted small" style="margin:0">Each ticket gets a Start Agent button. Full control, but work waits for you, and the slots only limit what you start.</p></div>
+    <div class="note"><div class="cap">C · BY ITSELF FOR SMALL WORK ONLY</div>
+      <p class="muted small" style="margin:0">Tweaks and Bugs start by themselves; Proposals and Builds of accepted Proposals wait for Start. A middle way while you build trust.</p></div>
+  </div>
+
+  <h2>2. Which programs can run as agents?</h2>
+  <div class="opt3">
+    <div class="note rec"><div class="cap capr">A · RECOMMENDED: CLAUDE CODE FIRST, CODEX NEXT</div>
+      <p class="muted small" style="margin:0">Claude Code runs headless in the workspace with the task's model and effort, and reports tokens. Codex follows with its own headless mode. Gemini CLI and opencode can be picked for coding tasks only once they are supported; until then the Settings menu shows them as "not yet for coding".</p></div>
+    <div class="note"><div class="cap">B · ALL FOUR AT ONCE</div>
+      <p class="muted small" style="margin:0">Every program from day one. Four sets of flags, permissions and output formats to get right before anything works.</p></div>
+  </div>
+
+  <h2>3. What may an agent do on this Mac?</h2>
+  <div class="opt3">
+    <div class="note rec"><div class="cap capr">A · RECOMMENDED: ITS WORKSPACE, ITS TOOLS, NOTHING ELSE</div>
+      <p class="muted small" style="margin:0">It may edit files in its own workspace, run the build and test commands, git (push only to its <code>ticket/…</code> branch, already enforced), and the <code>hatch</code> commands. Everything else is refused without asking you, so an agent never blocks waiting for permission.</p></div>
+    <div class="note"><div class="cap">B · FULL FREEDOM IN THE WORKSPACE</div>
+      <p class="muted small" style="margin:0">The program's "skip all permission checks" mode. Never blocks and never refuses, but nothing stops a command outside the workspace.</p></div>
+    <div class="note"><div class="cap">C · ASK ME</div>
+      <p class="muted small" style="margin:0">Each new kind of command waits for your yes in Hatch. Safest, but agents stand still whenever you are away.</p></div>
+  </div>
+
+  <h2>4. Where do you watch an agent?</h2>
+  <div class="opt3">
+    <div class="note rec"><div class="cap capr">A · RECOMMENDED: THE TICKET'S WORK TAB</div>
+      <p class="muted small" style="margin:0">The ticket shows the agent's steps and a live log, with Stop and "Open in Terminal" to take over in its workspace. The Agents page lists every running agent with its ticket, model, time and tokens. (The Agents page belongs to the other session; I would only add the running list.)</p></div>
+    <div class="note"><div class="cap">B · A TERMINAL WINDOW PER AGENT</div>
+      <p class="muted small" style="margin:0">Each agent runs visibly in Terminal. Familiar, but windows pile up and Hatch cannot show progress itself.</p></div>
+  </div>
+
+  <h2>5. When an agent stops without finishing</h2>
+  <div class="opt3">
+    <div class="note rec"><div class="cap capr">A · RECOMMENDED: ONE RETRY, THEN IT WAITS FOR YOU</div>
+      <p class="muted small" style="margin:0">If the program exits or times out before <code>hatch ready</code> or <code>hatch offer</code>, Hatch keeps the workspace, notes what happened on the ticket with the end of the log, and starts it once more. A second failure puts it on your Desk with the reason.</p></div>
+    <div class="note"><div class="cap">B · IT WAITS FOR YOU AT ONCE</div>
+      <p class="muted small" style="margin:0">No retry; the first failure goes to your Desk. Fewer tokens spent on a ticket that keeps failing.</p></div>
+  </div>
+
+  <h2>Decisions I need from you</h2>
+  <p class="lead">My recommendation is already selected. Your answers appear as text in the box at the bottom, ready to copy; or just tell me in chat.</p>
+  <form id="answers" class="note" style="margin-top:12px"></form>
+  <textarea id="summary" readonly></textarea>
+</main>
+<script>
+  const QUESTIONS = [
+    { id: 'start', title: '1. When does an agent start?', why: 'Work moves without you, the slots do their job, and Pause is one switch away.', rec: 'auto', options: [
+      ['auto', 'A: by itself, with a Pause switch', 'When a ticket is ready and a slot is free'], ['manual', 'B: when I press Start', 'Per ticket'], ['small', 'C: by itself for Tweaks and Bugs only', 'Proposals wait for Start'] ] },
+    { id: 'programs', title: '2. Which programs run as agents?', why: 'One program done well first; Codex next; the others shown as not yet supported for coding.', rec: 'claude', options: [
+      ['claude', 'A: Claude Code first, Codex next', 'Others later'], ['all', 'B: all four at once', 'More to get right first'] ] },
+    { id: 'perms', title: '3. What may an agent do?', why: 'Agents never block waiting for you, and nothing outside their workspace and tools is allowed.', rec: 'scoped', options: [
+      ['scoped', 'A: its workspace, build and test, git, hatch', 'Everything else refused'], ['free', 'B: full freedom in the workspace', 'Skip permission checks'], ['ask', 'C: ask me', 'Agents wait while I am away'] ] },
+    { id: 'watch', title: '4. Where do I watch an agent?', why: 'Everything about a ticket stays on the ticket, with Stop and Open in Terminal one click away.', rec: 'work', options: [
+      ['work', 'A: the ticket\'s Work tab, plus a running list on the Agents page', 'Live log, Stop, Open in Terminal'], ['terminal', 'B: a Terminal window per agent', 'Visible, piles up'] ] },
+    { id: 'fail', title: '5. When an agent stops without finishing', why: 'Most stops are passing (a timeout, a flaky build); a second failure needs a person.', rec: 'retry', options: [
+      ['retry', 'A: one retry, then my Desk', 'Workspace kept, log noted'], ['wait', 'B: my Desk at once', 'No retry'] ] }
+  ];
+  const KEY = 'hatch.launcher';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  const form = document.getElementById('answers');
+  function render() {
+    form.innerHTML = '';
+    QUESTIONS.forEach(q => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const box = document.createElement('div');
+      box.className = 'qform';
+      box.innerHTML = `<h3>${q.title}</h3><div class="why">Why I recommend it: ${q.why}</div><div class="opts"></div><textarea class="qnote" rows="1" placeholder="Note (optional)"></textarea>`;
+      const opts = box.querySelector('.opts');
+      q.options.forEach(([value, label, detail]) => {
+        const o = document.createElement('label');
+        o.className = 'opt' + (a.choice === value ? ' on' : '');
+        o.innerHTML = `<input type="radio" name="${q.id}" value="${value}" ${a.choice === value ? 'checked' : ''}><span class="dot ${a.choice === value ? 'on' : ''}"></span><span><b>${label}</b>${value === q.rec ? '<span class="rec-tag">Recommended</span>' : ''}<br><span class="d">${detail}</span></span>`;
+        o.addEventListener('click', () => { saved[q.id] = { choice: value, note: box.querySelector('.qnote').value }; store(); render(); });
+        opts.appendChild(o);
+      });
+      const note = box.querySelector('.qnote');
+      note.value = a.note || '';
+      note.addEventListener('input', () => { saved[q.id] = { choice: (saved[q.id] || a).choice, note: note.value }; store(); });
+      form.appendChild(box);
+    });
+  }
+  function store() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} }
+  function summary() {
+    return QUESTIONS.map(q => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const label = q.options.find(o => o[0] === a.choice)[1];
+      return `- ${q.title}: ${label}${a.choice === q.rec ? ' (recommended)' : ''}${a.note ? ' | Note: ' + a.note : ''}`;
+    }).join('\n');
+  }
+  window.hatchAnswers = summary;
+  (document.getElementById('copy')||{addEventListener(){}}).addEventListener('click', async () => {
+    const status = document.getElementById('status');
+    try { await navigator.clipboard.writeText(summary()); status.textContent = 'Copied. Paste it in chat.'; }
+    catch (e) { status.textContent = 'Could not copy here. Tell me in chat that you are done and I will read them.'; }
+  });
+  (document.getElementById('reset')||{addEventListener(){}}).addEventListener('click', () => { saved = {}; store(); render(); });
+  render();
+  const sumBox = document.getElementById('summary');
+  const showSummary = () => { sumBox.value = summary(); };
+  document.addEventListener('click', () => setTimeout(showSummary, 0));
+  document.addEventListener('input', () => setTimeout(showSummary, 0));
+  showSummary();
+</script>
+</body>
+</html>
