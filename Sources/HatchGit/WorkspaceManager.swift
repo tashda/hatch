@@ -92,8 +92,19 @@ public final class WorkspaceManager: @unchecked Sendable {
         }
         let ws = try store.saveWorkspace(ticketId: ticket.id, repoId: repo.id, path: path, branch: branch, baseSha: base)
         if guards { try installGuards(ws) }
+        placeRules(in: path, repo: repo)
         try store.record(ticket.id, actor: "hatch", kind: "workspace", payload: ["path": .string(path), "branch": .string(branch), "base": .string(base)])
         return ws
+    }
+
+    /// A worktree starts without untracked files, so the notebook's coding rules are placed in each code worktree.
+    /// Failing to place them never stops the workspace; the brief still carries the rules' path.
+    private func placeRules(in path: String, repo: Repo) {
+        guard repo.role == .app || repo.role == .designSystem,
+              let notebook = try? store.repo(projectId: repo.projectId, role: .notebook), let dir = notebook.localPath,
+              let rules = try? String(contentsOfFile: (dir as NSString).appendingPathComponent(Notebook.rulesPath), encoding: .utf8)
+        else { return }
+        _ = try? RulesPlacer.place(rules: rules, into: path, git: git)
     }
 
     public func list(ticketId: Int? = nil) throws -> [Workspace] { try store.workspaces(ticketId: ticketId) }

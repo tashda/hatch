@@ -37,7 +37,7 @@ enum AgentCommands {
         let t = try c.ticket(c.args.pos(1))
         let agent = c.args.option("agent") ?? "Agent on \(t.displayNumber)"
         let task = try c.store.take(t.id, agent: agent)
-        let wanted: [RepoRole] = task.kind == .prepare ? [.specimens] : (task.kind == .build || task.kind == .fix ? [.app, .designSystem] : [])
+        let wanted: [RepoRole] = task.kind == .prepare ? [.specimens, .notebook] : (task.kind == .build || task.kind == .fix ? [.app, .designSystem, .notebook] : [])
         var spaces: [String] = [], notes: [String] = []
         if !wanted.isEmpty && !c.args.flag("no-workspace") {
             let manager = WorkspaceManager(store: c.store)

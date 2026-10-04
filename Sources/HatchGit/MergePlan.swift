@@ -48,7 +48,7 @@ public extension MergePlan {
         let integration = project.config?.integrationBranch ?? "hatch"
         var steps: [MergeStep] = []
         var designTag: String?
-        for role in [RepoRole.designSystem, .specimens, .app] {
+        for role in [RepoRole.designSystem, .specimens, .app, .notebook] {
             guard let repo = try store.repo(projectId: project.id, role: role), let dir = repo.localPath else { continue }
             var ids: [Int] = [], cmds: [[String]] = [["merge", "--no-edit", "-m", "Bring \(repo.defaultBranch) into \(integration)", repo.defaultBranch]], names: [String] = []
             for t in tickets {

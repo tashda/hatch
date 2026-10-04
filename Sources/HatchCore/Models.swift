@@ -62,7 +62,7 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, Ex
 }
 
 public enum RepoRole: String, Codable, CaseIterable, Sendable {
-    case app, designSystem = "design-system", specimens, tickets
+    case app, designSystem = "design-system", specimens, tickets, notebook
 }
 
 public struct RepoConfig: Codable, Equatable, Sendable {
