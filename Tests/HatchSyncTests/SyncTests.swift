@@ -308,6 +308,19 @@ final class SyncTests: XCTestCase {
         XCTAssertEqual(try engine.ciStatus(repo: "acme/app", ref: "hatch"), .failed(["test"]))
     }
 
+    func testCIIsKeptAndNamedOnMergedTickets() throws {
+        let t = try store.createTicket(projectId: project.id, type: .tweak, title: "Rename Run")
+        try store.db.execute("UPDATE ticket SET status = 'merged', turn = 'hatch' WHERE id = ?", [.int(t.id)])
+        tracker.checkRunsByRef["hatch"] = [CheckRun(name: "test", status: "completed", conclusion: "failure")]
+        XCTAssertEqual(try engine.checkCI(projectId: project.id, repo: "acme/app", ref: "hatch"), .failed(["test"]))
+        XCTAssertEqual(store.ciRecord(projectId: project.id)?.summary, "failing: test")
+        try engine.checkCI(projectId: project.id, repo: "acme/app", ref: "hatch")
+        XCTAssertEqual(try store.events(ticketId: t.id, kinds: ["ci"]).count, 1, "an unchanged result is not logged again")
+        tracker.checkRunsByRef["hatch"] = [CheckRun(name: "test", status: "completed", conclusion: "success")]
+        try engine.checkCI(projectId: project.id, repo: "acme/app", ref: "hatch")
+        XCTAssertEqual(try store.events(ticketId: t.id, kinds: ["ci"]).last?.payload["state"]?.stringValue, "passed")
+    }
+
     func testCommitAttachment() throws {
         let t = try synced()
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("shot-\(UUID().uuidString).png")

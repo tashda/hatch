@@ -282,3 +282,46 @@ public extension HatchStore {
         .sorted { $0.at > $1.at }
     }
 }
+
+// MARK: - CI on the integration branch
+
+/// The last CI result on a project's integration branch (decision I6), read from GitHub during sync.
+public struct CIRecord: Codable, Equatable, Sendable {
+    public enum State: String, Codable, Sendable { case passed, pending, failed }
+    public var state: State
+    /// The checks that failed, by name.
+    public var failed: [String]
+    public var ref: String
+    public var checkedAt: Date
+    public init(state: State, failed: [String] = [], ref: String, checkedAt: Date) {
+        self.state = state; self.failed = failed; self.ref = ref; self.checkedAt = checkedAt
+    }
+
+    /// "passing", "running" or "failing: test, lint".
+    public var summary: String {
+        switch state {
+        case .passed: "passing"
+        case .pending: "running"
+        case .failed: "failing" + (failed.isEmpty ? "" : ": " + failed.joined(separator: ", "))
+        }
+    }
+}
+
+public extension HatchStore {
+    func ciRecord(projectId: Int) -> CIRecord? {
+        guard let raw = (try? setting("ci.\(projectId)")) ?? nil else { return nil }
+        return try? JSONDecoder().decode(CIRecord.self, from: Data(raw.utf8))
+    }
+
+    /// Keeps the latest result. When it changes, each merged ticket of the project gets a `ci` event, so its history
+    /// says when CI passed or failed on the branch it was merged into.
+    func setCIRecord(projectId: Int, _ ci: CIRecord) throws {
+        let before = ciRecord(projectId: projectId)
+        try setSetting("ci.\(projectId)", String(decoding: try JSONEncoder().encode(ci), as: UTF8.self))
+        guard before?.state != ci.state || before?.failed != ci.failed else { return }
+        for t in try tickets(TicketFilter(projectId: projectId, statuses: [.merged])) {
+            try record(t.id, actor: "hatch", kind: "ci", payload: ["state": .string(ci.state.rawValue), "ref": .string(ci.ref),
+                                                                   "failed": .array(ci.failed.map { .string($0) })])
+        }
+    }
+}

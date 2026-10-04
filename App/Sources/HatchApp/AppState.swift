@@ -142,9 +142,12 @@ final class AppState: ObservableObject {
 
     func syncNow() {
         guard !syncing else { return }
-        let targets: [(repo: String, projectId: Int)] = projects.compactMap { p in
+        let targets: [(repo: String, projectId: Int, ci: (remote: String, ref: String)?)] = projects.compactMap { p in
             guard let repo = p.config?.ticketsRepo, !repo.isEmpty else { return nil }
-            return (repo, p.id)
+            // CI on the integration branch is read only while something merged waits for it (decision I6).
+            let merged = !((try? store.tickets(TicketFilter(projectId: p.id, statuses: [.merged]))) ?? []).isEmpty
+            let ci = merged ? p.config?.repo(.app).map { ($0.remote, p.config?.integrationBranch ?? "hatch") } : nil
+            return (repo, p.id, ci)
         }
         guard !targets.isEmpty else { return }
         syncing = true
@@ -160,6 +163,7 @@ final class AppState: ObservableObject {
                     do {
                         _ = try engine.pushPending(repo: target.repo)
                         _ = try engine.pull(repo: target.repo, projectId: target.projectId)
+                        if let ci = target.ci { try engine.checkCI(projectId: target.projectId, repo: ci.remote, ref: ci.ref) }
                     } catch {
                         message = "\(target.repo): \(error)"
                     }

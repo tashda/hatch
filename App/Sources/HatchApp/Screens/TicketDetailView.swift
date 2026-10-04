@@ -227,7 +227,11 @@ struct TicketDetailView: View {
             return BannerSpec(message: "An agent is fixing what you reported.",
                               primaryTitle: "See progress", primary: .tab(.work))
         case .merged:
-            return BannerSpec(message: "Merged into the integration branch. Hatch waits for its checks.")
+            let branch = state.project(id: t.projectId)?.config?.integrationBranch ?? "hatch"
+            guard let ci = state.store.ciRecord(projectId: t.projectId) else {
+                return BannerSpec(message: "Merged into \(branch). Hatch waits for its checks.")
+            }
+            return BannerSpec(message: "Merged into \(branch). CI is \(ci.summary), checked \(Format.ago(ci.checkedAt)).")
         case .done:
             return BannerSpec(message: "Done.", primaryTitle: nil, primary: nil)
         case .blocked:

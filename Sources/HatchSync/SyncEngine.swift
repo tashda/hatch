@@ -215,6 +215,20 @@ public final class SyncEngine {
         return .passed
     }
 
+    /// Reads CI on a project's integration branch and keeps the result, for merged tickets and the Board (decision I6).
+    @discardableResult
+    public func checkCI(projectId: Int, repo: String, ref: String) throws -> CIState {
+        let state = try ciStatus(repo: repo, ref: ref)
+        let record: CIRecord
+        switch state {
+        case .passed: record = CIRecord(state: .passed, ref: ref, checkedAt: store.now())
+        case .pending: record = CIRecord(state: .pending, ref: ref, checkedAt: store.now())
+        case .failed(let names): record = CIRecord(state: .failed, failed: names, ref: ref, checkedAt: store.now())
+        }
+        try store.setCIRecord(projectId: projectId, record)
+        return state
+    }
+
     /// Commits a screenshot to `attachments/<ticket number>/<name>` in the tickets repo (decision M3) and records it.
     @discardableResult
     public func commitAttachment(ticket: Ticket, localFile: URL, repo: String, branch: String = "main", caption: String? = nil) throws -> Attachment {

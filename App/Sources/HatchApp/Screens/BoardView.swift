@@ -161,6 +161,12 @@ struct BoardCard: View {
                         PlainChip(text: projectName)
                     }
                 }
+                // A failing CI run on the branch a merged ticket went into is a real problem, so it is red (I6).
+                if ticket.status == .merged, let ci = state.store.ciRecord(projectId: ticket.projectId), ci.state == .failed {
+                    Label("CI failing", systemImage: "xmark.octagon.fill")
+                        .font(.caption.weight(.medium)).foregroundStyle(Theme.critical)
+                        .help(ci.summary)
+                }
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
