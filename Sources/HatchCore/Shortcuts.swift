@@ -134,6 +134,16 @@ public enum ShortcutCatalog {
         .init("page.health", "Health", .pages, .app, .init("h", [.control, .command])),
         .init("page.newTicket", "New Ticket", .pages, .app, .init("n", cmd)),
         .init("go.places", "Go to…", .pages, .app, .init("k", [.shift, .command])),
+        // The saved views listed under Views in the sidebar, in order.
+        .init("view.1", "Saved view 1", .pages, .app, .init("1", [.option, .command])),
+        .init("view.2", "Saved view 2", .pages, .app, .init("2", [.option, .command])),
+        .init("view.3", "Saved view 3", .pages, .app, .init("3", [.option, .command])),
+        .init("view.4", "Saved view 4", .pages, .app, .init("4", [.option, .command])),
+        .init("view.5", "Saved view 5", .pages, .app, .init("5", [.option, .command])),
+        .init("view.6", "Saved view 6", .pages, .app, .init("6", [.option, .command])),
+        .init("view.7", "Saved view 7", .pages, .app, .init("7", [.option, .command])),
+        .init("view.8", "Saved view 8", .pages, .app, .init("8", [.option, .command])),
+        .init("view.9", "Saved view 9", .pages, .app, .init("9", [.option, .command])),
 
         // General
         .init("search.tickets", "Search Tickets", .general, .app, .init("k", cmd)),
@@ -146,6 +156,7 @@ public enum ShortcutCatalog {
         .init("back", "Back", .general, .app, .init("[", cmd)),
         .init("forward", "Forward", .general, .app, .init("]", cmd)),
         .init("settings", "Settings…", .general, .app, .init(",", cmd), customizable: false),
+        .init("help.shortcuts", "Keyboard Shortcuts", .general, .app, .init("/", cmd)),
 
         // The ticket in front (its page, or the selected row). Tabs are ⌃1 to ⌃5; the rest use ⌥⌘ so typing never triggers them.
         .init("ticket.tab.overview", "Overview", .tickets, .app, .init("1", .control)),

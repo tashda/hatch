@@ -51,6 +51,11 @@ struct HatchApp: App {
         .windowToolbarStyle(.unified)
         .defaultSize(width: 900, height: 760)
 
+        Window("Keyboard Shortcuts", id: "shortcuts") {
+            ShortcutCheatSheet().environmentObject(state)
+        }
+        .defaultSize(width: 760, height: 620)
+
         // A regular window lets NavigationSplitView place its sidebar toggle in the titlebar.
         Window("Settings", id: "settings") {
             SettingsView().environmentObject(state)
@@ -91,12 +96,22 @@ struct HatchCommands: Commands {
             Toggle("Sidebar", isOn: $state.showSidebar).shortcut("sidebar", keys)
             Toggle("Iris Inspector", isOn: $state.showAskPanel).shortcut("iris.inspector", keys)
         }
+        CommandGroup(after: .help) {
+            Button("Keyboard Shortcuts") { openWindow(id: "shortcuts") }.shortcut("help.shortcuts", keys)
+        }
         CommandMenu("Go") {
             Button("Go to…") { state.openPalette(.places) }.shortcut("go.places", keys)
             Divider()
             ForEach(Route.pages, id: \.self) { route in
                 if let id = route.shortcutId {
                     Button(ShortcutCatalog.command(id)?.title ?? route.title) { state.navigate(to: route) }.shortcut(id, keys)
+                }
+            }
+            let views = Array(state.savedViews().prefix(9).enumerated())
+            if !views.isEmpty {
+                Divider()
+                ForEach(views, id: \.offset) { index, view in
+                    Button(view.name) { state.openSavedView(view) }.shortcut("view.\(index + 1)", keys)
                 }
             }
         }
