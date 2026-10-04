@@ -132,17 +132,30 @@ final class GitHubAccountModel: ObservableObject {
         var user: GitHubUser?
         var repos: [GitHubRepoSummary]
         var installation: GitHubInstallation?
+        var repositoryCount: Int?
+        var rateLimit: GitHubRateLimit?
         var error: String?
+    }
+
+    /// Whether a tickets repository has Hatch's labels, checked once each time Settings › GitHub appears.
+    enum LabelCheck: Equatable {
+        case checking, repairing, present, missing(Int), failed(String)
     }
 
     @Published var user: GitHubUser?
     @Published var source: GitHubTokenSource = .none
     @Published var repos: [GitHubRepoSummary] = []
     @Published var installation: GitHubInstallation?
+    /// How many repositories the installation was given, when the owner chose some rather than all.
+    @Published var repositoryCount: Int?
+    @Published var rateLimit: GitHubRateLimit?
+    @Published var labelChecks: [String: LabelCheck] = [:]
     @Published var busy = false
     @Published var error: String?
 
-    func refresh() {
+    /// Who is signed in and what Hatch can see. With `details`, also the repository count and the rate limit, which
+    /// only Settings shows (the rate limit costs nothing; the count is one small request).
+    func refresh(details: Bool = false) {
         busy = true
         Task {
             let probe = await Task.detached { () -> Probe in
@@ -152,8 +165,19 @@ final class GitHubAccountModel: ObservableObject {
                 do {
                     let me = try client.currentUser()
                     let repos = try client.listRepositories()
-                    let installation = (try? client.installations())?.first
-                    return Probe(source: source, user: me, repos: repos, installation: installation, error: nil)
+                    let all = (try? client.installations()) ?? []
+                    // The owner's own installation first; an organization's only when there is no personal one.
+                    let installation = all.first { $0.account.lowercased() == me.login.lowercased() } ?? all.first
+                    var count: Int?
+                    var limit: GitHubRateLimit?
+                    if details {
+                        if let installation, !installation.allRepositories {
+                            count = try? client.installationRepositoryCount(installation.id)
+                        }
+                        limit = try? client.rateLimit()
+                    }
+                    return Probe(source: source, user: me, repos: repos, installation: installation,
+                                 repositoryCount: count, rateLimit: limit, error: nil)
                 } catch {
                     return Probe(source: source, user: nil, repos: [], error: Self.describe(error))
                 }
@@ -162,9 +186,65 @@ final class GitHubAccountModel: ObservableObject {
             user = probe.user
             repos = probe.repos
             installation = probe.installation
+            if details || probe.user == nil {
+                repositoryCount = probe.repositoryCount
+                rateLimit = probe.rateLimit
+            }
             error = probe.error
             busy = false
         }
+    }
+
+    /// Asks GitHub which of Hatch's labels each repository lacks. Off the main thread; one request per repository.
+    func checkLabels(_ repositories: [String]) {
+        guard user != nil else { return }
+        for repo in repositories { labelChecks[repo] = .checking }
+        Task {
+            for repo in repositories {
+                let check = await Task.detached { () -> LabelCheck in
+                    do {
+                        let missing = try HXGitHub.client().missingHatchLabels(repo: repo)
+                        return missing.isEmpty ? .present : .missing(missing.count)
+                    } catch {
+                        return .failed(Self.describe(error))
+                    }
+                }.value
+                labelChecks[repo] = check
+            }
+        }
+    }
+
+    /// Adds Hatch's missing labels to `repo`, then checks again.
+    func repairLabels(_ repo: String) {
+        labelChecks[repo] = .repairing
+        Task {
+            let failure = await Task.detached { () -> String? in
+                do { try HXGitHub.client().ensureLabels(repo: repo, LabelSpec.baseSet); return nil }
+                catch { return Self.describe(error) }
+            }.value
+            if let failure { labelChecks[repo] = .failed(failure) } else { checkLabels([repo]) }
+        }
+    }
+
+    /// Made-up account for snapshots: connected, with two permissions missing so the page shows both states.
+    func loadDemo() {
+        user = GitHubUser(login: "tashda", name: "Kenneth Berg")
+        source = .stored
+        repos = [
+            GitHubRepoSummary(fullName: "acme/hatch-tickets", isPrivate: true),
+            GitHubRepoSummary(fullName: "acme/client-tickets", isPrivate: true),
+            GitHubRepoSummary(fullName: "acme/app", isPrivate: true, defaultBranch: "main"),
+            GitHubRepoSummary(fullName: "acme/app-notebook", isPrivate: true),
+            GitHubRepoSummary(fullName: "acme/design-system", isPrivate: false),
+        ]
+        installation = GitHubInstallation(
+            id: 1, appSlug: "hatch", account: "tashda", settingsURL: URL(string: "https://github.com/settings/installations/1")!,
+            repositorySelection: "all",
+            permissions: ["issues": "write", "contents": "read", "checks": "read", "statuses": "read", "metadata": "read"])
+        rateLimit = GitHubRateLimit(remaining: 4812, limit: 5000, reset: Date().addingTimeInterval(38 * 60))
+        labelChecks = ["acme/hatch-tickets": .present, "acme/client-tickets": .missing(3)]
+        error = nil
+        busy = false
     }
 
     /// GitHub's page where repositories are added to Hatch's installation.

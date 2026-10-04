@@ -9,6 +9,8 @@ enum Snapshots {
     static var demoMode: Bool {
         CommandLine.arguments.contains("--demo") || CommandLine.arguments.contains("--snapshots")
     }
+    /// Settings › GitHub shows a made-up connected account in demo mode; `settings-github-disconnected` shows it signed out.
+    @MainActor static var githubDisconnected = false
     private static let pendingQueryKey = "hatch.pendingTicketQuery"
     private static var priorPendingQuery: String??
 
@@ -290,7 +292,9 @@ enum Snapshots {
             } else if name.hasPrefix("settings") {
                 state.snapshotPresentation = .settings
                 // settings-<page>, by the page's title: settings-github, settings-general, settings-storage…
-                let page = name.dropFirst("settings-".count)
+                var page = String(name.dropFirst("settings-".count))
+                githubDisconnected = page == "github-disconnected"
+                if githubDisconnected { page = "github" }
                 state.settingsPage = SettingsPage.allCases.first { $0.title.lowercased() == page } ?? .general
             } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count).prefix { $0.isNumber }) {
                 // add-project-5: one step of the setup assistant, numbered as in the full run.
