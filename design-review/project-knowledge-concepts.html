@@ -152,57 +152,59 @@
   </div>
   <p class="lead" style="margin-top:12px">That gives the rule everything below follows: <b>nothing that matters lives only in Hatch.</b> Hatch's database becomes a fast cache. The truth is plain files in git (the notebook and the app repository) and GitHub issues. Hatch writes those files for you, so keeping them current costs you nothing.</p>
 
-  <h2>Proposal: a notebook per project, plus AGENTS.md in the app</h2>
+  <h2>Proposal: the app stays clean, the notebook holds the rest</h2>
+  <p class="lead">Agent files are often kept out of the app repository (gitignored, or the app is public). So the app repository gets <b>no Hatch files at all</b>. Everything Hatch and agents need, coding rules included, lives in the notebook, and Hatch places the rules where agents look.</p>
   <div class="grid2" style="margin-top:16px">
     <div class="note" style="font: 12px/1.75 ui-monospace, Menlo, monospace">
       <b>tashda/echo-notebook</b> <span class="muted">private</span><br>
       ├─ README.md <span class="muted">what Echo is, its repositories, how to start</span><br>
-      ├─ AGENTS.md <span class="muted">for any agent: read this first</span><br>
+      ├─ AGENTS.md <span class="muted">for an agent opened in the notebook</span><br>
       ├─ WORKFLOW.md <span class="muted">how work flows, with or without Hatch</span><br>
       ├─ NOW.md <span class="muted">in flight, waiting for you, next up</span><br>
-      ├─ decisions/<br>
-      │&nbsp;&nbsp;├─ README.md <span class="muted">index by area and kind</span><br>
-      │&nbsp;&nbsp;├─ 0151-toast-spacing.md<br>
-      │&nbsp;&nbsp;└─ 0163-connection-actors.md<br>
-      └─ specimens/<br>
-      &nbsp;&nbsp;&nbsp;├─ Today/ <span class="muted">Echo as it is now</span><br>
-      &nbsp;&nbsp;&nbsp;└─ 0151/ <span class="muted">options + README of what was chosen</span><br><br>
-      <b>tashda/echo</b> <span class="muted">the app, as today</span><br>
-      ├─ AGENTS.md <span class="muted">how we write code here (CLAUDE.md points to it)</span><br>
-      └─ .hatch/<br>
-      &nbsp;&nbsp;&nbsp;├─ project.json <span class="muted">settings, area index</span><br>
-      &nbsp;&nbsp;&nbsp;└─ spec/ <span class="muted">what the app does, by area</span>
+      ├─ project.json <span class="muted">settings and area index (was .hatch/ in the app)</span><br>
+      ├─ rules/<br>
+      │&nbsp;&nbsp;├─ AGENTS.md <span class="muted">how we write code in Echo: short</span><br>
+      │&nbsp;&nbsp;└─ areas/connections.md <span class="muted">detail, read only when the area is touched</span><br>
+      ├─ spec/ <span class="muted">what the app does, by area (was .hatch/spec)</span><br>
+      ├─ decisions/ <span class="muted">one file per decision + index</span><br>
+      └─ specimens/ <span class="muted">Proposal options, Echo today</span><br><br>
+      <b>tashda/echo</b> <span class="muted">only the app's code</span><br>
+      └─ AGENTS.md, CLAUDE.md <span class="muted">placed by Hatch, never committed</span>
     </div>
     <div>
-      <div class="note" style="margin-bottom:12px"><h3>Why coding rules go in the app, not the notebook</h3><p class="muted" style="margin:0">Agents read <code>AGENTS.md</code> in the repository they work in. Codex, Cursor and others read it directly, and Claude Code reads <code>CLAUDE.md</code>, which can point to it. An agent fixing a bug in Echo never opens the notebook, so "no Combine in new code" has to sit next to the code, or a non-Hatch agent breaks it.</p></div>
-      <div class="note"><h3>Why the rest goes in the notebook</h3><p class="muted" style="margin:0">Decisions, work in flight and specimens are about the project, not the code. Kept in the app repository they'd clutter its history and pull requests. Kept on this Mac they'd fail the test.</p></div>
+      <div class="note" style="margin-bottom:12px"><h3>How the rules reach every agent</h3><p class="muted" style="margin:0">When Hatch sets up the clone, and every time it makes a worktree for a ticket, it copies <code>rules/AGENTS.md</code> in as <code>AGENTS.md</code>, with a <code>CLAUDE.md</code> that says <code>@AGENTS.md</code> (Claude Code's import). It also lists both in the clone's <code>.git/info/exclude</code>. They can never be committed, even if the app's .gitignore doesn't mention them, and the app's .gitignore is left alone. A worktree doesn't copy untracked files, which is why Hatch places them each time.</p></div>
+      <div class="note"><h3>If the app already commits its own AGENTS.md</h3><p class="muted" style="margin:0">Hatch leaves it alone and doesn't place its copy. The notebook's rules then go in the brief instead. Setup tells you which case you're in.</p></div>
     </div>
   </div>
+  <div class="note" style="margin-top:12px"><h3>Picking up without Hatch</h3><p class="muted" style="margin:0">The notebook's README starts with one line: "Copy <code>rules/AGENTS.md</code> into your clone of the app as <code>AGENTS.md</code>." Everything else is readable as it is.</p></div>
 
-  <h2>What each file holds, and who writes it</h2>
+  <h2>Spec and settings move to the notebook too</h2>
   <div class="note" style="margin-top:12px">
-    <p><b>README.md:</b> the project in a paragraph, links to the app, components and tickets repositories, and "clone these, read AGENTS.md". Written at setup, updated when repositories change.</p>
-    <p><b>AGENTS.md (notebook):</b> the order to read things in, what each file is for, and the rule that Hatch's commands are used when Hatch is running and <code>WORKFLOW.md</code> is followed when it isn't.</p>
-    <p><b>WORKFLOW.md:</b> the process Hatch enforces, in words. A ticket per change, a <code>ticket/151-…</code> branch, plan before big changes, build before review, merge into <code>hatch</code>, a pull request to <code>dev</code>, Spec updated before Done. Generated from the same rules Hatch runs, so the two never disagree.</p>
-    <p><b>NOW.md:</b> the open tickets grouped by turn (waiting for you, agents working, queued), each with one line on where it stands, plus the last ten decisions. Refreshed by Hatch on every status change. GitHub issues still hold the full text.</p>
-    <p><b>decisions/:</b> one file per decision in the common ADR shape (context, options, decision, why, consequences), with ticket, kind, area and Spec IDs at the top. Written when a Proposal, Sketch or Question is decided, and never edited afterwards. A later decision says which one it replaces.</p>
-    <p style="margin:0"><b>specimens/:</b> each Proposal's option code, with a short README of what was compared and what won. Rejected options stay, so "what did we try" has an answer.</p>
+    <p>With no Hatch files in the app, <code>.hatch/project.json</code> and <code>.hatch/spec/</code> move to the notebook. The cost: the Spec no longer sits in the same pull request as the code. Hatch makes up for it. A ticket already gets a <code>ticket/151-…</code> branch in each repository it touches; the Spec change goes on the notebook branch, and the existing rule (no Done until the Spec is updated or marked unchanged) is checked across both. The merge plan already merges several repositories per ticket.</p>
+    <p class="muted" style="margin:0">Risk: someone changes the app outside Hatch and the Spec drifts. Hatch can flag commits on <code>dev</code> that touch an area without a matching Spec change.</p>
   </div>
 
-  <h2>What should not go in the notebook</h2>
-  <div class="note" style="margin-top:12px">
-    <p><b>The Spec stays in the app repository.</b> It describes what the code does and changes in the same pull request as the code.</p>
-    <p><b>Coding rules stay in the app's AGENTS.md</b>, for the reason above.</p>
-    <p><b>The components package stays its own, versioned repository.</b> The app depends on a tagged version of it.</p>
-    <p><b>Full ticket text, threads and screenshots stay in GitHub issues.</b> NOW.md is a summary, not a second copy that could disagree.</p>
-    <p style="margin:0"><b>Live and noisy state stays in Hatch's database:</b> picks in progress, claims, agent runs, token costs and the log. None of it is needed to pick up again.</p>
+  <h2>Where each thing lives, and what it costs</h2>
+  <div class="note" style="margin-top:12px;overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <tr style="text-align:left;color:var(--secondary)"><th style="padding:6px 8px">Thing</th><th>Truth</th><th>Fast copy</th><th>Written by</th><th>What an agent gets</th></tr>
+      <tr style="border-top:1px solid var(--row-line)"><td style="padding:6px 8px">Ticket text, thread, screenshots</td><td>GitHub issues</td><td>SQLite</td><td>You, Iris, agents via <code>hatch</code></td><td>This ticket only, in the brief</td></tr>
+      <tr style="border-top:1px solid var(--row-line)"><td style="padding:6px 8px">Status, type, turn</td><td>Hatch, mirrored as labels</td><td>SQLite</td><td>Hatch only</td><td>One line</td></tr>
+      <tr style="border-top:1px solid var(--row-line)"><td style="padding:6px 8px">Coding rules</td><td>Notebook <code>rules/</code></td><td>Placed in each clone</td><td>You (an agent can draft)</td><td>Loaded by the agent itself; kept short</td></tr>
+      <tr style="border-top:1px solid var(--row-line)"><td style="padding:6px 8px">Area detail</td><td>Notebook <code>rules/areas/</code></td><td>-</td><td>You, agents on request</td><td>A path in the brief, read only if needed</td></tr>
+      <tr style="border-top:1px solid var(--row-line)"><td style="padding:6px 8px">Spec</td><td>Notebook <code>spec/</code></td><td>SQLite FTS</td><td>Agents, on the ticket branch</td><td>The matching items, found by free local search</td></tr>
+      <tr style="border-top:1px solid var(--row-line)"><td style="padding:6px 8px">Decisions</td><td>Notebook <code>decisions/</code></td><td>SQLite FTS</td><td>Hatch, from what you picked</td><td>Up to 3 related, title and one line of why</td></tr>
+      <tr style="border-top:1px solid var(--row-line)"><td style="padding:6px 8px">Specimens</td><td>Notebook <code>specimens/</code></td><td>-</td><td>Agents preparing a Proposal</td><td>Their own folder</td></tr>
+      <tr style="border-top:1px solid var(--row-line)"><td style="padding:6px 8px">README, WORKFLOW, NOW</td><td>Notebook</td><td>-</td><td>Hatch, from code and data</td><td>Nothing: they're for picking up</td></tr>
+      <tr style="border-top:1px solid var(--row-line)"><td style="padding:6px 8px">Picks in progress, claims, runs, costs, log</td><td>SQLite only</td><td>-</td><td>Hatch</td><td>Nothing</td></tr>
+    </table>
   </div>
 
-  <h2>Is this the best way to work?</h2>
+  <h2>Why this keeps tokens low</h2>
   <div class="grid3" style="margin-top:12px">
-    <div class="note"><h3>For agents</h3><p class="muted">Each agent reads the AGENTS.md where it works, and Hatch's brief adds the ticket, the area's decisions and Spec. The context is short and on point (the cost rule), with no long list of docs to read.</p></div>
-    <div class="note"><h3>For shipping</h3><p class="muted">Nothing changes in the path to dev: ticket branch, <code>hatch</code>, CI, pull request. Decisions are written as a side effect of deciding, so there's never a documentation chore before a release.</p></div>
-    <div class="note"><h3>For picking up later</h3><p class="muted">Two clones and one sentence to any agent. Everything is plain Markdown and Swift in git. No database, no app and no special format is needed to read it.</p></div>
+    <div class="note"><h3>Hatch writes the notebook</h3><p class="muted" style="margin:0">Decision files, NOW.md and WORKFLOW.md are filled from data Hatch already holds: the options, your pick and your reason. No model call, so writing them costs zero tokens.</p></div>
+    <div class="note"><h3>Free search picks the context</h3><p class="muted" style="margin:0">Before an agent starts, local FTS selects the few Spec items and decisions that match the ticket's area. The agent reads those, not the whole notebook. Agents never call GitHub; <code>hatch</code> answers from SQLite.</p></div>
+    <div class="note"><h3>Short rules, detail on demand</h3><p class="muted" style="margin:0">The AGENTS.md an agent loads every session stays short. Area detail is a path the brief names, read only when that area is touched. Today's flat docs list makes every agent read everything.</p></div>
   </div>
 
   <h2>Decisions I need from you</h2>
@@ -216,9 +218,8 @@
 </main>
 <script>
   const QUESTIONS = [
-    { id: 'notebook', title: 'A notebook repository per project?', why: 'It passes the April 2027 test without cluttering the app. Hatch writes it, so it never goes stale.', rec: 'yes', options: [
+    { id: 'notebook', title: 'A notebook repository per project?', why: 'It passes the April 2027 test and keeps the app clean. Hatch writes it, so it never goes stale.', rec: 'yes', options: [
       ['yes', 'Yes, one notebook per project', 'Created during setup, kept current by Hatch'],
-      ['app', 'A folder in the app repository instead', 'One fewer repository; decisions show up in app pull requests'],
       ['no', 'No, keep things as they are', 'Fails the test: decisions stay on this Mac'] ] },
     { id: 'notebookName', title: 'What to call it', why: 'It must make sense without Hatch, so the repository name should not depend on the tool.', rec: 'notebook', options: [
       ['notebook', 'Notebook, repository echo-notebook', 'Tool-neutral and plain'],
@@ -228,9 +229,13 @@
       ['components', 'Components', 'Short; says it is building blocks'],
       ['uikit', 'UI kit', 'Familiar to developers'],
       ['design', 'Keep "Design system"', 'The industry word'] ] },
-    { id: 'rules', title: 'Where coding rules live', why: 'Agents read AGENTS.md where they work, so rules next to the code also bind agents that are not run by Hatch.', rec: 'app', options: [
-      ['app', "In the app's AGENTS.md", 'CLAUDE.md points to it; the notebook links there'],
-      ['notebook', 'In the notebook', 'One place, but agents in the app do not see it'] ] },
+    { id: 'rules', title: 'Coding rules for agents', why: 'Agents load AGENTS.md where they work. Placing it there without committing it keeps the app clean and binds every agent.', rec: 'placed', options: [
+      ['placed', 'In the notebook, placed into each clone and worktree by Hatch', 'Never committed, via .git/info/exclude'],
+      ['committed', "Committed in the app's AGENTS.md", 'Works without Hatch, but the app carries agent files'],
+      ['brief', 'In the notebook, sent only in the brief', 'Agents not run by Hatch never see them'] ] },
+    { id: 'spec', title: 'Spec and project settings', why: 'With no Hatch files in the app, the Spec moves to the notebook, and the Spec-before-Done check spans both ticket branches.', rec: 'notebook', options: [
+      ['notebook', 'Move them to the notebook', 'The app repository has no Hatch files'],
+      ['app', 'Keep .hatch/ in the app repository', 'The Spec stays in the same pull request as the code'] ] },
     { id: 'now', title: 'A NOW.md summary of work in flight', why: 'Picking up needs "where were we" in one file. GitHub issues keep the full text, so the summary never has to be complete.', rec: 'yes', options: [
       ['yes', 'Yes, refreshed by Hatch on every change', 'Open tickets by turn plus recent decisions'],
       ['no', 'No, GitHub issues are enough', 'An agent has to query GitHub to find out'] ] },
@@ -242,7 +247,7 @@
       ['question', 'A Question can carry options', 'The answer becomes a decision file'],
       ['newtype', 'A new ticket type, Decision', 'More explicit, one more type to learn'] ] }
   ];
-  const KEY = 'hatch.knowledgeAnswers2';
+  const KEY = 'hatch.knowledgeAnswers3';
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
   const form = document.getElementById('answers');
