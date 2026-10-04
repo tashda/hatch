@@ -174,6 +174,45 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(hits.first?.code, "NOTIF-1.2")
     }
 
+    func testResetPutsATicketBackToTheOwnersFirstPromptAndNothingElse() throws {
+        let t = try store.capture(prompt: "Whenever I go to Specs the panel looks odd when empty", projectId: project.id)
+        let other = try ticket(.bug, "Another")
+        try store.file(t.id, Filing(path: .visual, title: "Specs empty state", body: "Iris's version", area: nil, priority: 0, related: [other.id]), by: "Iris")
+        try store.ask(t.id, text: "Which?", by: "Iris")
+        _ = try store.addNote(t.id, kind: .note, author: "owner", body: "a note")
+        _ = try store.addAttachment(t.id, path: "attachments/\(t.id)/shot-1.png")
+        let before = try store.ticket(id: t.id)!
+        XCTAssertEqual(before.status, .needsAnswers)
+
+        let reset = try store.resetTicket(t.id)
+        XCTAssertEqual(reset.title, "Whenever I go to Specs the panel looks odd when empty")
+        XCTAssertEqual(reset.body, "")
+        XCTAssertEqual(reset.status, .checking, "Iris files it again")
+        XCTAssertEqual(reset.type, .question, "the placeholder type of a freshly captured ticket")
+        XCTAssertNil(reset.path)
+        XCTAssertEqual(reset.revision, 1)
+        XCTAssertTrue(try store.questions(ticketId: t.id).isEmpty)
+        XCTAssertTrue(try store.notes(ticketId: t.id).isEmpty)
+        XCTAssertTrue(try store.links(ticketId: t.id).isEmpty)
+        XCTAssertEqual(try store.attachments(ticketId: t.id).count, 1, "the screenshot is part of the prompt")
+        XCTAssertFalse(try store.isFiled(reset), "Iris has not filed it yet")
+        let kinds = try store.events(ticketId: t.id).map(\.kind)
+        XCTAssertEqual(Set(kinds), ["created", "captured", "attachment", "reset", "status"])
+        XCTAssertEqual(try store.ticket(id: other.id)?.status, .draft, "other tickets are left alone")
+    }
+
+    func testResetDropsThePartsOfASplitAndKeepsAPartsParent() throws {
+        let t = try store.capture(prompt: "Two things: A and B", projectId: project.id)
+        try store.file(t.id, Filing(path: .split), by: "Iris")
+        let parts = try store.splitIntoTheme(t.id, children: [FilingChild(title: "A", path: .visual), FilingChild(title: "B", path: .small)], by: "Iris")
+        let reset = try store.resetTicket(t.id)
+        XCTAssertEqual(reset.type, .question)
+        XCTAssertTrue(try parts.allSatisfy { try store.ticket(id: $0.id)?.status == .dropped })
+        let partReset = try store.resetTicket(parts[0].id)
+        XCTAssertEqual(partReset.parentId, t.id, "a part still belongs to its Theme")
+        XCTAssertEqual(partReset.title, "A")
+    }
+
     func testPlansThatNameTheSameFilesLinkTheirTicketsWithTheFilesAsTheReason() throws {
         let a = try walk(ticket(.tweak, "Row density"), to: .building)
         let b = try walk(ticket(.tweak, "Row hover"), to: .building)

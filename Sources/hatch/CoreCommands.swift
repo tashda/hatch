@@ -1,5 +1,6 @@
 import Foundation
 import HatchCore
+import HatchGit
 
 typealias Handler = (Context) throws -> Void
 
@@ -107,7 +108,7 @@ enum CoreCommands {
         c.out.emit(json, text: text)
     }
 
-    // hatch ticket new|list|show|link|undo-split
+    // hatch ticket new|list|show|link|undo-split|reset
     static func ticket(_ c: Context) throws {
         switch c.args.pos(1) {
         case "new": try ticketNew(c)
@@ -115,7 +116,8 @@ enum CoreCommands {
         case "show": try ticketShow(c)
         case "link": try ticketLink(c)
         case "undo-split": try ticketUndoSplit(c)
-        default: throw CLIError("Usage: hatch ticket new|list|show|link|undo-split ...")
+        case "reset": try ticketReset(c)
+        default: throw CLIError("Usage: hatch ticket new|list|show|link|undo-split|reset ...")
         }
     }
 
@@ -154,6 +156,15 @@ enum CoreCommands {
         json["notes"] = .array(notes.map { ["kind": .string($0.kind.rawValue), "author": .string($0.author), "body": .string($0.body)] })
         json["questions"] = .array(questions.map { ["id": .int($0.id), "text": .string($0.text), "answer": $0.answer.map { .string($0) } ?? .null] })
         c.out.emit(.object(json), text: text)
+    }
+
+    // hatch ticket reset #151: starts the ticket again from the owner's first prompt (decision IR16). For debugging.
+    static func ticketReset(_ c: Context) throws {
+        let t = try c.ticket(c.args.pos(2))
+        let result = try TicketReset.run(store: c.store, ticketId: t.id)
+        let extra = result.leftovers.isEmpty ? "" : "\nCould not remove: " + result.leftovers.joined(separator: "; ")
+        c.out.emit(["ticket": .string(result.ticket.displayNumber), "status": .string(result.ticket.status.rawValue), "leftovers": .array(result.leftovers.map { .string($0) })],
+                   text: "\(result.ticket.displayNumber) is back to your first prompt; Iris files it again.\(extra)")
     }
 
     // hatch ticket undo-split #151: puts a split back as one ticket (decision IR5). Refused once a part has started.

@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import HatchCore
+import HatchGit
 
 enum TicketTab: String, CaseIterable, Identifiable {
     case overview, options, thread, work, history
@@ -52,6 +53,7 @@ struct TicketDetailView: View {
     @State private var threadCount = 0
     @State private var info = ProposalInfo()
     @State private var confirmDrop = false
+    @State private var confirmReset = false
     @State private var questionOptions: [QuestionOption] = []
     @State private var deciding = false
     @State private var threadKind: NoteKind = .note
@@ -100,6 +102,12 @@ struct TicketDetailView: View {
         }
         .sheet(isPresented: $sendingPlanBack) {
             if let plan = pendingPlan { PlanSendBackSheet(plan: plan) }
+        }
+        .confirmationDialog("Reset this ticket?", isPresented: $confirmReset) {
+            Button("Reset", role: .destructive) { reset() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("It starts again from your first prompt and Iris files it again. Her questions, notes, links, plans and any agent work on it are removed.")
         }
         .confirmationDialog("Drop this ticket?", isPresented: $confirmDrop) {
             Button("Drop", role: .destructive) { move(to: .dropped) }
@@ -171,8 +179,10 @@ struct TicketDetailView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString("\(t.displayNumber) \(t.title)", forType: .string)
                 } label: { Label("Copy Number and Title", systemImage: "doc.on.doc") }
+                Divider()
+                // For debugging: start the ticket again from the first prompt.
+                Button(role: .destructive) { confirmReset = true } label: { Label("Reset Ticket…", systemImage: "arrow.counterclockwise") }
                 if canMove(t, to: .dropped) {
-                    Divider()
                     // Settings › General › Ask before dropping a ticket (on by default).
                     let ask = state.flag(Preference.confirmDrop)
                     Button(role: .destructive) { if ask { confirmDrop = true } else { move(to: .dropped) } } label: {
@@ -325,6 +335,18 @@ struct TicketDetailView: View {
     private func move(to target: Status) {
         let id = ticketId
         _ = state.perform("Could not change the status") { try state.store.move(id, to: target, actor: .owner) }
+    }
+
+    /// Stops the agent working on the ticket, waits for it to end (its exit would otherwise block the reset ticket), then
+    /// puts the ticket back to the owner's first prompt (decision IR16).
+    private func reset() {
+        let id = ticketId
+        state.stopAgent(ticketId: id)
+        Task { @MainActor in
+            var waited = 0
+            while state.agentRuns.contains(where: { $0.ticketId == id }) && waited < 50 { try? await Task.sleep(nanoseconds: 100_000_000); waited += 1 }
+            _ = state.perform("Could not reset the ticket") { try TicketReset.run(store: state.store, ticketId: id) }
+        }
     }
 
     private func resume() {
