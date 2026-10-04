@@ -313,12 +313,14 @@ public enum BriefBuilder {
                 "A Bug, or a change over \(limit) files, waits for the owner to approve the plan; Hatch tells you.",
                 t.type == .proposal ? "Build the owner's accepted choices exactly (see Owner's choices). Update the Spec text for the Spec IDs you change." : "Make the smallest change that fixes it, and update the Spec text if behaviour changes.",
                 "Run only the tests mapped to this area, in your worktree. Do not run the full suite or a full build; CI does that.",
+                "Compile with `hatch check \(t.displayNumber) --build`, and pipe a test run through `hatch check -` (`<test command> 2>&1 | hatch check -`): they print only errors, warnings and failing tests.",
                 "When done run `hatch ready`. Hatch runs the build, tests and match check and moves the ticket to To verify.",
             ] + common
         case .fix:
             return [
                 "Read the owner's notes under Since your last turn and fix exactly that, on the same branch `\(branchName(t))`.",
                 "Run only the tests mapped to this area. No full suite.",
+                "Compile with `hatch check \(t.displayNumber) --build`, and pipe a test run through `hatch check -`: only errors, warnings and failing tests.",
                 "When done run `hatch ready`. Hatch moves the ticket back to To verify.",
             ] + common
         }
@@ -336,7 +338,8 @@ public enum BriefBuilder {
                     "hatch note \(n) \"...\"    # context for the owner"]
         case .build?, .fix?:
             return (kind == .build ? ["hatch plan \(n) --files <paths>   # before you edit"] : [])
-                + ["hatch ready \(n)     # when the work is done",
+                + ["hatch check \(n) --build   # compile; only errors and warnings",
+                   "hatch ready \(n)     # when the work is done",
                    "hatch ask \(n) \"...\"     # only if you are blocked",
                    "hatch note \(n) \"...\"    # progress for the owner"]
         }

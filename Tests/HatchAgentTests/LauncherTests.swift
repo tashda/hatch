@@ -29,6 +29,13 @@ final class AgentStreamTests: XCTestCase {
         XCTAssertEqual(args[args.firstIndex(of: "--model")! + 1], "claude-opus-5-5")
         XCTAssertEqual(args[args.firstIndex(of: "--effort")! + 1], "high")
         XCTAssertEqual(args[args.firstIndex(of: "--add-dir")! + 1], "/w/notebook")
+        // Only the allowed tools are defined, and no MCP servers or skills are loaded (they cost tokens on every turn).
+        let defined = args[args.firstIndex(of: "--tools")! + 1].split(separator: ",").map(String.init)
+        XCTAssertEqual(defined.filter { $0 == "Bash" }.count, 1)
+        XCTAssertTrue(defined.contains("Read") && defined.contains("Edit"))
+        XCTAssertFalse(defined.contains { $0.contains("(") || $0 == "WebFetch" || $0 == "Agent" })
+        XCTAssertTrue(args.contains("--strict-mcp-config"))
+        XCTAssertTrue(args.contains("--disable-slash-commands"))
     }
 
     func testWorkspacesPerKindOfWork() {

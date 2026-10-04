@@ -53,7 +53,8 @@ enum AgentCommands {
         c.out.emit(["written": .int(r.decisionsWritten), "imported": .int(r.imported), "pushed": .bool(r.pushed)], text: text)
     }
 
-    /// Runs a shell command in a folder and returns (ok, last lines of output, seconds).
+    /// Runs a shell command in a folder and returns (ok, the lines that matter, seconds): errors, warnings and failing
+    /// tests rather than the last lines, which for xcodebuild are a list of commands, not the error.
     static func shell(_ command: String, in dir: String, timeout: TimeInterval = 1800) -> (ok: Bool, tail: String, seconds: Double) {
         let p = Process(), pipe = Pipe()
         p.executableURL = URL(fileURLWithPath: "/bin/sh"); p.arguments = ["-c", command]; p.currentDirectoryURL = URL(fileURLWithPath: dir)
@@ -68,7 +69,7 @@ enum AgentCommands {
         if p.isRunning { p.terminate() }
         group.wait()
         let text = String(decoding: data, as: UTF8.self)
-        let tail = text.split(separator: "\n").suffix(25).joined(separator: "\n")
+        let tail = BuildLog.digest(text, ok: p.terminationStatus == 0, root: dir).text
         return (p.terminationStatus == 0, tail, Date().timeIntervalSince(start))
     }
 
