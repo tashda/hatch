@@ -121,6 +121,7 @@ struct WindowFooter: View {
 
     private var text: String {
         if let message = summary.message, !message.isEmpty { return message }
+        if let problem = state.notebookProblem { return "Notebook not saved: \(problem)" }
         if summary.failed > 0 {
             return "\(summary.failed) failed to sync · \(summary.pending) pending"
         }

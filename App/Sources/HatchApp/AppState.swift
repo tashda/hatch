@@ -2,6 +2,8 @@ import SwiftUI
 import HatchCore
 import HatchSync
 import HatchAPI
+import HatchGit
+import HatchImport
 
 /// The one object every screen reads. It wraps the store (the only place state changes, decision S3), re-publishes after every
 /// change, and holds navigation and panel state. Screens never write SQL; they call store methods inside `perform`.
@@ -49,6 +51,9 @@ final class AppState: ObservableObject {
     /// Tickets opened most recently, newest first, for the palette's Recent group.
     @Published private(set) var recentTicketIds: [Int] = UserDefaults.standard.array(forKey: "hatch.recentTickets") as? [Int] ?? []
     @Published var syncSummary = SyncSummary()
+    /// Set when writing or pushing a notebook failed; the footer shows it until the next export works.
+    @Published var notebookProblem: String?
+    private var exportingNotebooks = false
     /// Snapshot harness only: selects each ticket subview without changing the normal navigation model.
     @Published var snapshotTicketTab: TicketTab?
     @Published var snapshotPresentation: SnapshotPresentation?
@@ -136,6 +141,7 @@ final class AppState: ObservableObject {
                 return (message == nil, message)
             }.value
             syncing = false
+            scheduleNotebookExport()
             if outcome.ok { syncSummary.lastOK = Date() }
             syncSummary.message = outcome.message
             refreshSyncSummary()
@@ -150,16 +156,48 @@ final class AppState: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
     }
 
-    /// Notebook writes are batched: one commit and push a few seconds after the last change.
+    /// Notebook writes are batched: at most one export every few seconds, however many changes come in. A pending
+    /// export is not pushed back, so steady changes cannot postpone it forever.
     private func scheduleNotebookExport() {
-        notebookDebounce?.cancel()
-        let work = DispatchWorkItem { [weak self] in Task { @MainActor in self?.exportNotebooks() } }
+        guard notebookDebounce == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                self?.notebookDebounce = nil
+                self?.exportNotebooks()
+            }
+        }
         notebookDebounce = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
     }
 
-    /// Filled in with the notebook export (decisions, NOW.md, push).
-    func exportNotebooks() {}
+    /// Brings every project's notebook in step with the database: Spec indexed from it, decision files written or
+    /// imported, NOW.md refreshed, one commit and a push. Local git and file work only, no model, so it costs no tokens.
+    func exportNotebooks() {
+        guard !exportingNotebooks, Snapshots.folder == nil, !Snapshots.demoMode else { return }
+        let projects = projects.filter { $0.config?.repo(.notebook)?.localPath != nil }
+        guard !projects.isEmpty else { return }
+        exportingNotebooks = true
+        notebookDirty.removeAll()
+        let store = store
+        Task {
+            let problem = await Task.detached { () -> String? in
+                let token = HXKeychain.read()
+                var problems: [String] = []
+                for project in projects {
+                    do {
+                        try SpecIndexer.indexNotebook(project: project, store: store)
+                        try NotebookExport.run(store: store, projectId: project.id, token: token)
+                        if let error = try store.notebookError(projectId: project.id) { problems.append("\(project.name): \(error)") }
+                    } catch {
+                        problems.append("\(project.name) notebook: \(error)")
+                    }
+                }
+                return problems.isEmpty ? nil : problems.joined(separator: " · ")
+            }.value
+            exportingNotebooks = false
+            notebookProblem = problem
+        }
+    }
 
     func stopServices() {
         syncTimer?.invalidate(); syncTimer = nil
@@ -226,6 +264,8 @@ final class AppState: ObservableObject {
         revision += 1
         refreshSyncSummary()
         if syncSummary.pending > 0, syncTimer != nil { scheduleSync() }
+        // Every change may move a ticket or record a decision: refresh the notebooks shortly after the last one.
+        if syncTimer != nil { scheduleNotebookExport() }
         NSApp?.dockTile.badgeLabel = yourTurnCount > 0 ? String(yourTurnCount) : nil
     }
 

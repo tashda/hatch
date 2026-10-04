@@ -16,6 +16,7 @@ enum BannerAction {
     case closeAsAnswered
     case resume
     case reopen
+    case decideQuestion
 }
 
 struct BannerSpec {
@@ -38,6 +39,8 @@ struct TicketDetailView: View {
     @State private var threadCount = 0
     @State private var info = ProposalInfo()
     @State private var confirmDrop = false
+    @State private var questionOptions: [QuestionOption] = []
+    @State private var deciding = false
     @State private var threadKind: NoteKind = .note
 
     var body: some View {
@@ -63,6 +66,9 @@ struct TicketDetailView: View {
         }
         .onAppear {
             if Snapshots.folder != nil, let next = state.snapshotTicketTab { tab = next }
+        }
+        .sheet(isPresented: $deciding) {
+            if let ticket { QuestionDecisionSheet(ticket: ticket, options: questionOptions) }
         }
         .confirmationDialog("Drop this ticket?", isPresented: $confirmDrop) {
             Button("Drop", role: .destructive) { move(to: .dropped) }
@@ -225,6 +231,11 @@ struct TicketDetailView: View {
         case .sketch:
             return BannerSpec(message: "Choose a direction from the variants, or ask for more.",
                               primaryTitle: "Choose direction", primary: .tab(.options))
+        case .question where !questionOptions.isEmpty:
+            let rec = questionOptions.first(where: \.recommended)
+            return BannerSpec(message: "Choose one of \(questionOptions.count) options" + (rec.map { "; the agent recommends \($0.key)." } ?? "."),
+                              primaryTitle: "Choose an option", primary: .decideQuestion,
+                              secondaryTitle: "Reply", secondary: .tab(.thread))
         default:
             return BannerSpec(message: "The agent replied. Answer in the thread, or close the question.",
                               primaryTitle: "Reply", primary: .tab(.thread),
@@ -250,6 +261,8 @@ struct TicketDetailView: View {
             resume()
         case .reopen:
             move(to: .draft)
+        case .decideQuestion:
+            deciding = true
         }
     }
 
@@ -328,6 +341,8 @@ struct TicketDetailView: View {
             return
         }
         if ticket != t { ticket = t }
+        let options = (try? state.store.questionOptions(ticketId: ticketId)) ?? []
+        if options != questionOptions { questionOptions = options }
         let openCount = ((try? state.store.questions(ticketId: ticketId, openOnly: true)) ?? []).count
         if openCount != openQuestions { openQuestions = openCount }
         let notes = ((try? state.store.notes(ticketId: ticketId)) ?? []).count
@@ -335,5 +350,73 @@ struct TicketDetailView: View {
         if notes + questions != threadCount { threadCount = notes + questions }
         info = ProposalInfo.load(store: state.store, ticket: t)
         if state.selectedTicketId != ticketId { state.selectedTicketId = ticketId }
+    }
+}
+
+
+/// The owner answers a Question by choosing one of the options the agent offered (decision PS16). The choice, the
+/// reason and the options become a decision, recorded in the database and written to the notebook.
+struct QuestionDecisionSheet: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.dismiss) private var dismiss
+    let ticket: Ticket
+    let options: [QuestionOption]
+    @State private var choice: String?
+    @State private var reason = ""
+    @State private var kind = DecisionKind.architecture
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(ticket.title).font(.title3.weight(.semibold))
+                Text("Your choice is recorded as a decision that agents and Iris check later work against.")
+                    .foregroundStyle(.secondary)
+            }
+            HXSetupGroup {
+                ForEach(options, id: \.key) { o in
+                    HXRadioRow(selected: choice == o.key, title: "\(o.key). \(o.title)",
+                               detail: [o.detail, o.recommended ? o.why.map { "Recommended: \($0)" } : nil].compactMap { $0 }.joined(separator: "\n"),
+                               recommended: o.recommended) { choice = o.key }
+                }
+            }
+            HXSetupGroup {
+                HXSetupRow("Why") {
+                    TextField("Why", text: $reason, prompt: Text(recommendedChosen ? "The recommendation's reason" : "Optional"))
+                        .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden()
+                }
+                HXSetupRow("Kind") {
+                    Picker("Kind", selection: $kind) {
+                        ForEach(DecisionKind.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                    .labelsHidden().pickerStyle(.segmented).fixedSize()
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Decide") { decide() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(choice == nil)
+            }
+        }
+        .padding(24)
+        .frame(width: 560)
+        .onAppear { choice = options.first(where: \.recommended)?.key }
+    }
+
+    private var recommendedChosen: Bool { options.first(where: \.recommended)?.key == choice }
+
+    private func decide() {
+        guard let choice else { return }
+        let id = ticket.id, projectId = ticket.projectId, why = reason, kind = kind
+        let done: Bool? = state.perform("Could not record the decision") {
+            _ = try state.store.decideQuestion(ticketId: id, choice: choice, reason: why, kind: kind)
+            return true
+        }
+        if done == true {
+            state.notebookChanged(projectId: projectId)
+            dismiss()
+        }
     }
 }
