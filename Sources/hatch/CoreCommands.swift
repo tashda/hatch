@@ -58,7 +58,16 @@ enum CoreCommands {
 
     // hatch components            -> the project's components as agents see them, and values typed into views
     // hatch components scan <dir>  -> what Hatch finds in any app folder (no project needed)
+    // hatch components roles [--template glass] [--element button] [--matrix] [--readme] -> the design system's roles (DS2)
+    // hatch components templates   -> the templates a system can start from (DS6)
     static func components(_ c: Context) throws {
+        if c.args.pos(1) == "templates" {
+            let list = ComponentTemplates.all
+            c.out.emit(.array(list.map { ["id": .string($0.id), "title": .string($0.title), "summary": .string($0.summary)] }),
+                       text: list.map { "\($0.id)  \($0.title)\n    \($0.summary)" }.joined(separator: "\n"))
+            return
+        }
+        if c.args.pos(1) == "roles" { try componentRoles(c); return }
         if c.args.pos(1) == "scan" {
             guard let dir = c.args.pos(2) else { throw CLIError("Usage: hatch components scan <app folder>") }
             let scan = ComponentsScanner.scan(appRoot: (dir as NSString).expandingTildeInPath)
@@ -89,6 +98,65 @@ enum CoreCommands {
         }
         c.out.emit(["components": .string(label), "colors": .int(catalog.colors.count), "fonts": .int(catalog.fonts.count),
                     "sizes": .int(catalog.sizes.count), "views": .int(catalog.views.count)], text: lines.joined(separator: "\n"))
+    }
+
+    /// The rules, read from a template or from the project's notebook. Read-only: the system changes through Hatch.
+    static func componentRoles(_ c: Context) throws {
+        let system: ComponentSystem
+        if let id = c.args.option("template") {
+            guard let t = ComponentTemplates.named(id) else {
+                throw CLIError("No template called \(id). Templates: \(ComponentTemplates.all.map(\.id).joined(separator: ", ")).")
+            }
+            system = t.system(name: (try? c.project().name) ?? "This app")
+        } else {
+            let project = try c.project()
+            guard let notebook = project.config?.repo(.notebook)?.localPath else {
+                throw CLIError("\(project.name) has no notebook on this Mac, so it has no design system here. See a template with hatch components roles --template glass.")
+            }
+            guard let found = try ComponentSystem.load(notebook: notebook) else {
+                throw CLIError("\(project.name) has no design system yet (\(ComponentSystem.notebookPath) in the notebook). See a template with hatch components roles --template glass.")
+            }
+            system = found
+        }
+        if c.args.flag("readme") {
+            c.out.emit(["readme": .string(system.readme())], text: system.readme())
+            return
+        }
+        var elements = system.elementsUsed
+        if let only = c.args.option("element") {
+            guard elements.contains(only) else { throw CLIError("No roles for \(only). Elements with roles: \(elements.joined(separator: ", ")).") }
+            elements = [only]
+        }
+        let n = system.counts
+        var lines = ["\(system.name): baseline v\(system.version)" + (system.template.flatMap { ComponentTemplates.named($0)?.title }.map { ", from the \($0) template" } ?? "")
+                     + ". \(system.roles.count) roles: \(n.agreed) agreed, \(n.provisional) provisional" + (n.inRedesign > 0 ? ", \(n.inRedesign) in redesign" : "") + "."]
+        for e in elements {
+            lines.append("\n" + (ComponentElement.named(e)?.plural ?? e))
+            if c.args.flag("matrix") {
+                let m = system.matrix(element: e)
+                let width = max(12, (m.places.map(\.title.count).max() ?? 0) + 2)
+                func pad(_ s: String, _ w: Int) -> String { s.count >= w ? s + " " : s + String(repeating: " ", count: w - s.count) }
+                lines.append("  " + pad("", width) + m.importances.map { pad($0.title, 22) }.joined())
+                for (i, p) in m.places.enumerated() {
+                    lines.append("  " + pad(p.title, width) + m.cells[i].map { pad($0?.id ?? "·", 22) }.joined())
+                }
+                continue
+            }
+            for r in system.roles(of: e) {
+                let places = r.places.map { system.place($0)?.title ?? $0 }.joined(separator: ", ") + (r.perScreen.map { "; at most \($0) per screen" } ?? "")
+                lines.append("  \(r.id)  \(r.title)  [\(r.status.title)]  \(r.codeName)")
+                lines.append("      use: \(r.use)")
+                if !r.avoid.isEmpty { lines.append("      not: \(r.avoid)") }
+                lines.append("      where: \(places)")
+                lines.append("      look: \(r.lookSummary)")
+                for v in r.variants { lines.append("      variant \(v.id): \(v.use) (\(ComponentRole.summary(v.recipe)))") }
+            }
+        }
+        let problems = system.problems()
+        if !problems.isEmpty { lines.append("\nProblems:\n" + problems.map { "  - " + $0 }.joined(separator: "\n")) }
+        var json = JSONValue.parse(String(decoding: try system.encoded(), as: UTF8.self)).objectValue ?? [:]
+        json["problems"] = .array(problems.map { .string($0) })
+        c.out.emit(.object(json), text: lines.joined(separator: "\n"))
     }
 
     // hatch status

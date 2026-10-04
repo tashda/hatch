@@ -2,6 +2,12 @@
 
 Updated 2026-10-04 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
 
+## Components as roles, step 1 of 6: the data (2026-10-05, decisions DS1 to DS12)
+
+- **Core** (`HatchCore/ComponentSystem.swift`, `ComponentTemplates.swift`): the system file (`components/system.json` in the notebook) with foundations, the 11 standard places plus a system's own, roles (use when, not when, places, importance, at most per screen, recipe, custom view, variants, status, decision) and the role table lookup (element × place × importance). `problems()` checks it (unknown elements, places or settings, values a setting does not take, missing foundations, two roles on one cell, bad colors). `readme()` writes `components/README.md` for agents. Templates as data: macOS Native (20 roles) and Glass (21, from LK1 to LK11 and DR8), all provisional. Both templates add two places the standard list lacks, Page and Action row, as data (DS5). Element catalog with the settings each recipe may use (12 elements).
+- **CLI**: `hatch components templates`; `hatch components roles [--template glass] [--element button] [--matrix] [--readme]` (read-only; reads the project's notebook, or a template).
+- **Verified**: `swift test` (0 failures, 10 new in `ComponentSystemTests`), `tools/smoke.sh`, Xcode app build. **Not built yet**: anything that writes the system (setup, step 4), the inventory by place (step 2), the Designer (step 3), roles in Iris, briefs and `hatch ready` (step 5), code generation for `.buttonRole(...)`.
+
 ## Local verification (macOS, 2026-10-05): Decide in the look picked in the Lab (DR8)
 
 - **Decide** (`DecideCard`): grey panel, white card 820 wide a third down, airy; eyebrow with the kind (and "1 of 2"), large title, token row; `QuestionMessage` (mark only, whole text) and `AnswerList` (keys, full text, filled Recommended badge, checkmark, "Something else…"); one question at a time; a pinned bottom bar (Later, Note, Refine or Open the Stage when they apply, then the prominent button). 1–4 and ↑ ↓ select, ↵ acts; the last question's answer goes through the undo window. Pick and plan cards use the same list (plan: Approve or Send back, Hatch's area check as the reason).
