@@ -50,6 +50,7 @@ When the module agents are done and CI is green: `git subtree split --prefix=Hat
 6. Echo-side changes, only with the owner's agreement: `hatch` branch trigger in `ci-light.yml`, DEBUG "Preview" banner in Echo, `echo-specimens` with the "Echo today" views.
 7. Import the existing Echo Labs rounds (`hatch import-labs`) once the owner has chosen whether the imported tickets should be pushed to GitHub.
 8. `CLAUDE.md` for the Hatch repo (the Echo one is gitignored; commit a trimmed one in the new repo).
+9. Later (SL1): make the Stage work like the Decide Lab: live drawing, switchable choices per part, hard cases, a copyable result. After Decide is settled.
 
 ## Rules that must not be lost
 

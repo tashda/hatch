@@ -2,6 +2,25 @@
 
 Updated 2026-10-04 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
 
+## Local verification (macOS, 2026-10-05): Decide in the look picked in the Lab (DR8)
+
+- **Decide** (`DecideCard`): grey panel, white card 820 wide a third down, airy; eyebrow with the kind (and "1 of 2"), large title, token row; `QuestionMessage` (mark only, whole text) and `AnswerList` (keys, full text, filled Recommended badge, checkmark, "Something else…"); one question at a time; a pinned bottom bar (Later, Note, Refine or Open the Stage when they apply, then the prominent button). 1–4 and ↑ ↓ select, ↵ acts; the last question's answer goes through the undo window. Pick and plan cards use the same list (plan: Approve or Send back, Hatch's area check as the reason).
+- **Ticket page and composer** (`AnswerCard`): the same message and list with an Answer button under it.
+- **Progress pills** (DR9, `DecideRun.marks` in core): one per decision in its first place, coloured by outcome (amber now, teal an agent goes on, green done, outline later, faint not reached), tooltips and a legend in the ? popover. Verified: `DecideRunTests` (3, with the new marks test) and a live run (Later, then two drafts submitted: outline, teal, teal, amber; the bar keeps 11 pills).
+- **Verified**: Xcode build (in a copy of the tree with `DeskView.swift` and `DeskBriefPane.swift` at HEAD, because another session's unfinished edits there do not compile); a live `--demo` run: an Iris question, two questions answered in a row with ↓ and ↵ (the second replaces the first, then the undo toast and the next card), an agent's long question, a plan, a pick with gains and costs. **Not verified**: dark mode; the ticket page's new answer card; design pictures (the Stage does not export them yet).
+
+## Local verification (macOS, 2026-10-05): Decide Lab (DR7)
+
+- **Decide Lab** (Go › Decide Lab, `DecideLab.swift`, its own window): the Decide card drawn with the app's controls, 31 parts with 2 to 8 options each (layout, column, position, surface, spacing, title size, header, facts, turn, question style, picture, line above, long message, answer style, recommended, selected, long answers, keys, own answer, two or more questions, how a design is shown, picture size, choosing a design, where the actions are, main button, size, Later and Note, order, hint, key, progress). Content: the real queue or seven hard cases (long answers, two questions, a design with four drawn specimens, gains and costs, an agent's long question, a plan, two short answers). The combination is kept (`lab.decide.style`) and copied with Copy for Claude. Nothing in it decides anything.
+- **Verified**: Xcode build; a live `--demo` run of eight combinations (Focus, Inbox, Spotlight, Stack, Split; list, accordion, cards, tiles; gallery, large-and-filmstrip; conversation for two questions). **Not verified**: every combination (there are millions); dark mode.
+
+## Local verification (macOS, 2026-10-04): Decide redesign (DR1 to DR6)
+
+- **Questions as messages** (`AnswerCard`): asker's mark, grey bubble with the ask, the recommendation and the folded full text (`QuestionDigest` in core); replies as capsules, recommended first and prominent; a rounded answer field. Used in Decide, the ticket and the composer.
+- **Filed by Iris** is a token row (`FiledByIrisTokens`), under the title in Decide and in Iris's review on the ticket.
+- **Decide**: one white panel; the window footer stays visible; no card box; shortcuts in a ? popover (button and ? key); Later among the replies on question cards; ↵ also sends an agent's own "My recommendation: …".
+- **Verified**: `QuestionDigestTests` (4), Xcode app build, a live `--demo` run (Iris question, the long agent question with tokens, the ? popover, Space to Later). The demo data has the long agent question (`--snapshots … --only decide-iris`). **Not verified**: dark mode in a live run (snapshot capture leaves out Liquid Glass), and the ticket page's look with the new answer cards.
+
 ## Local verification (macOS, 2026-10-04): leaner coding agents and build output
 
 - **Coding agents** (`AgentLauncher.claudeArguments`): Claude Code now gets `--tools` with only the tools the agent may use, `--strict-mcp-config`, `--disable-slash-commands` and `--exclude-dynamic-system-prompt-sections`. In dontAsk mode every other tool was refused anyway; its description was still sent on every turn. Measured: about 7.7k input tokens per turn instead of about 41.6k. A real two-file edit and commit took 31.5k input tokens instead of 169.6k ($0.023 against $0.112 at API prices), with the same result.
@@ -180,3 +199,9 @@ The App starts the Stage API at launch; the Stage can clear a verdict. `hatch-de
 ## Local verification (macOS, 2026-10-04): Components step as a verdict
 
 The owner found the Components step confusing (a folder menu of App and Stage, four radios, "Use what is in the app" recommended for four sizes and a view). Changes: an unnamed package counts as components only with at least 6 named values including 2 colors or type styles (a package named like components needs less); the step shows one verdict ("Found X" or "No components yet") with a plain plan, and the other choices sit under "Other options"; when nothing exists and typed-in values hold near duplicates, setup adds one prepared Question ("Which close values become one?") before the tickets that act on it. **Verified**: `swift test --filter ComponentsTests` (14, 0 failures, 2 new), Xcode app build with no warnings, `hatch components scan .` no longer lists `Stage`. **Not verified**: the new step looked at on screen, and the Review page does not yet list the consolidation Question.
+
+## Stage as its own app in the Dock
+
+The Stage is now `Stage.app`: its own name, icon and Dock tile, separate from Hatch. The icon is a proscenium tunnel of stepped blue arches (an echo of Hatch's arch) with the number in white at the end; a running Stage draws its ticket number into its Dock icon (`StageIcon.swift`, `NSApp.applicationIconImage`, drawn locally, no model call, gone on quit). `tools/build-stage.sh` builds the bundle (the icon comes from `--render-icon`, no separate art file); Hatch's Xcode build runs it and puts the result in `Hatch.app/Contents/Helpers/Stage.app`, and `StageLauncher` uses it unless a path is set in Settings › Tools. Window title and menu say "Stage".
+- **Verified**: Stage built and launched with `--demo --ticket 151`: own Dock tile with the 151 icon beside Hatch; Xcode app build succeeds, `Stage.app` is inside `Hatch.app` and `codesign --verify --deep --strict` passes; Stage tests (73) pass.
+- **Not verified**: opening a Stage from the Hatch UI (Open on a Proposal) end to end; release signing and notarization of the nested app; only the toast round is bundled (a real agent-made round would be bundled with `--round`).
