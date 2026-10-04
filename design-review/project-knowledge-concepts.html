@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project knowledge concepts</title>
+<style>
+  :root {
+    --page: #ececee; --sheet: #fbfbfd; --group: #f2f2f5; --row-line: #e1e1e6; --text: #1d1d1f; --secondary: #6e6e73;
+    --tertiary: #a1a1a6; --blue: #0a66d8; --blue-soft: #e7f0fd; --green: #248a3d; --green-soft: #e6f4ea; --amber: #a05a00;
+    --amber-soft: #fdf1df; --field: #ffffff; --line: #d6d6db; --side: #f4f4f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #161618; --sheet: #232326; --group: #2c2c30; --row-line: #3a3a3f; --text: #f2f2f4; --secondary: #a3a3aa;
+      --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+      --amber-soft: #3d2e14; --field: #1b1b1e; --line: #46464c; --side: #29292c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1060px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; font-weight: 600; margin: 56px 0 6px; }
+  h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--secondary); font-size: 14px; max-width: 720px; }
+  .muted { color: var(--secondary); }
+  .small { font-size: 11.5px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .note { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 12px; padding: 16px 18px; }
+  .rec { border: 2px solid var(--blue); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--blue-soft); color: var(--blue); margin-bottom: 8px; }
+  .badge.green { background: var(--green-soft); color: var(--green); }
+  .badge.amber { background: var(--amber-soft); color: var(--amber); }
+
+  .sheet { background: var(--sheet); border-radius: 16px; border: 1px solid var(--row-line); box-shadow: 0 20px 50px rgba(0,0,0,.14); overflow: hidden; }
+  .sheet-title { font-size: 15px; font-weight: 600; padding: 20px 24px 4px; }
+  .group-h { font-size: 12px; font-weight: 600; margin: 16px 24px 6px; }
+  .group { background: var(--group); border-radius: 10px; margin: 0 16px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; min-height: 38px; }
+  .row + .row { border-top: 1px solid var(--row-line); margin: 0 0; }
+  .row .val { color: var(--secondary); text-align: right; }
+  .inline-field { color: var(--text); text-align: right; min-width: 160px; outline: none; }
+  .inline-field.ph { color: var(--tertiary); }
+  .boxed { background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; width: 55%; min-height: 24px; }
+  .footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--row-line); margin-top: 18px; }
+  .btn { font: inherit; border: 0; border-radius: 7px; padding: 5px 14px; background: var(--group); color: var(--text); box-shadow: inset 0 0 0 0.5px var(--line); cursor: pointer; }
+  .btn.primary { background: var(--blue); color: #fff; box-shadow: none; }
+  .popup { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; padding: 3px 6px 3px 9px; background: var(--field); box-shadow: 0 0 0 0.5px var(--line), 0 1px 1px rgba(0,0,0,.05); }
+  .popup::after { content: "⌃⌄"; font-size: 9px; letter-spacing: -2px; writing-mode: vertical-lr; color: var(--secondary); }
+  .check { color: var(--green); font-weight: 600; }
+  .info { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--tertiary); color: var(--secondary); font-size: 10px; font-weight: 600; margin-left: 4px; vertical-align: 1px; }
+  .radio { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; }
+  .radio + .radio { border-top: 1px solid var(--row-line); }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--field); flex: none; margin-top: 2px; }
+  .dot.on { border: 4px solid var(--blue); }
+  .icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-size: 17px; flex: none; color: #fff; }
+  .i-tickets { background: #5e5ce6; } .i-code { background: #0a84ff; } .i-design { background: #ff6482; } .i-branch { background: #30a46c; } .i-gh { background: #1d1d1f; }
+  @media (prefers-color-scheme: dark) { .i-gh { background: #f2f2f4; color: #1d1d1f; } }
+
+  /* Concept A: assistant */
+  .assistant { display: grid; grid-template-columns: 200px 1fr; min-height: 520px; }
+  .steps { background: var(--side); padding: 18px 10px; border-right: 1px solid var(--row-line); }
+  .step { display: flex; gap: 9px; align-items: center; padding: 7px 10px; border-radius: 7px; cursor: pointer; color: var(--secondary); }
+  .step .n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); }
+  .step.done .n { background: var(--green); color: #fff; box-shadow: none; }
+  .step.on { background: var(--blue-soft); color: var(--text); font-weight: 600; }
+  .step.on .n { background: var(--blue); color: #fff; box-shadow: none; }
+  .pane { display: none; flex-direction: column; }
+  .pane.on { display: flex; }
+  .pane-body { padding: 26px 28px 0; flex: 1; }
+  .pane-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+  .pane-head h3 { font-size: 17px; margin: 0; }
+  .example { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; margin: 14px 0 0; background: var(--sheet); }
+  .example .label { font-size: 11px; font-weight: 600; color: var(--secondary); margin-bottom: 6px; }
+  .issue { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; }
+  .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; background: var(--group); color: var(--secondary); box-shadow: inset 0 0 0 0.5px var(--line); }
+  .swatches { display: flex; gap: 6px; margin-top: 4px; }
+  .swatches span { width: 22px; height: 22px; border-radius: 6px; }
+  .flow { display: flex; align-items: center; gap: 0; margin: 18px 0 6px; flex-wrap: wrap; row-gap: 10px; }
+  .node { padding: 7px 12px; border-radius: 9px; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .node.hatch { background: var(--green-soft); color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+  .node.base { background: var(--blue-soft); color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+  .arrow { display: flex; flex-direction: column; align-items: center; padding: 0 8px; color: var(--secondary); font-size: 11px; min-width: 96px; }
+  .arrow .line { height: 1px; background: var(--secondary); width: 100%; position: relative; margin: 4px 0; }
+  .arrow .line::after { content: ""; position: absolute; right: -1px; top: -4px; border-left: 7px solid var(--secondary); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; }
+
+  /* Concept B: cards */
+  .card { background: var(--group); border-radius: 12px; margin: 0 16px 12px; padding: 14px; }
+  .card-head { display: flex; gap: 12px; align-items: center; }
+  .card-head .grow { flex: 1; }
+  .card .sub { color: var(--secondary); font-size: 12px; }
+  .card .row { padding: 8px 0 0; min-height: 0; }
+  .card .row + .row { border-top: 0; }
+
+  /* Compare */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .qa { counter-reset: q; }
+  .qa .q { display: grid; grid-template-columns: 28px 1fr; gap: 6px 10px; padding: 14px 0; border-top: 1px solid var(--row-line); }
+  .qa .q::before { counter-increment: q; content: counter(q); width: 22px; height: 22px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); font-weight: 600; font-size: 12px; display: grid; place-items: center; }
+  .qa .q > div { grid-column: 2; }
+  .qa .q > div:first-of-type { grid-row: 1; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--group); padding: 1px 5px; border-radius: 4px; }
+  .qform { padding: 16px 0; border-top: 1px solid var(--row-line); }
+  .qform:first-child { border-top: 0; padding-top: 4px; }
+  .qform h3 { font-size: 14px; margin-bottom: 2px; }
+  .qform .why { color: var(--secondary); margin-bottom: 10px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+  .opt { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--group); box-shadow: inset 0 0 0 1px transparent; cursor: pointer; }
+  .opt:hover { box-shadow: inset 0 0 0 1px var(--line); }
+  .opt.on { background: var(--blue-soft); box-shadow: inset 0 0 0 1.5px var(--blue); }
+  .opt input { display: none; }
+  .opt .rec-tag { font-size: 10.5px; font-weight: 600; color: var(--blue); margin-left: 4px; }
+  .opt .d { color: var(--secondary); font-size: 12px; }
+  .qnote { width: 100%; margin-top: 8px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; resize: vertical; min-height: 34px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Where a project's knowledge lives</h1>
+  <p class="lead">You asked whether "Design system" is where design decisions, architecture, agent instructions and specimens live. It is not. It holds only the app's visual building blocks. Below: where each thing lives today (from the code), the gaps I found, my proposal, what should <i>not</i> move, names, and how the workflow changes. The questions at the bottom are answerable here, as before.</p>
+
+  <h2>Where things live today</h2>
+  <div class="grid3" style="margin-top:16px">
+    <div class="note"><div class="pane-head" style="margin-bottom:8px"><div class="icon i-tickets">#</div><h3>Tickets repository</h3></div>
+      <p class="muted">Issues are tickets, and labels hold their type, status and project. Comments are the thread. Screenshots go in <code>attachments/</code>. Shared by all projects.</p></div>
+    <div class="note"><div class="pane-head" style="margin-bottom:8px"><div class="icon i-code">{}</div><h3>App repository</h3></div>
+      <p class="muted">The code, plus <code>.hatch/project.json</code> (settings and the area index) and <code>.hatch/spec/*.md</code> (the Spec: what the app does, by area). Also any docs you list for agents, such as <code>CLAUDE.md</code>.</p></div>
+    <div class="note"><div class="pane-head" style="margin-bottom:8px"><div class="icon i-design">◐</div><h3>"Design system" repository</h3></div>
+      <p class="muted">Only <code>EchoDesignSystem</code>: colors, type and components, as a tagged Swift package. The Stage imports it so options look real. It is merged first when work ships.</p></div>
+    <div class="note"><div class="pane-head" style="margin-bottom:8px"><div class="icon" style="background:#8e8e93">◫</div><h3>Specimens repository</h3></div>
+      <p class="muted">The Swift code of each Proposal's options, plus the shared "Echo today" views. Agents prepare Proposals there. The setup does not ask for it yet.</p></div>
+    <div class="note"><div class="pane-head" style="margin-bottom:8px"><div class="icon" style="background:#ff9f0a">▤</div><h3>Hatch's database, on this Mac</h3></div>
+      <p class="muted"><b>Decisions</b> (written when you accept a Proposal), picks and notes, history, agent runs, claims and previews. Nothing here is in git or on GitHub.</p></div>
+    <div class="note"><div class="pane-head" style="margin-bottom:8px"><div class="icon i-branch">⚙</div><h3>Inside Hatch itself</h3></div>
+      <p class="muted">The agent rules for each task (Prepare, Build, Fix, Iris) are written in Hatch's code, so no agent has to remember a procedure. Project-specific guidance is only the flat docs list.</p></div>
+  </div>
+
+  <h2>Gaps I found</h2>
+  <div class="note" style="margin-top:12px">
+    <p><b>1. Decisions exist only on this Mac.</b> They are rows in the local database. A new Mac, a reset or a second person loses the "why" behind every choice. Agents can't read them either.</p>
+    <p><b>2. Architecture and coding decisions have no home.</b> A Decision is only created when you accept a visual Proposal. "We use actors for connections" or "no Combine in new code" is recorded nowhere that agents read.</p>
+    <p><b>3. Agent guidance is one flat list of files.</b> A Build agent and a Prepare agent get the same docs, and there's no place for "how we write code in Echo" beyond <code>CLAUDE.md</code>.</p>
+    <p style="margin:0"><b>4. The setup leaves agents without folders.</b> Build tasks also work in the design system repository and Prepare tasks in the specimens repository, and both need a clone on this Mac. The assistant sets neither, so <code>hatch take</code> would say "no local clone configured". I'll fix this in any case.</p>
+  </div>
+
+  <h2>Proposal: one project notebook</h2>
+  <p class="lead">One private repository per project that holds what Hatch and you decide, as plain files that you, agents and git can read: <code>echo-hatch</code>. Hatch creates it during setup, keeps a clone on this Mac, and is the only one that writes to it, except for the option code agents put in <code>specimens/</code>.</p>
+  <div class="grid2" style="margin-top:16px">
+    <div class="note" style="font: 12px/1.7 ui-monospace, Menlo, monospace">
+      tashda/echo-hatch<br>
+      ├─ decisions/<br>
+      │&nbsp;&nbsp;├─ 0151-toast-spacing.md <span class="muted">design</span><br>
+      │&nbsp;&nbsp;├─ 0163-connection-actors.md <span class="muted">architecture</span><br>
+      │&nbsp;&nbsp;└─ 0170-no-full-suite.md <span class="muted">workflow</span><br>
+      ├─ guides/<br>
+      │&nbsp;&nbsp;├─ code.md <span class="muted">how we write code here</span><br>
+      │&nbsp;&nbsp;├─ design.md <span class="muted">visual rules for options</span><br>
+      │&nbsp;&nbsp;└─ review.md <span class="muted">what Iris checks for</span><br>
+      └─ specimens/<br>
+      &nbsp;&nbsp;&nbsp;├─ Today/ <span class="muted">Echo as it is now</span><br>
+      &nbsp;&nbsp;&nbsp;└─ 0151/ <span class="muted">one folder per Proposal</span>
+    </div>
+    <div class="note">
+      <h3>A decision file</h3>
+      <div style="font: 12px/1.6 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: var(--secondary)">---
+ticket: 151
+kind: design
+spec: [TOAST-3]
+decided: 2026-10-04
+---
+# Toast spacing
+Chose B, 12pt between icon and text.
+Why: A felt cramped at large type; C wasted width.
+Options: A 8pt, B 12pt, C 16pt.</div>
+      <p class="muted small" style="margin-top:8px">Indexed for search like the Spec. Iris checks new tickets against it ("#151 already decided this").</p>
+    </div>
+  </div>
+
+  <h2>What should not go in the notebook</h2>
+  <div class="note" style="margin-top:12px">
+    <p><b>The Spec stays in the app repository.</b> It describes what the code does and must change in the same pull request as the code. A ticket can't be Done until its Spec is updated.</p>
+    <p><b>The components package stays its own, versioned thing.</b> The app depends on a tagged version of it. Folding it into the notebook would make the app depend on Hatch's files.</p>
+    <p><b>Tickets, threads and screenshots stay in the tickets repository.</b> Issues need it, and it's shared across projects.</p>
+    <p><b>Live state stays in Hatch's database:</b> picks in progress, claims, agent runs, token costs and the log. They change every minute and are only useful on this Mac. Only the final decision is written to the notebook.</p>
+    <p style="margin:0"><b>Hatch's own rules stay in Hatch's code.</b> The procedure for each task (take, plan, ready) is enforced by the app, not written in a guide an agent might skip. Guides add project knowledge on top.</p>
+  </div>
+
+  <h2>How the workflow changes</h2>
+  <div class="grid2" style="margin-top:12px">
+    <div class="note"><h3>Deciding</h3><p class="muted">Every decided Proposal, Sketch or Question writes a decision file of kind design, architecture or workflow. A Question can carry options A/B/C with a recommendation, like this page, so architecture choices are made the same way as visual ones. There are still six ticket types.</p></div>
+    <div class="note"><h3>Briefing agents</h3><p class="muted"><code>hatch take</code> gives each task its guides (Build and Fix get <code>code.md</code>, Prepare gets <code>design.md</code>) and the decisions for the ticket's area. That replaces the flat docs list.</p></div>
+    <div class="note"><h3>Vetting</h3><p class="muted">Iris already compares new tickets with other tickets and the Spec. She also compares them with decisions, and flags a ticket that would undo one.</p></div>
+    <div class="note"><h3>Setup</h3><p class="muted">The assistant gets a <b>Notebook</b> step (Hatch creates <code>echo-hatch</code>, private), and the components step finds or clones its folder too. Specimens is no longer a separate repository.</p></div>
+  </div>
+
+  <h2>Decisions I need from you</h2>
+  <p class="lead">My recommendation is already selected. Tell me in chat when you're done and I'll read your answers from this page.</p>
+  <form id="answers" class="note" style="margin-top:12px"></form>
+  <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
+    <button class="btn primary" id="copy" type="button">Copy answers</button>
+    <button class="btn" id="reset" type="button">Reset to recommendations</button>
+    <span class="muted small" id="status"></span>
+  </div>
+</main>
+<script>
+  const QUESTIONS = [
+    { id: 'notebook', title: 'A notebook repository per project for decisions, guides and specimens?', why: 'Decisions stop living only on this Mac, and agents and Iris can read them.', rec: 'yes', options: [
+      ['yes', 'Yes, one notebook per project', 'Hatch creates it during setup'],
+      ['app', 'Put it in the app repository instead', 'A .hatch/ folder next to the Spec; no new repository'],
+      ['no', 'No, keep things as they are', 'Decisions stay in the local database'] ] },
+    { id: 'notebookName', title: 'What to call the notebook', why: 'It says what it is in Hatch, and the repository name says whose it is.', rec: 'notebook', options: [
+      ['notebook', 'Notebook (repository echo-hatch)', 'Plain: where the project writes things down'],
+      ['knowledge', 'Knowledge (echo-knowledge)', 'Says what is in it, a bit formal'],
+      ['studio', 'Studio (echo-studio)', 'Fits design work, less so code decisions'] ] },
+    { id: 'designName', title: 'What to call "Design system"', why: 'It is a code package of colors, type and components that the app and the Stage import, nothing more.', rec: 'components', options: [
+      ['components', 'Components', 'Short; says it is building blocks'],
+      ['uikit', 'UI kit', 'Familiar to developers'],
+      ['design', 'Keep "Design system"', 'The industry word'] ] },
+    { id: 'kinds', title: 'Kinds of decisions', why: 'Three kinds keep the Decisions page filterable, and you never have to pick from a long list.', rec: 'three', options: [
+      ['three', 'Design, Architecture, Workflow', 'Set by the ticket, changeable'],
+      ['two', 'Design and Code', 'Simpler; workflow counts as code'],
+      ['none', 'No kinds', 'Only search'] ] },
+    { id: 'questionOptions', title: 'How architecture choices are made', why: 'The same A/B/C with a recommendation that you use here, without adding a seventh ticket type.', rec: 'question', options: [
+      ['question', 'A Question can carry options', 'The answer becomes a decision'],
+      ['newtype', 'A new ticket type, Decision', 'More explicit, one more type to learn'] ] },
+    { id: 'guides', title: 'Agent guides per task', why: 'A Build agent needs coding rules, and a Prepare agent needs visual rules. Hatch\'s own procedures stay in code.', rec: 'guides', options: [
+      ['guides', 'guides/ in the notebook, matched to the task', 'code.md, design.md, review.md'],
+      ['docs', 'Keep the flat docs list', 'Every agent reads the same files'] ] }
+  ];
+  const KEY = 'hatch.knowledgeAnswers';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  const form = document.getElementById('answers');
+  function render() {
+    form.innerHTML = '';
+    QUESTIONS.forEach(q => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const box = document.createElement('div');
+      box.className = 'qform';
+      box.innerHTML = `<h3>${q.title}</h3><div class="why">Why I recommend it: ${q.why}</div><div class="opts"></div><textarea class="qnote" rows="1" placeholder="Note (optional)"></textarea>`;
+      const opts = box.querySelector('.opts');
+      q.options.forEach(([value, label, detail]) => {
+        const o = document.createElement('label');
+        o.className = 'opt' + (a.choice === value ? ' on' : '');
+        o.innerHTML = `<input type="radio" name="${q.id}" value="${value}" ${a.choice === value ? 'checked' : ''}><span class="dot ${a.choice === value ? 'on' : ''}"></span><span><b>${label}</b>${value === q.rec ? '<span class="rec-tag">Recommended</span>' : ''}<br><span class="d">${detail}</span></span>`;
+        o.addEventListener('click', () => { saved[q.id] = { choice: value, note: box.querySelector('.qnote').value }; store(); render(); });
+        opts.appendChild(o);
+      });
+      const note = box.querySelector('.qnote');
+      note.value = a.note || '';
+      note.addEventListener('input', () => { saved[q.id] = { choice: (saved[q.id] || a).choice, note: note.value }; store(); });
+      form.appendChild(box);
+    });
+  }
+  function store() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} }
+  function summary() {
+    return QUESTIONS.map(q => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const label = q.options.find(o => o[0] === a.choice)[1];
+      return `- ${q.title}: ${label}${a.choice === q.rec ? ' (recommended)' : ''}${a.note ? ' | Note: ' + a.note : ''}`;
+    }).join('\n');
+  }
+  window.hatchAnswers = summary;
+  document.getElementById('copy').addEventListener('click', async () => {
+    const status = document.getElementById('status');
+    try { await navigator.clipboard.writeText(summary()); status.textContent = 'Copied. Paste it in chat.'; }
+    catch (e) { status.textContent = 'Could not copy here. Tell me in chat that you are done and I will read them.'; }
+  });
+  document.getElementById('reset').addEventListener('click', () => { saved = {}; store(); render(); });
+  render();
+</script>
+</body>
+</html>
