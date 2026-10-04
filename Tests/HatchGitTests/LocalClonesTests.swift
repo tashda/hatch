@@ -28,3 +28,17 @@ final class LocalClonesTests: XCTestCase {
         XCTAssertEqual(found.map { URL(fileURLWithPath: $0).lastPathComponent }, ["echo", "echo-copy"])
     }
 }
+
+final class BuildCommandTests: XCTestCase {
+    func testSuggestsFromTopLevel() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("build-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        XCTAssertNil(BuildCommand.suggest(in: root.path))
+        try "".write(to: root.appendingPathComponent("Package.swift"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(BuildCommand.suggest(in: root.path), "swift build")
+        try fm.createDirectory(at: root.appendingPathComponent("Echo.xcodeproj"), withIntermediateDirectories: true)
+        XCTAssertEqual(BuildCommand.suggest(in: root.path), "xcodebuild -project Echo.xcodeproj -scheme Echo build")
+    }
+}

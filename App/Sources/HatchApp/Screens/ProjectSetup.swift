@@ -14,7 +14,7 @@ let hxDefaultTicketsSetting = "tickets.default"
 @MainActor
 final class ProjectSetupModel: ObservableObject {
     enum Step: Int, CaseIterable, Identifiable {
-        case github, project, tickets, code, design, branches, review
+        case github, project, tickets, code, design, branches, agents, review
         var id: Int { rawValue }
         var title: String {
             switch self {
@@ -24,6 +24,7 @@ final class ProjectSetupModel: ObservableObject {
             case .code: "App code"
             case .design: "Design system"
             case .branches: "Branches"
+            case .agents: "Agents"
             case .review: "Review"
             }
         }
@@ -48,7 +49,7 @@ final class ProjectSetupModel: ObservableObject {
     private var forwarders: [AnyCancellable] = []
 
     @Published var appRepo: String? { didSet { appRepoChanged(from: oldValue) } }
-    @Published var localPath: String?
+    @Published var localPath: String? { didSet { if localPath != oldValue { suggestBuild() } } }
     @Published var clones: [String] = []
     @Published var searchingClones = false
     @Published var cloning = false
@@ -64,7 +65,15 @@ final class ProjectSetupModel: ObservableObject {
     @Published var baseBranch = ""
     @Published var integrationBranch = "hatch"
     @Published var promotion: Promotion = .pullRequest
-    @Published var maxAgents = 3
+    @Published var useAgentDefaults = true
+    @Published var maxAgents = ProjectSetupModel.defaultMaxAgents
+    @Published var planThreshold = ProjectSetupModel.defaultPlanThreshold
+    @Published var buildCommand = ""
+    @Published var testCommand = ""
+    /// What `buildCommand` was filled with from the clone, so the defaults can show it.
+    @Published var suggestedBuild: String?
+    static let defaultMaxAgents = 3
+    static let defaultPlanThreshold = 8
 
     @Published var adding = false
     @Published var error: String?
@@ -146,6 +155,7 @@ final class ProjectSetupModel: ObservableObject {
         case .tickets: return ticketsRepo != nil
         case .code: return appRepo != nil && localPath != nil
         case .design: return designChoice == .none || designRepo != nil
+        case .agents: return true
         case .branches: return !baseBranch.isEmpty && !integrationBranch.trimmingCharacters(in: .whitespaces).isEmpty
                                 && integrationBranch != baseBranch
         case .review: return !adding
@@ -231,6 +241,20 @@ final class ProjectSetupModel: ObservableObject {
         }
     }
 
+    private func suggestBuild() {
+        guard let path = localPath else { suggestedBuild = nil; return }
+        let suggestion = demo ? "xcodebuild -project Echo.xcodeproj -scheme Echo build" : BuildCommand.suggest(in: path)
+        if buildCommand.isEmpty || buildCommand == suggestedBuild { buildCommand = suggestion ?? "" }
+        suggestedBuild = suggestion
+    }
+
+    /// The values the project is saved with: the defaults, or what the owner typed.
+    var effectiveAgents: (max: Int, threshold: Int, build: String?, test: String?) {
+        if useAgentDefaults { return (Self.defaultMaxAgents, Self.defaultPlanThreshold, suggestedBuild, nil) }
+        let b = buildCommand.trimmingCharacters(in: .whitespaces), t = testCommand.trimmingCharacters(in: .whitespaces)
+        return (maxAgents, planThreshold, b.isEmpty ? nil : b, t.isEmpty ? nil : t)
+    }
+
     func clone() {
         guard let repo = appRepo else { return }
         let destination = cloneDestination
@@ -298,13 +322,15 @@ final class ProjectSetupModel: ObservableObject {
             case .success(let createdBranch):
                 if let createdBranch { designBranch = createdBranch }
             }
-            var repos = [RepoConfig(role: .app, remote: app, branch: base, localPath: localPath),
+            let agents = effectiveAgents
+            var repos = [RepoConfig(role: .app, remote: app, branch: base, localPath: localPath,
+                                    buildCommand: agents.build, testCommand: agents.test),
                          RepoConfig(role: .tickets, remote: tickets, branch: "main")]
             if let design = designRepo {
                 repos.append(RepoConfig(role: .designSystem, remote: design, branch: designBranch))
             }
-            var config = ProjectConfig(name: displayName, ticketsRepo: tickets, repos: repos, maxAgents: maxAgents,
-                                       integrationBranch: integration)
+            var config = ProjectConfig(name: displayName, ticketsRepo: tickets, repos: repos, maxAgents: agents.max,
+                                       integrationBranch: integration, planApprovalFileThreshold: agents.threshold)
             config.promotion = promotion
             // A default only inferred from another project becomes the saved default once it is used.
             let key = key, name = displayName
@@ -446,6 +472,7 @@ struct ProjectSetupAssistant: View {
         case .code: codePage
         case .design: designPage
         case .branches: branchesPage
+        case .agents: agentsPage
         case .review: reviewPage
         }
     }
@@ -687,15 +714,60 @@ struct ProjectSetupAssistant: View {
                 }
                 HXReviewRow(verb: "Creates", text: "branch \(model.integrationBranch) from \(model.baseBranch), if missing")
                 HXReviewRow(verb: "Writes", text: ".hatch/project.json in your clone, for you to commit")
+                HXReviewRow(verb: "Uses", text: "up to \(model.effectiveAgents.max) agents at once" +
+                            (model.effectiveAgents.build == nil ? ", with no build before review" : ", each building its work before review"))
             }
-            DisclosureGroup("Advanced") {
-                HXSetupGroup {
-                    HXSetupRow("Agents at once") {
-                        Stepper("\(model.maxAgents)", value: $model.maxAgents, in: 1...8).fixedSize()
+        }
+    }
+
+    private var agentsPage: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HXSetupHeader(symbol: "cpu", tint: .teal, title: "How agents work",
+                          detail: "How many work at once, when they ask you first, and how their work is built before you see it.")
+            HXSetupGroup {
+                HXRadioRow(selected: model.useAgentDefaults, title: "Use the defaults",
+                           detail: "Good for most projects. You can change them later in Project settings.", recommended: true) {
+                    model.useAgentDefaults = true
+                }
+                HXRadioRow(selected: !model.useAgentDefaults, title: "Customize", detail: "Set each value yourself.") {
+                    model.useAgentDefaults = false
+                }
+            }
+            HXSetupGroup {
+                HXSetupRow("Agents at once") {
+                    if model.useAgentDefaults {
+                        Text("\(ProjectSetupModel.defaultMaxAgents)").foregroundStyle(.secondary)
+                    } else {
+                        Stepper("\(model.maxAgents)", value: $model.maxAgents, in: 1...12).fixedSize()
                     }
                 }
-                .padding(.top, 8)
+                HXSetupRow("Ask before plans that touch more than") {
+                    if model.useAgentDefaults {
+                        Text("\(ProjectSetupModel.defaultPlanThreshold) files").foregroundStyle(.secondary)
+                    } else {
+                        Stepper("\(model.planThreshold) files", value: $model.planThreshold, in: 1...100).fixedSize()
+                    }
+                }
+                HXSetupRow("Build before review") {
+                    if model.useAgentDefaults {
+                        Text(model.suggestedBuild ?? "None found").font(.callout.monospaced()).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                    } else {
+                        TextField("Build command", text: $model.buildCommand, prompt: Text(""))
+                            .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden().font(.callout.monospaced())
+                    }
+                }
+                HXSetupRow("Tests before review") {
+                    if model.useAgentDefaults {
+                        Text("None, CI runs them").foregroundStyle(.secondary)
+                    } else {
+                        TextField("Test command", text: $model.testCommand, prompt: Text(""))
+                            .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden().font(.callout.monospaced())
+                    }
+                }
             }
+            Text("Before a ticket comes to you, its agent runs the build in its own copy of the app. Only the tests of the area it changed belong here; the full suite runs in CI.")
+                .font(.callout).foregroundStyle(.secondary)
         }
     }
 

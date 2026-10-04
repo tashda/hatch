@@ -73,3 +73,21 @@ public enum LocalClones {
         }
     }
 }
+
+/// A build command suggested from what is at the top of a clone, for `hatch ready`. Nil when nothing is recognised.
+public enum BuildCommand {
+    public static func suggest(in path: String) -> String? {
+        let fm = FileManager.default
+        let names = ((try? fm.contentsOfDirectory(atPath: path)) ?? []).sorted()
+        if let workspace = names.first(where: { $0.hasSuffix(".xcworkspace") }) {
+            let scheme = (workspace as NSString).deletingPathExtension
+            return "xcodebuild -workspace \(workspace) -scheme \(scheme) build"
+        }
+        if let project = names.first(where: { $0.hasSuffix(".xcodeproj") }) {
+            let scheme = (project as NSString).deletingPathExtension
+            return "xcodebuild -project \(project) -scheme \(scheme) build"
+        }
+        if names.contains("Package.swift") { return "swift build" }
+        return nil
+    }
+}
