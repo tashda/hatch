@@ -74,7 +74,7 @@ struct AgentSettingsPage: View {
         } header: {
             Text("Tasks")
         } footer: {
-            Text("Each task uses the default unless you choose otherwise. Hatch checks a task when its model changes, and once a day.")
+            Text("Each task uses the default unless you choose otherwise. Open a task to check that it works.")
         }
     }
 
@@ -150,25 +150,21 @@ struct AgentSettingsPage: View {
             if (try? store.setting(AgentSettings.settingKey)) == nil || !moved.isEmpty { persist(first) }
             checkAll()
             for p in first.providers where p.enabled && ModelCatalog.isStale(p) { refreshModels(p.id) }
-            // Once a day, each task is checked again.
-            for role in AgentRole.allCases where first.choice(role) != nil {
-                if let c = checks[role.rawValue], Date().timeIntervalSince(c.at) < 86_400 { continue }
-                testRole(role)
-            }
         }
     }
 
-    /// Applies a change, saves it, and checks every task whose provider or model it changed.
+    /// Applies a change and saves it. A task whose provider or model changed loses its last check, which no longer
+    /// says anything about it; checks run only when the owner asks.
     private func update(_ change: (inout AgentSettings) -> Void) {
         guard var s = settings else { return }
         let before = settings
         change(&s)
         settings = s
         persist(s)
-        guard !Snapshots.demoMode else { return }
-        for role in AgentRole.allCases where s.choice(role) != before?.choice(role) {
-            if s.choice(role) == nil { checks[role.rawValue] = nil; TaskCheck.save(checks, to: state.store) } else { testRole(role) }
-        }
+        let stale = AgentRole.allCases.filter { s.choice($0) != before?.choice($0) && checks[$0.rawValue] != nil }
+        guard !stale.isEmpty, !Snapshots.demoMode else { return }
+        for role in stale { checks[role.rawValue] = nil }
+        TaskCheck.save(checks, to: state.store)
     }
 
     private func persist(_ s: AgentSettings) {
@@ -559,11 +555,7 @@ private struct TaskSheet: View {
                             Text(message).font(.callout).foregroundStyle(Theme.critical).textSelection(.enabled)
                         }
                     } header: {
-                        HStack {
-                            Text("Status")
-                            Spacer()
-                            Button("Test Again", action: onTest).buttonStyle(.link).disabled(checking)
-                        }
+                        Text("Status")
                     }
                 }
             }
@@ -572,6 +564,9 @@ private struct TaskSheet: View {
             Divider()
             HStack {
                 Spacer()
+                Button(checking ? "Checking…" : "Check", action: onTest)
+                    .disabled(checking || mode == .off)
+                    .help("Send one short prompt with this task's provider and model")
                 Button("Done") { dismiss() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
@@ -688,11 +683,7 @@ private struct ProviderDetailsSheet: View {
                         } else { Text("Not checked yet").foregroundStyle(.secondary) }
                     }
                 } header: {
-                    HStack {
-                        Text("Status")
-                        Spacer()
-                        Button("Test Again") { onTest(provider) }.buttonStyle(.link).disabled(testing)
-                    }
+                    Text("Status")
                 }
                 Section {
                     Picker("Default model", selection: Binding(get: { provider.defaultModel ?? "" },
@@ -737,6 +728,8 @@ private struct ProviderDetailsSheet: View {
                 Button("Remove Provider…", role: .destructive) { confirmRemove = true }
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(testing ? "Checking…" : "Check") { onTest(provider) }.disabled(testing)
+                    .help("Send one short prompt with the provider's default model")
                 Button("Done", action: save).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
