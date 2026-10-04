@@ -102,6 +102,35 @@ extension GitHubClient {
         return TicketsRepoReport(repo: found!, created: created, labelsEnsured: labels.count)
     }
 
+    /// Branch names of a repository, the default branch's first page included. For the base branch picker.
+    public func listBranches(_ fullName: String, limit: Int = 200) throws -> [String] {
+        var names: [String] = []
+        var page = 1
+        while names.count < limit {
+            let r = try perform("GET", url("\(repoPath(fullName))/branches", [("per_page", "100"), ("page", String(page))]))
+            let batch = JSONValue.parse(String(decoding: r.body, as: UTF8.self)).arrayValue ?? []
+            names.append(contentsOf: batch.compactMap { $0["name"]?.stringValue })
+            if batch.count < 100 { break }
+            page += 1
+        }
+        return Array(names.prefix(limit))
+    }
+
+    /// Makes sure `name` exists in `fullName`, branching it from `base` when missing. True when it was created.
+    @discardableResult
+    public func ensureBranch(_ fullName: String, name: String, from base: String) throws -> Bool {
+        do {
+            _ = try perform("GET", url("\(repoPath(fullName))/git/ref/heads/\(name)"))
+            return false
+        } catch TrackerError.notFound {}
+        let r = try perform("GET", url("\(repoPath(fullName))/git/ref/heads/\(base)"))
+        guard let sha = JSONValue.parse(String(decoding: r.body, as: UTF8.self))["object"]?["sha"]?.stringValue else {
+            throw TrackerError.http(status: r.status, message: "GitHub did not return the commit of \(base).")
+        }
+        _ = try perform("POST", url("\(repoPath(fullName))/git/refs"), body: ["ref": .string("refs/heads/\(name)"), "sha": .string(sha)])
+        return true
+    }
+
     /// Which source the token would come from right now, without using it.
     public static func tokenSource(stored: String?) -> GitHubTokenSource {
         if let stored, !stored.isEmpty { return .stored }

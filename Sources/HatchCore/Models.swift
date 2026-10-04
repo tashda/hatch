@@ -93,6 +93,16 @@ public struct AreaConfig: Codable, Equatable, Sendable {
     }
 }
 
+/// How the integration branch reaches the base branch once CI passes on it.
+public enum Promotion: String, Codable, CaseIterable, Sendable {
+    /// Hatch opens a pull request from the integration branch; the owner merges it. The default.
+    case pullRequest = "pull-request"
+    /// Hatch merges the integration branch itself.
+    case automatic
+    /// Hatch leaves the work on the integration branch.
+    case manual
+}
+
 /// The content of `.hatch/project.json` in the app repo (decision L1).
 public struct ProjectConfig: Codable, Equatable, Sendable {
     public var name: String
@@ -103,6 +113,9 @@ public struct ProjectConfig: Codable, Equatable, Sendable {
     public var maxAgents: Int
     public var integrationBranch: String
     public var planApprovalFileThreshold: Int
+    /// Optional in the file so configs written before it still load; read `promotionMode`.
+    public var promotion: Promotion?
+    public var promotionMode: Promotion { promotion ?? .pullRequest }
 
     public init(name: String, ticketsRepo: String, repos: [RepoConfig] = [], areas: [AreaConfig] = [], docs: [String] = [],
                 maxAgents: Int = 3, integrationBranch: String = "hatch", planApprovalFileThreshold: Int = 8) {
@@ -111,6 +124,24 @@ public struct ProjectConfig: Codable, Equatable, Sendable {
     }
 
     public func repo(_ role: RepoRole) -> RepoConfig? { repos.first { $0.role == role } }
+
+    /// A key for labels such as `project:echo`, made from the name: lowercase letters, digits and dashes,
+    /// with a number added when another project already uses it.
+    public static func key(for name: String, existing: [String]) -> String {
+        let folded = name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil).lowercased()
+        var base = ""
+        for ch in folded {
+            if ch.isASCII && (ch.isLetter || ch.isNumber) { base.append(ch) }
+            else if !base.isEmpty && base.last != "-" { base.append("-") }
+        }
+        while base.hasSuffix("-") { base.removeLast() }
+        if base.isEmpty { base = "project" }
+        let taken = Set(existing.map { $0.lowercased() })
+        guard taken.contains(base) else { return base }
+        var n = 2
+        while taken.contains("\(base)-\(n)") { n += 1 }
+        return "\(base)-\(n)"
+    }
 
     public func area(containing path: String) -> AreaConfig? {
         areas.first { area in area.paths.contains { Glob.matches($0, path) } }

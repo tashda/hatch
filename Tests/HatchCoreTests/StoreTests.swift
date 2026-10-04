@@ -291,3 +291,18 @@ final class StoreTests: XCTestCase {
         return current
     }
 }
+
+final class ProjectKeyTests: XCTestCase {
+    func testKeyFromName() {
+        XCTAssertEqual(ProjectConfig.key(for: "Echo", existing: []), "echo")
+        XCTAssertEqual(ProjectConfig.key(for: "Café Bar!", existing: []), "cafe-bar")
+        XCTAssertEqual(ProjectConfig.key(for: "Echo", existing: ["echo", "echo-2"]), "echo-3")
+        XCTAssertEqual(ProjectConfig.key(for: "***", existing: []), "project")
+    }
+
+    func testPromotionDefaultsToPullRequestForOldConfigs() throws {
+        let old = #"{"name":"Echo","ticketsRepo":"a/t","repos":[],"areas":[],"docs":[],"maxAgents":3,"integrationBranch":"hatch","planApprovalFileThreshold":8}"#
+        let config = try JSONDecoder().decode(ProjectConfig.self, from: Data(old.utf8))
+        XCTAssertEqual(config.promotionMode, .pullRequest)
+    }
+}

@@ -21,7 +21,7 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $state.showPalette) { CommandPalette() }
-        .sheet(isPresented: $state.showAddProject) { AddProjectSheet() }
+        .sheet(isPresented: $state.showAddProject) { ProjectSetupAssistant(store: state.store) }
         .alert("Something went wrong", isPresented: Binding(get: { state.errorMessage != nil }, set: { if !$0 { state.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(state.errorMessage ?? "") }
@@ -98,7 +98,8 @@ struct RootView: View {
             } else if state.snapshotPresentation == .palette {
                 CommandPalette()
             } else if state.snapshotPresentation == .addProject {
-                AddProjectSheet()
+                ProjectSetupAssistant(store: state.store, demoStep: ProjectSetupModel.Step(rawValue: state.snapshotSetupStep))
+                    .id(state.snapshotSetupStep)
             } else if state.snapshotPresentation == .repositorySelector {
                 HXRepositorySelectionSheet(account: GitHubAccountModel(), projectName: "Acme",
                                            initial: [.tickets: "acme/hatch-tickets", .app: "acme/app",
@@ -161,8 +162,11 @@ private struct ToolbarActions: View {
         Button { state.navigate(to: .newTicket) } label: { Label("New Ticket", systemImage: "plus") }
             .labelStyle(.iconOnly)
             .help("New ticket (\u{2318}N)")
-        Button { state.showAskPanel.toggle() } label: { Label("Iris", systemImage: "sparkles") }
-            .labelStyle(.iconOnly)
+        // The icon takes the accent color while the panel is open; no pill behind it.
+        Button { state.showAskPanel.toggle() } label: {
+            Image(systemName: "sparkles")
+                .foregroundStyle(state.showAskPanel ? Color.accentColor : Color.primary)
+        }
             .help(state.showAskPanel ? "Hide Iris (\u{2325}\u{2318}A)" : "Show Iris (\u{2325}\u{2318}A)")
             .accessibilityLabel(state.showAskPanel ? "Hide Iris" : "Show Iris")
     }

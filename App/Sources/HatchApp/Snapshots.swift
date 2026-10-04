@@ -211,9 +211,12 @@ enum Snapshots {
             }
 
             state.snapshotPresentation = .addProject
-            try? await Task.sleep(nanoseconds: 700_000_000)
-            if let window = NSApp.windows.first(where: { $0.isVisible }) {
-                save(window, name: "add-project", mode: mode, into: folder)
+            for step in ProjectSetupModel.Step.allCases {
+                state.snapshotSetupStep = step.rawValue
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                if let window = NSApp.windows.first(where: { $0.isVisible }) {
+                    save(window, name: "add-project-\(step.rawValue + 1)-\(step.title.lowercased().replacingOccurrences(of: " ", with: "-"))", mode: mode, into: folder)
+                }
             }
 
             state.snapshotPresentation = .repositorySelector

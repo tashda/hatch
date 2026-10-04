@@ -52,7 +52,7 @@ struct ProjectView: View {
                 }
             }
         }
-        .sheet(isPresented: $showAdd) { AddProjectSheet() }
+        .sheet(isPresented: $showAdd) { ProjectSetupAssistant(store: state.store) }
     }
 }
 
@@ -107,7 +107,7 @@ struct ProjectForm: View {
         .onReceive(NotificationCenter.default.publisher(for: .hxGitHubAccountChanged)) { _ in
             account.refresh()
         }
-        .sheet(isPresented: $showAdd) { AddProjectSheet() }
+        .sheet(isPresented: $showAdd) { ProjectSetupAssistant(store: state.store) }
         .sheet(item: $editingArea) { draft in
             HXAreaEditSheet(draft: draft) { saved in
                 if let index = areas.firstIndex(where: { $0.id == saved.id }) { areas[index] = saved } else { areas.append(saved) }
@@ -596,146 +596,6 @@ struct WelcomeView: View {
         }
     }
 }
-
-/// The add-project flow: a key, a name, the tickets repo and the app repo.
-struct AddProjectSheet: View {
-    @EnvironmentObject var state: AppState
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var key = ""
-    @State private var name = ""
-    @State private var ticketsRepo = ""
-    @State private var appRemote = ""
-    @State private var designRemote = ""
-    @State private var appPath = ""
-    @State private var branch = "dev"
-    @State private var designBranch = "main"
-    @State private var showRepositorySheet = false
-    @StateObject private var account = GitHubAccountModel()
-
-    private var canAdd: Bool {
-        !ticketsRepo.isEmpty && !key.trimmingCharacters(in: .whitespaces).isEmpty && !name.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Add project").font(.title3.weight(.semibold))
-                Spacer()
-            }
-            .padding(.horizontal, 26)
-            .padding(.top, 22)
-            .padding(.bottom, 10)
-
-            Form {
-                Section("Project") {
-                    LabeledContent("Name") {
-                        TextField("Project name", text: $name)
-                            .textFieldStyle(.roundedBorder)
-                            .labelsHidden()
-                    }
-                    LabeledContent("Key") {
-                        TextField("For labels, such as echo", text: $key)
-                            .textFieldStyle(.roundedBorder)
-                            .labelsHidden()
-                    }
-                }
-                Section {
-                    LabeledContent("Tickets", value: ticketsRepo.isEmpty ? "Not selected" : ticketsRepo)
-                    LabeledContent("Project", value: appRemote.isEmpty ? "Not selected" : appRemote)
-                    LabeledContent("Design", value: designRemote.isEmpty ? "Not selected" : designRemote)
-                    HStack {
-                        Spacer()
-                        Button("Choose repositories…") { showRepositorySheet = true }
-                    }
-                } header: {
-                    Text("GitHub repositories")
-                } footer: {
-                    Text("Tickets must use a private repository. Choose from repositories available to Hatch.")
-                }
-                Section("Local checkout") {
-                    LabeledContent("App folder") {
-                        HStack {
-                            Text(appPath.isEmpty ? "Not selected" : appPath)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                            Button("Choose…") { choose() }
-                        }
-                    }
-                    LabeledContent("Base branch") {
-                        TextField("dev", text: $branch)
-                            .textFieldStyle(.roundedBorder)
-                            .labelsHidden()
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
-            .frame(minHeight: 500)
-
-            Divider()
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }
-                Button("Add") { add() }.buttonStyle(.glassProminent).disabled(!canAdd)
-            }
-            .padding(.horizontal, 26)
-            .padding(.vertical, 16)
-        }
-        .frame(width: 600)
-        .onAppear { if !Snapshots.demoMode { account.refresh() } }
-        .sheet(isPresented: $showRepositorySheet) {
-            HXRepositorySelectionSheet(account: account, projectName: name.isEmpty ? "this project" : name,
-                                       initial: selectedRepositoryNames) { assignments in
-                ticketsRepo = assignments.tickets.fullName
-                appRemote = assignments.project?.fullName ?? ""
-                branch = assignments.project?.defaultBranch ?? "dev"
-                designRemote = assignments.design?.fullName ?? ""
-                designBranch = assignments.design?.defaultBranch ?? "main"
-                return true
-            }
-        }
-    }
-
-    private var selectedRepositoryNames: [RepoRole: String] {
-        var names: [RepoRole: String] = [:]
-        if !ticketsRepo.isEmpty { names[.tickets] = ticketsRepo }
-        if !appRemote.isEmpty { names[.app] = appRemote }
-        if !designRemote.isEmpty { names[.designSystem] = designRemote }
-        return names
-    }
-
-    private func choose() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        if panel.runModal() == .OK, let url = panel.url { appPath = url.path }
-    }
-
-    private func add() {
-        let cleanKey = key.trimmingCharacters(in: .whitespaces).lowercased()
-        var repos: [RepoConfig] = []
-        if !appRemote.isEmpty {
-            repos.append(RepoConfig(role: .app, remote: appRemote, branch: branch.isEmpty ? "dev" : branch, localPath: appPath.isEmpty ? nil : appPath))
-        }
-        if !designRemote.isEmpty {
-            repos.append(RepoConfig(role: .designSystem, remote: designRemote, branch: designBranch))
-        }
-        if !ticketsRepo.isEmpty {
-            repos.append(RepoConfig(role: .tickets, remote: ticketsRepo, branch: "main"))
-        }
-        let config = ProjectConfig(name: name, ticketsRepo: ticketsRepo, repos: repos)
-        let created: Project? = state.perform("Add project") {
-            try state.store.upsertProject(key: cleanKey, name: name, config: config)
-        }
-        if let created {
-            state.selectedProjectKey = created.key
-            state.navigate(to: .projects)
-            dismiss()
-        }
-    }
-}
-
 
 /// Add or edit one area. Three fields, in their own small sheet instead of rows of text fields on the page.
 struct HXAreaEditSheet: View {

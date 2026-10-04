@@ -40,6 +40,8 @@ final class AppState: ObservableObject {
     /// Snapshot harness only: selects each ticket subview without changing the normal navigation model.
     @Published var snapshotTicketTab: TicketTab?
     @Published var snapshotPresentation: SnapshotPresentation?
+    /// Snapshot harness only: which add-project step to show.
+    @Published var snapshotSetupStep = 0
 
     struct SyncSummary: Equatable {
         var pending = 0

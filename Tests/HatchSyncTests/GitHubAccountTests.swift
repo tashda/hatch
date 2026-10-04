@@ -83,3 +83,35 @@ final class GitHubAccountTests: XCTestCase {
         XCTAssertTrue(transport.requests.contains { $0.url.path == "/orgs/acme/repos" })
     }
 }
+
+final class GitHubBranchTests: XCTestCase {
+    func testListBranches() throws {
+        let transport = CannedTransport()
+        transport.responses = [json(#"[{"name":"main"},{"name":"dev"}]"#)]
+        let client = GitHubClient(token: "tok", transport: transport)
+        XCTAssertEqual(try client.listBranches("ada/app"), ["main", "dev"])
+        XCTAssertEqual(transport.requests[0].url.path, "/repos/ada/app/branches")
+    }
+
+    func testEnsureBranchCreatesFromBase() throws {
+        let transport = CannedTransport()
+        transport.responses = [HTTPResponse(status: 404), json(#"{"object":{"sha":"abc123"}}"#), json("{}", status: 201)]
+        let client = GitHubClient(token: "tok", transport: transport)
+        XCTAssertTrue(try client.ensureBranch("ada/app", name: "hatch", from: "dev"))
+        XCTAssertEqual(transport.requests.map(\.url.path), ["/repos/ada/app/git/ref/heads/hatch", "/repos/ada/app/git/ref/heads/dev", "/repos/ada/app/git/refs"])
+        XCTAssertTrue(String(decoding: transport.requests[2].body ?? Data(), as: UTF8.self).contains("abc123"))
+    }
+
+    func testEnsureBranchLeavesExistingBranch() throws {
+        let transport = CannedTransport()
+        transport.responses = [json(#"{"object":{"sha":"abc"}}"#)]
+        let client = GitHubClient(token: "tok", transport: transport)
+        XCTAssertFalse(try client.ensureBranch("ada/app", name: "hatch", from: "dev"))
+        XCTAssertEqual(transport.requests.count, 1)
+    }
+
+    func testAppClientDoesNotFallBackToOtherTokens() {
+        let client = GitHubClient(token: nil, fallback: false, transport: CannedTransport())
+        XCTAssertThrowsError(try client.currentUser())
+    }
+}
