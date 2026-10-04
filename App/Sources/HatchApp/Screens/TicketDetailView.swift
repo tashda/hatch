@@ -312,7 +312,8 @@ struct TicketDetailView: View {
         var resumeAction: (() -> Void)?
         switch t.status {
         case .blocked, .parked: resumeTitle = "Resume"; resumeAction = { resume() }
-        case .done, .dropped where canMove(t, to: .draft): resumeTitle = "Reopen"; resumeAction = { move(to: .draft) }
+        case .done, .dropped:
+            if canMove(t, to: .draft) { resumeTitle = "Reopen"; resumeAction = { move(to: .draft) } }
         default: break
         }
         return TicketActions(

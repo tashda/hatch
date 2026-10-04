@@ -131,6 +131,7 @@ struct BoardColumn: View {
 
 struct BoardCard: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.openWindow) private var openWindow
     let ticket: Ticket
     let projectName: String
     let showProject: Bool
@@ -168,6 +169,10 @@ struct BoardCard: View {
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.2)))
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button("Open") { state.open(ticket) }
+            Button("Open in New Window") { openWindow(id: "ticket", value: ticket.id) }
+        }
     }
 }
 
