@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 // Providers for everyone (Settings design, "Providers for everyone, not one setup"): every provider is one of three
 // ways to reach a model, and the services behind them are data. A new service is a line here, not a new screen, and a
