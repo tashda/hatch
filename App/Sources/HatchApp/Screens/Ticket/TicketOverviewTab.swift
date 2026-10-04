@@ -18,6 +18,7 @@ struct TicketOverviewTab: View {
     /// Description and details as two separate panels (the ticket's own page); false stacks them in one scroll.
     var split = false
     @EnvironmentObject var state: AppState
+    @Environment(\.ticketOpener) private var opener
 
     @State private var attachments: [Attachment] = []
     @State private var linkEntries: [LinkEntry] = []
@@ -101,7 +102,7 @@ struct TicketOverviewTab: View {
                         ForEach(inPhase) { child in
                             TicketLine(ticket: child, projectName: "")
                                 .contentShape(Rectangle())
-                                .onTapGesture { state.open(child) }
+                                .onTapGesture { TicketOpener.go(opener, child, state) }
                         }
                     }
                 }
@@ -267,7 +268,7 @@ struct TicketOverviewTab: View {
                             .foregroundStyle(.tertiary)
                             .help("Remove this link")
                     }
-                    Button { state.open(entry.other) } label: {
+                    Button { TicketOpener.go(opener, entry.other, state) } label: {
                         HStack(spacing: 6) {
                             Text(entry.other.displayNumber).foregroundStyle(.secondary)
                             Text(entry.other.title).lineLimit(2).multilineTextAlignment(.leading)
@@ -337,7 +338,7 @@ struct TicketOverviewTab: View {
             if let parentTheme {
                 MetaRow(label: "Theme") {
                     Button {
-                        state.open(parentTheme)
+                        TicketOpener.go(opener, parentTheme, state)
                     } label: {
                         Text("\(parentTheme.title) (\(parentProgress.done) of \(parentProgress.total))")
                             .multilineTextAlignment(.leading)

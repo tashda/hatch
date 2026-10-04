@@ -56,6 +56,7 @@ enum WordDiff {
 /// resolves the whole suggestion through `IrisApplier`, and anything not yet decided stays as it is.
 struct IrisReviewView: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.ticketOpener) private var opener
     let ticketId: Int
     var showIdleMessage: Bool = false
 
@@ -182,7 +183,7 @@ struct IrisReviewView: View {
             SectionCard("Likely duplicate") {
                 HStack(spacing: 8) {
                     Button {
-                        state.open(other)
+                        TicketOpener.go(opener, other, state)
                     } label: {
                         HStack(spacing: 6) {
                             Text(other.displayNumber).foregroundStyle(.secondary)

@@ -33,6 +33,7 @@ struct TicketDetailView: View {
     /// Inside the Desk: one flat page in the Desk's card, no back link. On its own page the sections are separate panels.
     var embedded = false
     @EnvironmentObject var state: AppState
+    @Environment(\.ticketOpener) private var opener
     @State private var ticket: Ticket?
     @State private var tab: TicketTab = .overview
     @State private var openQuestions = 0
@@ -254,6 +255,7 @@ struct TicketDetailView: View {
             let moved: Ticket? = state.perform("Could not submit the ticket") { try state.store.move(id, to: .checking, actor: .owner, reason: "submitted for check") }
             if moved != nil { VettingBridge.start(ticketId: id, state: state) }
         case .previews:
+            if opener?.isTicketWindow == true { HatchWindows.showMain() }
             state.navigate(to: .previews)
         case .closeAsAnswered:
             move(to: .done)
@@ -349,7 +351,8 @@ struct TicketDetailView: View {
         let questions = ((try? state.store.questions(ticketId: ticketId)) ?? []).count
         if notes + questions != threadCount { threadCount = notes + questions }
         info = ProposalInfo.load(store: state.store, ticket: t)
-        if state.selectedTicketId != ticketId { state.selectedTicketId = ticketId }
+        // A ticket window is not the main window's selection.
+        if opener == nil, state.selectedTicketId != ticketId { state.selectedTicketId = ticketId }
     }
 }
 
