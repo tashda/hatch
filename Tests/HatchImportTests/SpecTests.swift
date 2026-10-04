@@ -108,7 +108,7 @@ final class SpecTests: XCTestCase {
         XCTAssertEqual(r.items, 4)
         let items = try store.specItems(projectId: project.id)
         XCTAssertEqual(items.map(\.code), ["NOTIF-1.1", "NOTIF-1.2", "NOTIF-2.1", "TABS-1.1"])
-        XCTAssertEqual(items.first?.source, ".hatch/spec/notifications.md")
+        XCTAssertEqual(items.first?.source, "spec/notifications.md")
         XCTAssertEqual(try store.specItems(projectId: project.id, area: "Tabs").count, 1)
         XCTAssertEqual(try store.searchSpec(projectId: project.id, query: "padding").map(\.code), ["NOTIF-1.2"])
     }

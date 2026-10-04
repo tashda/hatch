@@ -115,6 +115,99 @@ public enum Notebook {
         return lines.joined(separator: "\n")
     }
 
+    // MARK: Decision files
+
+    /// `decisions/0151-toast-spacing.md`. Unique among `taken`: a second decision on a ticket gets `-2`.
+    public static func decisionPath(_ d: DecisionRecord, taken: Set<String>) -> String {
+        let number = d.ticketNumber.hasPrefix("#") ? String(repeating: "0", count: max(0, 4 - (d.ticketNumber.count - 1))) + d.ticketNumber.dropFirst()
+                                                  : d.ticketNumber
+        let slug = HatchStore.slug(d.title.isEmpty ? d.summary : d.title).prefix(48)
+        var path = "\(decisionsDir)/\(number)-\(slug).md", n = 2
+        while taken.contains(path) { path = "\(decisionsDir)/\(number)-\(slug)-\(n).md"; n += 1 }
+        return path
+    }
+
+    /// A decision in the common ADR shape, with the facts a later reader or importer needs at the top.
+    public static func decisionFile(_ d: DecisionRecord, replacesPath: String?) -> String {
+        var front = ["---", "ticket: \(d.ticketNumber)", "type: \(d.ticketType.rawValue)", "kind: \(d.kind.rawValue)"]
+        if let area = d.area { front.append("area: \(area)") }
+        if !d.specCodes.isEmpty { front.append("spec: [\(d.specCodes.joined(separator: ", "))]") }
+        front.append("decided: \(dayFormatter.string(from: d.at))")
+        if let replacesPath { front.append("replaces: \(replacesPath)") }
+        front.append("---")
+        var lines = front + ["", "# \(d.title.isEmpty ? d.summary : d.title)", "", "**Decision:** \(d.summary)"]
+        if let why = d.reason, !why.isEmpty { lines += ["", "**Why:** \(why)"] }
+        if !d.options.isEmpty {
+            lines += ["", "## Options", ""]
+            for o in d.options {
+                var line = "- \(o.key): \(o.title)"
+                if let detail = o.detail, !detail.isEmpty { line += ". \(detail)" }
+                var marks: [String] = []
+                if o.key == d.recommended { marks.append("recommended") }
+                if let c = d.choice, c == o.key || c.contains("\(o.key) = ") { marks.append("chosen") }
+                if !marks.isEmpty { line += " (\(marks.joined(separator: ", ")))" }
+                lines.append(line)
+            }
+        }
+        lines += ["", "Ticket \(d.ticketNumber) holds the discussion.", ""]
+        return lines.joined(separator: "\n")
+    }
+
+    /// What an import needs from a decision file. Nil when the file is not a decision.
+    public struct ParsedDecision: Equatable, Sendable {
+        public var ticketNumber: Int
+        public var kind: DecisionKind
+        public var area: String?
+        public var specCodes: [String]
+        public var decided: Date?
+        public var title: String
+        public var summary: String
+        public var reason: String?
+    }
+
+    public static func parseDecision(_ text: String) -> ParsedDecision? {
+        let lines = text.components(separatedBy: "\n")
+        guard lines.first == "---", let end = lines.dropFirst().firstIndex(of: "---") else { return nil }
+        var fields: [String: String] = [:]
+        for line in lines[1..<end] {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            fields[String(line[..<colon]).trimmingCharacters(in: .whitespaces)] = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        }
+        guard let number = fields["ticket"].flatMap({ Int($0.trimmingCharacters(in: CharacterSet(charactersIn: "#"))) }) else { return nil }
+        let body = lines[(end + 1)...]
+        let title = body.first { $0.hasPrefix("# ") }.map { String($0.dropFirst(2)) } ?? ""
+        func after(_ prefix: String) -> String? { body.first { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces) } }
+        let spec = fields["spec"].map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "[]")).split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } } ?? []
+        return ParsedDecision(ticketNumber: number, kind: fields["kind"].flatMap(DecisionKind.init(rawValue:)) ?? .design, area: fields["area"],
+                              specCodes: spec, decided: fields["decided"].flatMap { dayFormatter.date(from: $0) }, title: title,
+                              summary: after("**Decision:**") ?? title, reason: after("**Why:**"))
+    }
+
+    /// `decisions/README.md`: every decision by kind, newest first, so a reader finds one without opening them all.
+    public static func decisionIndex(_ decisions: [DecisionRecord]) -> String {
+        var lines = ["# Decisions", "", "One file per decision, never edited after it is written. A later decision names the one it replaces.", ""]
+        for kind in DecisionKind.allCases {
+            let list = decisions.filter { $0.kind == kind && $0.filePath != nil }
+            guard !list.isEmpty else { continue }
+            lines += ["## \(kind.displayName)", ""]
+            for d in list {
+                let file = (d.filePath! as NSString).lastPathComponent
+                lines.append("- [\(d.ticketNumber) \(d.title.isEmpty ? d.summary : d.title)](\(file))" + (d.area.map { " · \($0)" } ?? ""))
+            }
+            lines.append("")
+        }
+        if decisions.isEmpty { lines.append("None yet.") }
+        return lines.joined(separator: "\n")
+    }
+
+    static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
     public static func starterRules(config: ProjectConfig) -> String {
         """
         # How code is written in \(config.name)

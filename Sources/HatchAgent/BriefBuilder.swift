@@ -7,6 +7,8 @@ public enum BriefBuilder {
     public static let bodyLimit = 1500
     public static let relatedCap = 6
     public static let specCap = 8
+    /// Earlier decisions in a brief: few, because each one is a line the agent reads on every run.
+    public static let decisionCap = 3
     public static let notesCap = 8
 
     /// The task the ticket is in now. A taken ticket has already moved (Ready becomes Preparing or Building).
@@ -56,8 +58,10 @@ public enum BriefBuilder {
         out += try linkLines(store, t)
         out += try relatedLines(store, t)
         out += try specLines(store, t)
+        out += try decisionLines(store, t)
         out += areaLines(config, t)
         out += try repoLines(store, t)
+        out += try notebookLines(store, t, config: config)
         if let config, !config.docs.isEmpty {
             out.append("\n## Docs to read")
             out.append(config.docs.map { "- \($0)" }.joined(separator: "\n"))
@@ -160,6 +164,40 @@ public enum BriefBuilder {
         return hits.isEmpty ? [] : ["\n## Spec items (search)"] + hits.map { "- \($0.code): \(Text.oneLine($0.text, 160))" }
     }
 
+    /// Earlier decisions that match the ticket, from the free local search: title and one line of why, plus the file
+    /// to open if the agent needs the options. Never the whole decision log.
+    private static func decisionLines(_ store: HatchStore, _ t: Ticket) throws -> [String] {
+        let hits = try store.searchDecisions(projectId: t.projectId, query: t.title + " " + t.body, area: t.area, limit: decisionCap)
+            .filter { $0.ticketId != t.id }
+        guard !hits.isEmpty else { return [] }
+        return ["\n## Earlier decisions (search; do not undo one without asking)"] + hits.map { d in
+            var line = "- \(d.ticketNumber) \(d.kind.rawValue): \(Text.oneLine(d.title.isEmpty ? d.summary : d.title, 90))"
+            if let why = d.reason, !why.isEmpty { line += ". Why: \(Text.oneLine(why, 140))" }
+            if let file = d.filePath { line += " (\(Notebook.decisionsDir)/\((file as NSString).lastPathComponent))" }
+            return line
+        }
+    }
+
+    /// Where the notebook is, which rules apply and where the Spec is edited. The area's rule file is named only when the
+    /// ticket has an area and the file exists, so detailed rules cost tokens only for the work that needs them.
+    private static func notebookLines(_ store: HatchStore, _ t: Ticket, config: ProjectConfig?) throws -> [String] {
+        guard let notebook = try store.repo(projectId: t.projectId, role: .notebook), let dir = notebook.localPath else { return [] }
+        let fm = FileManager.default
+        var out = ["\n## Notebook (\(notebook.remote))"]
+        out.append("- Spec: `\(Notebook.specDir)/` in your notebook workspace. Update the items you change on the same ticket branch, or say they are unchanged.")
+        if let area = t.area {
+            let file = "rules/areas/\(HatchStore.slug(area)).md"
+            if fm.fileExists(atPath: (dir as NSString).appendingPathComponent(file)) { out.append("- Rules for \(area): `\(file)` in the notebook. Read it.") }
+        }
+        // The app's own committed AGENTS.md means the notebook's rules were not placed; point at them instead.
+        if let app = try store.repo(projectId: t.projectId, role: .app)?.localPath,
+           let text = try? String(contentsOfFile: (app as NSString).appendingPathComponent("AGENTS.md"), encoding: .utf8),
+           !text.hasPrefix(Notebook.placedMarker) {
+            out.append("- Also follow `\(Notebook.rulesPath)` in the notebook; the app's own AGENTS.md is loaded already.")
+        }
+        return out
+    }
+
     private static func areaLines(_ config: ProjectConfig?, _ t: Ticket) -> [String] {
         guard let name = t.area else { return [] }
         guard let a = config?.areas.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else { return ["\n## Area\n\(name)"] }
@@ -210,8 +248,8 @@ public enum BriefBuilder {
                 ] + common + ["Hand it in with `hatch offer`. Never move the status yourself."]
             case .question:
                 return [
-                    "Answer in words. Look up the Spec first and name the Spec IDs the answer touches.",
-                    "Give one recommendation and the reason. If it needs a decision between options, say which one you would ship.",
+                    "Answer in words. Look up the Spec and the earlier decisions first and name the Spec IDs the answer touches.",
+                    "Give one recommendation and the reason. When the answer is a choice (how to build something, which approach), offer the options with `hatch options` (2 to 4, each with a short title and what it costs), recommend one and say why. The owner's choice becomes a recorded decision.",
                 ] + common + ["Hand the answer in with `hatch offer`. Never move the status yourself."]
             default:
                 return [

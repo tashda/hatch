@@ -4,8 +4,8 @@ import HatchCore
 let usage = """
 hatch: tickets, agents and decisions
 
-Agents use:  next · take · ask · offer · plan · ready · note · search
-People use:  init · status · ticket · sync · serve · import-labs · spec · admin
+Agents use:  next · take · ask · options · offer · plan · ready · note · search
+People use:  init · status · ticket · sync · serve · import-labs · spec · notebook · admin
 Add --json for machine-readable output, --project <key>, --db <path>.
 Run `hatch <command> --help` for a command.
 """

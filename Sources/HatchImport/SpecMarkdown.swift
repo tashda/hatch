@@ -15,7 +15,7 @@ public struct SpecDocument: Equatable, Sendable {
     public var warnings: [String]
 }
 
-/// The Markdown format of `.hatch/spec/*.md` (decision L3). Plain text so people, agents and diffs can all read it:
+/// The Markdown format of the notebook's `spec/*.md` (decisions L3, PS13). Plain text so people, agents and diffs can all read it:
 ///
 ///     ---
 ///     prefix: NOTIF

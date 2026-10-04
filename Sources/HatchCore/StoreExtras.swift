@@ -244,11 +244,12 @@ public extension HatchStore {
 
     // Decisions (Decisions library, decision N1)
 
+    /// A decision with only a summary (imports and older callers): kind and title come from the ticket.
     @discardableResult
     func recordDecision(ticketId: Int, summary: String, specCodes: [String] = []) throws -> Int {
-        try db.execute("INSERT INTO decision(ticket_id, summary, spec_codes_json, at) VALUES(?,?,?,?)",
-                       [.int(ticketId), .text(summary), .text(JSONValue.array(specCodes.map { .string($0) }).jsonString()), .date(now())])
-        return Int(db.lastInsertRowID)
+        let t = try ticket(id: ticketId)
+        return try recordDecision(ticketId: ticketId, kind: t.map { DecisionKind.default(for: $0.type) } ?? .design,
+                                  title: t?.title ?? "", summary: summary, area: t?.area, specCodes: specCodes)
     }
 
     func decisions(projectId: Int? = nil) throws -> [(ticket: Ticket, summary: String, specCodes: [String], at: Date)] {

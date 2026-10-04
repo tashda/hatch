@@ -9,10 +9,20 @@ public struct SpecIndexResult: Equatable, Sendable {
     public var warnings: [String] = []
 }
 
-/// Reads `.hatch/spec/*.md` into the Spec search index (decision L3).
+/// Reads the notebook's `spec/*.md` into the Spec search index (decisions L3 and PS13). Agents and Iris then get only
+/// the matching items from a free local search, never the whole Spec.
 public enum SpecIndexer {
-    /// Spec items from these files are stored with `source` = `.hatch/spec/<file>`. The same prefix is used to find stale items.
-    public static let sourcePrefix = ".hatch/spec/"
+    /// Spec items from these files are stored with `source` = `spec/<file>`. The same prefix is used to find stale items.
+    public static let sourcePrefix = Notebook.specDir + "/"
+    /// Where the Spec lived before the notebook, in the app's `.hatch/`; items from there are cleared on the next index.
+    static let legacyPrefix = ".hatch/spec/"
+
+    /// Indexes the Spec of a project's notebook clone. Nil when the project has no notebook on this Mac.
+    @discardableResult
+    public static func indexNotebook(project: Project, store: HatchStore) throws -> SpecIndexResult? {
+        guard let dir = try store.repo(projectId: project.id, role: .notebook)?.localPath else { return nil }
+        return try index(directory: URL(fileURLWithPath: dir).appendingPathComponent(Notebook.specDir), project: project, store: store)
+    }
 
     /// Upserts every item and removes items of earlier runs whose line has disappeared. Items from other sources
     /// (for example typed in by hand) are left alone. Re-running with unchanged files changes nothing.
@@ -42,6 +52,7 @@ public enum SpecIndexer {
         try store.db.transaction {
             try store.upsertSpecItems(projectId: project.id, items: items)
             result.removed = try store.deleteSpecItems(projectId: project.id, sourcePrefix: sourcePrefix, notIn: Set(items.map(\.code)))
+                + store.deleteSpecItems(projectId: project.id, sourcePrefix: legacyPrefix, notIn: [])
         }
         result.items = items.count
         return result

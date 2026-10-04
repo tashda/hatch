@@ -65,3 +65,59 @@ final class NotebookTests: GitTestCase {
         XCTAssertFalse(try NotebookWriter.commit("Nothing new", in: dir, git: git))
     }
 }
+
+final class NotebookExportTests: GitTestCase {
+    /// A notebook clone with a bare remote, so the export's push is real.
+    func makeNotebook() throws -> String {
+        let remote = tmp + "/remote-notebook.git"
+        try g(["init", "-q", "--bare", "-b", "dev", remote], tmp)
+        let dir = try makeRepo("echo-notebook")
+        try g(["remote", "add", "origin", remote], dir)
+        try g(["push", "-q", "-u", "origin", "dev"], dir)
+        var config = project.config!
+        config.repos.append(RepoConfig(role: .notebook, remote: "acme/echo-notebook", branch: "dev", localPath: dir))
+        project = try store.upsertProject(key: "echo", name: "Echo", config: config)
+        return dir
+    }
+
+    func testExportWritesDecisionsAndNowAndPushes() throws {
+        let dir = try makeNotebook()
+        let t = try store.createTicket(projectId: project.id, type: .proposal, title: "Toast spacing", ghNumber: 151)
+        try store.recordDecision(ticketId: t.id, kind: .design, title: "Toast spacing", summary: "Chose B.", reason: "Less cramped.")
+        _ = try store.createTicket(projectId: project.id, type: .bug, title: "Crash on timeout", ghNumber: 152)
+
+        let r = try XCTUnwrap(NotebookExport.run(store: store, projectId: project.id, token: nil, git: git))
+        XCTAssertEqual(r.decisionsWritten, 1)
+        XCTAssertTrue(r.nowUpdated)
+        XCTAssertTrue(r.pushed)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir + "/decisions/0151-toast-spacing.md"))
+        XCTAssertTrue(try String(contentsOfFile: dir + "/NOW.md", encoding: .utf8).contains("#152 Bug: Crash on timeout"))
+        XCTAssertTrue(try String(contentsOfFile: dir + "/decisions/README.md", encoding: .utf8).contains("[#151 Toast spacing](0151-toast-spacing.md)"))
+        XCTAssertEqual(try g(["rev-list", "--count", "@{u}..HEAD"], dir), "0")
+
+        // Nothing changed: no new commit.
+        let again = try XCTUnwrap(NotebookExport.run(store: store, projectId: project.id, token: nil, git: git))
+        XCTAssertEqual(again.decisionsWritten, 0)
+        XCTAssertFalse(again.nowUpdated)
+        XCTAssertFalse(again.committed)
+    }
+
+    func testDecisionFilesComeBackIntoANewDatabase() throws {
+        let dir = try makeNotebook()
+        let t = try store.createTicket(projectId: project.id, type: .question, title: "Retries", ghNumber: 160)
+        try store.recordDecision(ticketId: t.id, kind: .architecture, title: "Retries", summary: "Back off.", reason: "Servers recover.")
+        try NotebookExport.run(store: store, projectId: project.id, token: nil, push: false, git: git)
+
+        // A fresh database that knows the ticket (synced from GitHub) but not the decision: picking up on a new Mac.
+        let fresh = try HatchStore.inMemory()
+        let p = try fresh.upsertProject(key: "echo", name: "Echo", config: project.config)
+        _ = try fresh.createTicket(projectId: p.id, type: .question, title: "Retries", ghNumber: 160)
+        let r = try XCTUnwrap(NotebookExport.run(store: fresh, projectId: p.id, token: nil, push: false, git: git))
+        XCTAssertEqual(r.imported, 1)
+        XCTAssertEqual(r.decisionsWritten, 0, "an imported decision already has its file")
+        let found = try fresh.searchDecisions(projectId: p.id, query: "servers recover")
+        XCTAssertEqual(found.first?.kind, .architecture)
+        XCTAssertEqual(found.first?.reason, "Servers recover.")
+        _ = dir
+    }
+}

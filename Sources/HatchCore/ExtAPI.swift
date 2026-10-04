@@ -82,7 +82,9 @@ public extension HatchStore {
             else {
                 summary += ": " + picks.map { p in "\(p.topic) = \(p.choice)" + (p.note.map { " (\($0))" } ?? "") }.joined(separator: "; ") + "."
             }
-            let id = try recordDecision(ticketId: ticketId, summary: summary)
+            let id = try recordDecision(ticketId: ticketId, kind: .design, title: before.title, summary: summary, area: before.area,
+                                        options: picks.map { DecisionOption(key: $0.topic, title: $0.choice, detail: $0.note) },
+                                        choice: picks.isEmpty ? nil : picks.map { "\($0.topic) = \($0.choice)" }.joined(separator: "; "))
             return (moved, id, summary)
         }
     }

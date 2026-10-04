@@ -24,6 +24,12 @@ public struct VettingRequest: Codable, Equatable, Sendable {
         public var code: String
         public var text: String
     }
+    public struct DecisionHit: Codable, Equatable, Sendable {
+        public var number: String
+        public var kind: String
+        public var title: String
+        public var why: String
+    }
     public struct AreaInfo: Codable, Equatable, Sendable {
         public var name: String
         public var specPrefix: String?
@@ -31,6 +37,8 @@ public struct VettingRequest: Codable, Equatable, Sendable {
     public var ticket: TicketInfo
     public var similar: [Candidate]
     public var specHits: [SpecHit]
+    /// Earlier decisions that match, so Iris can flag a ticket that would undo one. Optional for older saved requests.
+    public var decisions: [DecisionHit]? = nil
     public var areas: [AreaInfo]
 
     public init(ticket: TicketInfo, similar: [Candidate] = [], specHits: [SpecHit] = [], areas: [AreaInfo] = []) {
@@ -44,12 +52,16 @@ public struct VettingRequest: Codable, Equatable, Sendable {
             .filter { $0.ticket.status != .dropped }
         let hits = try store.searchSpec(projectId: t.projectId, query: t.title + " " + t.body, limit: 8)
         let areas = try store.project(id: t.projectId)?.config?.areas ?? []
-        return VettingRequest(
+        let decided = try store.searchDecisions(projectId: t.projectId, query: t.title + " " + t.body, area: t.area, limit: 3)
+        var request = VettingRequest(
             ticket: .init(number: t.displayNumber, type: t.type.rawValue, title: t.title, body: Text.clip(t.body, 2000), area: t.area),
             similar: similar.map { .init(number: $0.ticket.displayNumber, type: $0.ticket.type.rawValue, status: $0.ticket.status.rawValue,
                                          title: $0.ticket.title, snippet: Text.clip($0.ticket.body.replacingOccurrences(of: "\n", with: " "), 160)) },
             specHits: hits.map { .init(code: $0.code, text: Text.clip($0.text, 200)) },
             areas: areas.map { .init(name: $0.name, specPrefix: $0.specPrefix) })
+        request.decisions = decided.map { .init(number: $0.ticketNumber, kind: $0.kind.rawValue, title: Text.clip($0.title.isEmpty ? $0.summary : $0.title, 120),
+                                                why: Text.clip($0.reason ?? $0.summary, 160)) }
+        return request
     }
 }
 
@@ -118,6 +130,7 @@ public enum IrisPrompt {
         - related: numbers of tickets from the list below that are related, like "#12".
         - specTouches: Spec codes from the list below that this ticket would change.
         - duplicateOf: a ticket number only if it is very probably the same request.
+        - If the ticket would undo or contradict one of the earlier decisions below, ask about it as one of the questions, naming the decision's ticket, with suggestions to keep that decision or to replace it.
 
         Shape: {"questions":[{"text":"","suggestions":[""]}],"rewrite":{"title":"","body":"","changes":[""]},"typeSuggestion":{"type":"","reason":""},"related":[""],"specTouches":[""],"duplicateOf":""}
 
@@ -131,6 +144,9 @@ public enum IrisPrompt {
         s += r.similar.isEmpty ? " none" : "\n" + r.similar.map { "- \($0.number) [\($0.type), \($0.status)] \($0.title): \($0.snippet)" }.joined(separator: "\n")
         s += "\n\nSpec items:"
         s += r.specHits.isEmpty ? " none" : "\n" + r.specHits.map { "- \($0.code): \($0.text)" }.joined(separator: "\n")
+        s += "\n\nEarlier decisions:"
+        let decided = r.decisions ?? []
+        s += decided.isEmpty ? " none" : "\n" + decided.map { "- \($0.number) [\($0.kind)] \($0.title). Why: \($0.why)" }.joined(separator: "\n")
         return s
     }
 }

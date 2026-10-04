@@ -237,6 +237,42 @@ public enum Schema {
             value TEXT NOT NULL
         );
         """,
+        // 2: decisions as full records (decisions PS9 to PS16). The database keeps everything and answers searches for
+        // free; the notebook gets a file per decision. `file_path` is NULL until the file is written, so the export is a
+        // queue that survives a crash.
+        """
+        ALTER TABLE decision ADD COLUMN kind TEXT NOT NULL DEFAULT 'design';
+        ALTER TABLE decision ADD COLUMN title TEXT NOT NULL DEFAULT '';
+        ALTER TABLE decision ADD COLUMN area TEXT;
+        ALTER TABLE decision ADD COLUMN options_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE decision ADD COLUMN choice TEXT;
+        ALTER TABLE decision ADD COLUMN recommended TEXT;
+        ALTER TABLE decision ADD COLUMN reason TEXT;
+        ALTER TABLE decision ADD COLUMN replaces_id INTEGER REFERENCES decision(id) ON DELETE SET NULL;
+        ALTER TABLE decision ADD COLUMN file_path TEXT;
+        CREATE INDEX decision_ticket ON decision(ticket_id);
+        CREATE INDEX decision_pending ON decision(file_path) WHERE file_path IS NULL;
+        CREATE UNIQUE INDEX decision_file ON decision(file_path) WHERE file_path IS NOT NULL;
+        CREATE VIRTUAL TABLE decision_fts USING fts5(title, summary, reason, area, decision_id UNINDEXED, tokenize = 'porter unicode61');
+        INSERT INTO decision_fts(title, summary, reason, area, decision_id) SELECT '', summary, '', '', id FROM decision;
+        CREATE TABLE question_option(
+            id INTEGER PRIMARY KEY,
+            ticket_id INTEGER NOT NULL REFERENCES ticket(id) ON DELETE CASCADE,
+            key TEXT NOT NULL,
+            title TEXT NOT NULL,
+            detail TEXT,
+            recommended INTEGER NOT NULL DEFAULT 0,
+            why TEXT,
+            UNIQUE(ticket_id, key)
+        );
+        CREATE TABLE notebook_state(
+            project_id INTEGER PRIMARY KEY REFERENCES project(id) ON DELETE CASCADE,
+            now_hash TEXT,
+            exported_at REAL,
+            pushed_at REAL,
+            error TEXT
+        );
+        """,
     ]
 
     public static func migrate(_ db: Database) throws {

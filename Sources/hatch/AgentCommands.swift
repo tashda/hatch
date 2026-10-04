@@ -11,7 +11,43 @@ enum AgentCommands {
     static let all: [String: Handler] = [
         "take": take, "offer": offer, "ready": ready, "vet": vet,
         "sync": sync, "serve": serve, "import-labs": importLabs, "spec": spec, "workspace": workspace, "preview": preview,
+        "options": options, "notebook": notebook,
     ]
+
+    // hatch options #160 --option "A|Use actors|One actor per connection" --option "B|Locks" --recommend A --why "..."
+    // An agent preparing a Question offers the owner options, one recommended with its reason (decision PS16).
+    static func options(_ c: Context) throws {
+        let t = try c.ticket(c.args.pos(1))
+        let raw = c.args.list("option")
+        guard !raw.isEmpty else { throw CLIError("Usage: hatch options #<question> --option \"A|Title|detail\" ... --recommend A --why \"reason\"") }
+        let recommend = c.args.option("recommend")
+        let options = raw.map { line -> QuestionOption in
+            let parts = line.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
+            let key = parts[0]
+            return QuestionOption(key: key, title: parts.count > 1 ? parts[1] : key, detail: parts.count > 2 && !parts[2].isEmpty ? parts[2] : nil,
+                                  recommended: key == recommend, why: key == recommend ? c.args.option("why") : nil)
+        }
+        guard recommend == nil || options.contains(where: { $0.key == recommend }) else { throw CLIError("--recommend \(recommend!) is not one of the options.") }
+        guard recommend != nil else { throw CLIError("Recommend one option with --recommend and say why with --why (the owner's rule).") }
+        try c.store.setQuestionOptions(ticketId: t.id, options)
+        c.out.emit(["options": .int(options.count)], text: "\(t.displayNumber) now offers \(options.count) options, \(recommend!) recommended. Hand it in with `hatch offer \(t.displayNumber)`.")
+    }
+
+    // hatch notebook export [--no-push]  -> decisions, NOW.md and the Spec index brought in step with the notebook clone
+    static func notebook(_ c: Context) throws {
+        guard c.args.pos(1) == "export" else { throw CLIError("Usage: hatch notebook export [--no-push]") }
+        let project = try c.project()
+        let spec = try SpecIndexer.indexNotebook(project: project, store: c.store)
+        guard let r = try NotebookExport.run(store: c.store, projectId: project.id, token: ProcessInfo.processInfo.environment["GITHUB_TOKEN"],
+                                             push: !c.args.flag("no-push")) else {
+            throw CLIError("\(project.name) has no notebook clone on this Mac.")
+        }
+        var text = "Notebook: \(r.decisionsWritten) decision file(s) written, \(r.imported) imported, NOW.md \(r.nowUpdated ? "updated" : "unchanged")"
+        text += r.pushed ? ", pushed." : "."
+        if let spec { text += " Spec: \(spec.items) item(s) from \(spec.files) file(s)." }
+        if !r.waitingForTickets.isEmpty { text += " Waiting for tickets to sync: \(r.waitingForTickets.joined(separator: ", "))." }
+        c.out.emit(["written": .int(r.decisionsWritten), "imported": .int(r.imported), "pushed": .bool(r.pushed)], text: text)
+    }
 
     /// Runs a shell command in a folder and returns (ok, last lines of output, seconds).
     static func shell(_ command: String, in dir: String, timeout: TimeInterval = 1800) -> (ok: Bool, tail: String, seconds: Double) {
@@ -170,12 +206,20 @@ enum AgentCommands {
         c.out.emit(["report": .string("\(report)")], text: "\(report)")
     }
 
-    // hatch spec index [--dir .hatch/spec]  |  hatch spec export --from <Areas dir> --to <dir>
+    // hatch spec index [--dir <folder>]  |  hatch spec export --from <Areas dir> --to <dir>
+    // Without --dir, the Spec of the project's notebook clone is indexed.
     static func spec(_ c: Context) throws {
         switch c.args.pos(1) {
         case "index":
-            let dir = c.args.option("dir") ?? ".hatch/spec"
-            let r = try SpecIndexer.index(directory: URL(fileURLWithPath: dir), project: try c.project(), store: c.store)
+            let project = try c.project()
+            let r: SpecIndexResult
+            if let dir = c.args.option("dir") {
+                r = try SpecIndexer.index(directory: URL(fileURLWithPath: dir), project: project, store: c.store)
+            } else if let found = try SpecIndexer.indexNotebook(project: project, store: c.store) {
+                r = found
+            } else {
+                throw CLIError("\(project.name) has no notebook clone on this Mac. Pass --dir <folder with the Spec files>.")
+            }
             c.out.emit(["result": .string("\(r)")], text: "\(r)")
         case "export":
             guard let from = c.args.option("from"), let to = c.args.option("to") else { throw CLIError("Usage: hatch spec export --from <Areas folder> --to <folder>") }
