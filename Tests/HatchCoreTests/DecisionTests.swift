@@ -93,3 +93,18 @@ final class DecisionTests: XCTestCase {
         XCTAssertEqual(try store.searchDecisions(projectId: project.id, query: "toast").count, 1)
     }
 }
+
+final class RecentEventsTests: XCTestCase {
+    func testNewestFirstAcrossTickets() throws {
+        let store = try HatchStore.inMemory()
+        let p = try store.upsertProject(key: "echo", name: "Echo")
+        let a = try store.createTicket(projectId: p.id, type: .tweak, title: "A", ghNumber: 1)
+        let b = try store.createTicket(projectId: p.id, type: .tweak, title: "B", ghNumber: 2)
+        _ = try store.move(a.id, to: .checking, actor: .owner)
+        _ = try store.move(b.id, to: .checking, actor: .owner)
+        let recent = try store.recentEvents(projectId: p.id, limit: 3)
+        XCTAssertEqual(recent.count, 3)
+        XCTAssertEqual(recent.first?.ticket.title, "B")
+        XCTAssertEqual(recent.first?.event.kind, "status")
+    }
+}

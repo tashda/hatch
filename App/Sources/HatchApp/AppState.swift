@@ -16,7 +16,7 @@ final class AppState: ObservableObject {
     let paths: AppPaths
     private var stageServer: StageServer?
     private var syncTimer: Timer?
-    private var syncing = false
+    @Published private(set) var syncing = false
     private var syncDebounce: DispatchWorkItem?
     private var notebookDirty: Set<Int> = []
     private var notebookDebounce: DispatchWorkItem?
@@ -59,7 +59,7 @@ final class AppState: ObservableObject {
     @Published var agentsPaused = false
     var launcher: AgentLauncher?
     var launchTimer: Timer?
-    private var exportingNotebooks = false
+    @Published private(set) var exportingNotebooks = false
     /// Snapshot harness only: selects each ticket subview without changing the normal navigation model.
     @Published var snapshotTicketTab: TicketTab?
     @Published var snapshotPresentation: SnapshotPresentation?

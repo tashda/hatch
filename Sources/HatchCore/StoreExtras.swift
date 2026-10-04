@@ -17,6 +17,22 @@ public extension HatchStore {
         }
     }
 
+    /// The latest events across tickets, newest first, for the footer's activity line and its card.
+    func recentEvents(projectId: Int? = nil, kinds: [String] = ["created", "status", "take", "release", "question", "answer"],
+                      limit: Int = 10) throws -> [(event: Event, ticket: Ticket)] {
+        var sql = "SELECT e.id AS eid, e.ticket_id AS etid, e.at AS eat, e.actor AS eactor, e.kind AS ekind, e.payload AS epayload, t.* FROM event e JOIN ticket t ON t.id = e.ticket_id"
+        var params: [SQLValue] = []
+        var conditions: [String] = []
+        if !kinds.isEmpty { conditions.append("e.kind IN (\(kinds.map { _ in "?" }.joined(separator: ",")))"); params += kinds.map { .text($0) } }
+        if let projectId { conditions.append("t.project_id = ?"); params.append(.int(projectId)) }
+        if !conditions.isEmpty { sql += " WHERE " + conditions.joined(separator: " AND ") }
+        params.append(.int(limit))
+        return try db.query(sql + " ORDER BY e.at DESC, e.id DESC LIMIT ?", params) {
+            (Event(id: $0.int("eid")!, ticketId: $0.int("etid")!, at: $0.date("eat")!, actor: $0.string("eactor")!,
+                   kind: $0.string("ekind")!, payload: JSONValue.parse($0.string("epayload") ?? "{}")), HatchStore.ticket($0))
+        }
+    }
+
     // Notes
 
     @discardableResult

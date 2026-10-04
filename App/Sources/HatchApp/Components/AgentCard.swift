@@ -102,6 +102,7 @@ struct AgentCard: View {
                 fact("Branch", run.branch ?? "–", symbol: "arrow.triangle.branch")
                 fact("Model", [run.model, run.providerName].compactMap { $0 }.joined(separator: " · "), symbol: "cpu")
                 fact("Tokens", "\(hxTokens(run.tokensIn)) in · \(hxTokens(run.tokensOut)) out", symbol: "gauge.with.dots.needle.33percent")
+                fact("Today", "\(hxTokens(today)) tokens in all", symbol: "calendar")
             }
             .font(.callout)
 
@@ -127,6 +128,12 @@ struct AgentCard: View {
             Label(label, systemImage: symbol).foregroundStyle(.secondary).labelStyle(.titleAndIcon)
             Text(value).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
         }
+    }
+
+    /// Tokens used today by every agent and task, so the card answers "how much today" without its own footer item.
+    private var today: Int {
+        let t = (try? state.store.tokenTotals(since: Calendar.current.startOfDay(for: Date()))) ?? (input: 0, output: 0)
+        return t.input + t.output
     }
 
     private func elapsed(_ now: Date) -> String {

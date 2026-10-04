@@ -117,60 +117,18 @@ struct SidebarRow: View {
 /// GitHub sync on the right. "Synced with GitHub · 2 pending"; red when something failed. Click opens the Log (decision B5).
 struct WindowFooter: View {
     @EnvironmentObject var state: AppState
-    @State private var slots: (used: Int, max: Int) = (0, 3)
 
-    private var summary: AppState.SyncSummary { state.syncSummary }
-
-    private var text: String {
-        if let message = summary.message, !message.isEmpty { return message }
-        if let problem = state.notebookProblem { return "Notebook not saved: \(problem)" }
-        if summary.failed > 0 {
-            return "\(summary.failed) failed to sync · \(summary.pending) pending"
-        }
-        if summary.pending > 0 {
-            return "Syncing with GitHub · \(summary.pending) pending"
-        }
-        if summary.lastOK == nil { return "Not synced yet" }
-        return "Synced with GitHub"
-    }
-
+    /// The calm status bar (design-review/footer.html): agents and what just happened on the left, where you are and
+    /// whether everything is saved on the right.
     var body: some View {
         HStack(spacing: 14) {
-            HStack(spacing: 4) {
-                // The launcher's agents first, then agents started by hand, then free slots.
-                let runs = state.agentRuns
-                ForEach(0..<max(slots.max, runs.count, 1), id: \.self) { i in
-                    AgentSlotCircle(run: i < runs.count ? runs[i] : nil, busy: i < max(slots.used, runs.count))
-                }
-                Button { state.setAgentsPaused(!state.agentsPaused) } label: {
-                    Image(systemName: state.agentsPaused ? "play.fill" : "pause.fill").font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(state.agentsPaused ? Theme.you : .secondary)
-                        .frame(width: 18, height: 18).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(state.agentsPaused ? "Agents are paused. Start agents again" : "Pause agents: no new agent starts; running ones finish")
-                .accessibilityLabel(state.agentsPaused ? "Resume agents" : "Pause agents")
-            }
-            Spacer()
-            Button { state.navigate(to: .log) } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: (summary.failed > 0 || summary.message != nil) ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath")
-                        .font(.caption)
-                    Text(text).font(.caption).lineLimit(1)
-                }
-                .foregroundStyle((summary.failed > 0 || summary.message != nil) ? Theme.critical : Color.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Open the Log")
+            FooterAgentSlots()
+            FooterActivityLine()
+            Spacer(minLength: 12)
+            FooterProjectPill()
+            FooterStatusGlyph()
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 7)
-        .autoReload(every: 4) { load() }
-    }
-
-    private func load() {
-        let used = (try? state.store.activeAgentCount()) ?? 0
-        let maxAgents = (try? state.store.maxAgents(projectId: state.projectFilterId)) ?? 3
-        if slots.used != used || slots.max != maxAgents { slots = (used, maxAgents) }
     }
 }
