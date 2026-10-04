@@ -14,6 +14,8 @@ extension FocusedValues {
     @Entry var windowNavigation: WindowNavigation?
     /// The ticket the window in front is about: the open page, or the selected row of a list. Nil elsewhere.
     @Entry var currentTicketId: Int?
+    /// What the ticket page in front can do now; the Ticket menu enables only what is here.
+    @Entry var ticketActions: TicketActions?
 }
 
 /// How a ticket page opens another ticket. In the main window that is the usual `state.open`; in a ticket window the
@@ -41,4 +43,19 @@ extension AppState {
         default: nil
         }
     }
+}
+
+/// The commands of the ticket page in front, as closures it fills in for the ticket's current status.
+struct TicketActions {
+    var tabs: [TicketTab]
+    var selectTab: (TicketTab) -> Void
+    var primaryTitle: String?
+    var primary: (() -> Void)?
+    var secondaryTitle: String?
+    var secondary: (() -> Void)?
+    var sendBack: (() -> Void)?
+    var park: (() -> Void)?
+    var resumeTitle: String?
+    var resume: (() -> Void)?
+    var drop: (() -> Void)?
 }

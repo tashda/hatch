@@ -5,6 +5,16 @@ import HatchCore
 enum TicketTab: String, CaseIterable, Identifiable {
     case overview, options, thread, work, history
     var id: String { rawValue }
+    /// For the Ticket menu; the page itself says Variants for a Sketch.
+    var menuTitle: String {
+        switch self {
+        case .overview: "Overview"
+        case .options: "Variants or Options"
+        case .thread: "Thread"
+        case .work: "Work"
+        case .history: "History"
+        }
+    }
 }
 
 /// What the banner says and which buttons it offers for a ticket in its current status (decision F2).
@@ -43,6 +53,7 @@ struct TicketDetailView: View {
     @State private var questionOptions: [QuestionOption] = []
     @State private var deciding = false
     @State private var threadKind: NoteKind = .note
+    @State private var sendingBack = false
 
     var body: some View {
         Group {
@@ -70,6 +81,10 @@ struct TicketDetailView: View {
         }
         .sheet(isPresented: $deciding) {
             if let ticket { QuestionDecisionSheet(ticket: ticket, options: questionOptions) }
+        }
+        .focusedSceneValue(\.ticketActions, ticket.map { actions(for: $0) })
+        .sheet(isPresented: $sendingBack) {
+            if let ticket, let target = sendBackTarget(ticket) { SendBackSheet(ticket: ticket, target: target) }
         }
         .confirmationDialog("Drop this ticket?", isPresented: $confirmDrop) {
             Button("Drop", role: .destructive) { move(to: .dropped) }
@@ -278,6 +293,39 @@ struct TicketDetailView: View {
         _ = state.perform("Could not resume the ticket") { try state.store.resume(id, actor: .owner) }
     }
 
+    // MARK: Keyboard (the Ticket menu)
+
+    /// Where "send back with notes" goes from here: more variants or options, or fixes after verifying.
+    private func sendBackTarget(_ t: Ticket) -> Status? {
+        let target: Status
+        switch t.status {
+        case .yourCall: target = .revising
+        case .toVerify: target = .fixing
+        default: return nil
+        }
+        return canMove(t, to: target) ? target : nil
+    }
+
+    private func actions(for t: Ticket) -> TicketActions {
+        let spec = bannerSpec(t)
+        var resumeTitle: String?
+        var resumeAction: (() -> Void)?
+        switch t.status {
+        case .blocked, .parked: resumeTitle = "Resume"; resumeAction = { resume() }
+        case .done, .dropped where canMove(t, to: .draft): resumeTitle = "Reopen"; resumeAction = { move(to: .draft) }
+        default: break
+        }
+        return TicketActions(
+            tabs: visibleTabs(t),
+            selectTab: { tab = $0 },
+            primaryTitle: spec.primaryTitle, primary: handler(spec.primary, t),
+            secondaryTitle: spec.secondaryTitle, secondary: handler(spec.secondary, t),
+            sendBack: sendBackTarget(t) == nil ? nil : { sendingBack = true },
+            park: canMove(t, to: .parked) ? { move(to: .parked) } : nil,
+            resumeTitle: resumeTitle, resume: resumeAction,
+            drop: canMove(t, to: .dropped) ? { confirmDrop = true } : nil)
+    }
+
     // MARK: Tabs
 
     private func visibleTabs(_ t: Ticket) -> [TicketTab] {
@@ -421,5 +469,50 @@ struct QuestionDecisionSheet: View {
             state.notebookChanged(projectId: projectId)
             dismiss()
         }
+    }
+}
+
+
+/// Send a ticket back with notes: the note goes to the agent as an instruction and the ticket moves to the status
+/// that makes it work again (Revising for a Sketch or Proposal, Fixing after verifying). The same two writes the
+/// Sketch board and Previews make, so the history reads the same.
+struct SendBackSheet: View {
+    let ticket: Ticket
+    let target: Status
+    @EnvironmentObject var state: AppState
+    @Environment(\.dismiss) private var dismiss
+    @State private var notes = ""
+
+    private var trimmed: String { notes.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Send \(ticket.displayNumber) back").font(.headline)
+            Text("The agent reads your notes and the ticket moves to \(target.displayName).")
+                .font(.callout).foregroundStyle(.secondary)
+            TextEditor(text: $notes)
+                .font(.body)
+                .frame(minHeight: 120)
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Send Back") { send() }
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(trimmed.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+    }
+
+    private func send() {
+        let id = ticket.id, body = trimmed, status = target
+        let done: Ticket? = state.perform("Send back") {
+            try state.store.addNote(id, kind: .instruction, author: "owner", body: body)
+            return try state.store.move(id, to: status, actor: .owner, reason: body)
+        }
+        if done != nil { dismiss() }
     }
 }

@@ -66,6 +66,7 @@ struct HatchCommands: Commands {
     @ObservedObject private var keys = ShortcutStore.shared
     @FocusedValue(\.windowNavigation) private var navigation
     @FocusedValue(\.currentTicketId) private var ticketId
+    @FocusedValue(\.ticketActions) private var ticket
 
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
@@ -103,6 +104,25 @@ struct HatchCommands: Commands {
             Button("Open in New Window") { if let ticketId { openWindow(id: "ticket", value: ticketId) } }
                 .shortcut("ticket.openWindow", keys)
                 .disabled(ticketId == nil)
+            Divider()
+            Button(ticket?.primaryTitle ?? "Main Action") { ticket?.primary?() }
+                .shortcut("ticket.primary", keys).disabled(ticket?.primary == nil)
+            Button(ticket?.secondaryTitle ?? "Second Action") { ticket?.secondary?() }
+                .shortcut("ticket.secondary", keys).disabled(ticket?.secondary == nil)
+            Button("Send Back with Notes…") { ticket?.sendBack?() }
+                .shortcut("ticket.sendBack", keys).disabled(ticket?.sendBack == nil)
+            Button("Park") { ticket?.park?() }
+                .shortcut("ticket.park", keys).disabled(ticket?.park == nil)
+            Button(ticket?.resumeTitle ?? "Resume") { ticket?.resume?() }
+                .shortcut("ticket.resume", keys).disabled(ticket?.resume == nil)
+            Button("Drop…") { ticket?.drop?() }
+                .shortcut("ticket.drop", keys).disabled(ticket?.drop == nil)
+            Divider()
+            ForEach(TicketTab.allCases) { tab in
+                Button(tab.menuTitle) { ticket?.selectTab(tab) }
+                    .shortcut("ticket.tab.\(tab.rawValue)", keys)
+                    .disabled(!(ticket?.tabs.contains(tab) ?? false))
+            }
         }
     }
 }

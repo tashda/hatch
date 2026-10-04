@@ -147,6 +147,19 @@ public enum ShortcutCatalog {
         .init("forward", "Forward", .general, .app, .init("]", cmd)),
         .init("settings", "Settings…", .general, .app, .init(",", cmd), customizable: false),
 
+        // The ticket in front (its page, or the selected row). Tabs are ⌃1 to ⌃5; the rest use ⌥⌘ so typing never triggers them.
+        .init("ticket.tab.overview", "Overview", .tickets, .app, .init("1", .control)),
+        .init("ticket.tab.options", "Options", .tickets, .app, .init("2", .control)),
+        .init("ticket.tab.thread", "Thread", .tickets, .app, .init("3", .control)),
+        .init("ticket.tab.work", "Work", .tickets, .app, .init("4", .control)),
+        .init("ticket.tab.history", "History", .tickets, .app, .init("5", .control)),
+        .init("ticket.primary", "Main Action", .tickets, .app, .init("return", [.shift, .command])),
+        .init("ticket.secondary", "Second Action", .tickets, .app, .init("return", [.option, .command])),
+        .init("ticket.sendBack", "Send Back with Notes…", .tickets, .app, .init("r", [.option, .command])),
+        .init("ticket.park", "Park", .tickets, .app, .init("p", [.option, .command])),
+        .init("ticket.resume", "Resume or Reopen", .tickets, .app, .init("z", [.option, .command])),
+        .init("ticket.drop", "Drop…", .tickets, .app, .init("delete", [.option, .command])),
+
         // Windows and the ticket in front
         .init("ticket.openWindow", "Open Ticket in New Window", .windows, .app, .init("o", [.shift, .command])),
         .init("list.openWindow", "Open Selected Ticket in New Window", .windows, .list, .init("return", .option)),

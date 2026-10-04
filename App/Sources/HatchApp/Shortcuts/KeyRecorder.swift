@@ -93,10 +93,11 @@ struct ShortcutKeyCaps: View {
             ForEach(Array(symbols.enumerated()), id: \.offset) { _, symbol in
                 Text(symbol)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(dimmed ? .tertiary : .secondary)
+                    .foregroundStyle(Color.primary.opacity(dimmed ? 0.4 : 0.75))
                     .padding(.horizontal, 5)
                     .frame(minWidth: 20, minHeight: 20)
-                    .background(.quaternary.opacity(0.7), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.primary.opacity(0.12)))
             }
         }
     }

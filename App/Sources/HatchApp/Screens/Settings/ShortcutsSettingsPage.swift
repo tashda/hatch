@@ -9,6 +9,7 @@ struct ShortcutsSettingsPage: View {
     @State private var recording: String?
     @State private var problem: (id: String, text: String)?
     @State private var clash: Clash?
+    @State private var hovered: String?
 
     private struct Clash: Identifiable {
         let command: ShortcutCommand
@@ -76,7 +77,7 @@ struct ShortcutsSettingsPage: View {
                         .buttonStyle(.borderless)
                         .help("Back to \(command.defaultChord?.display ?? "no shortcut")")
                 }
-                if command.customizable, chord != nil, !isRecording {
+                if command.customizable, chord != nil, !isRecording, hovered == command.id {
                     Button { store.set(nil, for: command.id); problem = nil } label: { Image(systemName: "xmark.circle") }
                         .buttonStyle(.borderless)
                         .help("Remove the shortcut")
@@ -86,6 +87,9 @@ struct ShortcutsSettingsPage: View {
             if let problem, problem.id == command.id {
                 Text(problem.text).font(.caption).foregroundStyle(.red)
             }
+        }
+        .onHover { inside in
+            if inside { hovered = command.id } else if hovered == command.id { hovered = nil }
         }
         .background(KeyRecorder(active: isRecording,
                                 onChord: { record($0, for: command) },
