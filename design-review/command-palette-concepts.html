@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Command palette concepts</title>
+<style>
+  :root {
+    --page: #ececee; --sheet: #fbfbfd; --group: #f2f2f5; --row-line: #e1e1e6; --text: #1d1d1f; --secondary: #6e6e73;
+    --tertiary: #a1a1a6; --blue: #0a66d8; --blue-soft: #e7f0fd; --green: #248a3d; --green-soft: #e6f4ea; --amber: #b86a00;
+    --amber-soft: #fdf1df; --teal: #12868f; --slate: #6b7280; --field: #ffffff; --line: #d6d6db;
+    --win: #e9e9ec; --card: #ffffff; --glass: rgba(250,250,252,.62); --glass-edge: rgba(255,255,255,.75); --sel: rgba(10,102,216,.16);
+    --key: rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #161618; --sheet: #232326; --group: #2c2c30; --row-line: #3a3a3f; --text: #f2f2f4; --secondary: #a3a3aa;
+      --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+      --amber-soft: #3d2e14; --teal: #3cc3cc; --slate: #9aa1ad; --field: #1b1b1e; --line: #46464c;
+      --win: #1e1e21; --card: #29292d; --glass: rgba(44,44,48,.6); --glass-edge: rgba(255,255,255,.14); --sel: rgba(76,155,255,.24);
+      --key: rgba(255,255,255,.1); }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1060px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; font-weight: 600; margin: 56px 0 6px; }
+  h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--secondary); font-size: 14px; max-width: 760px; }
+  .muted { color: var(--secondary); }
+  .small { font-size: 11.5px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .note { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 12px; padding: 16px 18px; }
+  .rec { border: 2px solid var(--blue); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--blue-soft); color: var(--blue); margin-bottom: 8px; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--group); padding: 1px 5px; border-radius: 4px; }
+  .btn { font: inherit; border: 0; border-radius: 7px; padding: 5px 14px; background: var(--group); color: var(--text); box-shadow: inset 0 0 0 0.5px var(--line); cursor: pointer; }
+  .btn.primary { background: var(--blue); color: #fff; box-shadow: none; }
+
+  /* Today */
+  .today { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+  .today ul { margin: 0; padding-left: 18px; }
+  .today li { margin-bottom: 4px; }
+
+  /* Segmented control for mockup states */
+  .seg { display: inline-flex; background: var(--group); border-radius: 8px; padding: 2px; box-shadow: inset 0 0 0 0.5px var(--line); margin: 14px 0 12px; flex-wrap: wrap; }
+  .seg button { font: inherit; border: 0; background: transparent; color: var(--text); padding: 4px 12px; border-radius: 6px; cursor: pointer; }
+  .seg button.on { background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,.12), inset 0 0 0 0.5px var(--line); font-weight: 500; }
+
+  /* Faux Hatch window behind the palette */
+  .stage { position: relative; border-radius: 14px; overflow: hidden; background: var(--win); height: 560px; box-shadow: 0 20px 50px rgba(0,0,0,.16), 0 0 0 0.5px var(--line); }
+  .stage .bar { height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 14px; }
+  .lights { display: flex; gap: 7px; margin-right: 10px; }
+  .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; } .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+  .pill { height: 28px; border-radius: 14px; background: var(--card); box-shadow: 0 0 0 0.5px var(--line); padding: 0 12px; display: flex; align-items: center; font-weight: 600; font-size: 12px; gap: 6px; }
+  .tile { width: 16px; height: 16px; border-radius: 4px; background: #ff6482; color: #fff; font-size: 10px; display: grid; place-items: center; font-weight: 700; }
+  .stage .body { display: grid; grid-template-columns: 200px 1fr 260px; gap: 8px; padding: 0 8px 8px; height: calc(100% - 46px); }
+  .stage .pane { background: var(--card); border-radius: 12px; padding: 14px; overflow: hidden; }
+  .side-item { padding: 5px 8px; border-radius: 6px; color: var(--secondary); font-size: 12px; }
+  .side-item.on { background: var(--group); color: var(--text); }
+  .side-h { font-size: 10.5px; font-weight: 600; color: var(--tertiary); margin: 10px 8px 4px; }
+  .faux-row { display: flex; gap: 10px; align-items: center; padding: 9px 4px; border-bottom: 1px solid var(--row-line); font-size: 12px; }
+  .faux-row .bar2 { height: 8px; border-radius: 4px; background: var(--group); flex: 1; }
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.06); }
+  .scrim.none { background: transparent; }
+
+  /* The palette */
+  .palette { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); width: 640px; max-width: calc(100% - 32px);
+    background: var(--glass); -webkit-backdrop-filter: blur(28px) saturate(180%); backdrop-filter: blur(28px) saturate(180%);
+    border-radius: 26px; box-shadow: 0 24px 70px rgba(0,0,0,.28), 0 0 0 0.5px rgba(0,0,0,.18), inset 0 0.5px 0 var(--glass-edge), inset 0 0 0 0.5px var(--glass-edge);
+    overflow: hidden; transition: height .2s ease; }
+  .field { display: flex; align-items: center; gap: 12px; padding: 0 20px; height: 56px; }
+  .field .mag { width: 20px; height: 20px; flex: none; color: var(--secondary); }
+  .field .q { font-size: 21px; letter-spacing: -0.01em; flex: 1; white-space: nowrap; overflow: hidden; }
+  .field .q .ph { color: var(--tertiary); }
+  .field .q .caret { display: inline-block; width: 2px; height: 22px; background: var(--blue); vertical-align: -4px; margin-left: 1px; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .token { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; padding: 3px 9px; border-radius: 8px; background: var(--key); vertical-align: 3px; margin-right: 6px; }
+  .results { border-top: 0.5px solid var(--row-line); padding: 6px 8px 6px; max-height: 384px; overflow: hidden; }
+  .sec { font-size: 11px; font-weight: 600; color: var(--secondary); padding: 8px 12px 3px; }
+  .item { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 12px; border-radius: 10px; cursor: default; }
+  .item.sel { background: var(--sel); }
+  .item .ic { width: 20px; text-align: center; color: var(--secondary); font-size: 14px; flex: none; }
+  .item .num { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--secondary); flex: none; min-width: 34px; }
+  .item .t { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .t b { font-weight: 650; }
+  .item .meta { color: var(--secondary); font-size: 12px; display: flex; align-items: center; gap: 6px; flex: none; }
+  .item .proj { font-size: 11px; color: var(--tertiary); flex: none; }
+  .dotc { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .you { background: var(--amber); } .agent { background: var(--teal); } .hatch { background: var(--slate); } .fin { background: var(--green); }
+  .kbd { display: inline-flex; gap: 2px; }
+  .kbd span { font-size: 11px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 5px; background: var(--key); color: var(--secondary); display: grid; place-items: center; }
+  .foot { display: flex; align-items: center; justify-content: space-between; height: 36px; padding: 0 16px; border-top: 0.5px solid var(--row-line); font-size: 11.5px; color: var(--secondary); }
+  .foot .hints { display: flex; gap: 14px; align-items: center; }
+  .foot .hints > span { display: inline-flex; gap: 5px; align-items: center; }
+  .scope { display: inline-flex; align-items: center; gap: 6px; }
+  .actions-panel { position: absolute; right: 14px; bottom: 44px; width: 250px; background: var(--card); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.22), 0 0 0 0.5px var(--line); padding: 5px; }
+  .actions-panel .item { height: 28px; font-size: 12.5px; border-radius: 7px; }
+  .actions-panel .sec { padding: 6px 10px 2px; }
+  .check { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--green); color: #fff; font-size: 10px; font-weight: 700; }
+  .ring { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--tertiary); display: grid; place-items: center; font-size: 10px; color: var(--secondary); font-weight: 600; }
+
+  .explain { margin-top: 14px; }
+  .explain .note p:last-child { margin: 0; }
+
+  /* Small alternative sketches */
+  .mini { position: relative; height: 210px; border-radius: 10px; background: var(--win); overflow: hidden; margin-bottom: 10px; box-shadow: inset 0 0 0 0.5px var(--line); }
+  .mini .p { position: absolute; left: 50%; transform: translateX(-50%); width: 72%; border-radius: 14px; background: var(--glass); backdrop-filter: blur(20px); box-shadow: 0 10px 30px rgba(0,0,0,.2), 0 0 0 0.5px rgba(0,0,0,.12); }
+  .mini .ln { height: 7px; border-radius: 4px; background: var(--group); margin: 7px 10px; }
+  .mini .ln.s { background: var(--sel); height: 14px; margin: 5px 6px; border-radius: 6px; }
+  .mini .hd { height: 22px; border-bottom: 0.5px solid var(--row-line); }
+
+  /* Questions */
+  .qform { padding: 16px 0; border-top: 1px solid var(--row-line); }
+  .qform:first-child { border-top: 0; padding-top: 4px; }
+  .qform h3 { font-size: 14px; margin-bottom: 2px; }
+  .qform h3 .qn { color: var(--secondary); font-weight: 500; margin-right: 6px; }
+  .qform .why { color: var(--secondary); margin-bottom: 10px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+  .opt { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--group); box-shadow: inset 0 0 0 1px transparent; cursor: pointer; }
+  .opt:hover { box-shadow: inset 0 0 0 1px var(--line); }
+  .opt.on { background: var(--blue-soft); box-shadow: inset 0 0 0 1.5px var(--blue); }
+  .opt input { display: none; }
+  .opt .rec-tag { font-size: 10.5px; font-weight: 600; color: var(--blue); margin-left: 4px; }
+  .opt .d { color: var(--secondary); font-size: 12px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--field); flex: none; margin-top: 2px; }
+  .dot.on { border: 4px solid var(--blue); }
+  .qnote { width: 100%; margin-top: 8px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; resize: vertical; min-height: 34px; }
+  .code-line { font: 15px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; letter-spacing: .04em; background: var(--group); padding: 10px 14px; border-radius: 10px; user-select: all; }
+  @media (max-width: 760px) { .stage .body { grid-template-columns: 1fr; } .stage .body > .pane:not(:nth-child(2)) { display: none; } .today { grid-template-columns: 1fr; } .item .proj, .item .meta .lbl { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Command palette (⌘K)</h1>
+  <p class="lead">You asked for two things: make the palette look native, and make it feel like a real command palette rather than a list. Below are the problems I see today, my proposal as a working mockup, and the decisions I need from you. My recommendation is already selected in every question.</p>
+
+  <h2>What is wrong today</h2>
+  <div class="today">
+    <div class="note"><h3>How it looks</h3><ul class="muted">
+      <li>It is a sheet: it slides out of the toolbar, dims the window and sits in an opaque white box. Spotlight in macOS 26 and later is a floating glass panel.</li>
+      <li>The window is a fixed 560 × 420. Two results leave a large empty area, as in your screenshot with no project.</li>
+      <li>Each row is two lines, and the second line says "Command" every time. The list is twice as tall as it needs to be.</li>
+    </ul></div>
+    <div class="note"><h3>How it works</h3><ul class="muted">
+      <li>With nothing typed it lists the same "Go to …" pages that the sidebar and ⌘1–9 already give you. It shows nothing about your work.</li>
+      <li>Results are one flat list with no groups, so tickets, Spec items and commands are hard to tell apart.</li>
+      <li>Return is the only action. To move a ticket or copy its link you have to open it first.</li>
+      <li>Matching is plain "contains", and shortcuts are never shown, so the palette doesn't teach them.</li>
+    </ul></div>
+  </div>
+
+  <h2>Proposal</h2>
+  <p class="lead">A floating Liquid Glass panel over the window, like Spotlight. It opens empty-ish and helpful, groups what it finds, and acts on what you've selected. Switch the states below; hover a row to select it.</p>
+  <div class="seg" id="states">
+    <button data-s="empty" class="on">Nothing typed</button>
+    <button data-s="typing">Typing "conn"</button>
+    <button data-s="actions">Tab: actions</button>
+    <button data-s="scope">"#" and "&gt;" scopes</button>
+    <button data-s="miss">No match</button>
+    <button data-s="setup">No project yet</button>
+  </div>
+  <div class="stage" id="stage">
+    <div class="bar"><div class="lights"><i></i><i></i><i></i></div><div class="pill">‹ ›</div><div class="pill"><span class="tile">E</span>Echo ⌄</div></div>
+    <div class="body">
+      <div class="pane">
+        <div class="side-h">Work</div><div class="side-item on">Desk</div><div class="side-item">Tickets</div><div class="side-item">Board</div><div class="side-item">Previews</div>
+        <div class="side-h">Reference</div><div class="side-item">Specs</div><div class="side-item">Decisions</div>
+        <div class="side-h">Machine</div><div class="side-item">Agents</div><div class="side-item">Log</div>
+      </div>
+      <div class="pane">
+        <div class="faux-row"><span class="dotc you"></span><b>Waiting for you</b></div>
+        <div class="faux-row"><span class="dotc you"></span>#151 Server cards: compact or roomy?<span class="bar2"></span></div>
+        <div class="faux-row"><span class="dotc you"></span>#142 Connection list loses selection after sync<span class="bar2"></span></div>
+        <div class="faux-row"><span class="dotc agent"></span>#138 Keychain prompt on every launch<span class="bar2"></span></div>
+        <div class="faux-row"><span class="dotc agent"></span>#160 Manage Connections redesign<span class="bar2"></span></div>
+        <div class="faux-row"><span class="dotc hatch"></span>#133 Query editor tab order<span class="bar2"></span></div>
+        <div class="faux-row"><span class="dotc fin"></span>#129 Result panel column widths<span class="bar2"></span></div>
+        <div class="faux-row"><span class="dotc fin"></span>#127 Sidebar disclosure animation<span class="bar2"></span></div>
+      </div>
+      <div class="pane"><b>Iris</b><p class="muted small" style="margin-top:8px">Ask about a ticket, the Spec or a decision.</p>
+        <div class="faux-row"><span class="bar2"></span></div><div class="faux-row"><span class="bar2"></span></div><div class="faux-row"><span class="bar2"></span></div></div>
+    </div>
+    <div class="scrim none"></div>
+    <div class="palette" id="palette"></div>
+  </div>
+
+  <div class="explain grid3">
+    <div class="note"><h3>Native look</h3><p class="muted">A floating panel with the system's Liquid Glass (<code>.glassEffect(.regular, in: .rect(cornerRadius:))</code>), drawn over the window instead of as a sheet. The window isn't dimmed and nothing slides. The selected row is a plain accent fill, since there is no glass on glass (DESIGN rule 3). With Reduce Transparency on, the system makes it opaque.</p></div>
+    <div class="note"><h3>Structure</h3><p class="muted">Results come in groups (Waiting for you, Recent, Tickets, Spec, Actions, Go to), each with a small header. Rows are one line: number and title on the left, status or shortcut on the right. The panel grows with the results up to eight rows, then scrolls.</p></div>
+    <div class="note"><h3>Feel</h3><p class="muted">Fuzzy matching ("mc" finds <b>M</b>anage <b>C</b>onnections) with the matched letters in bold. Return does the obvious thing and Tab shows everything else you can do. The footer always says what the keys do and which project you're searching.</p></div>
+  </div>
+
+  <h2>Alternatives I considered</h2>
+  <div class="grid3" style="margin-top:12px">
+    <div class="note"><div class="mini"><div class="p" style="top:0;border-radius:0 0 14px 14px;background:var(--card)"><div class="hd"></div><div class="ln s"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div></div></div>
+      <h3>A sheet with a glass background</h3><p class="muted" style="margin:0">The smallest change, but it still slides out of the toolbar and dims the window. macOS draws sheet chrome around it, so the glass reads as a box inside a box.</p></div>
+    <div class="note"><div class="mini"><div class="p" style="top:56px"><div class="hd"></div><div class="ln s"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div></div></div>
+      <h3>A floating panel in the window</h3><span class="badge">Recommended</span><p class="muted" style="margin:0">Looks and behaves like Spotlight, stays in Hatch's window and uses only SwiftUI. Click outside or press Esc to close it.</p></div>
+    <div class="note"><div class="mini" style="background:linear-gradient(135deg,#7aa7d8,#c69ad8)"><div class="p" style="top:56px"><div class="hd"></div><div class="ln s"></div><div class="ln"></div></div></div>
+      <h3>A system-wide panel with a global shortcut</h3><p class="muted" style="margin:0">Like Raycast: capture a ticket from any app. Useful, but it needs an AppKit panel and a global hotkey. It's better kept for later as "Quick capture from anywhere".</p></div>
+  </div>
+
+  <h2>Decisions I need from you</h2>
+  <p class="lead">My recommendation is already selected. The line under the questions updates as you pick. Type it in chat (for example <code>1A 2A 3A …</code>), or just say "all recommended".</p>
+  <form id="answers" class="note" style="margin-top:12px"></form>
+  <p style="margin:16px 0 6px" class="muted">Your answers:</p>
+  <div class="code-line" id="code"></div>
+  <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+    <button class="btn" id="reset" type="button">Reset to recommendations</button>
+  </div>
+</main>
+<script>
+  // ---------- Mockup ----------
+  const MAG = '<svg class="mag" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8.5" cy="8.5" r="6"/><path d="M13 13l5 5" stroke-linecap="round"/></svg>';
+  const kbd = (...k) => `<span class="kbd">${k.map(x => `<span>${x}</span>`).join('')}</span>`;
+  const sec = t => ({ sec: t });
+  const tk = (num, title, status, turn, sym, proj) => ({ ic: sym, num, title, meta: `<span class="dotc ${turn}"></span><span class="lbl">${status}</span>`, proj });
+  const cmd = (ic, title, keys) => ({ ic, title, meta: keys ? kbd(...keys) : '' });
+  const footer = (scope, hints) => `<div class="foot"><span class="scope">${scope}</span><span class="hints">${hints.map(([k, l]) => `<span>${kbd(k)} ${l}</span>`).join('')}</span></div>`;
+  const echoScope = '<span class="tile" style="width:14px;height:14px;font-size:9px">E</span> Echo · ⌥ for all projects';
+
+  const STATES = {
+    empty: { q: '', ph: 'Search tickets, Spec and actions', rows: [
+      sec('Waiting for you'),
+      tk('#151', 'Server cards: compact or roomy?', 'Your call', 'you', '◇'),
+      tk('#142', 'Connection list loses selection after sync', 'To verify', 'you', '⚑'),
+      sec('Recent'),
+      tk('#160', 'Manage Connections redesign', 'Preparing', 'agent', '✎'),
+      tk('#138', 'Keychain prompt on every launch', 'Building', 'agent', '⚑'),
+      sec('Actions'),
+      cmd('＋', 'New ticket', ['⌘', 'N']),
+      cmd('✦', 'Ask Iris', ['⌥', '⌘', 'A']),
+      cmd('↻', 'Sync with GitHub', ['⇧', '⌘', 'R']),
+    ], foot: footer(echoScope, [['↵', 'Open'], ['⇥', 'Actions'], ['esc', 'Close']]) },
+
+    typing: { q: 'conn', rows: [
+      sec('Tickets'),
+      tk('#142', '<b>Conn</b>ection list loses selection after sync', 'To verify', 'you', '⚑'),
+      tk('#160', 'Manage <b>Conn</b>ections redesign', 'Preparing', 'agent', '✎'),
+      tk('#118', 'Re<b>conn</b>ect after sleep drops the session', 'Done', 'fin', '⚑'),
+      sec('Spec'),
+      { ic: '▤', num: 'C-12', title: 'A <b>conn</b>ection keeps its selection across a sync', meta: '<span class="lbl">Connections</span>' },
+      { ic: '▤', num: 'C-04', title: 'Each <b>conn</b>ection shows its server version', meta: '<span class="lbl">Connections</span>' },
+      sec('Decisions'),
+      { ic: '⚐', num: 'D-31', title: 'Server cards use the compact layout', meta: '<span class="lbl">from #151</span>' },
+    ], foot: footer(echoScope, [['↵', 'Open'], ['⇥', 'Actions'], ['esc', 'Close']]) },
+
+    actions: { q: 'conn', rows: [
+      sec('Tickets'),
+      tk('#142', '<b>Conn</b>ection list loses selection after sync', 'To verify', 'you', '⚑'),
+      tk('#160', 'Manage <b>Conn</b>ections redesign', 'Preparing', 'agent', '✎'),
+      tk('#118', 'Re<b>conn</b>ect after sleep drops the session', 'Done', 'fin', '⚑'),
+      sec('Spec'),
+      { ic: '▤', num: 'C-12', title: 'A <b>conn</b>ection keeps its selection across a sync', meta: '<span class="lbl">Connections</span>' },
+    ], panel: true, foot: footer(echoScope, [['↵', 'Run'], ['esc', 'Back']]) },
+
+    scope: { q: '', token: 'Tickets', typed: '14', rows: [
+      sec('Tickets by number'),
+      tk('#142', 'Connection list loses selection after sync', 'To verify', 'you', '⚑'),
+      tk('#141', 'Export keeps the old file name', 'Ready', 'hatch', '⚑'),
+      tk('#140', 'Theme: calmer status colours', 'Draft', 'you', '◐'),
+      sec('Prefixes'),
+      { ic: '#', title: 'Tickets only, by number or text', meta: kbd('#') },
+      { ic: '›', title: 'Actions only', meta: kbd('>') },
+      { ic: '?', title: 'Ask Iris', meta: kbd('?') },
+    ], foot: footer(echoScope, [['↵', 'Open'], ['⌫', 'Remove scope'], ['esc', 'Close']]) },
+
+    miss: { q: 'dark mode for the query editor', rows: [
+      sec('No tickets or Spec items match'),
+      { ic: '＋', title: 'Capture “dark mode for the query editor” as a draft', meta: '<span class="lbl">Title only · Echo</span>' },
+      { ic: '✦', title: 'Ask Iris “dark mode for the query editor”', meta: '<span class="lbl">Searches first, free</span>' },
+      { ic: '✎', title: 'New ticket with this title…', meta: kbd('⌘', '↵') },
+    ], foot: footer(echoScope, [['↵', 'Capture'], ['esc', 'Close']]) },
+
+    setup: { q: '', ph: 'Search actions', rows: [
+      sec('Get started'),
+      { ic: '<span class="check">✓</span>', title: 'GitHub connected', meta: '<span class="lbl">tashda</span>', dim: true },
+      { ic: '<span class="ring">2</span>', title: 'Set up a project', meta: '<span class="lbl">Repositories, folder, agents</span>' },
+      sec('Hatch'),
+      cmd('⚙', 'Settings', ['⌘', ',']),
+    ], noProject: true, foot: footer('No project yet', [['↵', 'Open'], ['esc', 'Close']]) },
+  };
+
+  let current = 'empty', sel = -1;
+  const pal = document.getElementById('palette');
+  function render() {
+    const s = STATES[current];
+    const items = s.rows.filter(r => !r.sec && !r.dim);
+    if (sel < 0 || sel >= items.length) sel = 0;
+    let i = -1;
+    const rows = s.rows.map(r => {
+      if (r.sec) return `<div class="sec">${r.sec}</div>`;
+      const idx = r.dim ? -2 : ++i;
+      return `<div class="item ${idx === sel ? 'sel' : ''}" data-i="${idx}" style="${r.dim ? 'opacity:.55' : ''}"><span class="ic">${r.ic}</span>${r.num ? `<span class="num">${r.num}</span>` : ''}<span class="t">${r.title}</span>${r.proj ? `<span class="proj">${r.proj}</span>` : ''}<span class="meta">${r.meta || ''}</span></div>`;
+    }).join('');
+    const q = s.token
+      ? `<span class="token"># Tickets</span>${s.typed}<span class="caret"></span>`
+      : (s.q ? `${s.q}<span class="caret"></span>` : `<span class="caret"></span><span class="ph">${s.ph}</span>`);
+    const panel = s.panel ? `<div class="actions-panel">
+        <div class="sec">#142 Connection list loses selection…</div>
+        <div class="item sel"><span class="ic">✓</span><span class="t">Verified, merge it</span>${kbd('↵')}</div>
+        <div class="item"><span class="ic">↺</span><span class="t">Send back to fix…</span>${kbd('⌘', 'B')}</div>
+        <div class="item"><span class="ic">⧉</span><span class="t">Open on GitHub</span>${kbd('⌘', 'O')}</div>
+        <div class="item"><span class="ic">⎘</span><span class="t">Copy link</span>${kbd('⌘', 'C')}</div>
+        <div class="item"><span class="ic">✦</span><span class="t">Ask Iris about it</span></div>
+      </div>` : '';
+    pal.innerHTML = `<div class="field">${MAG}<div class="q">${q}</div></div><div class="results">${rows}</div>${s.foot}${panel}`;
+    pal.querySelectorAll('.item[data-i]').forEach(el => el.addEventListener('mouseenter', () => {
+      const n = +el.dataset.i; if (n >= 0 && n !== sel && !STATES[current].panel) { sel = n; render(); }
+    }));
+  }
+  document.querySelectorAll('#states button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#states button').forEach(x => x.classList.toggle('on', x === b));
+    current = b.dataset.s; sel = 0; render();
+  }));
+  render();
+
+  // ---------- Questions ----------
+  const QUESTIONS = [
+    { id: 'present', title: 'How it appears', why: 'A floating glass panel is how macOS presents search now (Spotlight). It keeps you in the window and needs no AppKit.', rec: 'A', options: [
+      ['A', 'Floating glass panel over the window', 'Like Spotlight; no dimming, no slide'],
+      ['B', 'Keep the sheet, glass background', 'Smallest change; still a sheet'],
+      ['C', 'System-wide panel, global shortcut', 'Works from any app; more work'] ] },
+    { id: 'empty', title: 'What it shows before you type', why: 'The sidebar and ⌘1–9 already cover "Go to". The palette is faster when it opens on your own work: what waits for you and what you just had open.', rec: 'A', options: [
+      ['A', 'Waiting for you, Recent, a few actions', 'Your work first; pages appear when typed'],
+      ['B', 'All actions, grouped', 'Today, with groups and shortcuts'],
+      ['C', 'Only the field', 'Spotlight style; results appear as you type'] ] },
+    { id: 'rows', title: 'Rows', why: 'One line per result fits twice as many, and the group header already says what kind of thing a row is.', rec: 'A', options: [
+      ['A', 'One line: number, title, then status or shortcut', 'Grouped under small headers'],
+      ['B', 'Two lines, as today', 'Title, then kind and status'] ] },
+    { id: 'actions', title: 'Acting on a result', why: 'Most of what you do with a ticket is one move (verify, send back, open on GitHub). Doing it from the palette saves opening the ticket. Moves still go through HatchStore.move.', rec: 'A', options: [
+      ['A', 'Return opens; Tab lists actions for it', 'Raycast style; actions follow the ticket’s status'],
+      ['B', 'Return only', 'Open the ticket to do anything else'] ] },
+    { id: 'scope', title: 'Narrowing the search', why: 'A prefix is the fastest way to narrow the search, and it turns into a visible token, so you can always see the current scope. The prefixes are listed when you type "#", ">" or "?".', rec: 'A', options: [
+      ['A', 'Prefixes: # tickets, > actions, ? Iris', 'Become a token in the field'],
+      ['B', 'Scope buttons under the field', 'All · Tickets · Spec · Actions'],
+      ['C', 'No scopes', 'One search across everything'] ] },
+    { id: 'miss', title: 'When nothing matches', why: 'A search that finds nothing is often a new idea. Capturing it costs nothing, and Iris searches locally (free) before she ever calls a model.', rec: 'A', options: [
+      ['A', 'Capture as draft, Ask Iris, New ticket', 'Capture is the default on Return'],
+      ['B', 'Capture as draft only', 'As today'] ] },
+    { id: 'match', title: 'Matching', why: 'Fuzzy matching forgives typos and initials, and bold letters show why something matched. Ranking puts your-turn and recent tickets first.', rec: 'A', options: [
+      ['A', 'Fuzzy, matched letters in bold', '"mc" finds Manage Connections'],
+      ['B', 'Contains, as today', 'Simpler, stricter'] ] },
+    { id: 'shortcuts', title: 'Shortcuts in rows', why: 'The palette is a menu, and menus show shortcuts. Seeing ⌘N next to New ticket is how people learn it. I would add this exception to DESIGN.md.', rec: 'A', options: [
+      ['A', 'Show them on the right of actions', 'Like menus do'],
+      ['B', 'Leave them out', 'DESIGN.md: shortcuts only in tooltips and menus'] ] },
+  ];
+  const KEY = 'hatch.paletteAnswers1';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  const form = document.getElementById('answers');
+  function renderQ() {
+    form.innerHTML = '';
+    QUESTIONS.forEach((q, n) => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const box = document.createElement('div');
+      box.className = 'qform';
+      box.innerHTML = `<h3><span class="qn">${n + 1}</span>${q.title}</h3><div class="why">Why I recommend it: ${q.why}</div><div class="opts"></div><textarea class="qnote" rows="1" placeholder="Note (optional)"></textarea>`;
+      const opts = box.querySelector('.opts');
+      q.options.forEach(([value, label, detail]) => {
+        const o = document.createElement('label');
+        o.className = 'opt' + (a.choice === value ? ' on' : '');
+        o.innerHTML = `<input type="radio" name="${q.id}" value="${value}" ${a.choice === value ? 'checked' : ''}><span class="dot ${a.choice === value ? 'on' : ''}"></span><span><b>${value} · ${label}</b>${value === q.rec ? '<span class="rec-tag">Recommended</span>' : ''}<br><span class="d">${detail}</span></span>`;
+        o.addEventListener('click', e => { e.preventDefault(); saved[q.id] = { choice: value, note: box.querySelector('.qnote').value }; store(); renderQ(); });
+        opts.appendChild(o);
+      });
+      const note = box.querySelector('.qnote');
+      note.value = a.note || '';
+      note.addEventListener('input', () => { saved[q.id] = { choice: (saved[q.id] || a).choice, note: note.value }; store(); code(); });
+      form.appendChild(box);
+    });
+    code();
+  }
+  function code() {
+    const parts = QUESTIONS.map((q, n) => (n + 1) + (saved[q.id] || { choice: q.rec }).choice);
+    const allRec = QUESTIONS.every(q => (saved[q.id] || { choice: q.rec }).choice === q.rec);
+    const notes = QUESTIONS.map((q, n) => saved[q.id] && saved[q.id].note ? `${n + 1}: ${saved[q.id].note}` : null).filter(Boolean);
+    document.getElementById('code').textContent = (allRec ? 'All recommended — ' : '') + parts.join(' ') + (notes.length ? '  · notes: ' + notes.join('; ') : '');
+  }
+  function store() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} }
+  window.hatchAnswers = () => document.getElementById('code').textContent;
+  document.getElementById('reset').addEventListener('click', () => { saved = {}; store(); renderQ(); });
+  renderQ();
+</script>
+</body>
+</html>
