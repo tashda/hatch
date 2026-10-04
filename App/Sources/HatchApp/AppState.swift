@@ -16,6 +16,8 @@ final class AppState: ObservableObject {
     let paths: AppPaths
     private var stageServer: StageServer?
     private var syncTimer: Timer?
+    /// Looks every hour whether the daily backup and clean-up are due; separate from sync, which may be off.
+    private var maintenanceTimer: Timer?
     /// True once services run; the timer may be off (Only when I ask) while changes still sync after a few seconds.
     private var syncStarted = false
     @Published private(set) var syncing = false
@@ -70,6 +72,9 @@ final class AppState: ObservableObject {
     @Published private(set) var waitingCount = 0
     var launcher: AgentLauncher?
     var launchTimer: Timer?
+    /// The daily backup and clean-up (Settings › Storage): when it last ran, and whether it is running now.
+    var storageMaintainedAt: Date?
+    var maintainingStorage = false
     @Published private(set) var exportingNotebooks = false
     /// Snapshot harness only: selects each ticket subview without changing the normal navigation model.
     @Published var snapshotTicketTab: TicketTab?
@@ -111,6 +116,12 @@ final class AppState: ObservableObject {
         NotificationCenterBridge.shared.start(state: self)
         startSync()
         startLauncher()
+        maintainStorageIfDue()
+        if maintenanceTimer == nil {
+            maintenanceTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.maintainStorageIfDue() }
+            }
+        }
         guard stageServer == nil else { return }
         let server = StageServer(store: store, paths: HatchPaths(home: paths.root))
         server.events = { [weak self] _ in
@@ -394,10 +405,16 @@ final class AppState: ObservableObject {
 }
 
 /// Where Hatch keeps its files (database, token, caches). Overridable with HATCH_HOME for tests and the CLI.
-struct AppPaths {
+struct AppPaths: Sendable {
     let root: URL
     var database: URL { root.appendingPathComponent("hatch.sqlite") }
     var workspaces: URL { root.appendingPathComponent("workspaces", isDirectory: true) }
+    /// Agent run logs, one JSON Lines file per run (AgentLauncher).
+    var runs: URL { root.appendingPathComponent("runs", isDirectory: true) }
+    /// Daily or weekly copies of the database (Settings › Storage).
+    var backups: URL { root.appendingPathComponent("backups", isDirectory: true) }
+    /// Local copies of screenshots added to tickets, by ticket id.
+    var attachments: URL { root.appendingPathComponent("attachments", isDirectory: true) }
 
     static var `default`: AppPaths {
         if let override = ProcessInfo.processInfo.environment["HATCH_HOME"] { return AppPaths(root: URL(fileURLWithPath: override)) }

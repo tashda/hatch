@@ -183,9 +183,35 @@ extension AppState {
         return nil
     }
 
-    /// Opens Terminal in an agent's workspace, so the owner can take over.
+    /// Opens the terminal chosen in Settings › Tools in an agent's workspace, so the owner can take over.
     func openInTerminal(_ path: String) {
-        guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
-        NSWorkspace.shared.open([URL(fileURLWithPath: path)], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
+        guard let terminal = HXOpenWith.terminal.appURL(setting: hxSetting(HXOpenWith.terminal.settingKey)) else { return }
+        openFolder(path, with: terminal)
+    }
+
+    /// Opens a folder in the code editor chosen in Settings › Tools; without one, Finder shows it.
+    func openInEditor(_ path: String) {
+        guard let editor = HXOpenWith.editor.appURL(setting: hxSetting(HXOpenWith.editor.settingKey)) else {
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            return
+        }
+        openFolder(path, with: editor)
+    }
+
+    /// Opens a repository in the git client chosen in Settings › Tools. Returns false when none is chosen.
+    @discardableResult
+    func openInGitClient(_ path: String) -> Bool {
+        guard let client = HXOpenWith.gitClient.appURL(setting: hxSetting(HXOpenWith.gitClient.settingKey)) else { return false }
+        openFolder(path, with: client)
+        return true
+    }
+
+    /// The git client chosen in Settings › Tools, when it is installed, for a button's label.
+    var gitClientName: String? {
+        HXOpenWith.gitClient.chosen(setting: hxSetting(HXOpenWith.gitClient.settingKey))?.name
+    }
+
+    private func openFolder(_ path: String, with app: URL) {
+        NSWorkspace.shared.open([URL(fileURLWithPath: path)], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
     }
 }
