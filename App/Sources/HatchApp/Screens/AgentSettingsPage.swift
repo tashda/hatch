@@ -31,8 +31,9 @@ struct AgentSettingsPage: View {
     var body: some View {
         Form {
             if let settings {
-                tasksSection(settings)
-                codingSection(settings)
+                defaultSection(settings)
+                tasksListSection(settings)
+                codingSection()
                 providersSection(settings)
             } else {
                 Section { ProgressView("Loading providers…") }
@@ -62,33 +63,32 @@ struct AgentSettingsPage: View {
 
     // MARK: Sections
 
-    /// The default every task uses, then one line per task: what it uses and whether it works.
-    private func tasksSection(_ settings: AgentSettings) -> some View {
+    /// The model every task uses unless it has its own.
+    private func defaultSection(_ settings: AgentSettings) -> some View {
         Section {
-            ChoiceRows(settings: settings, choice: settings.defaultChoice, recommendedModel: nil, providerLabel: "Default provider",
-                       modelLabel: "Default model") { c in update { $0.defaultChoice = c } }
-            ForEach(AgentRole.allCases) { role in
-                TaskListRow(role: role, settings: settings, check: checks[role.rawValue],
-                            checking: testing.contains("role-\(role.rawValue)")) { taskSheet = role }
-            }
+            ModelMenu(label: "Model", settings: settings, own: settings.defaultChoice, allowDefault: false, allowOff: false,
+                      programsOnly: false, recommendedModel: nil) { c in if let c { update { $0.defaultChoice = c } } }
+            ModelOptionRows(settings: settings, choice: settings.defaultChoice) { c in update { $0.defaultChoice = c } }
         } header: {
-            Text("Tasks")
+            Text("Default for tasks")
         } footer: {
-            Text("Each task uses the default unless you choose otherwise. Open a task to check that it works.")
+            Text("Each task uses this unless you choose otherwise.")
         }
     }
 
-    private func codingSection(_ settings: AgentSettings) -> some View {
-        let programs = settings.providers.filter { $0.kind.isProgram }
-        return Section {
-            Picker("Run agents with", selection: Binding(
-                get: { settings.codingProviderId ?? programs.first { $0.id == AgentSettings.claudeProviderId }?.id ?? programs.first?.id ?? "" },
-                set: { id in update { $0.codingProviderId = id } })) {
-                ForEach(programs) { p in
-                    Text(p.enabled ? p.name : "\(p.name) (off)").tag(p.id)
-                }
-                if programs.isEmpty { Text("No program connected").tag("") }
+    /// One row per task, as System Settings lists things: a symbol, the name, what it uses on the right.
+    private func tasksListSection(_ settings: AgentSettings) -> some View {
+        Section {
+            ForEach(AgentRole.allCases) { role in
+                TaskListRow(role: role, settings: settings, check: checks[role.rawValue]) { taskSheet = role }
             }
+        } header: {
+            Text("Tasks")
+        }
+    }
+
+    private func codingSection() -> some View {
+        Section {
             Picker("Agents at once", selection: $maxAgents) {
                 ForEach(Self.agentCounts, id: \.self) { n in
                     Text(n == 3 ? "3 · Recommended" : "\(n)").tag(n)
@@ -122,13 +122,9 @@ struct AgentSettingsPage: View {
         }
     }
 
-    /// What uses a provider, in plain words: its tasks and coding agents.
+    /// What uses a provider, in plain words: the tasks that run on it, their own or through the default.
     private func usage(of providerId: String) -> [String] {
-        guard let settings else { return [] }
-        var out = settings.roles(using: providerId).map(\.taskTitle)
-        let coding = settings.codingProviderId ?? AgentSettings.claudeProviderId
-        if coding == providerId { out.append("Coding agents") }
-        return out
+        settings?.roles(using: providerId).map(\.taskTitle) ?? []
     }
 
     // MARK: Loading and saving
@@ -193,7 +189,6 @@ struct AgentSettingsPage: View {
         update { s in
             s.update(provider)
             for role in AgentRole.allCases where uses.contains(role.rawValue) { s.setChoice(RoleChoice(providerId: provider.id), for: role) }
-            if uses.contains("coding") { s.codingProviderId = provider.id }
         }
         check(provider.id)
         refreshModels(provider.id)
@@ -203,7 +198,6 @@ struct AgentSettingsPage: View {
         HXAgentKeychain.delete(provider.id)
         update { s in
             s.remove(provider.id)
-            if s.codingProviderId == provider.id { s.codingProviderId = nil }
         }
     }
 
@@ -338,129 +332,204 @@ struct TaskCheck: Codable, Equatable {
 
 /// The name a model is shown by: its listed name, or its id when the list does not have it.
 private func modelName(_ id: String?, in provider: AgentProvider?) -> String {
-    guard let id else { return provider?.defaultModel.flatMap { provider?.model($0)?.name ?? $0 } ?? "Default" }
+    guard let id else { return provider?.defaultModel.flatMap { provider?.model($0)?.name ?? $0 } ?? "\(provider?.name ?? "The program")'s default" }
     return provider?.model(id)?.name ?? id
 }
 
-/// Provider, model, and the effort or thinking switch when the model takes one. Used for the default and in a task's sheet.
-private struct ChoiceRows: View {
+/// The whole choice in one native picker (round three, 1A): the default, each provider's current models grouped under
+/// its name, More Models… for a long list, and Off. Coding tasks only offer providers that run a program.
+private struct ModelMenu: View {
+    let label: String
     let settings: AgentSettings
-    let choice: RoleChoice?
+    /// The task's own choice: nil follows the default, `.off` is off.
+    let own: RoleChoice?
+    let allowDefault: Bool
+    let allowOff: Bool
+    let programsOnly: Bool
     let recommendedModel: String?
-    var providerLabel = "Provider"
-    var modelLabel = "Model"
-    let onChange: (RoleChoice) -> Void
+    /// Nil means "use the default".
+    let onChange: (RoleChoice?) -> Void
 
-    @State private var customModel = ""
-    @State private var askingCustom = false
+    @State private var more: AgentProvider?
 
-    private var provider: AgentProvider? { choice.flatMap { settings.provider($0.providerId) } }
-    private var selectedModel: ModelInfo? { provider?.model(choice?.model ?? provider?.defaultModel) }
+    /// Models a provider shows directly; the rest are under More Models….
+    static let shownPerProvider = 8
+
+    private var providers: [AgentProvider] {
+        settings.providers.filter { ($0.enabled || $0.id == own?.providerId) && (!programsOnly || $0.kind.isProgram) }
+    }
 
     var body: some View {
-        Picker(providerLabel, selection: Binding(get: { choice?.providerId ?? "" }, set: { id in
-            if !id.isEmpty { onChange(RoleChoice(providerId: id)) }
-        })) {
-            if choice == nil { Text("Choose…").tag("") }
-            ForEach(settings.providers.filter { $0.enabled || $0.id == choice?.providerId }) { p in
-                Text(p.enabled ? p.name : "\(p.name) (off)").tag(p.id)
+        Picker(label, selection: Binding(get: { tag(of: own) }, set: select)) {
+            if allowDefault {
+                Text(defaultTitle).tag("default")
+                Divider()
+            }
+            ForEach(providers) { p in
+                Section(p.enabled ? p.name : "\(p.name) (off)") {
+                    let listed = p.models.filter { !$0.isAlias && $0.featured }
+                    if listed.isEmpty || p.defaultModel == nil && p.kind.isProgram {
+                        Text(modelName(nil, in: p)).tag("p:\(p.id)|")
+                    }
+                    ForEach(listed.prefix(Self.shownPerProvider)) { m in Text(title(m, p)).tag("p:\(p.id)|\(m.id)") }
+                    // A chosen model the short list does not show stays visible, so the picker can show it.
+                    if let o = own, o.providerId == p.id, let m = o.model, !listed.prefix(Self.shownPerProvider).contains(where: { $0.id == m }) {
+                        Text(modelName(m, in: p)).tag("p:\(p.id)|\(m)")
+                    }
+                    Text("More Models…").tag("more:\(p.id)")
+                }
+            }
+            if allowOff {
+                Divider()
+                Text("Off").tag("off")
             }
         }
-        if let provider {
-            Picker(modelLabel, selection: modelBinding) {
-                Text(provider.defaultModel.map { "Default (\(modelName($0, in: provider)))" } ?? "Default").tag("")
-                // Real versions only; tasks move to newer ones on their own (the provider's switch).
-                let listed = provider.models.filter { !$0.isAlias }
-                ForEach(listed.filter(\.featured)) { m in Text(title(m, provider)).tag(m.id) }
-                let older = listed.filter { !$0.featured }
-                if !older.isEmpty {
-                    Section("Older models") { ForEach(older) { m in Text(title(m, provider)).tag(m.id) } }
-                }
-                if let current = choice?.model, provider.model(current) == nil || provider.model(current)?.isAlias == true {
-                    Text(current).tag(current)
-                }
-                Divider()
-                Text("Other Model…").tag(Self.otherTag)
+        .sheet(item: $more) { p in
+            MoreModelsSheet(provider: p, current: own?.providerId == p.id ? own?.model : nil) { id in
+                onChange(RoleChoice(providerId: p.id, model: id))
             }
-            .alert("Other model", isPresented: $askingCustom) {
-                TextField("Model id", text: $customModel)
-                Button("Use") {
-                    let name = customModel.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !name.isEmpty { set(model: name) }
+        }
+    }
+
+    private var defaultTitle: String {
+        guard let d = settings.defaultChoice, let p = settings.provider(d.providerId) else { return "Default" }
+        return "Default (\(modelName(d.model, in: p)))"
+    }
+
+    private func tag(of c: RoleChoice?) -> String {
+        guard let c else { return allowDefault ? "default" : "" }
+        if c.isOff { return "off" }
+        return "p:\(c.providerId)|\(c.model ?? "")"
+    }
+
+    private func select(_ tag: String) {
+        if tag == "default" { onChange(nil); return }
+        if tag == "off" { onChange(.off); return }
+        if tag.hasPrefix("more:") { more = settings.provider(String(tag.dropFirst(5))); return }
+        guard tag.hasPrefix("p:"), let bar = tag.firstIndex(of: "|") else { return }
+        let pid = String(tag[tag.index(tag.startIndex, offsetBy: 2)..<bar])
+        let model = String(tag[tag.index(after: bar)...])
+        var c = RoleChoice(providerId: pid, model: model.isEmpty ? nil : model)
+        // Keep the thinking switch when only the model changes within the same provider.
+        if let o = own, o.providerId == pid { c.thinking = o.thinking }
+        onChange(c)
+    }
+
+    private func title(_ m: ModelInfo, _ p: AgentProvider) -> String {
+        let name = m.name ?? m.id
+        guard p.kind == .claudeCode, let r = recommendedModel,
+              p.models.first(where: { !$0.isAlias && $0.featured && AgentSettings.family(of: $0.id) == r })?.id == m.id
+        else { return name }
+        return "\(name) · Recommended"
+    }
+}
+
+/// Every model a provider lists, searchable, plus a model id typed by hand.
+private struct MoreModelsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let provider: AgentProvider
+    let current: String?
+    let onChoose: (String) -> Void
+    @State private var search = ""
+    @State private var typed = ""
+
+    private var models: [ModelInfo] {
+        provider.models.filter { !$0.isAlias && (search.isEmpty || ($0.name ?? $0.id).localizedCaseInsensitiveContains(search) || $0.id.localizedCaseInsensitiveContains(search)) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("\(provider.name) models").font(.title3.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 8)
+            List {
+                ForEach(models) { m in
+                    Button { onChoose(m.id); dismiss() } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(m.name ?? m.id)
+                                if m.name != nil && m.name != m.id { Text(m.id).font(.caption).foregroundStyle(.secondary) }
+                            }
+                            Spacer()
+                            if m.id == current { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Type the model id exactly as \(provider.name) expects it.")
+                if models.isEmpty { Text(provider.models.isEmpty ? "The list has not been fetched." : "No model matches.").foregroundStyle(.secondary) }
             }
-            if let efforts = selectedModel?.efforts, !efforts.isEmpty {
-                Picker("Effort", selection: Binding(get: { choice?.effort ?? "" }, set: { e in
-                    guard var c = choice else { return }
-                    c.effort = e.isEmpty ? nil : e
-                    onChange(c)
+            .searchable(text: $search, placement: .toolbar, prompt: "Search models")
+            Divider()
+            HStack {
+                TextField("Other model id", text: $typed).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
+                Button("Use") { onChoose(typed.trimmingCharacters(in: .whitespaces)); dismiss() }
+                    .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 20).padding(.vertical, 12)
+        }
+        .frame(width: 480, height: 520)
+    }
+}
+
+/// Effort or Thinking, only when the chosen model takes it.
+private struct ModelOptionRows: View {
+    let settings: AgentSettings
+    let choice: RoleChoice?
+    let onChange: (RoleChoice) -> Void
+
+    private var provider: AgentProvider? { choice.flatMap { settings.provider($0.providerId) } }
+    private var model: ModelInfo? { provider?.model(choice?.model ?? provider?.defaultModel) }
+
+    var body: some View {
+        if let choice, !choice.isOff, let provider {
+            if let efforts = model?.efforts, !efforts.isEmpty {
+                Picker("Effort", selection: Binding(get: { choice.effort ?? "" }, set: { e in
+                    var c = choice; c.effort = e.isEmpty ? nil : e; onChange(c)
                 })) {
-                    Text(selectedModel?.defaultEffort.map { "Default (\($0.capitalized))" } ?? "Default").tag("")
+                    Text(model?.defaultEffort.map { "Default (\($0.capitalized))" } ?? "Default").tag("")
                     ForEach(efforts, id: \.self) { Text($0.capitalized).tag($0) }
                 }
-            }
-            if provider.kind == .claudeCode, let m = selectedModel, m.efforts.isEmpty {
-                Toggle("Thinking", isOn: Binding(get: { choice?.thinking ?? true }, set: { on in
-                    guard var c = choice else { return }
-                    c.thinking = on ? nil : false
-                    onChange(c)
+            } else if provider.kind == .claudeCode, model != nil {
+                Toggle("Thinking", isOn: Binding(get: { choice.thinking ?? true }, set: { on in
+                    var c = choice; c.thinking = on ? nil : false; onChange(c)
                 }))
                 .help("Off sends MAX_THINKING_TOKENS=0 to Claude Code: faster and far fewer tokens for short, structured work")
             }
         }
     }
+}
 
-    static let otherTag = "\u{0}other"
-
-    private func title(_ m: ModelInfo, _ provider: AgentProvider) -> String {
-        let name = m.name ?? m.id
-        guard provider.kind == .claudeCode, let r = recommendedModel, AgentSettings.family(of: m.id) == r,
-              provider.models.first(where: { !$0.isAlias && $0.featured && AgentSettings.family(of: $0.id) == r })?.id == m.id
-        else { return name }
-        return "\(name) · Recommended"
-    }
-
-    private var modelBinding: Binding<String> {
-        Binding(get: { choice?.model ?? "" }, set: { id in
-            if id == Self.otherTag { customModel = choice?.model ?? ""; askingCustom = true; return }
-            set(model: id.isEmpty ? nil : id)
-        })
-    }
-
-    private func set(model: String?) {
-        guard var c = choice else { return }
-        c.model = model
-        // An effort the new model does not take is dropped rather than sent.
-        if let e = c.effort, let p = provider, let info = p.model(model ?? p.defaultModel), !info.efforts.contains(e) { c.effort = nil }
-        // A model with effort levels controls thinking through effort; the on/off switch is only for models without.
-        if let p = provider, let info = p.model(model ?? p.defaultModel), !info.efforts.isEmpty { c.thinking = nil }
-        onChange(c)
+/// A task's symbol in a small coloured tile, as System Settings shows its panes.
+private struct TaskTile: View {
+    let role: AgentRole
+    var body: some View {
+        Image(systemName: role.symbol)
+            .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+            .frame(width: 24, height: 24)
+            .background(role.isCoding ? Color.orange : role == .iris ? Color.indigo : Color.blue,
+                        in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
-/// One task in the list: its name, then what it uses and whether it works. Opens the task's sheet.
+/// One task: symbol, name, and what it uses on the right. A warning appears only when something is wrong.
 private struct TaskListRow: View {
     let role: AgentRole
     let settings: AgentSettings
     let check: TaskCheck?
-    let checking: Bool
     let onOpen: () -> Void
 
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(role.taskTitle).foregroundStyle(.primary)
-                    HStack(spacing: 6) {
-                        Circle().fill(dotColor).frame(width: 7, height: 7)
-                        Text(statusLine).font(.callout).foregroundStyle(check?.ok == false && !checking ? Theme.critical : .secondary)
-                            .lineLimit(1).truncationMode(.tail)
-                    }
-                }
+                TaskTile(role: role)
+                Text(role.taskTitle).foregroundStyle(.primary)
                 Spacer()
+                if let problem {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).help(problem)
+                }
+                Text(value).foregroundStyle(.secondary)
                 Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
@@ -469,31 +538,27 @@ private struct TaskListRow: View {
         .accessibilityHint("Opens the settings for \(role.taskTitle)")
     }
 
-    private var uses: String {
-        let own = settings.ownChoice(role)
-        if own?.isOff == true { return "Off" }
-        guard let own else { return "Same as default" }
-        let provider = settings.provider(own.providerId)
-        var text = modelName(own.model, in: provider)
-        if own.thinking == false { text += ", thinking off" }
-        if own.providerId != settings.defaultChoice?.providerId { text += " · \(provider?.name ?? "missing provider")" }
-        return text
+    private var value: String {
+        guard let own = settings.ownChoice(role) else { return "Default" }
+        if own.isOff { return "Off" }
+        let p = settings.provider(own.providerId)
+        let name = modelName(own.model, in: p)
+        return own.providerId == settings.defaultChoice?.providerId ? name : "\(name) · \(p?.name ?? "missing")"
     }
 
-    private var statusLine: String {
-        if settings.choice(role) == nil { return uses == "Off" ? "Off: it does not run" : "No provider chosen" }
-        if checking { return "\(uses) · checking…" }
-        guard let check else { return "\(uses) · not checked yet" }
-        return "\(uses) · \(check.line)"
-    }
-
-    private var dotColor: Color {
-        if settings.choice(role) == nil || checking || check == nil { return .secondary.opacity(0.5) }
-        return check!.ok ? Theme.finished : Theme.critical
+    /// Why the task cannot run, or why its last check failed. Nil when nothing is wrong.
+    private var problem: String? {
+        if settings.ownChoice(role)?.isOff == true { return nil }
+        guard let c = settings.choice(role) else { return "No provider chosen" }
+        guard let p = settings.provider(c.providerId) else { return "Its provider was removed" }
+        if !p.enabled { return "\(p.name) is off" }
+        if role.isCoding && !p.kind.isProgram { return "\(p.name) cannot edit code; choose a program" }
+        if let check, !check.ok { return check.line }
+        return nil
     }
 }
 
-/// A task's own settings: the default, its own provider and model, or off; its last check and Test Again.
+/// A task's own settings: which model (or the default, or off), the model's options, the last check, and Check.
 private struct TaskSheet: View {
     @Environment(\.dismiss) private var dismiss
     let role: AgentRole
@@ -503,59 +568,39 @@ private struct TaskSheet: View {
     let onChange: (RoleChoice?) -> Void
     let onTest: () -> Void
 
-    private enum Mode: String { case useDefault, own, off }
-
-    private var mode: Mode {
-        guard let own = settings.ownChoice(role) else { return .useDefault }
-        return own.isOff ? .off : .own
-    }
-
-    private var defaultTitle: String {
-        guard let d = settings.defaultChoice, let p = settings.provider(d.providerId) else { return "The default" }
-        return "The default (\(modelName(d.model, in: p)) · \(p.name))"
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(role.taskTitle).font(.title3.weight(.semibold))
-                Text(role.detail).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                TaskTile(role: role)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(role.taskTitle).font(.title3.weight(.semibold))
+                    Text(role.detail).foregroundStyle(.secondary)
+                }
+                Spacer()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 24).padding(.top, 20)
             Form {
                 Section {
-                    Picker("Use", selection: Binding(get: { mode }, set: { m in
-                        switch m {
-                        case .useDefault: onChange(nil)
-                        case .off: onChange(.off)
-                        case .own: onChange(settings.choice(role) ?? settings.defaultChoice ?? settings.providers.first.map { RoleChoice(providerId: $0.id) })
-                        }
-                    })) {
-                        Text(defaultTitle).tag(Mode.useDefault)
-                        Text("Its own provider and model").tag(Mode.own)
-                        Text("Off").tag(Mode.off)
-                    }
-                    if mode == .own {
-                        ChoiceRows(settings: settings, choice: settings.ownChoice(role), recommendedModel: role.recommendedModel) { onChange($0) }
+                    ModelMenu(label: "Model", settings: settings, own: settings.ownChoice(role), allowDefault: true, allowOff: true,
+                              programsOnly: role.isCoding, recommendedModel: role.recommendedModel, onChange: onChange)
+                    if let own = settings.ownChoice(role), !own.isOff {
+                        ModelOptionRows(settings: settings, choice: own) { onChange($0) }
                     }
                 } footer: {
                     Text(role.recommendation)
                 }
-                if mode != .off {
-                    Section {
+                if settings.choice(role) != nil {
+                    Section("Status") {
                         LabeledContent("Last check") {
                             if checking { Text("Checking…").foregroundStyle(.secondary) }
                             else if let check {
                                 Text(check.ok ? "Answered in \(String(format: "%.1f", check.seconds ?? 0)) s, \(check.at.formatted(.relative(presentation: .named)))" : "Failed")
                                     .foregroundStyle(check.ok ? Color.secondary : Theme.critical)
-                            } else { Text("Not checked yet").foregroundStyle(.secondary) }
+                            } else { Text("Not checked").foregroundStyle(.secondary) }
                         }
                         if let check, !check.ok, let message = check.message {
                             Text(message).font(.callout).foregroundStyle(Theme.critical).textSelection(.enabled)
                         }
-                    } header: {
-                        Text("Status")
                     }
                 }
             }
@@ -565,13 +610,13 @@ private struct TaskSheet: View {
             HStack {
                 Spacer()
                 Button(checking ? "Checking…" : "Check", action: onTest)
-                    .disabled(checking || mode == .off)
-                    .help("Send one short prompt with this task's provider and model")
+                    .disabled(checking || settings.choice(role) == nil)
+                    .help("Send one short prompt with this task's model")
                 Button("Done") { dismiss() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
         }
-        .frame(width: 520, height: 480)
+        .frame(width: 520, height: 440)
     }
 }
 
@@ -1013,14 +1058,13 @@ private struct AddProviderSheet: View {
             }
         }
         Section {
-            ForEach(AgentRole.allCases) { role in
+            ForEach(AgentRole.allCases.filter { !$0.isCoding || draft.kind.isProgram }) { role in
                 Toggle(role.taskTitle, isOn: binding(role.rawValue))
             }
-            if draft.kind.isProgram { Toggle("Coding agents", isOn: binding("coding")) }
         } header: {
             Text("Use it for")
         } footer: {
-            Text("You can change this later, per task.")
+            Text("Switched on, the task uses this provider instead of the default. You can change it later.")
         }
     }
 
@@ -1085,10 +1129,8 @@ private struct AddProviderSheet: View {
         }
         key = ""
         status = nil
-        uses = Set(AgentRole.allCases.filter { settings.choice($0) == nil }.map(\.rawValue))
-        if draft.kind.isProgram && settings.codingProviderId == nil && !settings.providers.contains(where: { $0.kind.isProgram && $0.enabled }) {
-            uses.insert("coding")
-        }
+        // Tasks that have nothing to run on get the new provider by default.
+        uses = Set(AgentRole.allCases.filter { settings.choice($0) == nil && (!$0.isCoding || draft.kind.isProgram) }.map(\.rawValue))
     }
 
     private func finish() {
