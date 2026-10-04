@@ -135,3 +135,22 @@ final class NotebookKindTests: NotebookExportTestsBase {
         XCTAssertTrue(try String(contentsOfFile: dir + "/decisions/0160-retries.md", encoding: .utf8).contains("kind: workflow"))
     }
 }
+
+final class RepoProbeTests: GitTestCase {
+    func testProbeReadsTheClone() throws {
+        let dir = try makeRepo("probe")
+        try g(["remote", "add", "origin", "https://github.com/acme/probe.git"], dir)
+        try g(["checkout", "-q", "-b", "ticket/151-toast"], dir)
+        try g(["checkout", "-q", "dev"], dir)
+        try write(dir, "loose.txt", "x")
+        let p = RepoProbe.run(path: dir, remote: "acme/probe", branches: ["hatch", "dev"], git: git)
+        XCTAssertTrue(p.exists)
+        XCTAssertTrue(p.matchesRemote)
+        XCTAssertEqual(p.branch, "dev")
+        XCTAssertEqual(p.dirtyFiles, 1)
+        XCTAssertEqual(p.ticketBranches, ["ticket/151-toast"])
+        XCTAssertEqual(p.knownBranches, ["hatch": false, "dev": true])
+        XCTAssertFalse(p.recent.isEmpty)
+        XCTAssertFalse(RepoProbe.run(path: tmp + "/nowhere", remote: "acme/x", git: git).exists)
+    }
+}

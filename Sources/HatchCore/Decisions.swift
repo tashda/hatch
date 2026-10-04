@@ -168,6 +168,13 @@ public extension HatchStore {
             """, [.int(projectId), .opt(nowHash), .date(now()), pushed ? .date(now()) : .null, .opt(error)])
     }
 
+    /// When the notebook was last brought in step and pushed, and the last problem, for the Health page.
+    func notebookStatus(projectId: Int) throws -> (exportedAt: Date?, pushedAt: Date?, error: String?) {
+        try db.query("SELECT exported_at, pushed_at, error FROM notebook_state WHERE project_id = ?", [.int(projectId)]) {
+            ($0.date("exported_at"), $0.date("pushed_at"), $0.string("error"))
+        }.first ?? (nil, nil, nil)
+    }
+
     func notebookError(projectId: Int) throws -> String? {
         try db.query("SELECT error FROM notebook_state WHERE project_id = ?", [.int(projectId)]) { $0.string("error") }.first ?? nil
     }
