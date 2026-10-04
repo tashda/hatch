@@ -510,7 +510,6 @@ struct ProjectSetupAssistant: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: ProjectSetupModel
-    @State private var showOtherDesignOptions = false
 
     init(store: HatchStore, demoStep: ProjectSetupModel.Step? = nil) {
         let model = ProjectSetupModel(store: store)
@@ -766,8 +765,9 @@ struct ProjectSetupAssistant: View {
         VStack(alignment: .leading, spacing: 16) {
             HXSetupHeader(symbol: "paintpalette", tint: .pink, title: "Components",
                           detail: "Named colors, type, sizes and shared views that every screen uses. They live inside the app, usually as a local package, so the app gets no new dependency.")
+            let candidates = model.componentsScan?.candidates ?? []
+            let found = model.componentsScan.flatMap { _ in candidates.first { $0.path == model.foundPath } ?? candidates.first }
             HXSetupGroup {
-                let candidates = model.componentsScan?.candidates ?? []
                 if model.scanningComponents {
                     HXSetupRow("Looking") {
                         HStack(spacing: 6) {
@@ -775,71 +775,50 @@ struct ProjectSetupAssistant: View {
                             Text("Reading \(model.displayName)'s code…").foregroundStyle(.secondary)
                         }
                     }
-                } else if model.designChoice == .found, let set = model.chosenCandidate {
-                    HXSetupRow("Found") {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(set.path).font(.callout.monospaced())
-                            Text(set.summary).foregroundStyle(.secondary)
+                } else {
+                    if let found {
+                        HXRadioRow(selected: model.designChoice == .found, title: "Use the ones in the app",
+                                   detail: found.summary, recommended: true) { model.chooseDesign(.found) } trailing: {
+                            Text(found.path).font(.callout.monospaced()).foregroundStyle(.secondary)
                         }
                     }
-                    Text("\(model.displayName) already has components. Hatch will use them and ask Proposals and agents to reuse them."
-                         + (set.isPackage ? "" : " It is a folder, not a package, so Proposals cannot import it yet."))
-                        .foregroundStyle(.secondary).padding(.horizontal, 14).padding(.vertical, 10)
-                    if !model.otherCandidates.isEmpty {
-                        HXSetupRow("Also found") {
-                            Text(model.otherCandidates.map(\.path).joined(separator: ", ")).font(.callout.monospaced()).foregroundStyle(.secondary)
-                        }
-                        Text(model.clashes.isEmpty
-                             ? "Hatch adds a draft ticket to merge them in."
-                             : "Hatch adds a draft ticket to merge them in, and a question about the \(model.clashes.count) name\(model.clashes.count == 1 ? "" : "s") with two values, for you to decide.")
-                            .foregroundStyle(.secondary).padding(.horizontal, 14).padding(.vertical, 10)
-                    }
-                } else if model.designChoice == .start {
-                    HXSetupRow("Found") {
-                        Text(candidates.isEmpty ? "No components yet" : "Not enough to count as components").foregroundStyle(.secondary)
-                    }
-                    Text(startDetail).foregroundStyle(.secondary).padding(.horizontal, 14).padding(.vertical, 10)
-                    HXSetupRow("Folder") {
+                    HXRadioRow(selected: model.designChoice == .start, title: found == nil ? "Hatch starts them" : "Start a new set",
+                               detail: found == nil ? "Adds draft tickets. Nothing changes until you submit them." : "Adds draft tickets for a second set beside the one found.",
+                               recommended: found == nil) { model.chooseDesign(.start) } trailing: {
                         TextField("Folder", text: Binding(get: { model.startPathEdited ? model.startPath : ComponentsConfig.suggested(appName: model.displayName).path },
-                                                          set: { model.startPath = $0; model.startPathEdited = true }))
-                            .textFieldStyle(.plain).font(.callout.monospaced()).multilineTextAlignment(.trailing).frame(width: 240).labelsHidden()
+                                                          set: { model.startPath = $0; model.startPathEdited = true; model.chooseDesign(.start) }))
+                            .textFieldStyle(.plain).font(.callout.monospaced()).multilineTextAlignment(.trailing).frame(width: 220).labelsHidden()
+                            .foregroundStyle(model.designChoice == .start ? .primary : .secondary)
                     }
-                }
-                DisclosureGroup("Other options", isExpanded: $showOtherDesignOptions) {
-                    VStack(spacing: 0) {
-                        if model.designChoice != .start {
-                            HXRadioRow(selected: false, title: "Have Hatch start new components",
-                                       detail: "Adds draft tickets for a new package, even though some already exist.") { model.chooseDesign(.start) }
+                    HXRadioRow(selected: model.designChoice == .separate, title: "Use a separate repository",
+                               detail: "For a package several apps share.") { model.chooseDesign(.separate) } trailing: {
+                        Picker("Repository", selection: Binding(get: { model.designExisting },
+                                                                set: { model.designExisting = $0; model.chooseDesign(.separate) })) {
+                            Text("Choose…").tag(String?.none)
+                            ForEach(model.account.repos.filter { $0.fullName != model.appRepo }) { Text($0.fullName).tag(String?.some($0.fullName)) }
                         }
-                        if model.designChoice != .found, let first = candidates.first {
-                            HXRadioRow(selected: false, title: "Use \(first.path)", detail: first.summary) { model.foundPath = first.path; model.chooseDesign(.found) }
-                        }
-                        if model.designChoice == .found, candidates.count > 1 {
-                            HXSetupRow("Use a different folder") {
-                                Picker("Folder", selection: Binding(get: { model.foundPath }, set: { model.foundPath = $0; model.chooseDesign(.found) })) {
-                                    ForEach(candidates, id: \.path) { Text($0.path).tag(String?.some($0.path)) }
-                                }
-                                .labelsHidden().pickerStyle(.menu).fixedSize()
-                            }
-                            HXSetupRow("Merge the others") {
-                                Toggle("Add a ticket to merge them in", isOn: $model.mergeOthers).toggleStyle(.checkbox)
-                            }
-                        }
-                        HXRadioRow(selected: model.designChoice == .separate, title: "A separate repository",
-                                   detail: "For a package several apps share. The app imports it by version.") { model.chooseDesign(.separate) } trailing: {
-                            Picker("Repository", selection: Binding(get: { model.designExisting },
-                                                                    set: { model.designExisting = $0; model.chooseDesign(.separate) })) {
-                                Text("Choose…").tag(String?.none)
-                                ForEach(model.account.repos.filter { $0.fullName != model.appRepo }) { Text($0.fullName).tag(String?.some($0.fullName)) }
-                            }
-                            .labelsHidden().fixedSize()
-                        }
-                        HXRadioRow(selected: model.designChoice == .none, title: "Not now",
-                                   detail: "Proposals use plain SwiftUI and only look roughly like the app. You can start them later on the Components page.") { model.chooseDesign(.none) }
+                        .labelsHidden().fixedSize()
                     }
+                    HXRadioRow(selected: model.designChoice == .none, title: "Not now",
+                               detail: "Start them later on the Components page.") { model.chooseDesign(.none) }
                 }
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                if let repo = model.designRepo {
+            }
+            if !model.scanningComponents {
+                Text(componentsVerdict).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if model.designChoice == .found && (candidates.count > 1) {
+                HXSetupGroup {
+                    HXSetupRow("Folder") {
+                        Picker("Folder", selection: Binding(get: { model.foundPath }, set: { model.foundPath = $0; model.chooseDesign(.found) })) {
+                            ForEach(candidates, id: \.path) { Text($0.path).tag(String?.some($0.path)) }
+                        }
+                        .labelsHidden().fixedSize()
+                    }
+                    Toggle("Merge \(model.otherCandidates.map(\.path).joined(separator: ", ")) into it", isOn: $model.mergeOthers)
+                }
+            }
+            if let repo = model.designRepo {
+                HXSetupGroup {
                     HXSetupRow("On this Mac") {
                         Text(model.designPath.map(hxAbbreviated) ?? "Hatch clones it to \(hxAbbreviated(model.siblingFolder(for: repo)))")
                             .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
@@ -858,12 +837,28 @@ struct ProjectSetupAssistant: View {
         return c.summary + (c.isPackage ? "." : ". A folder in the app, not a package yet, so Proposals cannot import it until it moves into one.")
     }
 
-    private var startDetail: String {
-        let base = "Hatch will create one shared place for your colors, fonts and spacing and add draft tickets for it."
-        guard let scan = model.componentsScan, let typed = scan.typedSummary, !scan.isSmall else {
-            return base + " Nothing changes until you submit them."
+    /// What the scan found and what the chosen option adds, in one plain paragraph under the choices.
+    private var componentsVerdict: String {
+        let name = model.displayName
+        switch model.designChoice {
+        case .found:
+            guard let set = model.chosenCandidate else { return "" }
+            var text = "\(name) already has components in \(set.path). Proposals and agents will reuse them."
+            if !set.isPackage { text += " It is a folder, not a package, so Proposals cannot import it yet." }
+            if !model.clashes.isEmpty { text += " \(model.clashes.count) name\(model.clashes.count == 1 ? " has" : "s have") two values; Hatch adds a question for you to decide." }
+            return text
+        case .start:
+            var text = model.componentsScan?.candidates.isEmpty == false ? "" : "Hatch found no components in \(name)'s code. "
+            text += "It will add draft tickets that create one shared place for colors, fonts and spacing."
+            if let scan = model.componentsScan, let typed = scan.typedSummary, !scan.isSmall {
+                text += " The app types \(typed) straight into views; a question lets you decide which close values become one, then one ticket per kind moves them over."
+            }
+            return text
+        case .separate:
+            return "The app imports the package by version. Hatch reads it from its clone."
+        case .none:
+            return "Proposals use plain SwiftUI and only look roughly like the app."
         }
-        return base + " The app types \(typed) straight into views today; a question lets you decide which close values become one, then a ticket per kind moves them over. Nothing changes until you submit them."
     }
 
     private var notebookPage: some View {
