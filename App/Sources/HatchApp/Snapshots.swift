@@ -287,6 +287,10 @@ enum Snapshots {
                 state.snapshotPresentation = .addProject
             } else if name == "agent-card" {
                 state.snapshotPresentation = .agentCard
+            } else if name == "menu-bar" {                // The menu bar item's panel with two sample agents and the demo's waiting tickets.
+                state.agentRuns = [sampleRun, sampleRun2]
+                state.updateWaitingCount()
+                state.snapshotPresentation = .menuBar
             } else if name.hasPrefix("settings") {
                 state.snapshotPresentation = .settings
                 // settings-<page>, by the page's title: settings-github, settings-general, settings-storage…
@@ -308,5 +312,13 @@ enum Snapshots {
                      role: .build, providerName: "Claude Code", model: "Sonnet 5.5", repo: "tashda/echo", branch: "ticket/151-toast-spacing",
                      workspace: "/tmp", startedAt: Date().addingTimeInterval(-754), attempt: 1, step: "Editing ToastView.swift",
                      tokensIn: 184_200, tokensOut: 12_900, logPath: "/tmp/none")
+    }
+
+    /// A second running agent for the menu-bar snapshot.
+    static var sampleRun2: AgentRunInfo {
+        AgentRunInfo(ticketId: 5, ticketNumber: "#144", ticketTitle: "Connection test hangs on bad host", runId: 2, agent: "Agent on #144",
+                     role: .build, providerName: "Claude Code", model: "Sonnet 5.5", repo: "acme/app", branch: "ticket/144-connection-test",
+                     workspace: "/tmp", startedAt: Date().addingTimeInterval(-2_312), attempt: 1, step: "Running connection tests",
+                     tokensIn: 96_400, tokensOut: 8_100, logPath: "/tmp/none")
     }
 }

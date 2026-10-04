@@ -42,3 +42,26 @@ enum Route: Hashable {
         }
     }
 }
+
+extension Route {
+    /// The route as a short string, so the last page can be saved as a setting and opened at the next launch.
+    /// New ticket is not reopened: its unsaved text is gone, so it opens the Desk.
+    var storageKey: String {
+        switch self {
+        case .ticket(let id): "ticket:\(id)"
+        case .newTicket: "desk"
+        default: Route.plain.first { $0.value == self }?.key ?? "desk"
+        }
+    }
+
+    init?(storageKey: String) {
+        if storageKey.hasPrefix("ticket:"), let id = Int(storageKey.dropFirst("ticket:".count)) { self = .ticket(id); return }
+        guard let route = Route.plain[storageKey] else { return nil }
+        self = route
+    }
+
+    private static let plain: [String: Route] = [
+        "desk": .desk, "tickets": .tickets, "board": .board, "previews": .previews, "specs": .specs, "decisions": .decisions,
+        "components": .components, "agents": .agents, "health": .health, "log": .log, "projects": .projects,
+    ]
+}
