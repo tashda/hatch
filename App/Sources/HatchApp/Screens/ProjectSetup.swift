@@ -14,7 +14,7 @@ let hxDefaultTicketsSetting = "tickets.default"
 @MainActor
 final class ProjectSetupModel: ObservableObject {
     enum Step: Int, CaseIterable, Identifiable {
-        case github, project, tickets, code, design, branches, agents, review
+        case github, project, tickets, code, design, notebook, branches, agents, review
         var id: Int { rawValue }
         var title: String {
             switch self {
@@ -22,7 +22,8 @@ final class ProjectSetupModel: ObservableObject {
             case .project: "Project"
             case .tickets: "Tickets"
             case .code: "App code"
-            case .design: "Design system"
+            case .design: "Components"
+            case .notebook: "Notebook"
             case .branches: "Branches"
             case .agents: "Agents"
             case .review: "Review"
@@ -32,6 +33,7 @@ final class ProjectSetupModel: ObservableObject {
 
     enum TicketsChoice { case useDefault, create, existing }
     enum DesignChoice { case existing, create, none }
+    enum NotebookChoice { case create, existing }
 
     @Published var step: Step = .github
     @Published var name = ""
@@ -49,17 +51,28 @@ final class ProjectSetupModel: ObservableObject {
     private var forwarders: [AnyCancellable] = []
 
     @Published var appRepo: String? { didSet { appRepoChanged(from: oldValue) } }
-    @Published var localPath: String? { didSet { if localPath != oldValue { suggestBuild() } } }
+    @Published var localPath: String? { didSet { if localPath != oldValue { suggestBuild(); inspectRules() } } }
     @Published var clones: [String] = []
     @Published var searchingClones = false
     @Published var cloning = false
 
     @Published var designChoice: DesignChoice = .none
-    @Published var designExisting: String?
+    @Published var designExisting: String? { didSet { if designExisting != oldValue { designPath = nil; findClone(of: designExisting) { [weak self] in self?.designPath = $0 } } } }
     /// Follows the app repository's name until the owner types their own.
     @Published var designNewName = ""
     @Published var designNameEdited = false
     @Published var designPrivate = true
+    /// The clone of an existing components repository on this Mac; agents building a ticket work in it too.
+    @Published var designPath: String?
+
+    @Published var notebookChoice: NotebookChoice = .create
+    @Published var notebookNewName = ""
+    @Published var notebookNameEdited = false
+    @Published var notebookExisting: String?
+    @Published var notebookPath: String?
+    /// The app clone's own agent file, which becomes the notebook's rules: its line count, or nil when there is none.
+    @Published var existingRulesLines: Int?
+    @Published var appCommitsRules = false
 
     @Published var branches: [String] = []
     @Published var baseBranch = ""
@@ -140,6 +153,21 @@ final class ProjectSetupModel: ObservableObject {
         }
     }
 
+    var notebookRepo: String? {
+        switch notebookChoice {
+        case .existing: return notebookExisting
+        case .create:
+            let n = notebookNewName.trimmingCharacters(in: .whitespaces)
+            return n.isEmpty ? nil : "\(newRepoOwner)/\(n)"
+        }
+    }
+
+    /// A folder next to the app's clone, for the other repositories of the project.
+    func siblingFolder(for repo: String) -> String {
+        let parent = URL(fileURLWithPath: localPath ?? cloneDestination).deletingLastPathComponent()
+        return parent.appendingPathComponent(repo.split(separator: "/").last.map(String.init) ?? repo).path
+    }
+
     var cloneDestination: String {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let parent = ["Development", "Developer", "Projects", "Code"].map { home.appendingPathComponent($0) }
@@ -155,6 +183,7 @@ final class ProjectSetupModel: ObservableObject {
         case .tickets: return ticketsRepo != nil
         case .code: return appRepo != nil && localPath != nil
         case .design: return designChoice == .none || designRepo != nil
+        case .notebook: return notebookRepo != nil
         case .agents: return true
         case .branches: return !baseBranch.isEmpty && !integrationBranch.trimmingCharacters(in: .whitespaces).isEmpty
                                 && integrationBranch != baseBranch
@@ -200,8 +229,10 @@ final class ProjectSetupModel: ObservableObject {
         localPath = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Development/echo").path
         clones = [localPath!]
         branches = ["main", "dev"]
-        designChoice = .create
+        designChoice = .existing
         designExisting = "tashda/echo-design-system"
+        designPath = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Development/echo-design-system").path
+        existingRulesLines = 474
         self.step = step
     }
 
@@ -211,7 +242,9 @@ final class ProjectSetupModel: ObservableObject {
             let raw = repo.split(separator: "/").last.map(String.init) ?? repo
             setName(raw.prefix(1).uppercased() + raw.dropFirst(), edited: false)
         }
-        if !designNameEdited { designNewName = "\(repo.split(separator: "/").last.map(String.init) ?? "app")-design-system".lowercased() }
+        let repoName = (repo.split(separator: "/").last.map(String.init) ?? "app").lowercased()
+        if !designNameEdited { designNewName = "\(repoName)-components" }
+        if !notebookNameEdited { notebookNewName = Notebook.suggestedName(appRepo: repo) }
         baseBranch = appRepoSummary?.defaultBranch ?? "main"
         branches = []
         guard !demo else { return }
@@ -238,6 +271,27 @@ final class ProjectSetupModel: ObservableObject {
             clones = found
             if localPath == nil { localPath = found.first }
             searchingClones = false
+        }
+    }
+
+    /// Looks for a clone of `repo` in the usual code folders and reports the first one found.
+    func findClone(of repo: String?, found: @escaping (String?) -> Void) {
+        guard let repo, !demo else { return }
+        Task {
+            let paths = await Task.detached { LocalClones.find(repo) }.value
+            found(paths.first)
+        }
+    }
+
+    /// Whether the app's clone has its own agent file to carry into the notebook, or commits one.
+    private func inspectRules() {
+        guard let path = localPath, !demo else { return }
+        Task {
+            let (text, committed) = await Task.detached { () -> (String?, Bool) in
+                (RulesPlacer.existingRules(in: path), ProcessGit().succeeds(["ls-files", "--error-unmatch", "AGENTS.md"], in: path))
+            }.value
+            existingRulesLines = text.map { $0.split(separator: "\n", omittingEmptySubsequences: false).count }
+            appCommitsRules = committed
         }
     }
 
@@ -287,58 +341,95 @@ final class ProjectSetupModel: ObservableObject {
         localPath = url.path
     }
 
-    /// Creates or checks the tickets repository and Hatch's branch on GitHub, then saves the project.
+    /// Sets the project up on GitHub and this Mac, then saves it: the tickets repository, Hatch's branch, the
+    /// components and notebook repositories (created and cloned when needed), the notebook's first files, and the
+    /// rules placed into the app's clone.
     func add(state: AppState, done: @escaping () -> Void) {
-        guard let tickets = ticketsRepo, let app = appRepo, let localPath else { return }
+        guard let tickets = ticketsRepo, let app = appRepo, let appPath = localPath, let notebook = notebookRepo else { return }
         adding = true
         error = nil
-        let create = ticketsChoice == .create
+        let createTickets = ticketsChoice == .create
         let base = baseBranch, integration = integrationBranch.trimmingCharacters(in: .whitespaces)
-        let newDesign = designChoice == .create ? designRepo : nil, designPrivate = designPrivate, login = login
-        let designDescription = "Design system for \(displayName)."
-        var designBranch = account.repos.first { $0.fullName == designRepo }?.defaultBranch ?? "main"
+        let design = designRepo, createDesign = designChoice == .create, designPrivate = designPrivate
+        let designFolder = designPath ?? design.map(siblingFolder(for:))
+        let createNotebook = notebookChoice == .create
+        let notebookFolder = notebookPath ?? siblingFolder(for: notebook)
+        let login = login, name = displayName, promotion = promotion, agents = effectiveAgents
+        let knownBranches = Dictionary(account.repos.map { ($0.fullName, $0.defaultBranch) }, uniquingKeysWith: { a, _ in a })
         Task {
-            let result = await Task.detached { () -> Result<String?, Error> in
+            let result = await Task.detached { () -> Result<(ProjectConfig, RulesPlacer.Outcome), Error> in
                 Result {
                     let client = HXGitHub.client()
-                    let report = try client.prepareTicketsRepo(tickets, createIfMissing: create)
+                    let token = HXKeychain.read()
+                    func ensureRepo(_ full: String, description: String, isPrivate: Bool) throws -> (branch: String, created: Bool) {
+                        if let found = try client.repository(full) { return (found.defaultBranch, false) }
+                        let parts = full.split(separator: "/").map(String.init)
+                        let made = try client.createRepository(name: parts[1], description: description, isPrivate: isPrivate,
+                                                               organization: parts[0].lowercased() == login?.lowercased() ? nil : parts[0])
+                        return (made.defaultBranch, true)
+                    }
+                    func ensureClone(_ full: String, at folder: String) throws {
+                        guard !FileManager.default.fileExists(atPath: folder + "/.git") else { return }
+                        try LocalClones.clone(full, to: folder, token: token)
+                    }
+
+                    let report = try client.prepareTicketsRepo(tickets, createIfMissing: createTickets)
                     if report.isPublic { throw HXSetupError.publicTickets(tickets) }
                     try client.ensureBranch(app, name: integration, from: base)
-                    if let newDesign {
-                        if try client.repository(newDesign) != nil { throw HXSetupError.exists(newDesign) }
-                        let parts = newDesign.split(separator: "/").map(String.init)
-                        let created = try client.createRepository(name: parts[1], description: designDescription, isPrivate: designPrivate,
-                                                                  organization: parts[0].lowercased() == login?.lowercased() ? nil : parts[0])
-                        return created.defaultBranch
+
+                    var repos = [RepoConfig(role: .app, remote: app, branch: base, localPath: appPath,
+                                            buildCommand: agents.build, testCommand: agents.test),
+                                 RepoConfig(role: .tickets, remote: tickets, branch: "main")]
+                    if let design, let designFolder {
+                        let branch = createDesign
+                            ? try ensureRepo(design, description: "Components for \(name): colors, type and views.", isPrivate: designPrivate).branch
+                            : knownBranches[design] ?? "main"
+                        try ensureClone(design, at: designFolder)
+                        repos.append(RepoConfig(role: .designSystem, remote: design, branch: branch, localPath: designFolder))
                     }
-                    return nil
+                    let nb = createNotebook
+                        ? try ensureRepo(notebook, description: "What is decided about \(name) and how work on it is done.", isPrivate: true)
+                        : (branch: knownBranches[notebook] ?? "main", created: false)
+                    try ensureClone(notebook, at: notebookFolder)
+                    repos.append(RepoConfig(role: .notebook, remote: notebook, branch: nb.branch, localPath: notebookFolder))
+
+                    var config = ProjectConfig(name: name, ticketsRepo: tickets, repos: repos, maxAgents: agents.max,
+                                               integrationBranch: integration, planApprovalFileThreshold: agents.threshold)
+                    config.promotion = promotion
+                    let files = Notebook.scaffold(config: config, notebookRepo: notebook, rules: RulesPlacer.existingRules(in: appPath))
+                    // A repository GitHub just made has its own one-line README; the notebook's replaces it.
+                    if nb.created, let readme = files["README.md"] { try NotebookWriter.write(["README.md": readme], in: notebookFolder) }
+                    try NotebookWriter.writeMissing(files, in: notebookFolder)
+                    // Folders on this Mac are not shared, so the notebook's copy of the settings has none.
+                    var shared = config
+                    shared.repos = shared.repos.map { var r = $0; r.localPath = nil; return r }
+                    try shared.save(to: URL(fileURLWithPath: notebookFolder).appendingPathComponent(Notebook.configPath))
+                    if try NotebookWriter.commit("Start the \(name) notebook", in: notebookFolder) {
+                        try NotebookWriter.push(in: notebookFolder, token: token)
+                    }
+                    let rules = (try? String(contentsOfFile: notebookFolder + "/" + Notebook.rulesPath, encoding: .utf8)) ?? ""
+                    let placed = try RulesPlacer.place(rules: rules, into: appPath)
+                    return (config, placed)
                 }
             }.value
             adding = false
+            let config: ProjectConfig
             switch result {
             case .failure(let e):
-                error = (e as? HXSetupError)?.description ?? GitHubAccountModel.describe(e)
+                error = (e as? HXSetupError)?.description ?? (e as? GitError)?.description ?? GitHubAccountModel.describe(e)
                 return
-            case .success(let createdBranch):
-                if let createdBranch { designBranch = createdBranch }
+            case .success(let value):
+                config = value.0
+                if case .keptLocalFile(let file) = value.1 {
+                    state.errorMessage = "Your \(file) in \(hxAbbreviated(appPath)) was left as it is. Its rules are now in the notebook; delete the file there and Hatch places the notebook's copy."
+                }
             }
-            let agents = effectiveAgents
-            var repos = [RepoConfig(role: .app, remote: app, branch: base, localPath: localPath,
-                                    buildCommand: agents.build, testCommand: agents.test),
-                         RepoConfig(role: .tickets, remote: tickets, branch: "main")]
-            if let design = designRepo {
-                repos.append(RepoConfig(role: .designSystem, remote: design, branch: designBranch))
-            }
-            var config = ProjectConfig(name: displayName, ticketsRepo: tickets, repos: repos, maxAgents: agents.max,
-                                       integrationBranch: integration, planApprovalFileThreshold: agents.threshold)
-            config.promotion = promotion
             // A default only inferred from another project becomes the saved default once it is used.
-            let key = key, name = displayName
+            let key = key
             let makeDefault = ticketsChoice == .useDefault ? savedDefault == nil : makeDefault
             let created: Project? = state.perform("Add project") {
                 let project = try state.store.upsertProject(key: key, name: name, config: config)
                 if makeDefault { try state.store.setSetting(hxDefaultTicketsSetting, tickets) }
-                try config.save(to: URL(fileURLWithPath: localPath).appendingPathComponent(".hatch/project.json"))
                 return project
             }
             if let created {
@@ -352,11 +443,9 @@ final class ProjectSetupModel: ObservableObject {
 
 enum HXSetupError: Error, CustomStringConvertible {
     case publicTickets(String)
-    case exists(String)
     var description: String {
         switch self {
         case .publicTickets(let r): "\(r) is public. Tickets need a private repository, so they are not visible to everyone."
-        case .exists(let r): "\(r) already exists. Choose it under Use an existing repository, or pick another name."
         }
     }
 }
@@ -471,6 +560,7 @@ struct ProjectSetupAssistant: View {
         case .tickets: ticketsPage
         case .code: codePage
         case .design: designPage
+        case .notebook: notebookPage
         case .branches: branchesPage
         case .agents: agentsPage
         case .review: reviewPage
@@ -634,11 +724,11 @@ struct ProjectSetupAssistant: View {
 
     private var designPage: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HXSetupHeader(symbol: "paintpalette", tint: .pink, title: "Design system",
-                          detail: "Where the app's colors, type and components are defined. Optional.")
+            HXSetupHeader(symbol: "paintpalette", tint: .pink, title: "Components",
+                          detail: "The package with the app's colors, type and shared views, when it is its own repository. Optional.")
             HXSetupGroup {
                 HXRadioRow(selected: model.designChoice == .existing, title: "Use an existing repository",
-                           detail: "Proposals are built against it.") { model.designChoice = .existing } trailing: {
+                           detail: "The app and Proposals import it.") { model.designChoice = .existing } trailing: {
                     Picker("Repository", selection: Binding(get: { model.designExisting },
                                                             set: { model.designExisting = $0; model.designChoice = .existing })) {
                         Text("Choose…").tag(String?.none)
@@ -647,7 +737,7 @@ struct ProjectSetupAssistant: View {
                     .labelsHidden().pickerStyle(.menu).fixedSize()
                 }
                 HXRadioRow(selected: model.designChoice == .create, title: "Hatch creates one",
-                           detail: "A new repository with a README, for agents to fill from the app.") { model.designChoice = .create } trailing: {
+                           detail: "A new repository, for agents to move the app's shared views into.") { model.designChoice = .create } trailing: {
                     HStack(spacing: 2) {
                         Text("\(model.newRepoOwner)/").foregroundStyle(.secondary)
                         TextField("Name", text: Binding(get: { model.designNewName },
@@ -665,14 +755,74 @@ struct ProjectSetupAssistant: View {
                     }
                 }
                 HXRadioRow(selected: model.designChoice == .none, title: "No separate repository",
-                           detail: "It lives inside the app, or there is none. Proposals build against the app's own code.") { model.designChoice = .none }
+                           detail: "They live inside the app. Proposals build against the app's own code.") { model.designChoice = .none }
+                if let repo = model.designRepo {
+                    HXSetupRow("On this Mac") {
+                        Text(model.designPath.map(hxAbbreviated) ?? "Hatch clones it to \(hxAbbreviated(model.siblingFolder(for: repo)))")
+                            .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    }
+                }
             }
             missingRepositoryButton
             HXSetupExample("Why it matters") {
-                Text("A Proposal shows options side by side. Built with your design system, they use your real colors and type, so what you choose is what ships.")
+                Text("A Proposal shows options side by side. Built with your components, they use your real colors and type, so what you choose is what ships. Agents building a ticket work in this repository too.")
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var notebookPage: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HXSetupHeader(symbol: "book.closed", tint: .orange, title: "Notebook",
+                          detail: "Where \(model.displayName)'s decisions, Spec, agent rules and Proposal options live, as plain files. With it, anyone can pick the project up later, with any agent, even without Hatch.")
+            HXSetupGroup {
+                HXRadioRow(selected: model.notebookChoice == .create, title: "Hatch creates it", detail: "Private. Hatch writes its first files.",
+                           recommended: true) { model.notebookChoice = .create } trailing: {
+                    HStack(spacing: 2) {
+                        Text("\(model.newRepoOwner)/").foregroundStyle(.secondary)
+                        TextField("Name", text: Binding(get: { model.notebookNewName },
+                                                        set: { model.notebookNewName = $0; model.notebookNameEdited = true; model.notebookChoice = .create }))
+                            .textFieldStyle(.plain).frame(width: 170).labelsHidden()
+                    }
+                }
+                HXRadioRow(selected: model.notebookChoice == .existing, title: "Use an existing repository",
+                           detail: "Hatch adds the files that are missing.") { model.notebookChoice = .existing } trailing: {
+                    Picker("Repository", selection: Binding(get: { model.notebookExisting },
+                                                            set: { model.notebookExisting = $0; model.notebookChoice = .existing
+                                                                   model.notebookPath = nil
+                                                                   model.findClone(of: $0) { model.notebookPath = $0 } })) {
+                        Text("Choose…").tag(String?.none)
+                        ForEach(model.privateRepos.filter { $0.fullName != model.appRepo }) { Text($0.fullName).tag(String?.some($0.fullName)) }
+                    }
+                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                }
+                if let repo = model.notebookRepo {
+                    HXSetupRow("On this Mac") {
+                        Text(model.notebookPath.map(hxAbbreviated) ?? "Hatch clones it to \(hxAbbreviated(model.siblingFolder(for: repo)))")
+                            .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    }
+                }
+                HXSetupRow("Rules for agents") {
+                    Text(rulesSummary).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+                }
+            }
+            HXSetupExample("What is in it") {
+                VStack(alignment: .leading, spacing: 4) {
+                    HXPathLine(path: "NOW.md", note: "where things stand, refreshed by Hatch")
+                    HXPathLine(path: "WORKFLOW.md", note: "how work flows, with or without Hatch")
+                    HXPathLine(path: "rules/AGENTS.md", note: "how code is written; placed in your clone, never committed there")
+                    HXPathLine(path: "spec/", note: "what the app does, by area")
+                    HXPathLine(path: "decisions/", note: "every decision, its options and why")
+                    HXPathLine(path: "specimens/", note: "the code of each Proposal's options")
+                }
+            }
+        }
+    }
+
+    private var rulesSummary: String {
+        if model.appCommitsRules { return "The app commits its own AGENTS.md. Hatch leaves it and adds the notebook's rules to each brief." }
+        if let lines = model.existingRulesLines { return "Your AGENTS.md (\(lines) lines) becomes the notebook's rules" }
+        return "A short starter file for you to fill in"
     }
 
     private var branchesPage: some View {
@@ -710,10 +860,15 @@ struct ProjectSetupAssistant: View {
                 HXReviewRow(verb: "Uses", text: "\(model.appRepo ?? "") at \(hxAbbreviated(model.localPath ?? ""))")
                 if let d = model.designRepo {
                     HXReviewRow(verb: model.designChoice == .create ? "Creates" : "Uses",
-                                text: "\(d)\(model.designChoice == .create ? (model.designPrivate ? ", private," : ", public,") : "") as the design system")
+                                text: "\(d)\(model.designChoice == .create ? (model.designPrivate ? ", private," : ", public,") : "") for components")
+                }
+                if let n = model.notebookRepo {
+                    HXReviewRow(verb: model.notebookChoice == .create ? "Creates" : "Uses",
+                                text: "\(n) as the notebook, with its first files")
                 }
                 HXReviewRow(verb: "Creates", text: "branch \(model.integrationBranch) from \(model.baseBranch), if missing")
-                HXReviewRow(verb: "Writes", text: ".hatch/project.json in your clone, for you to commit")
+                HXReviewRow(verb: "Places", text: model.appCommitsRules ? "nothing in your clone: the app has its own AGENTS.md"
+                                                                         : "AGENTS.md and CLAUDE.md in your clone, never committed")
                 HXReviewRow(verb: "Uses", text: "up to \(model.effectiveAgents.max) agents at once" +
                             (model.effectiveAgents.build == nil ? ", with no build before review" : ", each building its work before review"))
             }

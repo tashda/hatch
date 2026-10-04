@@ -30,9 +30,10 @@ struct HXDocDraft: Identifiable {
 func hxRoleName(_ role: RepoRole) -> String {
     switch role {
     case .app: return "App"
-    case .designSystem: return "Design system"
+    case .designSystem: return "Components"
     case .specimens: return "Specimens"
     case .tickets: return "Tickets"
+    case .notebook: return "Notebook"
     }
 }
 
@@ -556,19 +557,20 @@ struct ProjectForm: View {
 /// The first thing a new owner sees: what a project is made of, and one button to set it up.
 struct WelcomeView: View {
     @EnvironmentObject var state: AppState
+    @StateObject private var account = GitHubAccountModel()
 
     var body: some View {
         VStack(spacing: 24) {
             VStack(spacing: 8) {
                 Image(systemName: "square.stack.3d.up").font(.system(size: 34)).foregroundStyle(.tertiary)
                 Text("Let's set up a project").font(.title2.weight(.semibold))
-                Text("Hatch keeps a project's tickets in a private GitHub repository and lets agents work in the app's folder on this Mac.")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 420)
             }
             VStack(alignment: .leading, spacing: 12) {
-                step(1, "Connect GitHub", "Hatch lists the repositories your account can see.")
+                if let user = account.user {
+                    step(1, "GitHub connected", "Signed in as \(user.login).", done: true)
+                } else {
+                    step(1, "Connect GitHub", "Hatch lists the repositories your account can see.")
+                }
                 step(2, "Choose repositories", "A private one for tickets; the app and design system if you have them.")
                 step(3, "Choose the app's folder", "The local checkout agents build and test in.")
             }
@@ -580,15 +582,25 @@ struct WelcomeView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { if !Snapshots.demoMode { account.refresh() } }
+        .onReceive(NotificationCenter.default.publisher(for: .hxGitHubAccountChanged)) { _ in account.refresh() }
     }
 
-    private func step(_ number: Int, _ title: String, _ detail: String) -> some View {
+    private func step(_ number: Int, _ title: String, _ detail: String, done: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text("\(number)")
-                .font(.callout.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
-                .background(.quaternary, in: Circle())
+            Group {
+                if done {
+                    Image(systemName: "checkmark").font(.callout.weight(.bold)).foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(Theme.finished, in: Circle())
+                } else {
+                    Text("\(number)")
+                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .background(.quaternary, in: Circle())
+                }
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).fontWeight(.medium)
                 Text(detail).font(.callout).foregroundStyle(.secondary)

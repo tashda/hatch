@@ -246,7 +246,7 @@ struct HXRepositoryAssignments {
         case .tickets: tickets
         case .app: project
         case .designSystem: design
-        case .specimens: nil
+        case .specimens, .notebook: nil
         }
     }
 
@@ -311,7 +311,7 @@ struct HXRepositorySelectionSheet: View {
                         assignmentRow(.tickets, title: "Tickets",
                                       detail: ticketsLocked ? "Issues and attachments. Fixed after the first ticket." : "Issues and attachments. Private repositories only.")
                         assignmentRow(.app, title: "Project", detail: "App source and Specs")
-                        assignmentRow(.designSystem, title: "Design", detail: "Design system assets")
+                        assignmentRow(.designSystem, title: "Components", detail: "Colors, type and shared views")
                     } footer: {
                         statusLine
                     }

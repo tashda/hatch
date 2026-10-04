@@ -478,9 +478,9 @@ struct ComposerView: View {
         for repo in config.repos {
             switch repo.role {
             case .app: parts.append("App \u{2192} \(repo.branch)")
-            case .designSystem: parts.append("Design system \u{2192} \(repo.branch)")
+            case .designSystem: parts.append("Components \u{2192} \(repo.branch)")
             case .specimens: parts.append("Specimens \u{2192} \(repo.branch)")
-            case .tickets: break
+            case .tickets, .notebook: break
             }
         }
         return parts.joined(separator: " · ")

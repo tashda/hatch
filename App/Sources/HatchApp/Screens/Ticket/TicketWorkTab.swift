@@ -111,12 +111,7 @@ struct TicketWorkTab: View {
 
     private func repoLabel(_ id: Int) -> String {
         guard let repo = repos.first(where: { $0.id == id }) else { return "Repo" }
-        switch repo.role {
-        case .app: return "App"
-        case .designSystem: return "Design system"
-        case .specimens: return "Specimens"
-        case .tickets: return "Tickets"
-        }
+        return hxRoleName(repo.role)
     }
 
     private func workspaceRow(_ ws: Workspace) -> some View {
