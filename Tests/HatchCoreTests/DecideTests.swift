@@ -135,3 +135,25 @@ final class SpecBeforeVerifyTests: XCTestCase {
         XCTAssertEqual(try store.ticket(id: u.id)?.status, .toVerify)
     }
 }
+
+final class ActivityLogTests: XCTestCase {
+    func testActionsCarryTheirSyncResult() throws {
+        let store = try HatchStore.inMemory()
+        let project = try store.upsertProject(key: "echo", name: "Echo")
+        let t = try store.createTicket(projectId: project.id, type: .tweak, title: "Rename Run")
+        try store.move(t.id, to: .checking, actor: .owner)
+        _ = try store.addNote(t.id, kind: .note, author: "owner", body: "Keep the shortcut")
+        try store.record(t.id, actor: "hatch", kind: "take", payload: [:])
+        let log = try store.activityLog(projectId: project.id)
+        let status = try XCTUnwrap(log.first { $0.event?.kind == "status" })
+        XCTAssertEqual(status.sync?.op, "issue.create", "leaving Draft makes the issue")
+        XCTAssertEqual(log.first { $0.event?.kind == "note" }?.sync?.op, "issue.comment")
+        XCTAssertNil(log.first { $0.event?.kind == "take" }?.sync, "an action that does not touch GitHub has no sync")
+        XCTAssertEqual(log.filter { $0.event == nil }.count, 0, "every operation found its action")
+
+        let comment = try XCTUnwrap(log.first { $0.event?.kind == "note" }?.sync)
+        try store.db.execute("UPDATE sync_log SET state = 'failed', error = 'Not found' WHERE id = ?", [.int(comment.id)])
+        let failed = try store.activityLog(projectId: project.id, failedOnly: true)
+        XCTAssertEqual(failed.map { $0.event?.kind }, ["note"])
+    }
+}

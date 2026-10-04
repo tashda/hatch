@@ -7,14 +7,9 @@ struct LogView: View {
     @State private var failedOnly = false
     @State private var tick = 0
 
-    private var ops: [SyncOp] {
-        let result: [SyncOp]?
-        if failedOnly {
-            result = try? state.store.syncLog(state: "failed", limit: 300)
-        } else {
-            result = try? state.store.syncLog(limit: 300)
-        }
-        return result ?? []
+    /// Every action with the sync that carried it (N2), for the project in the title or all of them.
+    private var entries: [LogEntry] {
+        (try? state.store.activityLog(projectId: state.projectFilterId, failedOnly: failedOnly, limit: 300)) ?? []
     }
 
     private func ticketLabel(_ id: Int?) -> String {
@@ -27,14 +22,14 @@ struct LogView: View {
         VStack(spacing: 8) {
             toolbarRow
                 .floatingCard()
-            let list = ops
+            let list = entries
             Group {
                 if list.isEmpty {
                     ContentUnavailableView(failedOnly ? "Nothing failed" : "Nothing logged yet", systemImage: "list.bullet.rectangle",
                                            description: Text("Every change Hatch makes is recorded here with its result on GitHub."))
                 } else {
                     List {
-                        ForEach(list) { op in row(op) }
+                        ForEach(list) { entry in row(entry) }
                     }
                     .scrollContentBackground(.hidden)
                 }
@@ -75,28 +70,39 @@ struct LogView: View {
         }
     }
 
-    private func row(_ op: SyncOp) -> some View {
+    /// One action: when, which ticket, who and what; then what GitHub made of it, when it went there.
+    private func row(_ entry: LogEntry) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(op.at.formatted(date: .omitted, time: .standard)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            Text(entry.at.formatted(date: .omitted, time: .standard)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 .frame(width: 80, alignment: .leading)
-            Text(op.op).font(.callout.monospaced()).frame(width: 150, alignment: .leading)
-            Text(ticketLabel(op.ticketId)).foregroundStyle(.secondary).frame(width: 70, alignment: .leading)
-            if op.state == "failed" {
-                HXProblemChip(text: stateName(op))
-            } else {
-                HXChip(text: stateName(op), turn: turn(for: op))
+            Text(ticketLabel(entry.ticketId)).foregroundStyle(.secondary).frame(width: 60, alignment: .leading)
+            if let e = entry.event {
+                Label(EventText.describe(e), systemImage: EventText.symbol(e))
+                    .labelStyle(.titleAndIcon).lineLimit(2)
+                Text(e.actor).font(.caption).foregroundStyle(.tertiary)
+            } else if let op = entry.sync {
+                Text(op.direction == "pull" ? "Pulled from GitHub" : op.op).font(.callout.monospaced()).foregroundStyle(.secondary)
             }
-            if op.attempt > 0 { Text("attempt \(op.attempt)").font(.caption).foregroundStyle(.secondary) }
-            if let error = op.error, !error.isEmpty {
-                Text(error).font(.caption).foregroundStyle(Theme.critical).lineLimit(2).textSelection(.enabled)
-            }
-            Spacer()
-            if op.state == "failed" || (op.state == "pending" && op.error != nil) {
-                Button("Retry") { state.perform("Retry") { try state.store.retrySync(op.id) } }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-            }
+            Spacer(minLength: 8)
+            if let op = entry.sync { syncResult(op) }
         }
         .padding(.vertical, 2)
+    }
+
+    @ViewBuilder private func syncResult(_ op: SyncOp) -> some View {
+        if let error = op.error, !error.isEmpty {
+            Text(error).font(.caption).foregroundStyle(Theme.critical).lineLimit(2).textSelection(.enabled).frame(maxWidth: 240, alignment: .trailing)
+        }
+        if op.attempt > 0 { Text("attempt \(op.attempt)").font(.caption).foregroundStyle(.secondary) }
+        if op.state == "failed" {
+            HXProblemChip(text: stateName(op))
+        } else {
+            HXChip(text: stateName(op), turn: turn(for: op)).help(op.op)
+        }
+        if op.state == "failed" || (op.state == "pending" && op.error != nil) {
+            Button("Retry") { state.perform("Retry") { try state.store.retrySync(op.id) } }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
     }
 }

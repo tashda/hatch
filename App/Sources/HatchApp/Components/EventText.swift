@@ -22,7 +22,13 @@ enum EventText {
         case "edit":
             return "Text edited"
         case "note":
-            return "Added a \(p["kind"]?.stringValue ?? "note")"
+            switch p["kind"]?.stringValue {
+            case "agent": return "The agent wrote a note"
+            case "instruction": return "Sent an instruction"
+            case "ask": return "Asked the agent"
+            case "comment": return "Comment from GitHub"
+            default: return "Added a note"
+            }
         case "question":
             return "Asked: \(p["text"]?.stringValue ?? "")"
         case "answer":
@@ -48,6 +54,26 @@ enum EventText {
             return "Taken for \(p["task"]?.stringValue ?? "work")"
         case "release":
             return "Released: \(p["reason"]?.stringValue ?? "")"
+        case "ci":
+            return "CI on \(p["ref"]?.stringValue ?? "the integration branch"): \(p["state"]?.stringValue == "passed" ? "passing" : p["state"]?.stringValue == "failed" ? "failing" : "running")"
+        case "plan-waiting":
+            return "Plan waits for the owner (\(p["reason"]?.stringValue ?? ""))"
+        case "plan-approved":
+            return "Plan approved"
+        case "plan-sent-back":
+            return "Plan sent back"
+        case "decided":
+            return "Decided in Decide" + (p["agreed"]?.boolValue == true ? ", as recommended" : ", own call")
+        case "offer":
+            return "Offered revision \(p["revision"]?.intValue ?? 1); the quality gate passed"
+        case "offer-rejected":
+            return "Offer sent back by the quality gate"
+        case "typed-values":
+            return "\(p["count"]?.intValue ?? 0) values typed into views"
+        case "spec", "build", "tests", "match-check", "merge-base", "commit":
+            return "\(e.kind.prefix(1).uppercased() + e.kind.dropFirst()): \(p["ok"]?.boolValue == false ? "failed" : "passed")"
+        case "vetting":
+            return "Iris checked the ticket"
         case "vetting-review":
             return "Review of Iris's suggestion: \(p["part"]?.stringValue ?? "") \(p["outcome"]?.stringValue ?? "")"
         default:
