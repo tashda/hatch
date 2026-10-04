@@ -631,8 +631,10 @@ struct ProjectSetupAssistant: View {
                         .font(.body.monospaced())
                 }
             }
-            Text("The key marks this project's tickets with the label \(Text("project:\(model.key)").font(.callout.monospaced())). It is suggested from the name.")
-                .font(.callout).foregroundStyle(.secondary)
+            if !model.name.trimmingCharacters(in: .whitespaces).isEmpty {
+                Text("The key marks this project's tickets with the label \(Text("project:\(model.key)").font(.callout.monospaced())). It is suggested from the name.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             missingRepositoryButton
         }
     }
@@ -660,7 +662,7 @@ struct ProjectSetupAssistant: View {
                         Text("Choose…").tag(String?.none)
                         ForEach(model.privateRepos) { Text($0.fullName).tag(String?.some($0.fullName)) }
                     }
-                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                    .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
                 }
             }
             if model.ticketsChoice != .useDefault {
@@ -705,7 +707,7 @@ struct ProjectSetupAssistant: View {
                         Picker("Clone", selection: Binding(get: { model.localPath }, set: { model.localPath = $0 })) {
                             ForEach(model.clones, id: \.self) { Text(hxAbbreviated($0)).tag(String?.some($0)) }
                         }
-                        .labelsHidden().pickerStyle(.menu).fixedSize()
+                        .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
                     }
                 }
             }
@@ -734,7 +736,7 @@ struct ProjectSetupAssistant: View {
                         Text("Choose…").tag(String?.none)
                         ForEach(model.account.repos.filter { $0.fullName != model.appRepo }) { Text($0.fullName).tag(String?.some($0.fullName)) }
                     }
-                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                    .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
                 }
                 HXRadioRow(selected: model.designChoice == .create, title: "Hatch creates one",
                            detail: "A new repository, for agents to move the app's shared views into.") { model.designChoice = .create } trailing: {
@@ -794,7 +796,7 @@ struct ProjectSetupAssistant: View {
                         Text("Choose…").tag(String?.none)
                         ForEach(model.privateRepos.filter { $0.fullName != model.appRepo }) { Text($0.fullName).tag(String?.some($0.fullName)) }
                     }
-                    .labelsHidden().pickerStyle(.menu).fixedSize()
+                    .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
                 }
                 if let repo = model.notebookRepo {
                     HXSetupRow("On this Mac") {
@@ -838,7 +840,7 @@ struct ProjectSetupAssistant: View {
                         Picker("Base branch", selection: $model.baseBranch) {
                             ForEach(model.branches, id: \.self) { Text($0).tag($0) }
                         }
-                        .labelsHidden().pickerStyle(.menu).fixedSize()
+                        .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
                     }
                 }
                 HXSetupRow("Hatch's branch") {
@@ -937,7 +939,7 @@ struct ProjectSetupAssistant: View {
             Text(account.busy ? "Loading…" : "Choose…").tag(String?.none)
             ForEach(account.repos) { Text($0.fullName).tag(String?.some($0.fullName)) }
         }
-        .labelsHidden().pickerStyle(.menu).fixedSize()
+        .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
     }
 }
 
