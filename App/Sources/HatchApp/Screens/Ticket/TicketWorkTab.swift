@@ -14,6 +14,7 @@ struct TicketWorkTab: View {
     @State private var repos: [Repo] = []
     @State private var claims: [Claim] = []
     @State private var blockers: [Ticket] = []
+    @State private var gate: [GateResult] = []
 
     private var showsBuildSteps: Bool {
         ticket.type == .proposal || ticket.type == .tweak || ticket.type == .bug
@@ -32,6 +33,7 @@ struct TicketWorkTab: View {
                     }
                 }
                 if !blockers.isEmpty { blockerCard }
+                if !gate.isEmpty { gateSection }
                 if showsBuildSteps { buildSection }
                 workspaceSection
                 claimSection
@@ -41,6 +43,34 @@ struct TicketWorkTab: View {
             .frame(maxWidth: .infinity)
         }
         .autoReload(every: 5) { load() }
+    }
+
+    // MARK: Quality gate
+
+    /// What the quality gate said about the latest offer, and how many tries it took (decision H19).
+    private var gateSection: some View {
+        let latest = gate[0]
+        let rejected = gate.filter { !$0.passed }.count
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Quality gate").font(.headline)
+            HStack(spacing: 8) {
+                Image(systemName: latest.passed ? "checkmark.seal" : "xmark.seal")
+                    .foregroundStyle(latest.passed ? Color.secondary : Theme.critical)
+                Text(latest.passed
+                     ? "Passed" + (latest.revision.map { " on revision \($0)" } ?? "") + (latest.findings.isEmpty ? "" : " with \(Format.count(latest.findings.count, "warning"))")
+                     : "The last offer was sent back to the agent with \(Format.count(latest.findings.filter(\.isError).count, "error"))")
+                Spacer()
+                if rejected > 0 && latest.passed {
+                    Text("after \(Format.count(rejected, "rejected offer"))").font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            ForEach(Array(latest.findings.prefix(8).enumerated()), id: \.offset) { _, f in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(f.code).font(.caption.monospaced()).foregroundStyle(f.isError ? Theme.critical : .secondary)
+                    Text(f.message).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 
     // MARK: Agent
@@ -214,6 +244,7 @@ struct TicketWorkTab: View {
     // MARK: Data
 
     private func load() {
+        gate = (try? state.store.gateResults(ticketId: ticket.id)) ?? []
         let store = state.store
         let id = ticket.id
         workspaces = (try? store.workspaces(ticketId: id)) ?? []

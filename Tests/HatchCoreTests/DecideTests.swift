@@ -69,3 +69,45 @@ final class DecideTests: XCTestCase {
         XCTAssertEqual(try store.questionOptions(ticketId: q.id).first?.cost, "A migration")
     }
 }
+
+final class DecideRunTests: XCTestCase {
+    func item(_ n: Int, _ kind: PendingDecision.Kind = .pick) -> PendingDecision {
+        let t = Ticket(id: n, ghNumber: n, projectId: 1, type: .question, status: .yourCall, prevStatus: nil, turn: .you, title: "T\(n)", body: "",
+                       originalTitle: nil, originalBody: nil, parentId: nil, priority: 0, area: nil, revision: 1, takenBy: nil,
+                       createdAt: Date(), updatedAt: Date())
+        return PendingDecision(id: "t\(n)", kind: kind, ticket: t, plan: nil)
+    }
+
+    func testWorkWaitsOutTheUndoWindowAndUndoCancelsIt() {
+        var run = DecideRun(items: [item(1), item(2), item(3)])
+        let start = Date(timeIntervalSince1970: 1000)
+        var done: [String] = []
+        run.decide(.chose(agreed: true), startsAgent: true, label: "one", now: start) { done.append("one") }
+        run.decide(.chose(agreed: false), startsAgent: false, label: "two", now: start) { done.append("two") }
+        XCTAssertEqual(run.current?.id, "t3")
+        XCTAssertTrue(run.due(now: start.addingTimeInterval(9)).isEmpty, "nothing runs inside the window")
+        run.undo()
+        XCTAssertEqual(run.current?.id, "t2", "undo brings the card back")
+        XCTAssertNil(run.records["t2"])
+        run.due(now: start.addingTimeInterval(10)).forEach { $0() }
+        XCTAssertEqual(done, ["one"], "the undone decision never runs")
+        XCTAssertTrue(run.due(now: start.addingTimeInterval(20)).isEmpty, "each piece runs once")
+    }
+
+    func testLaterMovesTheCardToTheEndAndClosingRunsEverything() {
+        var run = DecideRun(items: [item(1), item(2, .judge)])
+        var done = 0
+        run.decide(.later, startsAgent: false, label: "later") { done += 100 }
+        XCTAssertEqual(run.items.map(\.id), ["t1", "t2", "t1"])
+        XCTAssertEqual(run.current?.id, "t2")
+        run.decide(.refined, startsAgent: true, label: "refine") { done += 1 }
+        run.decide(.chose(agreed: true), startsAgent: false, label: "pick") { done += 1 }
+        XCTAssertNil(run.current)
+        run.due(all: true).forEach { $0() }
+        XCTAssertEqual(done, 2, "later has no work")
+        XCTAssertEqual(run.agreed, 1)
+        XCTAssertEqual(run.refined, 1)
+        XCTAssertEqual(run.later, 0, "the card decided after Later counts as decided")
+        XCTAssertEqual(run.agentsStarted, 1)
+    }
+}

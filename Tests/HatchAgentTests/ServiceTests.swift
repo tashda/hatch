@@ -100,6 +100,18 @@ final class OfferServiceTests: XCTestCase {
         offers = OfferService(store: store, agent: "Agent on #151")
     }
 
+    func testTheTicketKeepsWhatTheGateSaid() throws {
+        var bad = Fixture.manifest()
+        bad.specimens[1].gain = nil
+        guard case .rejected = try offers.offer(ticketId: t.id, manifest: bad) else { return XCTFail("expected a rejection") }
+        _ = try offers.offer(ticketId: t.id, manifest: Fixture.manifest())
+        let results = try store.gateResults(ticketId: t.id)
+        XCTAssertEqual(results.map(\.passed), [true, false])
+        XCTAssertEqual(results[1].findings.filter(\.isError).map(\.code), ["specimen.gain-cost"])
+        XCTAssertFalse(results[1].findings[0].message.isEmpty)
+        XCTAssertEqual(results[0].revision, 1)
+    }
+
     func testHappyPathMovesToYourCallByHatchAndReleasesTheAgent() throws {
         XCTAssertEqual(t.status, .preparing)
         XCTAssertNotNil(t.takenBy)

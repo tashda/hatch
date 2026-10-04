@@ -29,99 +29,58 @@ private struct DecideOverlay: ViewModifier {
 
 // MARK: - The session
 
-/// One decision the owner made in this session, waiting out its undo window or already done.
+/// What the owner did with a card, and whether it starts an agent.
 struct DecideOutcome: Equatable {
-    enum Kind: Equatable { case chose(agreed: Bool), refined, later, opened }
-    var kind: Kind
+    var kind: DecideRun.Outcome
     var startsAgent: Bool
 }
 
+/// The app's side of a session: it holds the `DecideRun` (order, Undo, the undo window, all tested in core), runs due
+/// work once a second, and gives the feedback.
 @MainActor
 final class DecideSession: ObservableObject {
-    /// How long Hatch waits before it acts on a decision (DC4).
-    static let undoSeconds = 10
-
-    struct Deferred {
-        let itemId: String
-        let label: String
-        let startsAgent: Bool
-        let fireAt: Date
-        let run: () -> Void
-    }
-
-    let store: HatchStore
-    @Published private(set) var items: [PendingDecision] = []
-    @Published private(set) var index = 0
-    @Published private(set) var outcomes: [String: DecideOutcome] = [:]
-    @Published private(set) var toast: Deferred?
+    @Published private(set) var run: DecideRun
     @Published var noteOpen = false
     @Published var note = ""
     @Published var highlight: String?
-    private var deferred: [Deferred] = []
-    private var history: [(itemId: String, index: Int, items: [PendingDecision])] = []
     private var timer: Timer?
 
     init(store: HatchStore, projectId: Int?, area: String?) {
-        self.store = store
-        items = (try? store.pendingDecisions(projectId: projectId, area: area)) ?? []
+        run = DecideRun(items: (try? store.pendingDecisions(projectId: projectId, area: area)) ?? [])
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
     }
 
-    var current: PendingDecision? { index < items.count ? items[index] : nil }
-    var remaining: Int { max(0, items.count - index) }
-    var minutesLeft: Int { max(1, Int(items[min(index, items.count)...].reduce(0) { $0 + $1.minutes }.rounded())) }
+    var items: [PendingDecision] { run.items }
+    var index: Int { run.index }
+    var current: PendingDecision? { run.current }
+    var remaining: Int { run.remaining }
+    var minutesLeft: Int { run.minutesLeft }
+    var toast: DecideRun.Waiting? { run.last }
+    func outcome(_ id: String) -> DecideRun.Outcome? { run.records[id]?.outcome }
 
-    /// Records the owner's decision on the current card. `run` happens after the undo window, or when the session closes.
-    func decide(_ outcome: DecideOutcome, label: String, run: @escaping () -> Void) {
-        guard let item = current else { return }
-        history.append((item.id, index, items))
-        outcomes[item.id] = outcome
-        if outcome.kind == .later { items.append(item) }
-        let d = Deferred(itemId: item.id, label: label, startsAgent: outcome.startsAgent,
-                         fireAt: Date().addingTimeInterval(TimeInterval(Self.undoSeconds)), run: run)
-        if outcome.kind != .later && outcome.kind != .opened { deferred.append(d) }
-        toast = d
+    /// Records the owner's decision on the current card. `work` happens after the undo window, or when the session closes.
+    func decide(_ outcome: DecideOutcome, label: String, work: @escaping () -> Void) {
+        run.decide(outcome.kind, startsAgent: outcome.startsAgent, label: label, run: work)
         noteOpen = false; note = ""; highlight = nil
-        index += 1
         DecideFeedback.decided()
     }
 
-    func undo() {
-        guard let last = history.popLast() else { return }
-        deferred.removeAll { $0.itemId == last.itemId }
-        outcomes[last.itemId] = nil
-        items = last.items
-        index = last.index
-        toast = nil
-    }
-
-    /// Runs every decision still waiting: at the end of its window, or all at once when the session closes.
-    func flush(all: Bool = false) {
-        let now = Date()
-        let due = deferred.filter { all || $0.fireAt <= now }
-        deferred.removeAll { d in due.contains { $0.itemId == d.itemId } }
-        for d in due { d.run() }
-    }
+    func undo() { run.undo() }
 
     private func tick() {
-        flush()
-        if let t = toast, t.fireAt.addingTimeInterval(1) <= Date() { toast = nil }
+        let due = run.due()
+        due.forEach { $0() }
+        run.clearLast()
         objectWillChange.send()
     }
 
+    /// Ends the session: every decision still waiting runs now.
     func stop() {
         timer?.invalidate(); timer = nil
-        flush(all: true)
+        run.due(all: true).forEach { $0() }
     }
-
-    var decided: [DecideOutcome] { Array(outcomes.values) }
-    var agreed: Int { decided.filter { $0.kind == .chose(agreed: true) }.count }
-    var ownCall: Int { decided.filter { $0.kind == .chose(agreed: false) }.count }
-    var refined: Int { decided.filter { $0.kind == .refined }.count }
-    var later: Int { decided.filter { $0.kind == .later || $0.kind == .opened }.count }
-    var agentsStarted: Int { decided.filter { $0.startsAgent && $0.kind != .later && $0.kind != .opened }.count }
 }
 
 /// The trackpad tap and the optional sound when a card is decided (DC7). Both are Settings, Decide.
@@ -230,7 +189,7 @@ struct DecideSessionView: View {
             HStack(spacing: 4) {
                 ForEach(Array(session.items.enumerated()), id: \.offset) { i, item in
                     Capsule().fill(pillStyle(i, item)).frame(width: 22, height: 5)
-                        .overlay(Capsule().strokeBorder(.secondary, lineWidth: session.outcomes[item.id]?.kind == .later && i >= session.index ? 1 : 0))
+                        .overlay(Capsule().strokeBorder(.secondary, lineWidth: session.outcome(item.id) == .later && i >= session.index ? 1 : 0))
                 }
             }
             Spacer()
@@ -249,7 +208,7 @@ struct DecideSessionView: View {
 
     private func pillStyle(_ i: Int, _ item: PendingDecision) -> Color {
         if i == session.index { return Theme.you }
-        if i < session.index { return session.outcomes[item.id]?.kind == .later ? .clear : .secondary }
+        if i < session.index { return session.outcome(item.id) == .later ? .clear : .secondary }
         return Color.secondary.opacity(0.25)
     }
 
@@ -257,7 +216,7 @@ struct DecideSessionView: View {
         if let t = session.toast {
             HStack(spacing: 12) {
                 Text(t.label).lineLimit(1)
-                if t.startsAgent, session.outcomes[t.itemId]?.kind != .later {
+                if t.startsAgent, session.outcome(t.itemId) != .later {
                     let left = max(0, Int(t.fireAt.timeIntervalSinceNow.rounded(.up)))
                     if left > 0 { Text("Agent starts in \(left) s").foregroundStyle(.secondary).monospacedDigit() }
                 }
@@ -288,19 +247,19 @@ struct DecideSessionView: View {
     }
 
     private var summary: some View {
-        let clearedAll = session.later == 0
+        let clearedAll = session.run.later == 0
         let streak = DecideStreak.days(state.store)
         return VStack(spacing: 14) {
             Text(session.items.isEmpty ? "Nothing waits for you" : clearedAll ? "All decided" : "Done for now")
                 .font(.largeTitle.weight(.bold))
             if !session.items.isEmpty {
-                Text("\(session.agreed + session.ownCall + session.refined) decided\(session.later > 0 ? ", \(session.later) left for later" : ""). "
-                     + "\(session.agentsStarted) agent\(session.agentsStarted == 1 ? "" : "s") started; the rest was bookkeeping.")
+                Text("\(session.run.agreed + session.run.ownCall + session.run.refined) decided\(session.run.later > 0 ? ", \(session.run.later) left for later" : ""). "
+                     + "\(session.run.agentsStarted) agent\(session.run.agentsStarted == 1 ? "" : "s") started; the rest was bookkeeping.")
                     .foregroundStyle(.secondary)
                 HStack(spacing: 10) {
-                    stat(session.agreed, "agreed with the recommendation")
-                    stat(session.ownCall, "your own call")
-                    stat(session.refined, "sent back to refine")
+                    stat(session.run.agreed, "agreed with the recommendation")
+                    stat(session.run.ownCall, "your own call")
+                    stat(session.run.refined, "sent back to refine")
                 }
                 .frame(maxWidth: 520)
             }

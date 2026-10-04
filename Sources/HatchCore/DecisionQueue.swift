@@ -169,3 +169,116 @@ public extension HatchStore {
                    note: r.string("note"), at: r.date("at") ?? Date())
     }
 }
+
+// MARK: - One session
+
+/// The bookkeeping of one Decide session (decisions DC3, DC4, DC6): the order of the cards, what the owner did with
+/// each, Undo, and the decisions waiting out their undo window. The work itself is a closure the app hands in; it runs
+/// only when `due` returns it, after the window or when the session closes.
+public struct DecideRun {
+    public enum Outcome: Equatable, Sendable { case chose(agreed: Bool), refined, later, opened }
+
+    public struct Record: Equatable, Sendable {
+        public var outcome: Outcome
+        public var startsAgent: Bool
+    }
+
+    public struct Waiting {
+        public let itemId: String
+        public let label: String
+        public let startsAgent: Bool
+        public let fireAt: Date
+        let run: () -> Void
+    }
+
+    /// How long Hatch waits before it acts on a decision (DC4).
+    public static let undoSeconds: TimeInterval = 10
+
+    public private(set) var items: [PendingDecision]
+    public private(set) var index = 0
+    public private(set) var records: [String: Record] = [:]
+    /// The last decision, for the toast with Undo.
+    public private(set) var last: Waiting?
+    private var waiting: [Waiting] = []
+    private var history: [(itemId: String, index: Int, items: [PendingDecision])] = []
+
+    public init(items: [PendingDecision]) { self.items = items }
+
+    public var current: PendingDecision? { index < items.count ? items[index] : nil }
+    public var remaining: Int { max(0, items.count - index) }
+    public var minutesLeft: Int { max(1, Int(items[min(index, items.count)...].reduce(0) { $0 + $1.minutes }.rounded())) }
+
+    /// Records what the owner did with the current card and moves on. Later puts the card at the end; Later and Open
+    /// have no work to wait for.
+    public mutating func decide(_ outcome: Outcome, startsAgent: Bool, label: String, now: Date = Date(), run: @escaping () -> Void) {
+        guard let item = current else { return }
+        history.append((item.id, index, items))
+        records[item.id] = Record(outcome: outcome, startsAgent: startsAgent)
+        if outcome == .later { items.append(item) }
+        let w = Waiting(itemId: item.id, label: label, startsAgent: startsAgent, fireAt: now.addingTimeInterval(Self.undoSeconds), run: run)
+        if outcome != .later && outcome != .opened { waiting.append(w) }
+        last = w
+        index += 1
+    }
+
+    /// Takes back the last decision: its work never runs and its card comes back.
+    public mutating func undo() {
+        guard let h = history.popLast() else { return }
+        waiting.removeAll { $0.itemId == h.itemId }
+        records[h.itemId] = nil
+        items = h.items
+        index = h.index
+        last = nil
+    }
+
+    /// The work whose window has passed, or all of it when the session closes. Each piece is returned once.
+    public mutating func due(now: Date = Date(), all: Bool = false) -> [() -> Void] {
+        let ready = waiting.filter { all || $0.fireAt <= now }
+        waiting.removeAll { w in ready.contains { $0.itemId == w.itemId } }
+        return ready.map(\.run)
+    }
+
+    /// Clears the toast once its decision has run.
+    public mutating func clearLast(now: Date = Date()) {
+        if let l = last, l.fireAt.addingTimeInterval(1) <= now { last = nil }
+    }
+
+    public var isWaiting: Bool { !waiting.isEmpty }
+    public var agreed: Int { records.values.filter { $0.outcome == .chose(agreed: true) }.count }
+    public var ownCall: Int { records.values.filter { $0.outcome == .chose(agreed: false) }.count }
+    public var refined: Int { records.values.filter { $0.outcome == .refined }.count }
+    public var later: Int { records.values.filter { $0.outcome == .later || $0.outcome == .opened }.count }
+    public var agentsStarted: Int { records.values.filter { $0.startsAgent && $0.outcome != .later && $0.outcome != .opened }.count }
+}
+
+// MARK: - The quality gate's results
+
+/// What the quality gate said about one offer (decision H19): passed (with warnings) or rejected, and its findings.
+public struct GateResult: Equatable, Sendable {
+    public struct Finding: Equatable, Sendable {
+        public var isError: Bool
+        public var code: String
+        public var message: String
+    }
+    public var passed: Bool
+    public var revision: Int?
+    public var at: Date
+    public var findings: [Finding]
+}
+
+public extension HatchStore {
+    /// Every offer's gate result for a ticket, newest first, read from the offer events.
+    func gateResults(ticketId: Int) throws -> [GateResult] {
+        try events(ticketId: ticketId, kinds: ["offer", "offer-rejected"]).map { e in
+            let findings = (e.payload["issues"]?.arrayValue ?? []).compactMap { v -> GateResult.Finding? in
+                guard let code = v["code"]?.stringValue else { return nil }
+                return GateResult.Finding(isError: v["severity"]?.stringValue == "error", code: code, message: v["message"]?.stringValue ?? "")
+            }
+            // Offers recorded before the findings were kept only have the codes.
+            let codes = findings.isEmpty ? (e.payload["codes"]?.arrayValue ?? []).compactMap(\.stringValue)
+                .map { GateResult.Finding(isError: true, code: $0, message: "") } : findings
+            return GateResult(passed: e.kind == "offer", revision: e.payload["revision"]?.intValue, at: e.at, findings: codes)
+        }
+        .sorted { $0.at > $1.at }
+    }
+}
