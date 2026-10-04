@@ -42,16 +42,21 @@ enum Snapshots {
     @MainActor static func demoState() -> AppState {
         isolateDemoPreferences()
         let store = try! HatchStore.inMemory()
-        let config = ProjectConfig(name: "Acme", ticketsRepo: "acme/hatch-tickets", repos: [
-            RepoConfig(role: .app, remote: "acme/app", branch: "main", localPath: "/tmp/hatch-demo/App", buildCommand: "swift build", testPlans: ["UnitTests"]),
-            RepoConfig(role: .designSystem, remote: "acme/design-system", branch: "main", localPath: "/tmp/hatch-demo/DesignSystem"),
+        var config = ProjectConfig(name: "Acme", ticketsRepo: "acme/hatch-tickets", repos: [
+            RepoConfig(role: .app, remote: "acme/app", branch: "main", localPath: "/tmp/hatch-demo/app",
+                       buildCommand: "xcodebuild -scheme Acme build", testPlans: ["UnitTests"], testCommand: "swift test --filter AcmeTests"),
+            RepoConfig(role: .tickets, remote: "acme/hatch-tickets", branch: "main"),
+            RepoConfig(role: .designSystem, remote: "acme/design-system", branch: "main", localPath: "/tmp/hatch-demo/design-system"),
+            RepoConfig(role: .notebook, remote: "acme/app-notebook", branch: "main", localPath: "/tmp/hatch-demo/app-notebook"),
             RepoConfig(role: .specimens, remote: "acme/specimens", branch: "main", localPath: "/tmp/hatch-demo/Specimens"),
         ], areas: [
             AreaConfig(name: "Connections", paths: ["Sources/Connections/**"], specPrefix: "CONN", testPlans: ["UnitTests"]),
             AreaConfig(name: "Editor", paths: ["Sources/Editor/**"], specPrefix: "EDIT"),
             AreaConfig(name: "Notifications", paths: ["Sources/Notifications/**"], specPrefix: "NOTIF"),
-        ], docs: ["README.md", "Design/CONTRIBUTING.md"], maxAgents: 3, integrationBranch: "main")
+        ], docs: ["README.md", "Design/CONTRIBUTING.md"], maxAgents: 3, integrationBranch: "hatch")
+        config.promotion = .pullRequest
         let p = try! store.upsertProject(key: "acme", name: "Acme", config: config)
+        try! store.setSetting(hxDefaultTicketsSetting, "acme/hatch-tickets")
         let rows: [(TicketType, Status, String, String)] = [
             (.proposal, .yourCall, "Toast spacing and corner radius", "Notifications"),
             (.proposal, .preparing, "Query tab empty state", "Editor"),

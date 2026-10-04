@@ -2,29 +2,18 @@ import SwiftUI
 import AppKit
 import HatchCore
 import HatchSync
+import HatchGit
 
-// Project settings (decisions L1, L2, M): a form that writes .hatch/project.json into the app repo and keeps the database in step.
-
-struct HXRepoDraft: Identifiable {
-    let id = UUID()
-    var role: RepoRole
-    var remote: String
-    var branch: String
-    var localPath: String
-    var build: String
-    var plans: String
-}
+// Project settings (PS1): one page of cards, one per part of a project, each changed in place. The assistant adds a
+// project; these cards edit it. Save writes the database and the notebook's project.json, never the app repository (PS13).
 
 struct HXAreaDraft: Identifiable {
     let id = UUID()
     var name: String
     var globs: String
     var prefix: String
-}
-
-struct HXDocDraft: Identifiable {
-    let id = UUID()
-    var path: String
+    /// Not edited on the page; kept so saving does not drop them.
+    var testPlans: [String]? = nil
 }
 
 func hxRoleName(_ role: RepoRole) -> String {
@@ -59,54 +48,65 @@ struct ProjectView: View {
 
 struct ProjectForm: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.openWindow) private var openWindow
     let project: Project
 
-    @State private var name = ""
-    @State private var ticketsRepo = ""
-    @State private var showRepositorySheet = false
-    @State private var editingArea: HXAreaDraft?
     @StateObject private var account = GitHubAccountModel()
-    @State private var maxAgents = 3
+    @State private var name = ""
+    @State private var ticketsRepo: String?
+    @State private var ticketsIsDefault = false
+    @State private var appRepo: String?
+    @State private var appPath: String?
+    @State private var baseBranch = "main"
+    @State private var branches: [String] = []
+    @State private var componentsRepo: String?
+    @State private var componentsPath: String?
+    @State private var notebookRepo: String?
+    @State private var notebookPath: String?
     @State private var integrationBranch = "hatch"
-    @State private var threshold = 8
-    @State private var repos: [HXRepoDraft] = []
+    @State private var promotion: Promotion = .pullRequest
+    @State private var maxAgents = ProjectSetupModel.defaultMaxAgents
+    @State private var threshold = ProjectSetupModel.defaultPlanThreshold
+    @State private var buildCommand = ""
+    @State private var testCommand = ""
+    /// What the app's clone suggests for the build, so a new clone can replace it but never a command the owner typed.
+    @State private var suggestedBuild: String?
     @State private var areas: [HXAreaDraft] = []
-    @State private var docs: [HXDocDraft] = []
-    @State private var message = ""
+    /// Roles whose clone is being looked for on this Mac.
+    @State private var searching: Set<RepoRole> = []
+    @State private var editingArea: HXAreaDraft?
     @State private var showAdd = false
     @State private var loaded = false
-
-    private var appLocalPath: String? {
-        let path = repos.first { $0.role == .app }?.localPath ?? ""
-        return path.isEmpty ? nil : path
-    }
-
-    private var configURL: URL? {
-        guard let path = appLocalPath else { return nil }
-        return URL(fileURLWithPath: path).appendingPathComponent(".hatch/project.json")
-    }
+    @State private var message = ""
+    @State private var problem = false
 
     var body: some View {
-        // A native grouped form in the page's panel, as in Echo's Settings: each group is a rounded inset
-        // section, rows are label on the left and value on the right.
-        Form {
-            identitySection
-            repositoriesSection
-            foldersSection
-            agentsSection
-            areasSection
-            docsSection
-            advancedSection
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                header
+                if !githubReady && !account.busy { githubNotice }
+                projectCard
+                ticketsCard
+                codeCard
+                componentsCard
+                notebookCard
+                branchesCard
+                agentsCard
+                areasCard
+            }
+            .frame(maxWidth: 720)
+            .padding(.horizontal, 28)
+            .padding(.top, 24)
+            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity)
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
         .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
         .onAppear {
-            if !Snapshots.demoMode { account.refresh() }
             if !loaded { load(); loaded = true }
+            if Snapshots.demoMode { fillDemoAccount() } else { account.refresh(); loadBranches(); suggestBuild(fill: false) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .hxGitHubAccountChanged)) { _ in
-            account.refresh()
+            if !Snapshots.demoMode { account.refresh() }
         }
         .sheet(isPresented: $showAdd) { ProjectSetupAssistant(store: state.store) }
         .sheet(item: $editingArea) { draft in
@@ -114,222 +114,195 @@ struct ProjectForm: View {
                 if let index = areas.firstIndex(where: { $0.id == saved.id }) { areas[index] = saved } else { areas.append(saved) }
             }
         }
-        .sheet(isPresented: $showRepositorySheet) {
-            HXRepositorySelectionSheet(account: account, projectName: project.name,
-                                       initial: selectedRepositoryNames,
-                                       ticketsLocked: state.hasTickets(projectId: project.id)) { assignments in
-                let saved = state.saveRepositoryAssignments(projectId: project.id, assignments)
-                if saved {
-                    ticketsRepo = assignments.tickets.fullName
-                    updateRepo(.app, with: assignments.project)
-                    updateRepo(.designSystem, with: assignments.design)
-                    message = "Repositories saved."
-                }
-                return saved
+    }
+
+    private var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? project.name : trimmed
+    }
+
+    private var header: some View {
+        HStack(spacing: 14) {
+            ProjectTile(name: displayName, key: project.key, size: 46)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayName).font(.title2.weight(.semibold))
+                Text("Project settings").foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button { showAdd = true } label: { Label("Add project", systemImage: "plus") }
+                .buttonStyle(.glass)
+        }
+        .padding(.bottom, 6)
+    }
+
+    private var githubNotice: some View {
+        HStack(spacing: 10) {
+            Label("GitHub is not connected, so repositories can't be changed here.", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(Theme.you)
+            Spacer()
+            Button("Connect in Settings…") {
+                state.settingsPage = .github
+                openWindow(id: "settings")
+            }
+        }
+        .padding(12)
+        .background(Theme.youBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    // MARK: Cards
+
+    private var projectCard: some View {
+        HXSettingsCard(symbol: "square.stack.3d.up", tint: HX.projectTint(project.key), title: "Project",
+                       summary: "Its name, and the key in its labels",
+                       info: "The name shows across Hatch. The key marks this project's tickets on GitHub with the label project:\(project.key).",
+                       footnote: Text("The key is used in labels such as \(Text("project:\(project.key)").font(.callout.monospaced())), so it stays as it is: changing it would leave this project's tickets on GitHub behind.")) {
+            HXSetupRow("Name") {
+                TextField("Name", text: $name, prompt: Text(project.name))
+                    .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden()
+            }
+            HXSetupRow("Key") {
+                Text(project.key).font(.body.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
     }
 
-    // MARK: Sections
+    private var ticketsLocked: Bool { ticketsRepo != nil && state.hasTickets(projectId: project.id) }
 
-    /// Who this is: the tile, an editable name, and where the config file lives.
-    private var identitySection: some View {
-        Section {
-            HStack(spacing: 14) {
-                ProjectTile(name: name.isEmpty ? project.name : name, key: project.key, size: 46)
-                VStack(alignment: .leading, spacing: 3) {
-                    TextField("Name", text: $name)
-                        .labelsHidden()
-                        .textFieldStyle(.plain)
-                        .font(.title2.weight(.semibold))
-                    Text(configURL.map { $0.path } ?? "Choose the app's folder on this Mac to write .hatch/project.json")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                }
-                Spacer()
-                Button { showAdd = true } label: { Label("Add Project", systemImage: "plus") }
-                    .buttonStyle(.glass)
-            }
-            .padding(.vertical, 4)
-        }
-    }
-
-    // MARK: Repositories: chosen from GitHub, never typed
-
-    private var githubReady: Bool { account.user != nil || Snapshots.demoMode }
-
-    private var choices: [GitHubRepoSummary] {
-        if Snapshots.demoMode {
-            return [GitHubRepoSummary(fullName: "acme/hatch-tickets", isPrivate: true),
-                    GitHubRepoSummary(fullName: "acme/app", isPrivate: true),
-                    GitHubRepoSummary(fullName: "acme/design-system", isPrivate: true),
-                    GitHubRepoSummary(fullName: "acme/specimens", isPrivate: true),
-                    GitHubRepoSummary(fullName: "acme/public-site", isPrivate: false)]
-        }
-        return account.repos
-    }
-
-    private func current(_ role: RepoRole) -> String? {
-        if role == .tickets { return ticketsRepo.isEmpty ? nil : ticketsRepo }
-        let remote = repos.first { $0.role == role }?.remote ?? ""
-        return remote.isEmpty ? nil : remote
-    }
-
-    private func summary(_ name: String?) -> GitHubRepoSummary? {
-        guard let name else { return nil }
-        return choices.first { $0.fullName == name } ?? GitHubRepoSummary(fullName: name, isPrivate: true)
-    }
-
-    /// One pick from the menu. Tickets, App and Design go through the same save as before; Specimens edits the draft.
-    private func pick(_ role: RepoRole, _ name: String?) {
-        guard name != current(role) else { return }
-        if role == .specimens {
-            if let name, let repo = summary(name) {
-                if let index = repos.firstIndex(where: { $0.role == .specimens }) {
-                    repos[index].remote = repo.fullName; repos[index].branch = repo.defaultBranch
+    private var ticketsCard: some View {
+        HXSettingsCard(symbol: "number", tint: .indigo, title: "Tickets",
+                       summary: ticketsRepo.map { "Issues in \($0)" } ?? "Issues in a private repository",
+                       info: "A private GitHub repository. Each ticket is an issue, and its type and status are labels. Several projects can share one.",
+                       footnote: ticketsLocked ? Text("This project already has tickets in it, so the repository stays.") : nil) {
+            HXSetupRow("Repository") {
+                if ticketsLocked {
+                    Label(ticketsRepo ?? "", systemImage: "lock.fill").foregroundStyle(.secondary)
                 } else {
-                    repos.append(HXRepoDraft(role: .specimens, remote: repo.fullName, branch: repo.defaultBranch, localPath: "", build: "", plans: ""))
+                    repoPicker("Tickets repository", selection: $ticketsRepo, from: privateRepos)
                 }
-            } else {
-                repos.removeAll { $0.role == .specimens }
             }
-            return
-        }
-        guard let tickets = summary(role == .tickets ? name : current(.tickets)), tickets.isPrivate else {
-            message = "Tickets need a private repository."
-            return
-        }
-        let assignments = HXRepositoryAssignments(
-            tickets: tickets,
-            project: summary(role == .app ? name : current(.app)),
-            design: summary(role == .designSystem ? name : current(.designSystem)))
-        if state.saveRepositoryAssignments(projectId: project.id, assignments) {
-            ticketsRepo = assignments.tickets.fullName
-            updateRepo(.app, with: assignments.project)
-            updateRepo(.designSystem, with: assignments.design)
-            message = "Repositories saved."
+            HXSetupRow("Default for new projects") {
+                Toggle("Default for new projects", isOn: $ticketsIsDefault)
+                    .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                    .disabled(ticketsRepo == nil)
+            }
         }
     }
 
-    private func repoRow(_ role: RepoRole, _ title: String, _ detail: String) -> some View {
-        LabeledContent {
-            if role == .tickets && state.hasTickets(projectId: project.id) {
-                Label(current(role) ?? "Not selected", systemImage: "lock.fill").foregroundStyle(.secondary)
-            } else {
-                Picker(title, selection: Binding<String?>(get: { current(role) }, set: { pick(role, $0) })) {
-                    if role != .tickets || current(role) == nil { Text(role == .tickets ? "Choose…" : "None").tag(String?.none) }
-                    if let name = current(role), !choices.contains(where: { $0.fullName == name }) {
-                        Text("\(name) (unavailable)").tag(String?.some(name))
+    private var codeCard: some View {
+        HXSettingsCard(symbol: "chevron.left.forwardslash.chevron.right", tint: .blue, title: "App code",
+                       summary: appPath.map { "\(hxAbbreviated($0)) · on \(baseBranch)" } ?? "Not on this Mac yet",
+                       info: "The repository agents change, and your clone of it on this Mac. Hatch needs both. You never edit the same files as an agent: each one works in its own copy.") {
+            HXSetupRow("Repository") {
+                repoPicker("App repository", selection: Binding(get: { appRepo }, set: { changeRepo(.app, to: $0) }), from: allRepos)
+            }
+            folderRow(.app, repo: appRepo, path: $appPath)
+            HXSetupRow("Base branch") {
+                if branches.isEmpty {
+                    TextField("Base branch", text: $baseBranch, prompt: Text("main"))
+                        .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden().font(.body.monospaced())
+                } else {
+                    Picker("Base branch", selection: $baseBranch) {
+                        if !branches.contains(baseBranch) { Text(baseBranch).tag(baseBranch) }
+                        ForEach(branches, id: \.self) { Text($0).tag($0) }
                     }
-                    ForEach(role == .tickets ? choices.filter { $0.isPrivate } : choices, id: \.fullName) { repo in
-                        Text(repo.isPrivate ? repo.fullName : "\(repo.fullName) (public)").tag(String?.some(repo.fullName))
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .fixedSize()
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(detail).font(.caption).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var repositoriesSection: some View {
-        Section {
-            if githubReady {
-                repoRow(.tickets, "Tickets", "Issues and attachments")
-                repoRow(.app, "App", "Source code and Specs")
-                repoRow(.designSystem, "Design System", "Design assets")
-                repoRow(.specimens, "Specimens", "Sample material for design rounds")
-            } else {
-                LabeledContent {
-                    Button("Connect GitHub…") { showRepositorySheet = true }
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("GitHub is not connected")
-                        Text("Repositories are chosen from your account.").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            }
-        } header: {
-            HStack {
-                Text("GitHub Repositories")
-                Spacer()
-                if githubReady && !Snapshots.demoMode {
-                    Button { account.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                        .labelStyle(.iconOnly).buttonStyle(.borderless).help("Reload the list from GitHub")
-                }
-            }
-        } footer: {
-            Text("Only repositories your GitHub account can reach appear here. Each branch follows the repository's default.")
-        }
-    }
-
-    /// Where each repository lives on this Mac: the one thing that has to be picked from the file system.
-    private var foldersSection: some View {
-        Section {
-            ForEach($repos.filter { $0.wrappedValue.role != .tickets && !$0.wrappedValue.remote.isEmpty }) { $repo in
-                LabeledContent {
-                    HStack(spacing: 8) {
-                        Text(repo.localPath.isEmpty ? "Not set" : repo.localPath)
-                            .foregroundStyle(repo.localPath.isEmpty ? .secondary : .primary)
-                            .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
-                        Button("Choose…") { chooseFolder($repo) }
-                    }
-                } label: { Text(hxRoleName(repo.role)) }
-            }
-        } header: {
-            Text("On This Mac")
-        } footer: {
-            Text("Agents work in these folders. Choose the clone of each repository.")
-        }
-    }
-
-    private var agentsSection: some View {
-        Section {
-            LabeledContent("Agents at once") {
-                HStack(spacing: 8) {
-                    Text("\(maxAgents)").monospacedDigit()
-                    Stepper("Agents at once", value: $maxAgents, in: 1...12).labelsHidden()
-                }
-            }
-            LabeledContent("Ask before plans above") {
-                HStack(spacing: 8) {
-                    Text("\(threshold) files").monospacedDigit()
-                    Stepper("Plan approval threshold", value: $threshold, in: 1...100).labelsHidden()
-                }
-            }
-        } header: {
-            Text("Agents")
-        } footer: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("A plan that touches more files than this waits for your approval before an agent starts.")
-                if state.hxSetting("max_agents") != nil {
-                    Text("A value set in Settings overrides the number of agents.")
+                    .labelsHidden().pickerStyle(.menu).fixedSize()
                 }
             }
         }
     }
 
-    // MARK: Areas and docs: lists, not rows of fields
+    private var componentsCard: some View {
+        HXSettingsCard(symbol: "paintpalette", tint: .pink, title: "Components",
+                       summary: componentsRepo == nil ? "None: they live inside the app" : "Proposals build against them",
+                       info: "The package with the app's colors, type and shared views, when it is its own repository. Optional. Proposals built with it use your real colors and type.") {
+            HXSetupRow("Repository") {
+                repoPicker("Components repository", selection: Binding(get: { componentsRepo }, set: { changeRepo(.designSystem, to: $0) }),
+                           from: allRepos.filter { $0.fullName != appRepo }, none: "None")
+            }
+            if componentsRepo != nil {
+                folderRow(.designSystem, repo: componentsRepo, path: $componentsPath)
+            }
+        }
+    }
 
-    private var areasSection: some View {
-        Section {
+    private var notebookCard: some View {
+        HXSettingsCard(symbol: "book.closed", tint: .orange, title: "Notebook",
+                       summary: "Decisions, Spec and agent rules as plain files",
+                       info: "Where \(displayName)'s decisions, Spec, agent rules and Proposal options live, as plain files. With it, anyone can pick the project up later, with any agent, even without Hatch.",
+                       footnote: Text(notebookPath == nil
+                                      ? "Choose the notebook's folder on this Mac so these settings are kept in it, not only in Hatch."
+                                      : "Save also writes these settings to \(Text("project.json").font(.callout.monospaced())) in the notebook and commits it. Folders on this Mac are left out.")) {
+            HXSetupRow("Repository") {
+                repoPicker("Notebook repository", selection: Binding(get: { notebookRepo }, set: { changeRepo(.notebook, to: $0) }),
+                           from: privateRepos.filter { $0.fullName != appRepo })
+            }
+            folderRow(.notebook, repo: notebookRepo, path: $notebookPath)
+        }
+    }
+
+    private var branchesCard: some View {
+        let base = baseBranch.isEmpty ? "main" : baseBranch
+        let branch = integrationBranch.trimmingCharacters(in: .whitespaces).isEmpty ? "hatch" : integrationBranch
+        return HXSettingsCard(symbol: "arrow.triangle.branch", tint: .green, title: "Branches",
+                              summary: "ticket → \(branch) → " + (promotion == .manual ? "you merge into \(base)" : promotion == .automatic ? "merged into \(base)" : "pull request into \(base)"),
+                              info: "Hatch has its own branch. Approved tickets merge into it, and nothing reaches your base branch without CI passing on it.") {
+            HXBranchFlow(integration: branch, base: base, promotion: promotion)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+            HXSetupRow("Hatch's branch") {
+                TextField("Hatch's branch", text: $integrationBranch, prompt: Text("hatch"))
+                    .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden().font(.body.monospaced())
+            }
+            Text("When \(Text(branch).font(.callout.monospaced())) passes CI")
+                .font(.callout.weight(.semibold)).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 2)
+            HXPromotionChoice(promotion: $promotion, base: base)
+        }
+    }
+
+    private var agentsCard: some View {
+        let build = buildCommand.trimmingCharacters(in: .whitespaces)
+        var notes = "Before a ticket comes to you, its agent runs the build in its own copy of the app. Only the tests of the area it changed belong here; the full suite runs in CI."
+        if state.hxSetting("max_agents") != nil { notes += " The number of agents set in Settings overrides this one." }
+        return HXSettingsCard(symbol: "cpu", tint: .teal, title: "Agents",
+                              summary: "Up to \(maxAgents) at once · " + (build.isEmpty ? "no build before review" : "builds before review"),
+                              info: "How many work at once, when they ask you first, and how their work is built before you see it.",
+                              footnote: Text(notes)) {
+            HXSetupRow("Agents at once") {
+                Stepper("\(maxAgents)", value: $maxAgents, in: 1...12).monospacedDigit().fixedSize()
+            }
+            HXSetupRow("Ask before plans that touch more than") {
+                Stepper("\(threshold) files", value: $threshold, in: 1...100).monospacedDigit().fixedSize()
+            }
+            HXSetupRow("Build before review") {
+                TextField("Build command", text: $buildCommand, prompt: Text("None"))
+                    .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden().font(.callout.monospaced())
+            }
+            HXSetupRow("Tests before review") {
+                TextField("Test command", text: $testCommand, prompt: Text("None, CI runs them"))
+                    .textFieldStyle(.plain).multilineTextAlignment(.trailing).labelsHidden().font(.callout.monospaced())
+            }
+        }
+    }
+
+    private var areasCard: some View {
+        HXSettingsCard(symbol: "square.grid.2x2", tint: .purple, title: "Areas",
+                       summary: areas.isEmpty ? "None yet" : "\(areas.count) \(areas.count == 1 ? "area" : "areas")",
+                       info: "An area maps part of the code to a name and a Spec prefix, so agents read only what a ticket touches.",
+                       footnote: Text("Notes for agents about an area go in the notebook, in \(Text("rules/areas/").font(.callout.monospaced())).")) {
             if areas.isEmpty {
-                Text("No areas yet. Re-scan finds them from the app's folders.").foregroundStyle(.secondary)
+                Text("No areas yet. Re-scan finds them in the app's folder.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+                    .padding(.horizontal, 12)
             }
             ForEach(areas) { area in
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(area.name.isEmpty ? "Untitled" : area.name)
                         Text(area.globs.isEmpty ? "No paths" : area.globs)
-                            .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                            .font(.callout.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     }
                     Spacer()
                     if !area.prefix.isEmpty {
@@ -342,95 +315,82 @@ struct ProjectForm: View {
                     Button { areas.removeAll { $0.id == area.id } } label: { Image(systemName: "minus.circle") }
                         .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove this area")
                 }
+                .padding(.horizontal, 12).padding(.vertical, 8)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { editingArea = area }
             }
-        } header: {
-            HStack {
-                Text("Areas")
-                Spacer()
+        } accessory: {
+            HStack(spacing: 8) {
                 Button("Re-scan") { rescan() }
-                    .buttonStyle(.borderless)
-                    .disabled(appLocalPath == nil)
-                    .help(appLocalPath == nil ? "Choose the app's folder on this Mac first." : "Look for new folders and add them as areas.")
-                Button { editingArea = HXAreaDraft(name: "", globs: "", prefix: "") } label: { Label("Add Area", systemImage: "plus") }
-                    .labelStyle(.iconOnly).buttonStyle(.borderless).help("Add an area")
+                    .disabled(appPath == nil)
+                    .help(appPath == nil ? "Choose the app's folder on this Mac first." : "Look for new folders and add them as areas.")
+                Button { editingArea = HXAreaDraft(name: "", globs: "", prefix: "") } label: { Label("Add area", systemImage: "plus") }
+                    .labelStyle(.iconOnly).help("Add an area")
             }
-        } footer: {
-            Text("An area maps part of the code to a name and a Spec prefix, so agents read only what a ticket touches.")
+            .buttonStyle(.bordered).controlSize(.small)
         }
     }
 
-    private var docsSection: some View {
-        Section {
-            if docs.isEmpty { Text("No docs listed.").foregroundStyle(.secondary) }
-            ForEach(docs) { doc in
-                HStack {
-                    Label(doc.path, systemImage: "doc.text").lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Button { docs.removeAll { $0.id == doc.id } } label: { Image(systemName: "minus.circle") }
-                        .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove this doc")
+    // MARK: Rows
+
+    private var githubReady: Bool { account.user != nil }
+    private var allRepos: [GitHubRepoSummary] { account.repos }
+    private var privateRepos: [GitHubRepoSummary] { account.repos.filter(\.isPrivate) }
+
+    /// A repository chosen from GitHub, never typed. The current one stays listed even when the account can't see it.
+    private func repoPicker(_ title: String, selection: Binding<String?>, from list: [GitHubRepoSummary], none: String? = nil) -> some View {
+        Picker(title, selection: selection) {
+            if let none { Text(none).tag(String?.none) } else if selection.wrappedValue == nil { Text("Choose…").tag(String?.none) }
+            if let current = selection.wrappedValue, !list.contains(where: { $0.fullName == current }) {
+                Text(githubReady ? "\(current) (not available)" : current).tag(String?.some(current))
+            }
+            ForEach(list) { repo in
+                Text(repo.isPrivate ? repo.fullName : "\(repo.fullName) (public)").tag(String?.some(repo.fullName))
+            }
+        }
+        .labelsHidden().pickerStyle(.menu).fixedSize()
+        .disabled(!githubReady)
+    }
+
+    /// The clone of `repo` on this Mac: found automatically when the repository changes, or chosen and checked.
+    private func folderRow(_ role: RepoRole, repo: String?, path: Binding<String?>) -> some View {
+        HXSetupRow("On this Mac") {
+            if repo == nil {
+                Text("Choose the repository first").foregroundStyle(.tertiary)
+            } else if searching.contains(role) {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Looking for a clone…").foregroundStyle(.secondary)
+                }
+            } else if let current = path.wrappedValue {
+                HStack(spacing: 8) {
+                    Label(hxAbbreviated(current), systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(Theme.finished).lineLimit(1).truncationMode(.middle)
+                    Button("Change…") { chooseFolder(for: role, repo: repo, path: path) }
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Text("No clone found").foregroundStyle(.secondary)
+                    Button("Choose…") { chooseFolder(for: role, repo: repo, path: path) }
                 }
             }
-        } header: {
-            HStack {
-                Text("Docs for Agents")
-                Spacer()
-                Button { addDoc() } label: { Label("Add Doc", systemImage: "plus") }
-                    .labelStyle(.iconOnly).buttonStyle(.borderless)
-                    .disabled(appLocalPath == nil)
-                    .help(appLocalPath == nil ? "Choose the app's folder on this Mac first." : "Pick a file in the app repository")
-            }
-        } footer: {
-            Text("Files every agent reads first, such as CLAUDE.md.")
         }
     }
 
-    /// Everything you rarely touch, folded away.
-    private var advancedSection: some View {
-        Section {
-            DisclosureGroup("Advanced") {
-                LabeledContent("Merge into branch") {
-                    TextField("hatch", text: $integrationBranch).labelsHidden().multilineTextAlignment(.trailing)
-                }
-                ForEach($repos.filter { $0.wrappedValue.role != .tickets && !$0.wrappedValue.remote.isEmpty }) { $repo in
-                    LabeledContent("\(hxRoleName(repo.role)) build") {
-                        TextField("swift build", text: $repo.build).labelsHidden().multilineTextAlignment(.trailing)
-                    }
-                    LabeledContent("\(hxRoleName(repo.role)) test plans") {
-                        TextField("Comma separated", text: $repo.plans).labelsHidden().multilineTextAlignment(.trailing)
-                    }
-                }
-            }
-        }
-    }
-
-    private func addDoc() {
-        guard let base = appLocalPath else { return }
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = true
-        panel.directoryURL = URL(fileURLWithPath: base)
-        guard panel.runModal() == .OK else { return }
-        for url in panel.urls {
-            var path = url.path
-            if path.hasPrefix(base + "/") { path = String(path.dropFirst(base.count + 1)) }
-            if !docs.contains(where: { $0.path == path }) { docs.append(HXDocDraft(path: path)) }
-        }
-    }
-
-    /// Save and Revert float over the bottom of the form, so they are always in reach.
+    /// Save floats over the bottom of the page, so it is always in reach.
     private var saveBar: some View {
         HStack(spacing: 10) {
             if !message.isEmpty {
-                Text(message).font(.callout).foregroundStyle(.secondary).transition(.opacity)
+                Text(message).font(.callout)
+                    .foregroundStyle(problem ? Theme.critical : .secondary)
+                    .lineLimit(2).frame(maxWidth: 420, alignment: .trailing)
+                    .transition(.opacity)
             }
-            Spacer()
             Button("Revert") { load() }
                 .buttonStyle(.glass)
             Button { save() } label: { Label("Save", systemImage: "checkmark") }
                 .buttonStyle(.glassProminent)
+                .keyboardShortcut("s", modifiers: .command)
         }
         .controlSize(.large)
         .padding(.horizontal, 16)
@@ -442,115 +402,294 @@ struct ProjectForm: View {
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
+    // MARK: Repositories and folders
+
+    private func changeRepo(_ role: RepoRole, to repo: String?) {
+        switch role {
+        case .app:
+            guard repo != appRepo else { return }
+            appRepo = repo; appPath = nil; branches = []
+            baseBranch = account.repos.first { $0.fullName == repo }?.defaultBranch ?? "main"
+            loadBranches()
+            findClone(of: repo, role: .app) { appPath = $0; suggestBuild(fill: true) }
+        case .designSystem:
+            guard repo != componentsRepo else { return }
+            componentsRepo = repo; componentsPath = nil
+            findClone(of: repo, role: .designSystem) { componentsPath = $0 }
+        case .notebook:
+            guard repo != notebookRepo else { return }
+            notebookRepo = repo; notebookPath = nil
+            findClone(of: repo, role: .notebook) { notebookPath = $0 }
+        case .tickets, .specimens:
+            break
+        }
+    }
+
+    private func findClone(of repo: String?, role: RepoRole, found: @escaping (String?) -> Void) {
+        guard let repo, !Snapshots.demoMode else { return }
+        searching.insert(role)
+        Task {
+            let paths = await Task.detached { LocalClones.find(repo) }.value
+            searching.remove(role)
+            found(paths.first)
+        }
+    }
+
+    private func chooseFolder(for role: RepoRole, repo: String?, path: Binding<String?>) {
+        guard let repo else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Use Folder"
+        if let current = path.wrappedValue { panel.directoryURL = URL(fileURLWithPath: current).deletingLastPathComponent() }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let config = (try? String(contentsOf: url.appendingPathComponent(".git/config"), encoding: .utf8)) ?? ""
+        guard LocalClones.configPoints(config, at: repo) else {
+            show("\(hxAbbreviated(url.path)) is not a clone of \(repo). Choose the folder that holds its .git.", problem: true)
+            return
+        }
+        message = ""
+        path.wrappedValue = url.path
+        if role == .app { suggestBuild(fill: true) }
+    }
+
+    private func loadBranches() {
+        guard let repo = appRepo, !Snapshots.demoMode else { return }
+        Task {
+            let names = await Task.detached { (try? HXGitHub.client().listBranches(repo)) ?? [] }.value
+            guard appRepo == repo else { return }
+            branches = names
+            if !names.isEmpty && !names.contains(baseBranch), let first = names.first { baseBranch = first }
+        }
+    }
+
+    /// Reads the build command the app's clone suggests. `fill` replaces the command only while it is empty or
+    /// still the previous suggestion, so a command the owner typed is kept.
+    private func suggestBuild(fill: Bool) {
+        guard let path = appPath, !Snapshots.demoMode else { return }
+        Task {
+            let suggestion = await Task.detached { BuildCommand.suggest(in: path) }.value
+            guard appPath == path else { return }
+            if fill, buildCommand.trimmingCharacters(in: .whitespaces).isEmpty || buildCommand == suggestedBuild {
+                buildCommand = suggestion ?? ""
+            }
+            suggestedBuild = suggestion
+        }
+    }
+
+    private func rescan() {
+        guard let path = appPath else { return }
+        let found = HXAreasAdapter.suggestAreas(repoPath: path)
+        let existing = Set(areas.map { $0.name.lowercased() })
+        var added = 0
+        for a in found where !existing.contains(a.name.lowercased()) {
+            areas.append(HXAreaDraft(name: a.name, globs: a.paths.joined(separator: ", "), prefix: a.specPrefix ?? "", testPlans: a.testPlans))
+            added += 1
+        }
+        show(added == 0 ? "No new areas found." : "Added \(added) \(added == 1 ? "area" : "areas"). Review them, then Save.")
+    }
+
     // MARK: Loading and saving
 
+    /// The settings as saved, or, for a project from before settings were stored, its repositories in the database.
+    private var savedConfig: ProjectConfig {
+        if let config = project.config { return config }
+        let rows = (try? state.store.repos(projectId: project.id)) ?? []
+        return ProjectConfig(name: project.name, ticketsRepo: rows.first { $0.role == .tickets }?.remote ?? "",
+                             repos: rows.map { RepoConfig(role: $0.role, remote: $0.remote, branch: $0.defaultBranch, localPath: $0.localPath,
+                                                          buildCommand: $0.buildCommand, testPlans: $0.testPlans) })
+    }
+
     private func load() {
-        let config = project.config
+        let config = savedConfig
         name = project.name
-        ticketsRepo = config?.ticketsRepo ?? ""
-        maxAgents = config?.maxAgents ?? 3
-        integrationBranch = config?.integrationBranch ?? "hatch"
-        threshold = config?.planApprovalFileThreshold ?? 8
-        var list: [RepoConfig] = config?.repos ?? []
-        if list.isEmpty {
-            let rows = (try? state.store.repos(projectId: project.id)) ?? []
-            list = rows.map { RepoConfig(role: $0.role, remote: $0.remote, branch: $0.defaultBranch, localPath: $0.localPath, buildCommand: $0.buildCommand, testPlans: $0.testPlans) }
+        ticketsRepo = config.ticketsRepo.isEmpty ? nil : config.ticketsRepo
+        ticketsIsDefault = ticketsRepo != nil && ((try? state.store.setting(hxDefaultTicketsSetting)) ?? nil) == ticketsRepo
+        let app = config.repo(.app)
+        appRepo = app?.remote
+        appPath = app?.localPath
+        baseBranch = app?.branch ?? "main"
+        buildCommand = app?.buildCommand ?? ""
+        testCommand = app?.testCommand ?? ""
+        componentsRepo = config.repo(.designSystem)?.remote
+        componentsPath = config.repo(.designSystem)?.localPath
+        notebookRepo = config.repo(.notebook)?.remote
+        notebookPath = config.repo(.notebook)?.localPath
+        integrationBranch = config.integrationBranch
+        promotion = config.promotionMode
+        maxAgents = config.maxAgents
+        threshold = config.planApprovalFileThreshold
+        areas = config.areas.map { a in
+            HXAreaDraft(name: a.name, globs: a.paths.joined(separator: ", "), prefix: a.specPrefix ?? "", testPlans: a.testPlans)
         }
-        repos = list.map { r in
-            HXRepoDraft(role: r.role, remote: r.remote, branch: r.branch, localPath: r.localPath ?? "",
-                        build: r.buildCommand ?? "", plans: (r.testPlans ?? []).joined(separator: ", "))
-        }
-        areas = (config?.areas ?? []).map { a in
-            HXAreaDraft(name: a.name, globs: a.paths.joined(separator: ", "), prefix: a.specPrefix ?? "")
-        }
-        docs = (config?.docs ?? []).map { HXDocDraft(path: $0) }
         message = ""
+        problem = false
     }
 
     private func splitList(_ text: String) -> [String] {
         text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
+    private func trimmed(_ text: String) -> String? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        return t.isEmpty ? nil : t
+    }
+
+    /// The saved settings with the page's edits applied. Everything the page does not show, such as docs, the
+    /// specimens repository or test plans, is kept as it was.
     private func makeConfig() -> ProjectConfig {
-        let repoConfigs: [RepoConfig] = repos.filter { !$0.remote.isEmpty }.map { r in
-            RepoConfig(role: r.role, remote: r.remote, branch: r.branch.isEmpty ? "main" : r.branch,
-                       localPath: r.localPath.isEmpty ? nil : r.localPath,
-                       buildCommand: r.build.isEmpty ? nil : r.build,
-                       testPlans: splitList(r.plans))
+        var config = savedConfig
+        config.name = displayName
+        config.ticketsRepo = ticketsRepo ?? ""
+        let defaults = Dictionary(account.repos.map { ($0.fullName, $0.defaultBranch) }, uniquingKeysWith: { a, _ in a })
+
+        func set(_ role: RepoRole, remote: String?, branch: String? = nil, path: String?, change: (inout RepoConfig) -> Void = { _ in }) {
+            guard let remote else { config.repos.removeAll { $0.role == role }; return }
+            if let index = config.repos.firstIndex(where: { $0.role == role }) {
+                if config.repos[index].remote != remote { config.repos[index].branch = defaults[remote] ?? "main" }
+                config.repos[index].remote = remote
+                config.repos[index].localPath = path
+                if let branch { config.repos[index].branch = branch }
+                change(&config.repos[index])
+            } else {
+                var repo = RepoConfig(role: role, remote: remote, branch: branch ?? defaults[remote] ?? "main", localPath: path)
+                change(&repo)
+                config.repos.append(repo)
+            }
         }
-        let areaConfigs: [AreaConfig] = areas.filter { !$0.name.isEmpty }.map { a in
-            AreaConfig(name: a.name, paths: splitList(a.globs), specPrefix: a.prefix.isEmpty ? nil : a.prefix)
+        set(.tickets, remote: ticketsRepo, path: nil)
+        set(.app, remote: appRepo, branch: trimmed(baseBranch) ?? "main", path: appPath) { repo in
+            repo.buildCommand = trimmed(buildCommand)
+            repo.testCommand = trimmed(testCommand)
         }
-        return ProjectConfig(name: name, ticketsRepo: ticketsRepo, repos: repoConfigs, areas: areaConfigs,
-                             docs: docs.map { $0.path }.filter { !$0.isEmpty }, maxAgents: maxAgents,
-                             integrationBranch: integrationBranch.isEmpty ? "hatch" : integrationBranch,
-                             planApprovalFileThreshold: threshold)
+        set(.designSystem, remote: componentsRepo, path: componentsPath)
+        set(.notebook, remote: notebookRepo, path: notebookPath)
+
+        config.integrationBranch = trimmed(integrationBranch) ?? "hatch"
+        config.promotion = promotion
+        config.maxAgents = maxAgents
+        config.planApprovalFileThreshold = threshold
+        config.areas = areas.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }.map { a in
+            AreaConfig(name: a.name, paths: splitList(a.globs), specPrefix: trimmed(a.prefix), testPlans: a.testPlans)
+        }
+        return config
+    }
+
+    /// What has to be fixed before Save can work, named so the owner knows where to look.
+    private var missing: String? {
+        if ticketsRepo == nil { return "Choose a tickets repository." }
+        if appRepo == nil { return "Choose the app's repository." }
+        let branch = trimmed(integrationBranch) ?? "hatch"
+        if branch == trimmed(baseBranch) { return "Hatch's branch must differ from the base branch, \(baseBranch)." }
+        return nil
     }
 
     private func save() {
+        if let missing { show(missing, problem: true); return }
         let config = makeConfig()
-        let url = configURL
-        let key = project.key
-        let projectName = name.isEmpty ? project.name : name
-        let result: Bool? = state.perform("Save project") {
-            try state.store.upsertProject(key: key, name: projectName, config: config)
-            if let url { try config.save(to: url) }
-            return url != nil
-        }
-        if let wrote = result {
-            message = wrote ? "Saved, and written to .hatch/project.json." : "Saved. Set the app repo's local path to also write .hatch/project.json."
-        }
-    }
-
-    private func addRepo() {
-        guard !repos.contains(where: { $0.role == .specimens }) else { return }
-        repos.append(HXRepoDraft(role: .specimens, remote: "", branch: "main", localPath: "", build: "", plans: ""))
-    }
-
-    private var selectedRepositoryNames: [RepoRole: String] {
-        var names: [RepoRole: String] = [:]
-        if !ticketsRepo.isEmpty { names[.tickets] = ticketsRepo }
-        for role in [RepoRole.app, .designSystem] {
-            if let remote = repos.first(where: { $0.role == role })?.remote, !remote.isEmpty { names[role] = remote }
-        }
-        return names
-    }
-
-    private func updateRepo(_ role: RepoRole, with selected: GitHubRepoSummary?) {
-        if let index = repos.firstIndex(where: { $0.role == role }) {
-            if let selected {
-                if repos[index].remote != selected.fullName { repos[index].localPath = "" }
-                repos[index].remote = selected.fullName
-                repos[index].branch = selected.defaultBranch
-            } else {
-                repos.remove(at: index)
+        let tickets = ticketsRepo
+        let makeDefault = ticketsIsDefault
+        guard state.saveProject(key: project.key, name: displayName, config: config, notebook: { outcome in
+            switch outcome {
+            case .committed: show("Saved, and committed to the notebook.")
+            case .unchanged: show("Saved.")
+            case .noNotebook: show("Saved in Hatch. Choose the notebook's folder to keep the settings there too.")
+            case .failed(let reason): show("Saved in Hatch, but the notebook could not be updated: \(reason)", problem: true)
             }
-        } else if let selected {
-            repos.append(HXRepoDraft(role: role, remote: selected.fullName,
-                                     branch: selected.defaultBranch, localPath: "", build: "", plans: ""))
+        }) != nil else { return }
+        // The default tickets repository is a setting of its own, shared by every project.
+        let saved = (try? state.store.setting(hxDefaultTicketsSetting)) ?? nil
+        if makeDefault, let tickets, saved != tickets {
+            state.perform("Save the default tickets repository") { try state.store.setSetting(hxDefaultTicketsSetting, tickets) }
+        } else if !makeDefault, let saved, saved == tickets {
+            state.perform("Save the default tickets repository") { try state.store.removeSetting(hxDefaultTicketsSetting) }
         }
     }
 
-    private func removeRepo(_ id: UUID) { repos.removeAll { $0.id == id } }
-
-    private func chooseFolder(_ repo: Binding<HXRepoDraft>) {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url { repo.wrappedValue.localPath = url.path }
+    private func show(_ text: String, problem: Bool = false) {
+        withAnimation { message = text; self.problem = problem }
     }
 
-    private func rescan() {
-        guard let path = appLocalPath else { return }
-        let found = HXAreasAdapter.suggestAreas(repoPath: path)
-        let existing = Set(areas.map { $0.name.lowercased() })
-        var added = 0
-        for a in found where !existing.contains(a.name.lowercased()) {
-            areas.append(HXAreaDraft(name: a.name, globs: a.paths.joined(separator: ", "), prefix: a.specPrefix ?? ""))
-            added += 1
+    /// Snapshot runs: the repositories the demo account can see, so the pickers show real choices without the network.
+    private func fillDemoAccount() {
+        account.user = GitHubUser(login: "acme", name: "Acme")
+        account.repos = [GitHubRepoSummary(fullName: "acme/hatch-tickets", isPrivate: true),
+                         GitHubRepoSummary(fullName: "acme/app", isPrivate: true),
+                         GitHubRepoSummary(fullName: "acme/design-system", isPrivate: true),
+                         GitHubRepoSummary(fullName: "acme/app-notebook", isPrivate: true),
+                         GitHubRepoSummary(fullName: "acme/public-site", isPrivate: false)]
+        branches = ["main", "dev"]
+    }
+}
+
+/// One part of a project in Project settings: a tinted tile, its name, an ⓘ that explains it as the assistant does,
+/// a line with its current value, then its rows, edited in place.
+struct HXSettingsCard<Content: View, Accessory: View>: View {
+    let symbol: String
+    let tint: Color
+    let title: String
+    let summary: String
+    let info: String
+    var footnote: Text?
+    @ViewBuilder let content: Content
+    @ViewBuilder let accessory: Accessory
+    @State private var showInfo = false
+
+    init(symbol: String, tint: Color, title: String, summary: String, info: String, footnote: Text? = nil,
+         @ViewBuilder content: () -> Content, @ViewBuilder accessory: () -> Accessory) {
+        self.symbol = symbol; self.tint = tint; self.title = title; self.summary = summary; self.info = info
+        self.footnote = footnote; self.content = content(); self.accessory = accessory()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                HXIconTile(symbol: symbol, tint: tint, size: 30)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Text(title).font(.headline)
+                        Button { showInfo.toggle() } label: { Image(systemName: "info.circle") }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.secondary)
+                            .help("About \(title.lowercased())")
+                            .popover(isPresented: $showInfo, arrowEdge: .bottom) {
+                                Text(info)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(width: 280, alignment: .leading)
+                                    .padding(14)
+                            }
+                    }
+                    Text(summary).font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                }
+                Spacer(minLength: 8)
+                accessory
+            }
+            .padding(12)
+            Group(subviews: content) { subviews in
+                ForEach(subviews) { view in
+                    Divider().padding(.leading, 12)
+                    view
+                }
+            }
+            if let footnote {
+                Divider().padding(.leading, 12)
+                footnote
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+            }
         }
-        message = added == 0 ? "No new areas found." : "Added \(added) area(s). Review them, then Save."
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+extension HXSettingsCard where Accessory == EmptyView {
+    init(symbol: String, tint: Color, title: String, summary: String, info: String, footnote: Text? = nil,
+         @ViewBuilder content: () -> Content) {
+        self.init(symbol: symbol, tint: tint, title: title, summary: summary, info: info, footnote: footnote,
+                  content: content) { EmptyView() }
     }
 }
 
