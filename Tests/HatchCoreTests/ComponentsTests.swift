@@ -166,6 +166,31 @@ final class ComponentsTests: XCTestCase {
         XCTAssertTrue(drafts[1].body.contains("140 colors and 300 sizes"))
     }
 
+    func testASmallUnnamedPackageIsNotComponents() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("hatch-scan-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        func write(_ path: String, _ text: String) throws {
+            let url = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try text.write(to: url, atomically: true, encoding: .utf8)
+        }
+        try write("Stage/Package.swift", #"let package = Package(name: "Stage", products: [.library(name: "Stage", targets: ["Stage"])])"#)
+        try write("Stage/Sources/Stage/Sizes.swift", "public enum Gap { public static let a: CGFloat = 4\n public static let b: CGFloat = 8\n public static let c: CGFloat = 12\n public static let d: CGFloat = 16 }\npublic struct Card: View { public var body: some View { Text(\"x\") } }\n")
+        XCTAssertEqual(ComponentsScanner.scan(appRoot: root.path).candidates.map(\.path), [], "four sizes and a view are not a components set")
+    }
+
+    func testNearDuplicateTypedValuesBecomeAPreparedQuestion() throws {
+        var scan = ComponentsScan(candidates: [], typed: [.color: 60, .size: 80], typedFiles: [], swiftFiles: 100,
+                                  colorLiterals: ["#2B59C2": 30, "#2B5AC2": 3], sizeLiterals: [16: 40, 15: 2])
+        let q = try XCTUnwrap(ComponentsSetup.consolidationQuestion(scan: scan))
+        XCTAssertEqual(q.type, .question)
+        XCTAssertEqual(q.options.filter(\.recommended).count, 1)
+        let drafts = ComponentsSetup.drafts(appName: "Acme", config: .suggested(appName: "Acme"), scan: scan)
+        XCTAssertEqual(drafts.first?.type, .question, "decisions come before the tickets that act on them")
+        scan.colorLiterals = ["#2B59C2": 30]; scan.sizeLiterals = [16: 40]
+        XCTAssertNil(ComponentsSetup.consolidationQuestion(scan: scan), "nothing close, nothing to decide")
+    }
+
     func testConfigWithoutComponentsStillLoads() throws {
         let old = #"{"name":"A","ticketsRepo":"a/t","repos":[],"areas":[],"docs":[],"maxAgents":3,"integrationBranch":"hatch","planApprovalFileThreshold":8}"#
         let config = try JSONDecoder().decode(ProjectConfig.self, from: Data(old.utf8))

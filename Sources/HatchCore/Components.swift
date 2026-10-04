@@ -585,6 +585,8 @@ public enum ComponentsScanner {
             || name.hasSuffix(".xcworkspace") || name.hasSuffix(".app")
     }
     /// Folder names that usually hold components: `DesignSystem`, `AcmeUI`, `Theme`, `Components`, `Styles`, `Tokens`.
+    /// Named values a package needs, with at least two colors or type styles, to count as components when its name does not say so.
+    static let realTokenCount = 6
     static let namePattern = ComponentReader.re(#"(?i:design ?system|components|theme|styles?|tokens|appearance)$|UI$|UIKit$"#)
 
     /// Looks through the app's clone. `excluding` is a components folder already chosen, left out of the typed-in count.
@@ -610,7 +612,9 @@ public enum ComponentsScanner {
             let full = root.appendingPathComponent(dir).path
             let cat = catalog(at: full, isPackage: true)
             let named = namePattern.firstMatch(in: (dir as NSString).lastPathComponent, range: NSRange(location: 0, length: (dir as NSString).lastPathComponent.utf16.count)) != nil
-            guard cat.tokenCount >= 2 || (named && !cat.isEmpty) else { continue }
+            // An unnamed package is components only with a real mass of named colors and type; a few sizes and a
+            // view are what any package has (the app's own, a tool's). A package named like components needs less.
+            guard (cat.tokenCount >= realTokenCount && cat.colors.count + cat.fonts.count >= 2) || (named && !cat.isEmpty) else { continue }
             candidates.append(ComponentsCandidate(path: dir, isPackage: true, product: product(inPackageAt: full), catalog: cat))
         }
         // A named folder inside a package that is itself components is part of it; inside any other package (often
@@ -853,7 +857,8 @@ public enum ComponentsSetup {
         }
         guard let scan, !scan.isSmall else { return [Draft(type: .tweak, title: startTitle, body: start)] }
 
-        let drafts = [Draft(type: .theme, title: "Components for \(appName)",
+        let question = consolidationQuestion(scan: scan).map { [$0] } ?? []
+        let drafts = question + [Draft(type: .theme, title: "Components for \(appName)",
                             body: "Move \(appName)'s colors, type and sizes into `\(config.path)` one kind at a time, so no single change touches every screen. Submit the start first; the others build on it. After these, views that still type values in move over when a ticket touches them.\n"),
                       Draft(type: .tweak, title: startTitle, body: start)]
         return drafts + moveDrafts(config: config, scan: scan, catalog: nil)
@@ -895,6 +900,31 @@ public enum ComponentsSetup {
             drafts.append(Draft(type: .tweak, title: "Move typed-in \(kind.plural) into components", body: body))
         }
         return drafts
+    }
+
+    /// The Question Hatch prepares when no components exist and the typed-in values hold near duplicates (two blues a
+    /// few steps apart, 15 and 16 point padding): which of them become one name. Without it the agent would decide
+    /// alone, and a merge changes how the app looks.
+    public static func consolidationQuestion(scan: ComponentsScan) -> Draft? {
+        let colors = ComponentConflicts.colorMatches(scan.colorLiterals, catalog: nil).filter { !$0.exact && $0.name == nil }
+        let sizes = ComponentConflicts.sizeMatches(scan.sizeLiterals, catalog: nil).filter { !$0.exact && $0.name == nil }
+        guard colors.count + sizes.count >= 2 else { return nil }
+        var body = "The app types in values that look meant to be the same. Naming them is a chance to merge them, but a merge changes how the app looks, so you decide.\n\n"
+        func line(_ m: ValueMatch) -> String { "- \(m.literal) (\(m.count) times) is close to \(m.nameValue ?? "") (more used)\n" }
+        if !colors.isEmpty { body += "Colors:\n" + colors.prefix(8).map(line).joined() + (colors.count > 8 ? "- and \(colors.count - 8) more\n" : "") + "\n" }
+        if !sizes.isEmpty { body += "Sizes:\n" + sizes.prefix(8).map(line).joined() + (sizes.count > 8 ? "- and \(sizes.count - 8) more\n" : "") }
+        let options = [
+            QuestionOption(key: "A", title: "Merge close values into the more used one", detail: "One name per look", recommended: true,
+                           why: "A rarer value next to a common one is almost always the same intent typed twice; merging gives the app one look per name.",
+                           gain: "A smaller, cleaner set of names", cost: "A few views shift by a shade or a point"),
+            QuestionOption(key: "B", title: "Keep every value as it is", detail: "Each gets its own name",
+                           gain: "Nothing changes on screen", cost: "Near duplicates stay, with names that look alike"),
+            QuestionOption(key: "C", title: "Decide one by one in each plan", detail: "The agent lists merges, you approve",
+                           gain: "You see each change before it happens", cost: "More review later"),
+        ]
+        var draft = Draft(type: .question, title: "Which close values become one?", body: body, options: options)
+        draft.area = area
+        return draft
     }
 
     /// Merging a second set of components into the chosen one (decision CO9).

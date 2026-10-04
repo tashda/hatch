@@ -176,3 +176,7 @@ The App starts the Stage API at launch; the Stage can clear a verdict. `hatch-de
 - Measuring the round-only Stage build time (decision S1/O1).
 - Echo-side changes that need the owner's agreement: a `hatch` trigger in `ci-light.yml`, a DEBUG "Preview" banner, the "Echo today" views into `tashda/echo-specimens`, splitting Echo Lab Tools, the Echo Labs rebuild-flake fix.
 - Importing the real Echo Labs rounds into the owner's database and choosing whether to push them to GitHub (`hatch import-labs --enqueue`).
+
+## Local verification (macOS, 2026-10-04): Components step as a verdict
+
+The owner found the Components step confusing (a folder menu of App and Stage, four radios, "Use what is in the app" recommended for four sizes and a view). Changes: an unnamed package counts as components only with at least 6 named values including 2 colors or type styles (a package named like components needs less); the step shows one verdict ("Found X" or "No components yet") with a plain plan, and the other choices sit under "Other options"; when nothing exists and typed-in values hold near duplicates, setup adds one prepared Question ("Which close values become one?") before the tickets that act on it. **Verified**: `swift test --filter ComponentsTests` (14, 0 failures, 2 new), Xcode app build with no warnings, `hatch components scan .` no longer lists `Stage`. **Not verified**: the new step looked at on screen, and the Review page does not yet list the consolidation Question.
