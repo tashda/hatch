@@ -22,6 +22,8 @@
 		A1B2C3D4E5F60718293A4B5C /* IrisPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* IrisPanel.swift */; };
 		B1B2C3D4E5F60718293A4B5C /* PanelResizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1B2C3D4E5F60718293A4B5D /* PanelResizer.swift */; };
 		421D632B0243EED9E2C59F19 /* AppState+Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0CFDAD1AD73457B63235D3 /* AppState+Notifications.swift */; };
+		AEF9082ECDFF44FDB3E85268 /* AppState+Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71617872CD744FB39971D7F9 /* AppState+Preferences.swift */; };
+		D4919CDA766042B5B3A21F27 /* MenuBarPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D421010C42D47958B571432 /* MenuBarPanel.swift */; };
 		424B48E9EB6C77DFD5CFCC00 /* VettingBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E69B44A5B5D1CAEE74C70CFF /* VettingBridge.swift */; };
 		EB3B807235F2498FA3F4B4A1 /* AgentProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E0BD2633E245D2B1E8B464 /* AgentProviders.swift */; };
 		4358486F0788BD721883D3E8 /* HatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 617F034C123D732B1CF03882 /* HatchApp.swift */; };
@@ -88,6 +90,8 @@
 		09B2D59CC25AE9BE9F39E59E /* hatch */ = {isa = PBXFileReference; lastKnownFileType = folder; name = hatch; path = .; sourceTree = SOURCE_ROOT; };
 		0AFC7402DEC44D748849719B /* Snapshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Snapshots.swift; sourceTree = "<group>"; };
 		0B0CFDAD1AD73457B63235D3 /* AppState+Notifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppState+Notifications.swift"; sourceTree = "<group>"; };
+		71617872CD744FB39971D7F9 /* AppState+Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppState+Preferences.swift"; sourceTree = "<group>"; };
+		7D421010C42D47958B571432 /* MenuBarPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarPanel.swift; sourceTree = "<group>"; };
 		0FCFDFE8E9481E42646D752A /* SketchBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SketchBoard.swift; sourceTree = "<group>"; };
 		168F59BA94540A6EA616F0CB /* StageLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageLauncher.swift; sourceTree = "<group>"; };
 		198272DA0A12BD567C54E381 /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
@@ -224,6 +228,7 @@
 				4E374A9B62BB42A52EAAC221 /* GitHubAccount.swift */,
 				BA53B185D376C44F5D5D861E /* AgentCard.swift */,
 				7EDA6B0996874D06724BF18F /* FooterParts.swift */,
+				7D421010C42D47958B571432 /* MenuBarPanel.swift */,
 				2C294CBEE8C4487CA95C0002 /* GitHubDeviceFlow.swift */,
 				C55062C4CDC76CEA05F19695 /* ProblemChip.swift */,
 				F0CD09DBC6396867DD8D2F66 /* ProposalInfo.swift */,
@@ -250,6 +255,7 @@
 				6AC92F9C8D0358C8FDD4FA6F /* Shortcuts */,
 				211BC59B762AD8A3B0EB98B0 /* AppState.swift */,
 				0B0CFDAD1AD73457B63235D3 /* AppState+Notifications.swift */,
+				71617872CD744FB39971D7F9 /* AppState+Preferences.swift */,
 				617F034C123D732B1CF03882 /* HatchApp.swift */,
 				64F0F50F0745471BE8744028 /* RootView.swift */,
 				D4FCD7FFB1E1EAE68A19CD02 /* Route.swift */,
@@ -465,6 +471,8 @@
 				437B449283ADBC928D57C174 /* AgentsView.swift in Sources */,
 				E82E2F2DD0373D41928DBA39 /* AnswerCards.swift in Sources */,
 				421D632B0243EED9E2C59F19 /* AppState+Notifications.swift in Sources */,
+				AEF9082ECDFF44FDB3E85268 /* AppState+Preferences.swift in Sources */,
+				D4919CDA766042B5B3A21F27 /* MenuBarPanel.swift in Sources */,
 				B521BFEB27A4CBFFFFD4E248 /* AppState.swift in Sources */,
 				3CF2407446C3D2E48FBB5059 /* AskPanel.swift in Sources */,
 				89B529C5AF394926839F67B6 /* AgentSettingsPage.swift in Sources */,

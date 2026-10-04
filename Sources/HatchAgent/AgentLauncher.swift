@@ -28,6 +28,7 @@ public struct AgentRunInfo: Identifiable, Equatable, Sendable {
     public var step: String
     public var tokensIn: Int
     public var tokensOut: Int
+    public var cacheTokens: Int = 0
     public var logPath: String
 
     public init(ticketId: Int, ticketNumber: String, ticketTitle: String, runId: Int, agent: String, role: AgentRole, providerName: String,
@@ -47,6 +48,8 @@ public enum AgentStream {
         public var model: String?
         public var tokensIn: Int?
         public var tokensOut: Int?
+        /// Prompt tokens read from the cache; counted apart from input, since they cost far less.
+        public var cacheTokens: Int?
         public var finished = false
         public var isError = false
         public var result: String?
@@ -78,7 +81,8 @@ public enum AgentStream {
             e.isError = j["is_error"]?.boolValue ?? (j["subtype"]?.stringValue != "success")
             e.result = j["result"]?.stringValue
             if let usage = j["usage"] {
-                e.tokensIn = (usage["input_tokens"]?.intValue ?? 0) + (usage["cache_read_input_tokens"]?.intValue ?? 0) + (usage["cache_creation_input_tokens"]?.intValue ?? 0)
+                e.tokensIn = (usage["input_tokens"]?.intValue ?? 0) + (usage["cache_creation_input_tokens"]?.intValue ?? 0)
+                e.cacheTokens = usage["cache_read_input_tokens"]?.intValue
                 e.tokensOut = usage["output_tokens"]?.intValue
             }
         default:
@@ -285,7 +289,8 @@ public final class AgentLauncher: @unchecked Sendable {
     // MARK: Running
 
     private func launch(_ plan: Plan, attempt: Int) throws {
-        let runId = try store.startRun(ticketId: plan.ticketId, agent: plan.agent, step: "\(plan.role.taskTitle) · \(plan.model ?? "default model")")
+        let runId = try store.startRun(ticketId: plan.ticketId, agent: plan.agent, step: "\(plan.role.taskTitle) · \(plan.model ?? "default model")",
+                                       provider: plan.providerName, model: plan.model, role: plan.role.rawValue)
         FileManager.default.createFile(atPath: plan.logPath, contents: nil)
         let log = FileHandle(forWritingAtPath: plan.logPath)
         let p = Process()
@@ -314,7 +319,7 @@ public final class AgentLauncher: @unchecked Sendable {
                     guard var r = self.runs[plan.ticketId] else { return }
                     if let s = e.step { r.step = s }
                     if let m = e.model, r.model == nil { r.model = m }
-                    if e.finished { r.tokensIn = e.tokensIn ?? r.tokensIn; r.tokensOut = e.tokensOut ?? r.tokensOut }
+                    if e.finished { r.tokensIn = e.tokensIn ?? r.tokensIn; r.tokensOut = e.tokensOut ?? r.tokensOut; r.cacheTokens = e.cacheTokens ?? r.cacheTokens }
                     else { r.tokensIn += e.tokensIn ?? 0; r.tokensOut += e.tokensOut ?? 0 }
                     self.runs[plan.ticketId] = r
                 }
@@ -342,7 +347,8 @@ public final class AgentLauncher: @unchecked Sendable {
         let now = (try? store.ticket(id: plan.ticketId))?.status
         let done = now.map { Self.handedIn(statusAtStart: plan.statusAtStart, now: $0) } ?? true
         let outcome = stopped ? "stopped" : done ? "ok" : "stopped early (exit \(exitCode))"
-        try? store.endRun(info?.runId ?? 0, tokensIn: info?.tokensIn ?? 0, tokensOut: info?.tokensOut ?? 0, outcome: outcome)
+        try? store.endRun(info?.runId ?? 0, tokensIn: info?.tokensIn ?? 0, tokensOut: info?.tokensOut ?? 0, outcome: outcome,
+                          cacheTokens: info?.cacheTokens ?? 0)
         defer { onChange() }
         if done { return }
         let tail = Self.tail(of: plan.logPath)

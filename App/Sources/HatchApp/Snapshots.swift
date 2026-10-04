@@ -9,6 +9,8 @@ enum Snapshots {
     static var demoMode: Bool {
         CommandLine.arguments.contains("--demo") || CommandLine.arguments.contains("--snapshots")
     }
+    /// Settings › GitHub shows a made-up connected account in demo mode; `settings-github-disconnected` shows it signed out.
+    @MainActor static var githubDisconnected = false
     private static let pendingQueryKey = "hatch.pendingTicketQuery"
     private static var priorPendingQuery: String??
 
@@ -140,6 +142,20 @@ enum Snapshots {
         _ = try! store.take(tickets[5].id, agent: "Jon")
         let completedRun = try! store.startRun(ticketId: tickets[8].id, agent: "Jon", step: "Preview passed")
         try! store.endRun(completedRun, tokensIn: 18400, tokensOut: 2300, outcome: "ok")
+        // Two weeks of runs for Usage and Reports: Claude Code builds and prepares, Codex sometimes, Iris every day.
+        let kinds: [(provider: String, model: String, role: String, tokens: Int)] = [
+            ("Claude Code", "claude-sonnet-5-5", "build", 180_000), ("Claude Code", "claude-opus-5-5", "prepare", 90_000),
+            ("Claude Code", "claude-haiku-4-5", "iris", 6_000), ("Claude Code", "claude-sonnet-5-5", "ask", 4_000),
+            ("Codex", "gpt-5.5-codex", "fix", 60_000)]
+        for day in 0..<14 {
+            for (i, k) in kinds.enumerated() where (day + i) % 3 != 0 || k.role == "iris" {
+                let start = Calendar.current.date(byAdding: .hour, value: -(day * 24 + i * 2 + 1), to: Date())!
+                let tokens = k.tokens * (1 + (day * 7 + i * 3) % 5) / 3
+                try! store.recordRun(ticketId: tickets[(day + i) % tickets.count].id, agent: k.role == "iris" ? "Iris" : "Agent", step: nil,
+                                     provider: k.provider, model: k.model, role: k.role, tokensIn: tokens * 4 / 5, tokensOut: tokens / 5,
+                                     cacheTokens: tokens * 3, outcome: "ok", startedAt: start, endedAt: start.addingTimeInterval(600))
+            }
+        }
         try! store.logPull(summary: "17 issues updated", ok: true)
         try! store.logPull(summary: "Preview status unavailable", ok: false, error: "Checks are still running.")
         // Decide: a Question Hatch prepared about the components, and a plan over the limit (decisions CO11, DC8).
@@ -299,10 +315,16 @@ enum Snapshots {
                 state.snapshotPresentation = .addProject
             } else if name == "agent-card" {
                 state.snapshotPresentation = .agentCard
+            } else if name == "menu-bar" {                // The menu bar item's panel with two sample agents and the demo's waiting tickets.
+                state.agentRuns = [sampleRun, sampleRun2]
+                state.updateWaitingCount()
+                state.snapshotPresentation = .menuBar
             } else if name.hasPrefix("settings") {
                 state.snapshotPresentation = .settings
                 // settings-<page>, by the page's title: settings-github, settings-general, settings-storage…
-                let page = name.dropFirst("settings-".count)
+                var page = String(name.dropFirst("settings-".count))
+                githubDisconnected = page == "github-disconnected"
+                if githubDisconnected { page = "github" }
                 state.settingsPage = SettingsPage.allCases.first { $0.title.lowercased() == page } ?? .general
             } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count).prefix { $0.isNumber }) {
                 // add-project-5: one step of the setup assistant, numbered as in the full run.
@@ -320,5 +342,13 @@ enum Snapshots {
                      role: .build, providerName: "Claude Code", model: "Sonnet 5.5", repo: "tashda/echo", branch: "ticket/151-toast-spacing",
                      workspace: "/tmp", startedAt: Date().addingTimeInterval(-754), attempt: 1, step: "Editing ToastView.swift",
                      tokensIn: 184_200, tokensOut: 12_900, logPath: "/tmp/none")
+    }
+
+    /// A second running agent for the menu-bar snapshot.
+    static var sampleRun2: AgentRunInfo {
+        AgentRunInfo(ticketId: 5, ticketNumber: "#144", ticketTitle: "Connection test hangs on bad host", runId: 2, agent: "Agent on #144",
+                     role: .build, providerName: "Claude Code", model: "Sonnet 5.5", repo: "acme/app", branch: "ticket/144-connection-test",
+                     workspace: "/tmp", startedAt: Date().addingTimeInterval(-2_312), attempt: 1, step: "Running connection tests",
+                     tokensIn: 96_400, tokensOut: 8_100, logPath: "/tmp/none")
     }
 }

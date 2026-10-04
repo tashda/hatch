@@ -224,7 +224,8 @@ struct AskPanel: View {
 
     private func recordCost(ticket: Ticket?, answer: HXAskAdapter.Answer) {
         state.perform("Record cost") {
-            let runId = try state.store.startRun(ticketId: ticket?.id, agent: "ask", step: "ask with \(answer.label)")
+            let runId = try state.store.startRun(ticketId: ticket?.id, agent: "ask", step: "ask with \(answer.label)",
+                                                 provider: answer.author, model: answer.model, role: "ask")
             try state.store.endRun(runId, tokensIn: answer.tokensIn, tokensOut: answer.tokensOut, outcome: "ok")
         }
     }

@@ -14,7 +14,7 @@ struct HatchApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: AppState.mainWindowId) {
             RootView()
                 .environmentObject(state)
                 .background(WindowTag(identifier: HatchWindows.mainIdentifier))
@@ -61,6 +61,16 @@ struct HatchApp: App {
             SettingsView().environmentObject(state)
         }
         .defaultSize(width: 1040, height: 720)
+
+        // Settings › General › Show in the menu bar (on by default): agents and status while Hatch is in the background.
+        // Removing the item from the menu bar by hand switches the setting off.
+        MenuBarExtra(isInserted: Binding(get: { state.showMenuBarItem },
+                                         set: { if $0 != state.showMenuBarItem { state.setFlag(Preference.menuBar, $0) } })) {
+            MenuBarPanel().environmentObject(state)
+        } label: {
+            MenuBarLabel(waiting: state.waitingCount > 0)
+        }
+        .menuBarExtraStyle(.window)
     }
 }
 

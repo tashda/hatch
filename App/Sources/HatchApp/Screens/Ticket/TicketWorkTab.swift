@@ -163,10 +163,14 @@ struct TicketWorkTab: View {
                 PlainChip(text: ws.state)
                 Spacer()
                 // Take over: each ticket has its own workspace, so no other agent is disturbed (decision I5).
-                Button("Open in Terminal") { openTerminal(ws.path) }
+                Button("Open in Terminal") { state.openInTerminal(ws.path) }
                     .controlSize(.small)
-                Button("Open in Xcode") { openXcode(ws.path) }
+                Button("Open in Editor") { state.openInEditor(ws.path) }
                     .controlSize(.small)
+                if let client = state.gitClientName {
+                    Button("Open in \(client)") { state.openInGitClient(ws.path) }
+                        .controlSize(.small)
+                }
                 Button("Show in Finder") {
                     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: ws.path)
                 }
@@ -202,20 +206,6 @@ struct TicketWorkTab: View {
         let number: Int = ticket.ghNumber ?? ticket.id
         let slug = String(HatchStore.slug(ticket.title).prefix(32))
         return "ticket/\(number)-\(slug)"
-    }
-
-    private func openTerminal(_ path: String) {
-        let terminal = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
-        NSWorkspace.shared.open([URL(fileURLWithPath: path)], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
-    }
-
-    private func openXcode(_ path: String) {
-        let folder = URL(fileURLWithPath: path)
-        if let xcode = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.dt.Xcode") {
-            NSWorkspace.shared.open([folder], withApplicationAt: xcode, configuration: NSWorkspace.OpenConfiguration())
-        } else {
-            NSWorkspace.shared.open(folder)
-        }
     }
 
     // MARK: Claims

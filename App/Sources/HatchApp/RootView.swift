@@ -93,6 +93,11 @@ struct RootView: View {
                 AgentCard(run: Snapshots.sampleRun) {}
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if state.snapshotPresentation == .menuBar {
+                // Snapshot only: the menu bar item's panel, which lives outside the window and is not captured.
+                MenuBarPanel()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if state.snapshotPresentation == .addProject {
                 ProjectSetupAssistant(store: state.store, demoStep: ProjectSetupModel.Step(rawValue: state.snapshotSetupStep))
                     .id(state.snapshotSetupStep)
@@ -116,6 +121,7 @@ struct RootView: View {
         case .addProject: "Add project"
         case .repositorySelector: "Choose repositories"
         case .agentCard: "Agent"
+        case .menuBar: "Menu bar"
         case nil: state.route.title
         }
     }

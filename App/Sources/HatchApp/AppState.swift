@@ -10,19 +10,26 @@ import HatchImport
 /// change, and holds navigation and panel state. Screens never write SQL; they call store methods inside `perform`.
 @MainActor
 final class AppState: ObservableObject {
-    enum SnapshotPresentation { case settings, palette, addProject, repositorySelector, agentCard }
+    enum SnapshotPresentation { case settings, palette, addProject, repositorySelector, agentCard, menuBar }
 
     let store: HatchStore
     let paths: AppPaths
     private var stageServer: StageServer?
     private var syncTimer: Timer?
+    /// Looks every hour whether the daily backup and clean-up are due; separate from sync, which may be off.
+    private var maintenanceTimer: Timer?
+    /// True once services run; the timer may be off (Only when I ask) while changes still sync after a few seconds.
+    private var syncStarted = false
     @Published private(set) var syncing = false
     private var syncDebounce: DispatchWorkItem?
     private var notebookDirty: Set<Int> = []
     private var notebookDebounce: DispatchWorkItem?
 
     /// Where the main window is, with its Back and Forward. Settings and ticket windows keep their own history.
-    @Published private(set) var history = PageHistory<Route>(start: .desk)
+    /// The page is remembered as it changes, so "When Hatch opens: The last page" can return to it (Settings › General).
+    @Published private(set) var history = PageHistory<Route>(start: .desk) {
+        didSet { if history.current != oldValue.current { rememberPlace() } }
+    }
     var route: Route {
         get { history.current }
         set { history.replaceCurrent(with: newValue) }
@@ -30,7 +37,7 @@ final class AppState: ObservableObject {
     /// A card the current page asks the Iris inspector to show at its top (the Desk's decision brief).
     @Published var inspectorTop: AnyView?
     @Published var selectedProjectKey: String? {        // nil means "All projects" (decision B2, B3)
-        didSet { if selectedProjectKey != oldValue { refreshDecisionCount() } }
+        didSet { rememberProject(); updateWaitingCount(); if selectedProjectKey != oldValue { refreshDecisionCount() } }
     }
     @Published var selectedTicketId: Int?
     @Published var revision = 0                          // bumped after any change so views reload
@@ -62,8 +69,19 @@ final class AppState: ObservableObject {
     /// Agents the launcher is running now, for the footer, the ticket and the Agents page.
     @Published var agentRuns: [AgentRunInfo] = []
     @Published var agentsPaused = false
+    /// Settings › General: Hatch's item in the menu bar, on by default. Snapshot runs never add it to the real menu bar.
+    @Published var showMenuBarItem = Snapshots.folder == nil
+    /// Settings › General: whether the Dock icon shows how many tickets wait for you.
+    var dockBadgeShown = true
+    /// Tickets waiting for the owner, counted once per change for the Dock badge and the menu bar item.
+    @Published private(set) var waitingCount = 0
+    /// Today's tokens against the daily limits on Settings › Usage; above the pause limit no new work starts.
+    @Published var usageLevel: UsageLimits.Level = .fine
     var launcher: AgentLauncher?
     var launchTimer: Timer?
+    /// The daily backup and clean-up (Settings › Storage): when it last ran, and whether it is running now.
+    var storageMaintainedAt: Date?
+    var maintainingStorage = false
     @Published private(set) var exportingNotebooks = false
     /// Snapshot harness only: selects each ticket subview without changing the normal navigation model.
     @Published var snapshotTicketTab: TicketTab?
@@ -99,7 +117,9 @@ final class AppState: ObservableObject {
         let paths = AppPaths.default
         do {
             let store = try HatchStore(path: paths.database.path)
-            return AppState(store: store, paths: paths)
+            let state = AppState(store: store, paths: paths)
+            state.applyLaunchPreferences()
+            return state
         } catch {
             // The app must still open so the owner sees the message; fall back to a throwaway in-memory store.
             let store = try! HatchStore.inMemory()
@@ -120,6 +140,12 @@ final class AppState: ObservableObject {
             }
         }
         startLauncher()
+        maintainStorageIfDue()
+        if maintenanceTimer == nil {
+            maintenanceTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.maintainStorageIfDue() }
+            }
+        }
         guard stageServer == nil else { return }
         let server = StageServer(store: store, paths: HatchPaths(home: paths.root))
         server.events = { [weak self] _ in
@@ -136,9 +162,24 @@ final class AppState: ObservableObject {
     /// Pushes queued changes to the tickets repository of every project and pulls what changed there. Off the main thread;
     /// the sidebar footer shows the result (decision B5). Runs on a timer, shortly after a change, and from the Go menu.
     func startSync() {
-        guard syncTimer == nil else { return }
+        guard !syncStarted else { return }
+        syncStarted = true
         syncNow()
-        syncTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        restartSyncTimer()
+    }
+
+    /// The `sync_interval` setting: seconds between checks of GitHub, 0 for only when the owner asks. Default a minute.
+    static let syncIntervalSetting = "sync_interval"
+
+    var syncInterval: Int {
+        hxSetting(Self.syncIntervalSetting).flatMap(Int.init) ?? 60
+    }
+
+    /// Starts the timer again with the saved interval, after Settings › GitHub changes it.
+    func restartSyncTimer() {
+        syncTimer?.invalidate(); syncTimer = nil
+        guard syncStarted, syncInterval > 0 else { return }
+        syncTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(syncInterval), repeats: true) { [weak self] _ in
             Task { @MainActor in self?.syncNow() }
         }
     }
@@ -234,6 +275,7 @@ final class AppState: ObservableObject {
 
     func stopServices() {
         syncTimer?.invalidate(); syncTimer = nil
+        syncStarted = false
         launchTimer?.invalidate(); launchTimer = nil
         stageServer?.stop()
         stageServer = nil
@@ -304,6 +346,12 @@ final class AppState: ObservableObject {
     /// Tickets waiting for the owner, for the Dock badge and the sidebar (decision B6).
     var yourTurnCount: Int { ((try? store.countByTurn(projectId: projectFilterId)) ?? [:])[.you] ?? 0 }
 
+    /// Counts the waiting tickets and shows them on the Dock icon, unless Settings › General turned the badge off.
+    func updateWaitingCount() {
+        let count = yourTurnCount
+        if waitingCount != count { waitingCount = count }
+    }
+
     /// Called after anything is written to a project's notebook clone: Hatch commits and pushes it in the background.
     func notebookChanged(projectId: Int) {
         notebookDirty.insert(projectId)
@@ -328,9 +376,10 @@ final class AppState: ObservableObject {
     func refresh() {
         revision += 1
         refreshSyncSummary()
-        if syncSummary.pending > 0, syncTimer != nil { scheduleSync() }
+        if syncSummary.pending > 0, syncStarted { scheduleSync() }
         // Every change may move a ticket or record a decision: refresh the notebooks shortly after the last one.
-        if syncTimer != nil { scheduleNotebookExport() }
+        if syncStarted { scheduleNotebookExport() }
+        updateWaitingCount()
         refreshDecisionCount()
     }
 
@@ -338,7 +387,7 @@ final class AppState: ObservableObject {
     func refreshDecisionCount() {
         let n = store.pendingDecisionCount(projectId: projectFilterId)
         if n != decisionCount { decisionCount = n }
-        NSApp?.dockTile.badgeLabel = n > 0 ? String(n) : nil
+        NSApp?.dockTile.badgeLabel = dockBadgeShown && n > 0 ? String(n) : nil
     }
 
     /// Opens a Decide session over everything waiting, or only one area's decisions.
@@ -385,10 +434,16 @@ final class AppState: ObservableObject {
 }
 
 /// Where Hatch keeps its files (database, token, caches). Overridable with HATCH_HOME for tests and the CLI.
-struct AppPaths {
+struct AppPaths: Sendable {
     let root: URL
     var database: URL { root.appendingPathComponent("hatch.sqlite") }
     var workspaces: URL { root.appendingPathComponent("workspaces", isDirectory: true) }
+    /// Agent run logs, one JSON Lines file per run (AgentLauncher).
+    var runs: URL { root.appendingPathComponent("runs", isDirectory: true) }
+    /// Daily or weekly copies of the database (Settings › Storage).
+    var backups: URL { root.appendingPathComponent("backups", isDirectory: true) }
+    /// Local copies of screenshots added to tickets, by ticket id.
+    var attachments: URL { root.appendingPathComponent("attachments", isDirectory: true) }
 
     static var `default`: AppPaths {
         if let override = ProcessInfo.processInfo.environment["HATCH_HOME"] { return AppPaths(root: URL(fileURLWithPath: override)) }

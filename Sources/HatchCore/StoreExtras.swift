@@ -241,14 +241,47 @@ public extension HatchStore {
 
     // Agent runs and cost (decision K5)
 
-    func startRun(ticketId: Int?, agent: String, step: String?) throws -> Int {
-        try db.execute("INSERT INTO agent_run(ticket_id, agent, step, started_at) VALUES(?,?,?,?)", [.opt(ticketId), .text(agent), .opt(step), .date(now())])
+    /// Starts a run record. Provider, model and task (an `AgentRole` raw value) say what did the work, for Usage and Reports.
+    func startRun(ticketId: Int?, agent: String, step: String?, provider: String? = nil, model: String? = nil, role: String? = nil) throws -> Int {
+        try db.execute("INSERT INTO agent_run(ticket_id, agent, step, started_at, provider, model, role) VALUES(?,?,?,?,?,?,?)",
+                       [.opt(ticketId), .text(agent), .opt(step), .date(now()), .opt(provider), .opt(model), .opt(role)])
         return Int(db.lastInsertRowID)
     }
 
-    func endRun(_ id: Int, tokensIn: Int, tokensOut: Int, outcome: String) throws {
-        try db.execute("UPDATE agent_run SET tokens_in = ?, tokens_out = ?, ended_at = ?, outcome = ? WHERE id = ?",
-                       [.int(tokensIn), .int(tokensOut), .date(now()), .text(outcome), .int(id)])
+    func endRun(_ id: Int, tokensIn: Int, tokensOut: Int, outcome: String, cacheTokens: Int = 0) throws {
+        try db.execute("UPDATE agent_run SET tokens_in = ?, tokens_out = ?, ended_at = ?, outcome = ?, cache_tokens = ? WHERE id = ?",
+                       [.int(tokensIn), .int(tokensOut), .date(now()), .text(outcome), .int(cacheTokens), .int(id)])
+    }
+
+    /// Records a run that already finished, at its own times: for imported history and the demo data.
+    @discardableResult
+    func recordRun(ticketId: Int?, agent: String, step: String?, provider: String?, model: String?, role: String?,
+                   tokensIn: Int, tokensOut: Int, cacheTokens: Int = 0, outcome: String, startedAt: Date, endedAt: Date) throws -> Int {
+        try db.execute("""
+            INSERT INTO agent_run(ticket_id, agent, step, started_at, ended_at, provider, model, role, tokens_in, tokens_out, cache_tokens, outcome)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+            """, [.opt(ticketId), .text(agent), .opt(step), .date(startedAt), .date(endedAt), .opt(provider), .opt(model), .opt(role),
+                  .int(tokensIn), .int(tokensOut), .int(cacheTokens), .text(outcome)])
+        return Int(db.lastInsertRowID)
+    }
+
+    /// Run records with what they used, for Usage and Reports. Aggregation is done by the caller; a day's runs are few.
+    func runRecords(since: Date, until: Date? = nil, projectId: Int? = nil) throws -> [RunRecord] {
+        var sql = """
+            SELECT r.*, t.project_id AS pid, t.area AS tarea, t.gh_number AS tgh, t.title AS ttitle, t.type AS ttype
+            FROM agent_run r LEFT JOIN ticket t ON t.id = r.ticket_id WHERE r.started_at >= ?
+            """
+        var params: [SQLValue] = [.date(since)]
+        if let until { sql += " AND r.started_at < ?"; params.append(.date(until)) }
+        if let projectId { sql += " AND t.project_id = ?"; params.append(.int(projectId)) }
+        return try db.query(sql + " ORDER BY r.started_at", params) {
+            RunRecord(id: $0.int("id")!, ticketId: $0.int("ticket_id"), ticketNumber: $0.int("tgh").map { "#\($0)" },
+                      ticketTitle: $0.string("ttitle"), ticketType: $0.string("ttype").flatMap(TicketType.init(rawValue:)),
+                      area: $0.string("tarea"), projectId: $0.int("pid"), agent: $0.string("agent") ?? "",
+                      provider: $0.string("provider"), model: $0.string("model"), role: $0.string("role"),
+                      tokensIn: $0.int("tokens_in") ?? 0, tokensOut: $0.int("tokens_out") ?? 0, cacheTokens: $0.int("cache_tokens") ?? 0,
+                      startedAt: $0.date("started_at")!, endedAt: $0.date("ended_at"), outcome: $0.string("outcome"))
+        }
     }
 
     func tokenTotals(ticketId: Int? = nil, since: Date? = nil) throws -> (input: Int, output: Int) {
@@ -277,4 +310,29 @@ public extension HatchStore {
              (JSONValue.parse($0.string("spec_codes_json") ?? "[]").arrayValue ?? []).compactMap { $0.stringValue }, $0.date("dat") ?? Date())
         }
     }
+}
+
+
+/// One run of a model, with what it used. Tokens only: plans have no per-token price (decision on Reports).
+public struct RunRecord: Equatable, Sendable {
+    public var id: Int
+    public var ticketId: Int?
+    public var ticketNumber: String?
+    public var ticketTitle: String?
+    public var ticketType: TicketType?
+    public var area: String?
+    public var projectId: Int?
+    public var agent: String
+    /// The provider's name; nil for runs recorded before providers were.
+    public var provider: String?
+    public var model: String?
+    /// An `AgentRole` raw value (iris, ask, prepare, build, fix).
+    public var role: String?
+    public var tokensIn: Int
+    public var tokensOut: Int
+    public var cacheTokens: Int
+    public var startedAt: Date
+    public var endedAt: Date?
+    public var outcome: String?
+    public var tokens: Int { tokensIn + tokensOut }
 }

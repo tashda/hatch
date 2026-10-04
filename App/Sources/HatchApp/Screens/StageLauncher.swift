@@ -76,7 +76,7 @@ final class StageLauncher {
     private func showNotBuilt(ticket: Ticket) {
         let alert = NSAlert()
         alert.messageText = "The Stage is not built yet"
-        alert.informativeText = "Hatch Stage opens \(ticket.displayNumber) in its own window. Build the Stage app, then set its path under Settings, Apps Hatch opens."
+        alert.informativeText = "Hatch Stage opens \(ticket.displayNumber) in its own window. Build the Stage app, then choose it in Settings › Tools, under Project apps."
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()

@@ -23,7 +23,7 @@ enum VettingBridge {
                     // Iris uses the provider and model chosen in Settings, Agents. A missing or switched-off
                     // provider is a failure with a reason, never a silent fallback to another model.
                     let iris = try AgentFactory.resolve(.iris, settings: AgentSettings.load(from: store), context: context)
-                    _ = try VettingService(store: store, runner: iris.runner, label: iris.label).vet(ticketId: ticketId)
+                    _ = try VettingService(store: store, runner: iris.runner, label: iris.label, provider: iris.provider.name, model: iris.model).vet(ticketId: ticketId)
                 } catch {
                     try? store.record(ticketId, actor: "Iris", kind: "vetting-failed", payload: ["reason": .string("\(error)")])
                 }

@@ -115,3 +115,69 @@ final class GitHubBranchTests: XCTestCase {
         XCTAssertThrowsError(try client.currentUser())
     }
 }
+
+/// What Settings › GitHub reads: the account picture, the installation's access, the rate limit and the labels.
+final class GitHubSettingsClientTests: XCTestCase {
+    var transport: CannedTransport!
+    var client: GitHubClient!
+
+    override func setUp() {
+        transport = CannedTransport()
+        client = GitHubClient(token: "tok", transport: transport)
+    }
+
+    func testCurrentUserReadsTheAvatar() throws {
+        transport.responses = [json(#"{"login":"ada","avatar_url":"https://avatars.githubusercontent.com/u/1"}"#)]
+        XCTAssertEqual(try client.currentUser().avatarURL?.absoluteString, "https://avatars.githubusercontent.com/u/1")
+    }
+
+    func testInstallationsReadPermissionsAndSelection() throws {
+        transport.responses = [json(#"""
+        {"total_count":1,"installations":[{"id":7,"app_slug":"hatch","account":{"login":"ada"},
+          "html_url":"https://github.com/settings/installations/7","repository_selection":"selected",
+          "permissions":{"issues":"write","metadata":"read","checks":"read"}}]}
+        """#)]
+        let installation = try XCTUnwrap(client.installations().first)
+        XCTAssertEqual(installation.repositorySelection, "selected")
+        XCTAssertFalse(installation.allRepositories)
+        XCTAssertEqual(installation.permissions, ["issues": "write", "metadata": "read", "checks": "read"])
+    }
+
+    func testPermissionNeedsCompareTheLowestGrant() {
+        let granted = ["issues": "write", "contents": "read", "checks": "read", "metadata": "read", "administration": "admin"]
+        let needs = Dictionary(uniqueKeysWithValues: GitHubPermissionNeed.all.map { ($0.title, $0) })
+        XCTAssertTrue(needs["Issues"]!.isMet(in: granted))
+        XCTAssertEqual(needs["Contents"]!.granted(in: granted), .read)
+        XCTAssertFalse(needs["Contents"]!.isMet(in: granted), "read is not enough to push Hatch's branch")
+        XCTAssertFalse(needs["Pull requests"]!.isMet(in: granted))
+        XCTAssertEqual(needs["Checks and commit statuses"]!.granted(in: granted), GitHubAccess.none, "statuses is missing")
+        XCTAssertTrue(needs["Administration"]!.isMet(in: granted), "admin counts as write")
+        XCTAssertTrue(needs["Metadata"]!.isMet(in: granted))
+    }
+
+    func testInstallationRepositoryCount() throws {
+        transport.responses = [json(#"{"total_count":12,"repositories":[{"full_name":"ada/a"}]}"#)]
+        XCTAssertEqual(try client.installationRepositoryCount(7), 12)
+        XCTAssertEqual(transport.requests[0].url.path, "/user/installations/7/repositories")
+    }
+
+    func testRateLimitReadsTheCoreAllowance() throws {
+        transport.responses = [json(#"{"resources":{"core":{"limit":5000,"remaining":4812,"reset":1790000000,"used":188}},"rate":{}}"#)]
+        let limit = try client.rateLimit()
+        XCTAssertEqual(limit, GitHubRateLimit(remaining: 4812, limit: 5000, reset: Date(timeIntervalSince1970: 1_790_000_000)))
+        XCTAssertEqual(transport.requests[0].url.path, "/rate_limit")
+    }
+
+    func testMissingHatchLabels() throws {
+        let present = LabelSpec.baseSet.dropFirst(2).map { #"{"name":"\#($0.name.uppercased())"}"# }.joined(separator: ",")
+        transport.responses = [json("[\(present),{\"name\":\"bug\"}]")]
+        let missing = try client.missingHatchLabels(repo: "ada/tickets")
+        XCTAssertEqual(missing, LabelSpec.baseSet.prefix(2).map(\.name), "names compare without case")
+        XCTAssertEqual(transport.requests[0].url.path, "/repos/ada/tickets/labels")
+    }
+
+    func testAllLabelsPresent() throws {
+        transport.responses = [json("[" + LabelSpec.baseSet.map { #"{"name":"\#($0.name)"}"# }.joined(separator: ",") + "]")]
+        XCTAssertEqual(try client.missingHatchLabels(repo: "ada/tickets"), [])
+    }
+}

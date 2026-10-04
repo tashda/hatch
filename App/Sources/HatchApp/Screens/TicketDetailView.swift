@@ -166,7 +166,11 @@ struct TicketDetailView: View {
                 } label: { Label("Copy Number and Title", systemImage: "doc.on.doc") }
                 if canMove(t, to: .dropped) {
                     Divider()
-                    Button(role: .destructive) { confirmDrop = true } label: { Label("Drop Ticket…", systemImage: "trash") }
+                    // Settings › General › Ask before dropping a ticket (on by default).
+                    let ask = state.flag(Preference.confirmDrop)
+                    Button(role: .destructive) { if ask { confirmDrop = true } else { move(to: .dropped) } } label: {
+                        Label(ask ? "Drop Ticket…" : "Drop Ticket", systemImage: "trash")
+                    }
                 }
             } label: {
                 Image(systemName: "ellipsis")
