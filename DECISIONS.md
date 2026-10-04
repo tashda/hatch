@@ -1337,9 +1337,9 @@ Conflicts (agreed 2026-10-04, built the same day). The principle: Hatch finds co
 | CO12 | Values that are nearly the same, and typed-in values equal to a name | Near duplicates are listed in the brief of the ticket that moves that kind; the agent proposes the merges and the owner approves them in the plan. An exact match is replaced without asking, since nothing visible changes. |
 | CO13 | When tickets are made and where conflicts show | Setup's Review lists what will be added (for example "1 question: two sets of components"). Everything is a draft, kept in Hatch until submitted, as today. A rescan offers tickets, never opens them by itself. Where the owner works through these is open: the owner asked for a dedicated way to go over everything that needs a decision, not a section on the Components page. |
 
-## U. How the Stage uses components (open, asked 2026-10-04, ids SC1 to SC5)
+## U. How the Stage uses components (answered 2026-10-04 as WF-V6: all recommendations, ids SC1 to SC5)
 
-Not answered yet and not built. They apply once the Stage is built per Proposal (S1); today the Stage is one prebuilt app (the toast spike). ★ marks the recommendation.
+Answered: every recommendation (A), through WF-V6 in section X. Not built yet. They apply once the Stage is built per Proposal (S1); today the Stage is one prebuilt app (the toast spike). ★ marks the recommendation.
 
 ### SC1. Which code does a Stage build against?
 
@@ -1349,7 +1349,7 @@ A Proposal's Stage imports the app's components. They can come from different co
 - **B · The owner's own clone**: no extra copy, but it can be on any branch with half-finished edits.
 - **C · The ticket's branch**: shows the ticket's own changes, but a Proposal is judged before anything is built.
 
-**Open:** not answered yet.
+**Chosen:** A (WF-V6).
 
 **My recommendation and reason:** A. A Proposal should be judged against what ships today. The owner's clone can be on any branch with half-finished edits, and the ticket's branch has nothing on it yet while options are judged. Recording the commit lets a decision say what it was compared with.
 
@@ -1360,7 +1360,7 @@ An option may need a value the components do not have yet, such as a new backgro
 - ★ **A · Proposed inside the option, moved on build**: the option adds them in its own folder; the Stage shows "adds 2 colors"; the build ticket moves only the accepted ones into the components.
 - **B · Added to the components on a branch while preparing**: the Stage imports the branch, so options use the real package.
 
-**Open:** not answered yet.
+**Chosen:** A (WF-V6).
 
 **My recommendation and reason:** A. Rejected options never leave anything in the app, and the components change once, on the build ticket, through the normal review. B needs a components branch per Proposal and has to be cleaned up when options are dropped.
 
@@ -1371,7 +1371,7 @@ Every Proposal starts with the app as it is now. Agents are told "Echo today" (`
 - ★ **A · "App today", the real component where there is one**: renamed for any app (the old key still accepted). When the thing being changed is a component, such as `PrimaryButton`, the Stage draws the real one; a screen that lives only in the app is drawn by hand from the components.
 - **B · Always drawn by hand**: as now, renamed only.
 
-**Open:** not answered yet.
+**Chosen:** A (WF-V6).
 
 **My recommendation and reason:** A. A real component cannot drift from what ships, and a hand-drawn screen built from the components is much closer than one built from copied values. The rename is needed either way, since Hatch is for any macOS app.
 
@@ -1380,7 +1380,7 @@ Every Proposal starts with the app as it is now. Agents are told "Echo today" (`
 - ★ **A · Yes, per option, with a gate warning**: "uses 9 components, adds 1, types 3 values in", from the same free text check as `hatch ready`; the quality gate warns the agent before the owner sees it.
 - **B · No**: the Stage shows only the options.
 
-**Open:** not answered yet.
+**Chosen:** A (WF-V6).
 
 **My recommendation and reason:** A. What an option adds or types in is part of its cost, and it helps choose between two that look alike. The check costs nothing: no model call.
 
@@ -1391,7 +1391,7 @@ A project may have chosen Not now, or have its components in a plain folder of t
 - ★ **A · Plain SwiftUI with a banner**: the Stage works as it does now and says the options only look roughly like the app.
 - **B · Compile the app's folder into the round**: copy or link the folder's files into the round.
 
-**Open:** not answered yet.
+**Chosen:** A (WF-V6).
 
 **My recommendation and reason:** A. Files in an app folder usually depend on the rest of the app and would not compile alone; the honest banner tells the owner what they are judging. Moving the folder into a package is a ticket like any other (CO8).
 
@@ -1432,3 +1432,57 @@ The owner wants to compare tickets and to work mainly from the keyboard. Tabs in
 | KB8 | Ticket page keys | ⌃1 to ⌃5 the tabs, ⇧⌘↵ and ⌥⌘↵ the banner's two buttons, ⌥⌘R send back with notes, ⌥⌘P park, ⌥⌘Z resume or reopen, ⌥⌘⌫ drop (still confirmed). All in the Ticket menu, enabled only when the status allows them. | Everything the page offers has a key. |
 | KB9 | Send back with notes | One sheet from the ticket: the note is added as an instruction and the ticket moves to Revising (Sketch, Proposal) or Fixing (after verifying), the same two writes the Sketch board and Previews make. | One way to send back from anywhere. |
 | KB10 | Saved views and the sheet | Saved views get ⌥⌘1 to ⌥⌘9 in the Go menu, in the sidebar's order. ⌘/ opens a read-only sheet of all shortcuts with Customize… | Views are places too. |
+
+## X. The whole workflow: one prompt in, Iris routes it (answered 2026-10-04, ids WF-C1 to WF-A4)
+
+Page: https://claude.ai/artifact/WLEm158ifiUuQdPNuGjxzs (source `design-review/design-workflow.html`, with the 28 gaps G1 to G28 found in the code). The owner asked that a ticket can be created from a prompt alone, that Iris works out the type, area and everything else and asks only what she cannot guess, and that Hatch needs the owner only where it really does. Every answer was the recommendation (A). Ids carry the `WF-` prefix so they do not clash with the older A to W ids.
+
+| Id | Question | Choice | Reason | Replaces |
+|---|---|---|---|---|
+| WF-C1 | What you give | Only the prompt (pictures, links, a crash log if you like); Iris sets the rest | A type picked before anyone has looked is a guess | E1, E7 (type picker) |
+| WF-C2 | Where you capture | Everywhere: ⌘N, a system-wide shortcut, the menu bar, the palette, the Ask panel's Make a ticket, `hatch new`. Owner's note: needs a better default shortcut | Bugs show up while using the app | |
+| WF-C3 | When Iris starts | At once; Save as draft only when chosen | Submit existed only because Iris needed a finished ticket | |
+| WF-C4 | Project | The current one, moved by Iris when it clearly belongs elsewhere (she says so; asks when unsure) | Most prompts are about what is on screen | |
+| WF-C5 | Screenshots | Iris sees them, made smaller | A marked screenshot is often the whole prompt | |
+| WF-T1 | How much Iris decides | She applies it, shows what she did, every field has Change; asks only when unsure or on a conflict | Needed for prompt-only tickets; nothing starts until filed | E8, E9 |
+| WF-T2 | What Iris sets | Path, type, title, text, area, priority, related and parent links, Blocks, Spec codes, how it is verified | Area picks files and tests, priority the queue | |
+| WF-T3 | When unsure | Asks about that one field with her best guess picked | A one-click guess beats a wrong agent run | |
+| WF-T4 | Several things in one prompt | Iris proposes a split (Theme and children), one card to confirm | Agents and claims work per ticket | |
+| WF-T5 | Probable duplicate | Sure: the prompt is added to the original as a note, this one closed as duplicate, you are told, Undo reopens; unsure: asked | Same thing said again | E6 |
+| WF-T6 | Undoes an earlier decision | Always a question: keep or replace | Decisions are deliberate | |
+| WF-T7 | Iris's model | Haiku first, a stronger model only when unsure about the path. Owner's note: the "unsure" model is chosen in Settings, Agents | Cost; measure on real prompts | |
+| WF-Q1 | How Iris asks | Up to 3 at a time, her guess picked, at most two rounds | Few, quick questions | E4 (5, one round) |
+| WF-Q2 | After you answer | Iris checks again with the answers, then files | An answer can change what the ticket is | |
+| WF-Q3 | Where you answer | Decide, the notification, the menu bar, the ticket | Keeps agents moving | |
+| WF-R1 | Types | Five: Question, Proposal (any change with options, visual or written), Bug, Tweak, Theme. Sketch folds into Proposal's web draft; existing Sketches open as Proposal drafts | Type is a label once Iris files; path decides what happens | A1, G1 to G4 |
+| WF-R2 | Type change during work | Hatch may change it when the work shows it (Bug → Proposal, Tweak → Proposal, Question → Theme), logged, owner told | Keeps history on one ticket | E9 (before work only) |
+| WF-P1 | Queue order | Urgent first, then priority, then age; nothing running is stopped | A crash should not wait; stopping wastes tokens | |
+| WF-V1 | Draft first | Every visual change starts with a web draft; it can say Swift is needed | Cheapest point to change direction | S1 (Swift for every Proposal) |
+| WF-V2 | Who decides Swift | The agent recommends with a reason, the owner decides | One recommendation and its reason | |
+| WF-W1 | Written proposal | Options with gain and cost, files and areas, risk, migration, test plan, rough size; one recommended | Makes structural choices comparable and verifiable | |
+| WF-F1 | Unknown cause | Investigate first: reproduce, measure, find the cause, hand in findings | A blind fix is a guess | |
+| WF-F2 | Known or unknown | Iris decides at filing; the build agent can switch to investigating | Most are clear from the prompt | |
+| WF-Q4 | After a Question's option is chosen | Iris drafts the follow-up tickets from the choice and files them, linked, with Undo | A decision nobody carries out is a dead end | |
+| WF-Q5 | Replying to an answer | A reply that asks something sends it back to the agent; a note does not | Follow-up questions went nowhere | |
+| WF-V3 | Accepted draft builds from | The chosen HTML, the mix and the pins, kept in Hatch, given to the build agent as files; verified in a Preview | Small things stay quick | G4 (Make it real as a new ticket) |
+| WF-V4 | Drafts in Decide | Yes: the card shows the variants side by side with the exits | Most drafts are a quick look | DC3 for drafts |
+| WF-W2 | Accepted written proposal | A decision in the notebook, and the same ticket builds it (split first when large) | The proposal is already a brief | |
+| WF-F3 | Findings with one small fix | Straight on to build, owner told; otherwise Your call | No choice, no stop | |
+| WF-V5 | Building a Proposal's Stage | One rounds package Hatch keeps, one target per Proposal; built and checked at `hatch offer` | Measured at about 2 s per round | |
+| WF-V6 | SC1 to SC5 | The recommendations in section U (all A) | Honest rounds, nothing left from rejected options | SC1 to SC5 |
+| WF-B1 | Plan approval | Over the file limit or in a protected area; a plain Bug no longer waits | Investigations cover what Bug approval did | I2 |
+| WF-B2 | Freeing files | When the holder is handed in to verify; the next builds on the base branch | Waiting for merge holds the queue | K (claims at Done) |
+| WF-B3 | Agent stops twice | Once more on the stronger model, then ask the owner with the log | Most stops are the model getting lost | |
+| WF-F4 | Speed fixes | A measure command per area; numbers before and after required; worse fails | Numbers, not "feels faster" | |
+| WF-F5 | Bug fix test | A test that failed on the base branch, where the area has tests; Hatch checks it | Proves the fix, prevents return | |
+| WF-K1 | Match check | Build it: parts at 0.5 pt and an image comparison, shown at verify | Catches drift before the owner looks | I4 (still open) |
+| WF-K2 | Who verifies | Only what can be seen or measured; tests and CI verify structure and chores | A Preview of a pool change checks nothing | J (every ticket in a Preview) |
+| WF-K3 | Checklist | Iris writes 2 to 5 items from the ticket and what was accepted | She did not build it | |
+| WF-K4 | Preview contents | Hatch builds one Preview with everything waiting in the project | Faster, finds clashes early | |
+| WF-L1 | After Looks right | Merge automatically when the plan is clean; ask only on conflicts | No choice left | |
+| WF-L2 | Reaching dev | Push the integration branch; one pull request to dev, merged by Hatch on green CI | Keeps branch protection | I (manual promote) |
+| WF-L3 | Done | When in dev with green CI; a CI failure sends it to Fixing once, then asks | Done means in dev and passing | |
+| WF-A1 | How often Hatch stops | Only for the "needs you" list on the page (Iris cannot guess, conflicts, real choices, large plans, stuck agents, things to see, what Hatch cannot fix) | That is where a stop adds a decision | |
+| WF-A2 | Follow-ups from agents | `hatch suggest`, filed by Iris like a prompt, linked to where it came from | Notes get lost | |
+| WF-A3 | Digest | Daily, on the Desk and in the menu bar | Trust needs a place to look | |
+| WF-A4 | Issues opened on GitHub | Filed by Iris like a prompt | Same path from anywhere | |

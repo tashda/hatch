@@ -1,0 +1,965 @@
+<title>Hatch Workflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column with a sticky stage index on wide screens; diagrams and the journey table scroll sideways in their own boxes. */
+:root {
+  --bg: #f6f7f8; --surface: #ffffff; --fg: #1d2329; --muted: #5d6873; --line: #d9dee3;
+  --you: #b4540a; --agent: #0f7c7a; --hatch: #56657a; --done: #2e7d3b; --paused: #8a9097; --bad: #c0362c; --warn: #a8660b;
+  --you-soft: #f8ebe0; --agent-soft: #e0f1f0; --hatch-soft: #e8ecf1; --done-soft: #e3f1e5; --bad-soft: #f8e3e1; --warn-soft: #f6ecd9; --code-bg: #eef1f4;
+  --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Sans 3", -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15191d; --surface: #1d2328; --fg: #e6eaee; --muted: #9aa5af; --line: #333c44;
+  --you: #f0954a; --agent: #4cc3bf; --hatch: #9aabc0; --done: #6cc47a; --paused: #8e959c; --bad: #f07a70; --warn: #e3a94e;
+  --you-soft: #3a2a1d; --agent-soft: #173331; --hatch-soft: #262e38; --done-soft: #1c3221; --bad-soft: #3d2220; --warn-soft: #382c18; --code-bg: #262d33;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #15191d; --surface: #1d2328; --fg: #e6eaee; --muted: #9aa5af; --line: #333c44;
+  --you: #f0954a; --agent: #4cc3bf; --hatch: #9aabc0; --done: #6cc47a; --paused: #8e959c; --bad: #f07a70; --warn: #e3a94e;
+  --you-soft: #3a2a1d; --agent-soft: #173331; --hatch-soft: #262e38; --done-soft: #1c3221; --bad-soft: #3d2220; --warn-soft: #382c18; --code-bg: #262d33;
+  color-scheme: dark; }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.55; }
+.page { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 96px; display: grid; gap: 64px; }
+.prose { max-width: 72ch; }
+h1, h2, h3, h4 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 2.2rem; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.5rem; font-weight: 700; }
+h3 { font-size: 1.12rem; font-weight: 700; }
+h4 { font-size: 0.95rem; font-weight: 700; }
+p { margin: 0; }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+section { display: grid; gap: 18px; min-width: 0; }
+.eyebrow { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.12rem; color: var(--muted); }
+.small { font-size: 0.9rem; color: var(--muted); }
+code { font-family: var(--mono); font-size: 0.84em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--agent); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--you); outline-offset: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.9rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+
+/* Progress */
+.progress { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.bar { flex: 1 1 200px; height: 8px; background: var(--hatch-soft); border-radius: 99px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--you); transition: width .3s; }
+.progress .count { font-family: var(--mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.progress nav { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.85rem; }
+.progress nav a { color: var(--muted); text-decoration: none; }
+.progress nav a:hover { color: var(--fg); text-decoration: underline; }
+button.quiet { font: inherit; font-size: 0.85rem; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+button.quiet:hover { border-color: var(--muted); }
+
+/* Journey table */
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table.journey { border-collapse: separate; border-spacing: 0; min-width: 1040px; width: 100%; font-size: 0.86rem; }
+.journey th, .journey td { padding: 9px 10px; vertical-align: top; border-bottom: 1px solid var(--line); text-align: left; }
+.journey thead th { font-family: var(--mono); font-size: 0.7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--bg); position: sticky; top: 0; }
+.journey tbody th { font-family: var(--display); font-size: 0.9rem; width: 150px; }
+.journey tbody th small { display: block; font-family: var(--body); font-weight: 400; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+.journey td.you { background: var(--you-soft); border-left: 3px solid var(--you); }
+.journey td.agent { color: var(--fg); }
+.journey td.auto { color: var(--muted); }
+.journey td.none { color: var(--paused); }
+.journey tr:last-child th, .journey tr:last-child td { border-bottom: 0; }
+
+/* Touchpoints */
+.touch { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.touch div { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--you); border-radius: 8px; padding: 12px; display: grid; gap: 4px; }
+.touch b { font-weight: 600; }
+.touch span { color: var(--muted); font-size: 0.92rem; }
+.notyou { background: var(--hatch-soft); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; }
+
+/* Flow lanes (today) */
+.flow { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.lane { display: grid; grid-template-columns: 120px 1fr; gap: 14px; align-items: start; padding-block: 14px; border-top: 1px dashed var(--line); min-width: 1020px; }
+.lane:first-child { border-top: 0; padding-top: 4px; }
+.lane-name { font-family: var(--display); font-weight: 700; font-size: 0.95rem; padding-top: 8px; }
+.lane-name small { display: block; font-family: var(--body); font-weight: 400; color: var(--muted); font-size: 0.78rem; }
+.steps { display: flex; align-items: stretch; }
+.arrow { flex: none; width: 20px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 0.85rem; }
+.node { flex: 0 1 auto; min-width: 88px; max-width: 148px; background: var(--bg); border: 1px solid var(--line); border-left: 4px solid var(--hatch); border-radius: 8px; padding: 7px 9px; display: grid; gap: 2px; position: relative; }
+.node b { font-size: 0.84rem; font-weight: 600; line-height: 1.25; }
+.node i { font-style: normal; font-size: 0.73rem; color: var(--muted); line-height: 1.3; }
+.node.you { border-left-color: var(--you); } .node.agent { border-left-color: var(--agent); } .node.hatch { border-left-color: var(--hatch); } .node.done { border-left-color: var(--done); }
+.mark { position: absolute; top: -8px; right: -6px; font-family: var(--mono); font-size: 0.64rem; font-weight: 600; padding: 1px 5px; border-radius: 9px; border: 1px solid; background: var(--surface); }
+.mark.ok { color: var(--done); border-color: var(--done); }
+.mark.gap { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+.mark.no { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+
+/* Gap groups */
+.gapgroup { display: grid; gap: 10px; }
+.gap { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; display: grid; grid-template-columns: 48px 1fr; gap: 3px 12px; }
+.gap .id { font-family: var(--mono); font-weight: 600; font-size: 0.88rem; grid-row: span 3; padding-top: 2px; }
+.gap.no .id { color: var(--bad); } .gap.gapc .id { color: var(--warn); }
+.gap .what { font-weight: 600; }
+.gap .why { color: var(--muted); font-size: 0.94rem; min-width: 0; }
+.gap .where { font-family: var(--mono); font-size: 0.74rem; color: var(--muted); overflow-wrap: anywhere; }
+
+/* Stages */
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: grid; gap: 16px; scroll-margin-top: 80px; }
+.stage > header { display: grid; gap: 6px; }
+.stage .num { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+.stage .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.stage .col { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.stage .col h4 { font-size: 0.82rem; font-family: var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.stage .col.you h4 { color: var(--you); }
+.stage .col ul { font-size: 0.95rem; }
+.status-list { list-style: none; padding: 0; display: grid; gap: 6px; font-size: 0.93rem; }
+.status-list li { display: grid; grid-template-columns: 56px 1fr; gap: 8px; }
+.status-list .tag { font-family: var(--mono); font-size: 0.68rem; font-weight: 600; border-radius: 6px; padding: 2px 0; text-align: center; height: fit-content; }
+.tag.ok { background: var(--done-soft); color: var(--done); }
+.tag.gap { background: var(--warn-soft); color: var(--warn); }
+.tag.no { background: var(--bad-soft); color: var(--bad); }
+.tag.new { background: var(--agent-soft); color: var(--agent); }
+.status-list .ref { display: block; font-family: var(--mono); font-size: 0.72rem; color: var(--muted); overflow-wrap: anywhere; }
+.subtable { overflow-x: auto; }
+.subtable table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.9rem; }
+.subtable th, .subtable td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.subtable th { font-family: var(--mono); font-size: 0.7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.decisions-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+.decisions-head h4 { color: var(--you); }
+
+/* Decisions */
+.decision { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 10px; }
+.decision header { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.decision header .id { font-family: var(--mono); font-weight: 600; color: var(--you); }
+.decision .context { color: var(--muted); font-size: 0.94rem; max-width: 78ch; }
+.options { display: grid; gap: 8px; }
+.opt { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--surface); }
+.opt:hover { border-color: var(--muted); }
+.opt:has(input:checked) { border-color: var(--you); background: var(--you-soft); }
+.opt input { margin: 4px 0 0; accent-color: var(--you); }
+.opt input:focus-visible { outline: 2px solid var(--you); outline-offset: 2px; }
+.opt b { font-weight: 600; }
+.opt .rec { font-family: var(--mono); font-size: 0.68rem; color: var(--you); border: 1px solid var(--you); border-radius: 9px; padding: 0 6px; margin-left: 6px; white-space: nowrap; }
+.opt span.d { display: block; color: var(--muted); font-size: 0.91rem; }
+.reason { font-size: 0.94rem; border-left: 3px solid var(--you); padding-left: 12px; max-width: 78ch; }
+.reason b { font-weight: 600; }
+textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 0.94rem; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); resize: vertical; min-height: 40px; }
+textarea:focus-visible { outline: 2px solid var(--you); outline-offset: 1px; }
+.saverow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+button.save { font: inherit; font-weight: 600; font-size: 0.9rem; padding: 6px 16px; border-radius: 999px; border: 0; background: var(--you); color: #fff; cursor: pointer; }
+button.save:disabled { opacity: 0.45; cursor: default; }
+.status { font-size: 0.86rem; color: var(--muted); }
+.status.ok { color: var(--done); } .status.err { color: var(--bad); }
+.store-note { font-size: 0.9rem; color: var(--muted); background: var(--hatch-soft); border-radius: 8px; padding: 10px 12px; }
+
+/* Examples */
+.examples { display: grid; gap: 14px; }
+.example { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; }
+.example .prompt { font-style: italic; font-size: 1.05rem; }
+.example .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--mono); font-size: 0.72rem; padding: 2px 8px; border-radius: 99px; background: var(--hatch-soft); color: var(--fg); }
+.chip.you { background: var(--you-soft); color: var(--you); font-weight: 600; }
+.trace { list-style: none; padding: 0; display: grid; gap: 4px; font-size: 0.93rem; }
+.trace li { display: grid; grid-template-columns: 64px 1fr; gap: 10px; padding: 3px 0; }
+.trace .who { font-family: var(--mono); font-size: 0.72rem; font-weight: 600; padding-top: 3px; }
+.trace .who.you { color: var(--you); } .trace .who.iris, .trace .who.agent { color: var(--agent); } .trace .who.hatch { color: var(--hatch); }
+.trace li.you { background: var(--you-soft); border-radius: 6px; padding-inline: 6px; margin-inline: -6px; }
+
+ol.plan { margin: 0; padding-left: 1.4em; display: grid; gap: 12px; max-width: 80ch; }
+ol.plan b { font-weight: 600; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.75rem; }
+  .gap { grid-template-columns: 1fr; } .gap .id { grid-row: auto; }
+  .page { gap: 48px; padding-block: 28px 64px; padding-inline: 16px; }
+  .stage { padding: 16px; }
+  .trace li { grid-template-columns: 52px 1fr; }
+  .progress nav { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+
+<header class="prose" style="display:grid;gap:12px">
+  <div class="eyebrow">Hatch · every workflow · read from the code on 4 October 2026</div>
+  <h1>Hatch Workflow</h1>
+  <p class="lede">You write a prompt. Iris works out what it is, asks only what she cannot guess, and sends it down the right path. Agents and Hatch do the rest, and Hatch comes to you only when it really needs you: a real choice, something you can see, or a question only you can answer.</p>
+  <p class="prose">This page covers the whole journey for every kind of work: questions, visual changes, architecture and structure, bugs, slowness, small changes, chores and big multi-part work. It sets out what the code does today and where it breaks, and how each stage should work. Questions for you sit in the stage they belong to, each with my recommendation (★) and the reason.</p>
+  <div class="legend" aria-label="Legend">
+    <span><i class="dot" style="background:var(--you)"></i>Needs you</span>
+    <span><i class="dot" style="background:var(--agent)"></i>Iris or an agent</span>
+    <span><i class="dot" style="background:var(--hatch)"></i>Hatch, automatic</span>
+    <span><i class="dot" style="background:var(--done)"></i>Finished</span>
+  </div>
+</header>
+
+<div class="progress" id="progress">
+  <span class="count" id="countText">0 of 0 answered</span>
+  <div class="bar" aria-hidden="true"><i id="countBar"></i></div>
+  <button class="quiet" type="button" id="copyAnswers">Copy my answers</button>
+  <span class="status" id="copyStatus"></span>
+  <nav aria-label="Sections">
+    <a href="#journey">Journey</a><a href="#needs">Needs you</a><a href="#today">Today</a><a href="#gaps">Gaps</a><a href="#stages">Stages</a><a href="#examples">Examples</a><a href="#plan">Plan</a>
+  </nav>
+</div>
+
+<!-- JOURNEY -->
+<section id="journey">
+  <div class="eyebrow">1 · At a glance</div>
+  <h2>One door in, eight paths through</h2>
+  <p class="prose">Every ticket starts as a prompt and goes through Iris. Iris picks the path from what the prompt says. The columns are the stages, the rows are the paths, and amber cells are the only places you are needed. A path skips the stages it does not need.</p>
+  <div class="scroll">
+  <table class="journey">
+    <thead><tr><th>Path</th><th>Prepare (agent)</th><th>Your call</th><th>Build (agent)</th><th>Hatch checks</th><th>Verify</th><th>Land</th></tr></thead>
+    <tbody>
+      <tr><th>Question<small>“should we…”, “how does…”</small></th>
+        <td class="agent">An answer in words, or 2–4 options with gain and cost, one recommended</td>
+        <td class="you">Choose an option, or reply</td>
+        <td class="none" colspan="3">Nothing is built on this ticket. Iris drafts the follow-up tickets from your choice and routes them.</td>
+        <td class="auto">Decision saved in the notebook</td></tr>
+      <tr><th>Visual change<small>layout, look, feel</small></th>
+        <td class="agent">Web draft: 2–4 HTML variants, says whether Swift is needed</td>
+        <td class="you">Accept the draft, try it in Swift, ask for more, or record only</td>
+        <td class="agent">From the chosen variant or Swift option</td>
+        <td class="auto">Build, tests, match check, Spec</td>
+        <td class="you">Preview with Iris's checklist</td>
+        <td class="auto">Merge, CI, Done</td></tr>
+      <tr><th>Swift Stage<small>only when asked for</small></th>
+        <td class="agent">Swift options for the chosen variants; Hatch builds and checks the Stage</td>
+        <td class="you">Judge in the Stage, accept or send back</td>
+        <td class="agent" colspan="4">Continues as a visual change</td></tr>
+      <tr><th>Change with approaches<small>architecture, structure, API</small></th>
+        <td class="agent">Written proposal: options, files, risk, migration, tests</td>
+        <td class="you">Choose an option</td>
+        <td class="agent">Builds it; a large one is split or waits for plan approval</td>
+        <td class="auto">Build, tests, Spec</td>
+        <td class="auto">Tests and CI; no step for you</td>
+        <td class="auto">Merge, CI, Done</td></tr>
+      <tr><th>Bug, cause known<small>steps, crash log</small></th>
+        <td class="none">None</td>
+        <td class="none">None</td>
+        <td class="agent">A test that fails first, then the fix</td>
+        <td class="auto">Build, tests, Spec</td>
+        <td class="you">Preview when you can see it; otherwise CI</td>
+        <td class="auto">Merge, CI, Done</td></tr>
+      <tr><th>Problem, cause unknown<small>“slow”, “sometimes”</small></th>
+        <td class="agent">Investigation: reproduces, measures, finds the cause, lists fixes</td>
+        <td class="you">Only if there is more than one sensible fix</td>
+        <td class="agent">The chosen fix</td>
+        <td class="auto">Build, tests, before and after numbers</td>
+        <td class="you">The numbers; Preview if visible</td>
+        <td class="auto">Merge, CI, Done</td></tr>
+      <tr><th>Small change<small>one obvious fix</small></th>
+        <td class="none">None</td><td class="none">None</td>
+        <td class="agent">The change</td>
+        <td class="auto">Build, tests, Spec</td>
+        <td class="you">Preview</td>
+        <td class="auto">Merge, CI, Done</td></tr>
+      <tr><th>Chore<small>dependency, CI, docs</small></th>
+        <td class="none">None</td><td class="none">None</td>
+        <td class="agent">The change</td>
+        <td class="auto">Build, tests</td>
+        <td class="auto">CI only; listed in the digest</td>
+        <td class="auto">Merge, CI, Done</td></tr>
+      <tr><th>Big or several things<small>“redo the editor”</small></th>
+        <td class="agent">Iris splits it into child tickets under a Theme</td>
+        <td class="you">Confirm the split</td>
+        <td class="agent" colspan="3">Each child takes its own path</td>
+        <td class="auto">Done when every child is Done</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">Before any of this: capture (you write the prompt) and Iris's check (Iris, automatic; you only answer her questions when she cannot guess). Both are the same for every path and come first in Stages below.</p>
+</section>
+
+<!-- NEEDS YOU -->
+<section id="needs">
+  <div class="eyebrow">2 · Where Hatch needs you</div>
+  <h2>The complete list of times Hatch stops for you</h2>
+  <p class="prose">Every item below arrives the same way: one card in Decide, a notification, the count on the Dock and in the menu bar, and the banner on the ticket. If a stop is not on this list, the proposed workflow should not stop for it.</p>
+  <div class="touch">
+    <div><b>Iris cannot guess</b><span>What is wrong, which screen, what “better” means. At most three questions at a time, each with suggested answers and her best guess already picked.</span></div>
+    <div><b>Something conflicts</b><span>A ticket that would undo an earlier decision, a probable duplicate she is not sure of, or a split of one prompt into several tickets.</span></div>
+    <div><b>A real choice</b><span>Question options, a web draft, a Swift Stage, a written proposal, or findings with more than one sensible fix.</span></div>
+    <div><b>A large plan</b><span>More files than the project's limit, or a protected area. A plain Bug no longer waits for approval on its own.</span></div>
+    <div><b>An agent is stuck</b><span>A question only you can answer while it works. It pauses there and carries on where it stopped once you answer.</span></div>
+    <div><b>Something you can see</b><span>Verify in a Preview with a short checklist, or check before and after numbers for slowness.</span></div>
+    <div><b>Hatch cannot fix it itself</b><span>A merge conflict between two tickets, CI failing twice, or an agent that stopped twice even on a stronger model.</span></div>
+  </div>
+  <div class="notyou">
+    <h3>What no longer needs you</h3>
+    <p class="small">Choosing the type, the title, the area, the priority and the links. Accepting Iris's rewrite. Submitting a draft. Approving every Bug's plan. Picking tickets for a Preview. Pressing Merge on a clean plan. Promoting to dev on green CI. Closing Merged tickets. Verifying chores and internal restructuring that tests and CI cover. Iris does these and lists them in the ticket's history and a daily digest, and each one can be changed or undone.</p>
+  </div>
+</section>
+
+<!-- TODAY -->
+<section id="today">
+  <div class="eyebrow">3 · Today</div>
+  <h2>What the code does now, type by type</h2>
+  <p class="prose">Read from the code: <code>Workflow.swift</code>, the store, Iris, the offer service, the launcher, Previews and the merge plan. The tag on each step points at a gap in the next section.</p>
+  <div class="legend"><span><code style="color:var(--done)">ok</code> works and is tested</span><span><code style="color:var(--warn)">G4</code> broken or partial</span><span><code style="color:var(--bad)">G18</code> not built</span></div>
+  <div class="flow" role="img" aria-label="Today's paths per ticket type">
+    <div class="lane"><div class="lane-name">Every ticket<small>intake</small></div><div class="steps">
+      <div class="node you"><span class="mark gap">G1</span><b>Composer</b><i>type and title required</i></div><div class="arrow">→</div>
+      <div class="node agent"><span class="mark gap">G3</span><b>Iris checks</b><i>questions, rewrite, type if wrong</i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark gap">G4</span><b>Needs answers</b><i>any rewrite stops here</i></div><div class="arrow">→</div>
+      <div class="node hatch"><span class="mark gap">G7</span><b>Ready</b><i>no re-check after answers</i></div><div class="arrow">→</div>
+      <div class="node hatch"><span class="mark ok">ok</span><b>Agent starts</b><i>10 s timer, 3 slots</i></div></div></div>
+    <div class="lane"><div class="lane-name">Question<small>words or options</small></div><div class="steps">
+      <div class="node agent"><span class="mark ok">ok</span><b>Answer</b><i><code>--answer</code> or <code>hatch options</code></i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark ok">ok</span><b>Your call</b><i>choose, or reply</i></div><div class="arrow">→</div>
+      <div class="node done"><span class="mark ok">ok</span><b>Done + decision</b><i>saved to the notebook</i></div><div class="arrow">→</div>
+      <div class="node hatch"><span class="mark no">G9</span><b>Follow-ups</b><i>none are made</i></div></div></div>
+    <div class="lane"><div class="lane-name">Sketch<small>HTML</small></div><div class="steps">
+      <div class="node agent"><span class="mark gap">G11</span><b>2–4 variants</b><i>files never reach Hatch</i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark gap">G11</span><b>Sketch board</b><i>pins, notes</i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark gap">G12</span><b>Choose direction</b><i>record, or a new Draft</i></div><div class="arrow">→</div>
+      <div class="node done"><b>Done</b><i>nothing built</i></div></div></div>
+    <div class="lane"><div class="lane-name">Proposal<small>Swift</small></div><div class="steps">
+      <div class="node agent"><span class="mark gap">G14</span><b>Swift specimens</b><i>no round template</i></div><div class="arrow">→</div>
+      <div class="node hatch"><span class="mark gap">G14</span><b>Gate</b><i>JSON only</i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark no">G15</span><b>Open Stage</b><i>always the toast app</i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark gap">G16</span><b>Accept</b><i>never run live</i></div><div class="arrow">→</div>
+      <div class="node agent"><span class="mark ok">ok</span><b>Build</b><i>worktree, plan, ready</i></div></div></div>
+    <div class="lane"><div class="lane-name">Tweak<small>one fix</small></div><div class="steps">
+      <div class="node agent"><span class="mark ok">ok</span><b>Building</b><i>straight after Ready</i></div><div class="arrow">→</div>
+      <div class="node hatch"><span class="mark ok">ok</span><b><code>hatch ready</code></b><i>build, tests, match, Spec</i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark gap">G25</span><b>To verify</b><i>Preview; opens a fixed app</i></div><div class="arrow">→</div>
+      <div class="node hatch"><span class="mark gap">G26</span><b>Merged</b><i>into <code>hatch</code>, not pushed</i></div><div class="arrow">→</div>
+      <div class="node done"><span class="mark no">G23</span><b>Done</b><i>never reached</i></div></div></div>
+    <div class="lane"><div class="lane-name">Bug<small>steps, expected</small></div><div class="steps">
+      <div class="node agent"><span class="mark no">G19</span><b>Building</b><i>no investigation</i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark ok">ok</span><b>Plan approval</b><i>every Bug</i></div><div class="arrow">→</div>
+      <div class="node hatch"><span class="mark ok">ok</span><b>Checks</b><i>as Tweak</i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark gap">G20</span><b>To verify</b><i>Preview only</i></div><div class="arrow">→</div>
+      <div class="node hatch"><span class="mark no">G23</span><b>Merged</b><i>stays there</i></div></div></div>
+    <div class="lane"><div class="lane-name">Theme<small>parent</small></div><div class="steps">
+      <div class="node you"><span class="mark gap">G5</span><b>Children</b><i>only at creation</i></div><div class="arrow">→</div>
+      <div class="node hatch"><span class="mark ok">ok</span><b>Progress</b><i>3 of 7 done</i></div><div class="arrow">→</div>
+      <div class="node done"><span class="mark no">G23</span><b>Done</b><i>never, if a child was built</i></div></div></div>
+    <div class="lane"><div class="lane-name">Off the path<small>any type</small></div><div class="steps">
+      <div class="node agent"><span class="mark gap">G21</span><b>Agent asks</b><i>work restarts after</i></div><div class="arrow">→</div>
+      <div class="node hatch"><span class="mark gap">G22</span><b>Waits for files</b><i>until the other is Done</i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark gap">G24</span><b>Stopped, Blocked</b><i>your Resume fails</i></div><div class="arrow">→</div>
+      <div class="node you"><span class="mark ok">ok</span><b>Park, Drop, Reopen</b><i>GitHub follows</i></div></div></div>
+  </div>
+</section>
+
+<!-- GAPS -->
+<section id="gaps">
+  <div class="eyebrow">4 · What breaks</div>
+  <h2>Twenty-eight gaps, grouped by stage</h2>
+  <p class="prose">Each one is checked against the code with a file reference. Some are wrong behaviour that should be fixed whatever you answer below; the build plan puts those first.</p>
+  <div id="gapList" style="display:grid;gap:22px"></div>
+</section>
+
+<!-- STAGES -->
+<section id="stages">
+  <div class="eyebrow">5 · Proposed, stage by stage</div>
+  <h2>How each stage should work, and your decisions</h2>
+  <p class="prose">For each stage: what happens, what Iris and Hatch do on their own, when it needs you, what exists today, and the questions for you. Your answers are saved as you go. I read them from here and record them in DECISIONS.md.</p>
+  <div class="store-note" id="storeNote">Connecting to the answer store…</div>
+  <div id="stageList" style="display:grid;gap:22px"></div>
+</section>
+
+<!-- EXAMPLES -->
+<section id="examples">
+  <div class="eyebrow">6 · Worked examples</div>
+  <h2>Seven prompts, followed from start to finish</h2>
+  <p class="prose">Each is traced through the proposed workflow with the recommended answers. Amber rows are the only moments you are needed.</p>
+  <div class="examples" id="exampleList"></div>
+</section>
+
+<!-- PLAN -->
+<section id="plan">
+  <div class="eyebrow">7 · Then</div>
+  <h2>Build order</h2>
+  <ol class="plan">
+    <li><b>Repair what is broken today</b> (G7, G11, G21–G26). These are bugs under any answer: Merged reaching Done, file claims freed when work is handed in, your Resume on Blocked, resumed tickets being picked up again, an agent's question resuming the work instead of restarting it, Iris starting for tickets made by the CLI or from GitHub, Preview opening the app it built, and the draft's files kept in Hatch. I can start these before you answer.</li>
+    <li><b>Prompt in, Iris routes</b> (stages 1–4): the one-field composer and quick capture everywhere, Iris's new result (path, area, priority, links, split, confidence), applying what she is sure of, her questions in rounds, the re-check after your answers, the digest.</li>
+    <li><b>The paths and what you judge</b> (stages 5–7): Question follow-ups, written proposals, investigations with findings and numbers, the common exits on Your call, type changes during work.</li>
+    <li><b>Visual: draft first</b> (stage 6 and 7): draft offers on Proposals, Accept draft, drafts on Decide cards.</li>
+    <li><b>The Swift Stage</b> (stage 8): the round template, Hatch builds and checks it at <code>hatch offer</code>, one Stage per Proposal, Reload, and a live run with Hatch.</li>
+    <li><b>Checks, verify and land</b> (stages 9–12): verification per path, Iris's checklists, merge on Looks right, push and pull request, CI to Done, promote.</li>
+    <li><b>Seven real runs</b>: the seven examples above on a throwaway database with real agents, then STATUS.md says what passed and what did not.</li>
+  </ol>
+  <p class="small">Every step ends with <code>swift test</code> at the root and in Stage, <code>tools/smoke.sh</code>, the Xcode build, and a look at the running app. Nothing is called working until it has run.</p>
+</section>
+
+</div>
+
+<script>
+// ---------- Gaps (checked against the code, 4 October 2026) ----------
+const GAPS = [
+  { group: "Capture and Iris", items: [
+    ["G1", "gapc", "You must pick a type and write a title before you can submit.", "The composer's Submit stays disabled until project, type and title are set. There is no prompt-only way in.", "App/…/ComposerView.swift:58"],
+    ["G2", "gapc", "Quick capture makes a Question draft that nobody checks.", "The palette's “Capture … as a draft” always makes a title-only Question in Draft and does not start Iris. There is no system-wide shortcut; “anywhere” keys only work inside Hatch.", "App/…/CommandPalette.swift:603–621 · Shortcuts.swift:62–71"],
+    ["G3", "gapc", "Iris sets almost nothing herself.", "She returns questions, a rewrite, a type only if the current one looks wrong, related tickets, Spec codes and a possible duplicate. She is given the areas but has no area field, and nothing sets priority (the column exists, the queue sorts by it, no screen or command sets it). Project is never checked.", "Sources/HatchAgent/Iris.swift:129 · Schema.swift:39"],
+    ["G4", "gapc", "Any suggestion from Iris stops the ticket for you.", "A rewrite or a type suggestion moves the ticket to Needs answers until you press Accept, Edit or Keep mine. From a bare prompt Iris almost always rewrites, so every ticket would wait for you.", "Sources/HatchAgent/IrisApplier.swift:44"],
+    ["G5", "gapc", "One prompt is always one ticket.", "Iris cannot split a prompt into several tickets or a Theme. Children join a Theme only when created with it; the link picker leaves out Parent.", "Sources/HatchAgent/Iris.swift · TicketOverviewTab.swift:292"],
+    ["G6", "gapc", "Tickets from the CLI and GitHub are never checked.", "<code>hatch ticket new --submit</code> and issues pulled from GitHub land in Checking, but only the app starts Iris. They sit until someone runs <code>hatch vet</code>.", "Sources/hatch/CoreCommands.swift:108 · SyncEngine.swift:155"],
+    ["G7", "gapc", "After you answer, nobody checks again.", "Answering the last question moves the ticket straight to Ready. The move back to Checking exists but nothing uses it, so an answer that changes what the ticket is never reaches Iris.", "Sources/HatchCore/StoreExtras.swift:104–120 · Workflow.swift:131"],
+    ["G8", "gapc", "Iris does not see screenshots.", "Her request carries title, body and area. Screenshots are listed in agents' briefs as files, but not in Iris's check.", "Sources/HatchAgent/Iris.swift:49–65"],
+  ]},
+  { group: "Questions and decisions", items: [
+    ["G9", "no", "A decision leads nowhere.", "Choosing an option closes the Question and records the decision. Nothing carries it out; you write the build ticket yourself.", "Sources/HatchCore/Decisions.swift:151"],
+    ["G10", "gapc", "Replying to an answer does not reach the agent.", "A Question in Your call can be replied to or closed; a reply never sends it back to an agent, so a follow-up question goes nowhere.", "Sources/HatchCore/StoreExtras.swift:51"],
+  ]},
+  { group: "Visual changes", items: [
+    ["G11", "gapc", "A real agent's web variants never show.", "<code>hatch offer --sketch</code> checks the files exist, then stores only ids, titles and relative paths. Hatch looks in its own <code>sketches/&lt;n&gt;</code>, which nothing fills: “This variant has no HTML file yet.”", "Sources/HatchAgent/OfferService.swift:64 · SketchBoard.swift:37"],
+    ["G12", "gapc", "A chosen direction cannot go to a build.", "Choose direction records it or makes a new Draft Proposal or Tweak, which you have to submit, which Iris checks again, and which carries the direction as one line of text.", "App/…/SketchBoard.swift:487"],
+    ["G13", "gapc", "No way to accept a design without Swift.", "A Sketch never reaches Accepted; a Proposal's gate needs Swift specimens.", "Sources/HatchCore/Workflow.swift:139–141"],
+    ["G14", "gapc", "Nothing builds or checks the agent's Swift.", "No round template in the brief; <code>hatch offer</code> checks only the JSON (its <code>stageCheck</code> is empty); the Stage's <code>--check</code> is never run.", "Sources/hatch/AgentCommands.swift:97 · OfferService.swift:23"],
+    ["G15", "no", "Open Stage opens the toast app for every Proposal.", "It starts the one program chosen in Settings › Tools. Another Proposal's specimens are unknown to it and show as failed.", "App/…/StageLauncher.swift:29"],
+    ["G16", "gapc", "The Stage and Hatch have never run together.", "Picks, pins, Accept and Send back go through the local API and are tested in code only. Reload, Focus and “Stage closed unexpectedly” are not built.", "STATUS.md · HANDOVER.md §5"],
+    ["G17", "gapc", "Drafts cannot be decided on a Decide card, and “Echo today” is hard-coded.", "A Sketch card only says “Open it”. The brief and the gate say Echo today, which only fits Echo; SC1–SC5 are unanswered.", "DecideView.swift:435 · BriefBuilder.swift:291 · DECISIONS.md §U"],
+  ]},
+  { group: "Non-visual changes, bugs and slowness", items: [
+    ["G18", "no", "No ticket type for a non-visual change with several approaches.", "A Proposal means Swift specimens next to Echo today. “How should we structure the pool” can only be a Question, which cannot be built.", "Sources/HatchAgent/BriefBuilder.swift:288–299"],
+    ["G19", "no", "Bugs have no investigation step.", "Ready goes straight to Building. “The driver is slow” must be found and fixed in one run. It cannot come back with the cause, numbers and options; the type can only change before work starts, and only by you.", "Sources/HatchCore/AgentQueue.swift:26 · Store.swift:233"],
+    ["G20", "gapc", "Verify only fits visible changes.", "To verify always means a Preview and “looks right”. A speed fix needs numbers before and after; a restructure needs tests and CI. The checklist is the ticket's first line or the picks.", "PreviewsView.swift:315 · TicketDetailView.swift:251"],
+  ]},
+  { group: "Building, merging and landing", items: [
+    ["G21", "gapc", "An agent's question restarts the work.", "A ticket that asks while Building or Revising goes back to Ready when you answer, and Ready means “prepare” or “build from scratch”, so the agent starts over instead of carrying on.", "Sources/HatchCore/StoreExtras.swift:104–120 · AgentQueue.swift:26"],
+    ["G22", "gapc", "A ticket waiting for another's files waits forever.", "File claims are freed only at Done, Dropped or Parked, so the waiting ticket waits until the other is Done, which never happens (G23). When it is resumed it keeps a stale taker and the launcher never picks it up.", "Sources/HatchCore/Store.swift:195, 203 · Claims.swift:70–83"],
+    ["G23", "no", "Merged never becomes Done.", "The rule exists, nothing calls it. Built tickets stay Merged, and a Theme with a built child never finishes.", "Sources/HatchCore/Workflow.swift:153 · Store.swift:207"],
+    ["G24", "gapc", "You cannot resume a Blocked ticket.", "The Resume button asks as the owner, but only Hatch may resume from Blocked. A ticket you stopped stays stopped.", "Sources/HatchCore/Workflow.swift:173 · TicketDetailView.swift:330"],
+    ["G25", "gapc", "Preview opens a fixed app, not the one it built.", "Open app launches the path in Settings. Looks right records a verdict but moves nothing. Picking tickets for a Preview is by hand.", "App/…/PreviewsView.swift:214–221, 409–414"],
+    ["G26", "gapc", "The merge plan pushes nothing; promote is manual.", "Merges go into the integration branch in Hatch's worktree only. Promote is a button, works on local refs, and needs CI read during sync.", "Sources/HatchGit/MergePlan.swift:47–75, 152–176"],
+    ["G27", "gapc", "“Try again / Stop” after an agent stops twice does nothing.", "The question is asked, but neither answer is handled; answering moves the ticket to Ready, which starts the same agent again.", "Sources/HatchAgent/AgentLauncher.swift:368–371"],
+    ["G28", "gapc", "The match check is only a command.", "It runs <code>matchCommand</code> if the project has one. There is no parts table or image comparison in Hatch, and no screen to set the command.", "Sources/hatch/AgentCommands.swift:158 · Models.swift:78"],
+  ]},
+];
+
+// ---------- Stages and decisions ----------
+const STAGES = [
+ { id: "s-capture", n: 1, title: "Capture: you write a prompt",
+   summary: "One text field, the way you would tell a colleague. Pictures, a crash log or a link can be pasted in. Nothing else is required.",
+   happens: ["You press ⌘N in Hatch, a system-wide shortcut from any app, the menu bar item, the palette, “Make a ticket” in the Ask panel, or <code>hatch new \"…\"</code>.", "Hatch saves it with your exact words kept as the original, and Iris starts at once.", "The ticket gets a number when Iris has filed it; a working title until then is the first line."],
+   auto: ["Project: the one in the title bar, unless Iris finds it clearly belongs to another.", "Screenshots are made smaller before Iris sees them."],
+   you: ["Only the prompt. “Save as draft” is there for a thought you are not ready to send."],
+   today: [["gap", "Composer requires type and title", "ComposerView.swift:58"], ["gap", "Palette capture makes an unchecked Question draft", "CommandPalette.swift:603"], ["no", "No system-wide shortcut", "Shortcuts.swift:62"], ["ok", "Paste screenshots and mark them up anywhere", "ScreenshotPasteCenter"], ["no", "Ask panel cannot make a ticket", "AskPanel.swift"]],
+   decisions: [
+     { id: "C1", title: "What must you give when you create something?", context: "Today: project, type and title are required.",
+       options: [{ k: "A", t: "Only the prompt", d: "Pictures and links if you like. Iris sets everything else.", rec: true }, { k: "B", t: "The prompt, and a type if you want to", d: "An optional type picker stays in the composer." }, { k: "C", t: "As today", d: "Type and title required." }],
+       why: "You asked to just write it. A type you pick is a guess made before anyone has looked; Iris has looked, and you can still change what she chose in one click. B keeps a picker you would mostly ignore." },
+     { id: "C2", title: "Where can you capture from?", context: "Today: the composer and the palette inside Hatch.",
+       options: [{ k: "A", t: "Everywhere", d: "⌘N, a system-wide shortcut, the menu bar, the palette, the Ask panel's “Make a ticket”, <code>hatch new</code>.", rec: true }, { k: "B", t: "Only inside Hatch", d: "" }],
+       why: "Ideas and bugs show up while you use Echo, not while Hatch is in front. A system-wide shortcut means a bug is written in the moment, with the screenshot still on the clipboard." },
+     { id: "C3", title: "When does Iris start?", context: "Today: a draft is saved and you press Submit for check.",
+       options: [{ k: "A", t: "At once; Save as draft only when you choose it", d: "", rec: true }, { k: "B", t: "Always a draft that you submit", d: "" }],
+       why: "Submitting is a step that only exists because Iris used to need a finished ticket. Her check costs a few thousand tokens on Haiku, so there is no reason to hold it back." },
+     { id: "C4", title: "Which project does a prompt go to?", context: "Hatch has several projects. Today the composer uses the one in the title bar.",
+       options: [{ k: "A", t: "The current one, moved by Iris if it clearly belongs elsewhere", d: "She tells you she moved it; when she is unsure she asks.", rec: true }, { k: "B", t: "Always the current one", d: "" }, { k: "C", t: "You pick it", d: "" }],
+       why: "Most prompts are about what you are looking at, so the current project is right nearly always. Iris already searches each project's tickets and Spec, so she can see when a prompt about the SQL Server driver lands in the wrong project." },
+     { id: "C5", title: "Does Iris look at screenshots?", context: "Today she reads text only.",
+       options: [{ k: "A", t: "Yes, made smaller", d: "About a thousand tokens per picture on Haiku.", rec: true }, { k: "B", t: "Only their captions", d: "" }],
+       why: "A screenshot with a red box is often the whole prompt: “this is wrong”. Without it Iris would ask what you mean, which costs you more than the tokens." },
+   ] },
+ { id: "s-iris", n: 2, title: "Iris files it",
+   summary: "Iris reads the prompt with the free search results Hatch gathers first (similar tickets, Spec items, earlier decisions, areas), and files the ticket: path, type, title, structured text, area, priority, links and how it will be checked.",
+   happens: ["Hatch runs the free local search first, as today.", "Iris returns one result with a confidence for each field.", "Hatch applies what she is sure of, keeps your words as the original, and moves the ticket on. What she is unsure of becomes a question (stage 3).", "The ticket shows “Filed by Iris” with what she set and a Change button on each field."],
+   auto: ["Path and type (see stage 4).", "Title and text in the type's shape: Bug as steps, expected and actual; Proposal as what, why, scope.", "Area, priority, related tickets, parent Theme, Blocks, Spec codes.", "How it will be verified (stage 11)."],
+   you: ["Only when she is unsure, when it would undo an earlier decision, when it is probably a duplicate, or when she wants to split it."],
+   today: [["ok", "Free search before the model call; compact prompt; Haiku with thinking off (about 6 s)", "Iris.swift:49"], ["gap", "Sets only questions, rewrite, a type if wrong, links, Spec codes, duplicate", "Iris.swift:129"], ["gap", "Every suggestion waits for you", "IrisApplier.swift:44"], ["no", "No split, no area, no priority, no project", ""], ["gap", "Not started for CLI and GitHub tickets", "CoreCommands.swift:108"]],
+   decisions: [
+     { id: "T1", title: "How much does Iris decide on her own?", context: "Decisions E8 and E9 say she suggests and you decide every suggestion. You now want her to handle it unless she needs you.",
+       options: [{ k: "A", t: "She applies it, shows what she did, you can change it", d: "She asks only when she is unsure or something conflicts. Every field she set has Change; the ticket's history keeps your words.", rec: true }, { k: "B", t: "She applies it, and you confirm each ticket on one Decide card", d: "One tap per ticket." }, { k: "C", t: "As today: she suggests, you decide each suggestion", d: "" }],
+       why: "This replaces E8 and E9, and it is what makes “just a prompt” work. Nothing she sets is final: an agent does not start until the ticket is filed, and a wrong type or area is one click to change. B keeps a stop on every ticket, which is the step you said you do not want." },
+     { id: "T2", title: "What does Iris set?", context: "",
+       options: [{ k: "A", t: "Everything a ticket needs", d: "Path, type, title, text, area, priority, related and parent links, Blocks, Spec codes, and how it will be verified.", rec: true }, { k: "B", t: "Type and text only", d: "You set area and priority." }],
+       why: "Area decides which files an agent reads and which tests run; priority decides the queue. Both are cheap for Iris to guess from the prompt and the area index, and costly for you to keep filling in." },
+     { id: "T3", title: "What does Iris do when she is unsure?", context: "",
+       options: [{ k: "A", t: "Ask about that one field, with her best guess already picked", d: "Below a confidence she asks; above it she applies. One click accepts her guess.", rec: true }, { k: "B", t: "Always guess", d: "" }, { k: "C", t: "Always ask about path and area", d: "" }],
+       why: "A guess you can accept in one click costs you a second; a wrong guess on the path costs an agent run. Asking only where she is unsure keeps the questions few." },
+     { id: "T4", title: "One prompt with several things in it?", context: "“Redo the query editor: tabs, history and a grid that can pin columns.”",
+       options: [{ k: "A", t: "Iris splits it and shows the split to confirm", d: "A Theme with one child per part, each filed on its own. One card: Confirm, Change, or Keep as one.", rec: true }, { k: "B", t: "Always one ticket; Iris only notes it is big", d: "" }, { k: "C", t: "Iris splits without asking", d: "" }],
+       why: "Agents do far better with one thing per ticket, and file claims work per ticket. A split changes what gets built, so it is worth one confirmation; after that each child runs on its own." },
+     { id: "T5", title: "A probable duplicate?", context: "Today: Merge, Link or Keep separate, always asked.",
+       options: [{ k: "A", t: "Sure: added to the original; unsure: asked", d: "When sure, your prompt goes onto the earlier ticket as a note and this one is closed as a duplicate, and you are told. Undo reopens it.", rec: true }, { k: "B", t: "Always asked", d: "" }],
+       why: "Most duplicates are the same thing said again, and what you add is still useful on the original. Asking every time is a stop for something Iris can see plainly." },
+     { id: "T6", title: "A prompt that would undo an earlier decision?", context: "Iris already gets the three closest decisions from the notebook.",
+       options: [{ k: "A", t: "Always a question to you: keep the decision or replace it", d: "", rec: true }, { k: "B", t: "Iris notes it and carries on", d: "" }],
+       why: "Decisions are where you chose deliberately. Undoing one silently would make the notebook untrustworthy, and the question is a quick one." },
+     { id: "T7", title: "Which model does Iris use?", context: "Today Haiku, thinking off, about 6 s and 250–475 output tokens per check. Filing everything asks more of her.",
+       options: [{ k: "A", t: "Haiku first; Sonnet only when Haiku is unsure about the path", d: "Measure on real prompts before relying on it.", rec: true }, { k: "B", t: "Sonnet every time", d: "Better routing, several times the cost." }, { k: "C", t: "Haiku only", d: "" }],
+       why: "Most prompts are plain. Paying for Sonnet on all of them spends tokens where Haiku is right; escalating only the unclear ones keeps cost low and routing good. The models stay choosable in Settings, Agents." },
+   ] },
+ { id: "s-questions", n: 3, title: "Iris asks, only what she cannot guess",
+   summary: "Questions come as cards with short suggested answers and her best guess picked. You answer, Iris checks once more with your answers, and the ticket goes on.",
+   happens: ["Up to three questions at a time, each with 2–4 suggested answers.", "When you answer, Iris checks again with your answers: one cheap call.", "If an answer opens something new she may ask once more; never a third round."],
+   auto: ["The re-check after your answers.", "Moving on once nothing is open."],
+   you: ["Answering. From Decide, the notification, the menu bar or the ticket."],
+   today: [["ok", "Answer cards with suggestions; Decide; Desk accept", "AnswerCards.swift:75"], ["gap", "Up to five questions, one round, no re-check", "StoreExtras.swift:104"], ["no", "No answer from the menu bar or notification", ""]],
+   decisions: [
+     { id: "Q1", title: "How does Iris ask?", context: "Today up to five questions, one round.",
+       options: [{ k: "A", t: "Up to three, her guess picked, at most two rounds", d: "", rec: true }, { k: "B", t: "Up to five, one round, as today", d: "" }, { k: "C", t: "A conversation with Iris", d: "Free text back and forth." }],
+       why: "Three is the most people answer well at once; a picked guess turns most of them into one click. A conversation would be pleasant but costs a model call per message and has no clear end." },
+     { id: "Q2", title: "What happens after you answer?", context: "Today the ticket goes straight to Ready.",
+       options: [{ k: "A", t: "Iris checks again with your answers, then files it", d: "", rec: true }, { k: "B", t: "Straight on, as today", d: "" }],
+       why: "Your answer can change what the ticket is (“it is not slow, it freezes”). One more Haiku call is cheap next to an agent working on the wrong thing." },
+     { id: "Q3", title: "Where can you answer?", context: "",
+       options: [{ k: "A", t: "Decide, the notification, the menu bar and the ticket", d: "Pick a suggested answer from the notification without opening Hatch.", rec: true }, { k: "B", t: "Decide and the ticket only", d: "" }],
+       why: "Most of Iris's questions are one tap. Answering from the notification keeps the agent moving while you stay in what you were doing." },
+   ] },
+ { id: "s-paths", n: 4, title: "Paths and types",
+   summary: "The path decides what happens; the type is the label on GitHub and in lists. Iris picks the path from what the prompt says, and Hatch may change it when the work shows it was wrong.",
+   table: { head: ["Path", "Type label", "Iris picks it when the prompt…", "Prepare step"], rows: [
+     ["Question", "Question", "asks, wonders, compares (“should we”, “why does”, “how would”)", "Answer or options"],
+     ["Visual change", "Proposal", "is about how something looks, is laid out or feels", "Web draft, Swift if needed"],
+     ["Change with approaches", "Proposal", "changes behaviour or structure with more than one sensible way", "Written proposal"],
+     ["Bug, cause known", "Bug", "has steps, an error, a crash log or a clear wrong result", "None"],
+     ["Problem, cause unknown", "Bug", "is vague about why: slow, sometimes, after a while, only on SQL Server", "Investigation and findings"],
+     ["Small change", "Tweak", "has one obvious fix (rename, colour, copy)", "None"],
+     ["Chore", "Tweak", "is maintenance: dependency, CI, docs, Spec text", "None"],
+     ["Big or several things", "Theme", "names several parts or areas", "Split into children"] ] },
+   happens: ["Iris sets path and type together.", "During the work Hatch may change them: a Bug whose fix needs a choice becomes a Proposal, a Tweak with several fixes too. It is logged and you are told."],
+   auto: ["Path, type, and changes to them during the work."],
+   you: ["Nothing, unless you change one."],
+   today: [["ok", "Six types, 16 statuses, one transition table", "Workflow.swift"], ["gap", "Types change only before work, only by you", "Store.swift:233"], ["no", "No path for non-visual approaches or investigations", ""]],
+   decisions: [
+     { id: "R1", title: "Which types?", context: "Today six: Question, Sketch, Proposal, Tweak, Bug, Theme.",
+       options: [{ k: "A", t: "Five: Question, Proposal, Bug, Tweak, Theme", d: "Proposal is any change with options, visual or written. Sketch folds into Proposal's web draft. Existing Sketches open as Proposal drafts.", rec: true }, { k: "B", t: "Six as today plus Investigation", d: "Seven labels." }, { k: "C", t: "Hide types; show only the path", d: "Labels on GitHub would still need a name." }],
+       why: "With Iris filing, the type is mostly a label you read. Five labels cover every path, with the path shown alongside. Fewer kinds also means fewer rules in the code. C hides something GitHub still shows, which is confusing." },
+     { id: "R2", title: "Can the type change after work started?", context: "Today only before work, only by you.",
+       options: [{ k: "A", t: "Yes, by Hatch when the work shows it, logged and you are told", d: "Bug → Proposal when the fix needs a choice; Tweak → Proposal when there are several fixes; Question → Theme when the answer is a plan.", rec: true }, { k: "B", t: "Only before work, as today", d: "" }],
+       why: "Investigations exist to find out what a problem really is; the answer is often “this needs a choice”. Keeping it on the same ticket keeps the history, the screenshots and the thread together." },
+   ] },
+ { id: "s-queue", n: 5, title: "Waiting for an agent",
+   summary: "Filed tickets that need an agent queue up. Hatch starts one when a slot is free, in priority order, within the daily token limits.",
+   happens: ["Hatch picks the next ticket by priority, then age.", "It makes the workspaces, writes the brief, and starts the program and model chosen for the task in Settings, Agents."],
+   auto: ["Everything here."],
+   you: ["Nothing. Pause from the menu bar when you want."],
+   today: [["ok", "Launcher, slots (default 3), daily usage limits, pause", "AgentLauncher.swift"], ["gap", "Priority is never set, so the queue is first in, first out", "Schema.swift:39"], ["gap", "Starts on a 10 s timer, not on change", "FooterParts.swift:101"]],
+   decisions: [
+     { id: "P1", title: "How is the queue ordered?", context: "",
+       options: [{ k: "A", t: "Urgent first, then priority, then age; nothing running is stopped", d: "Iris sets Urgent for crashes and data loss.", rec: true }, { k: "B", t: "First in, first out", d: "" }, { k: "C", t: "Urgent may stop a running agent", d: "" }],
+       why: "A crash should not wait behind three Tweaks, but stopping a running agent throws its tokens away. The next free slot is soon enough." },
+   ] },
+ { id: "s-prepare", n: 6, title: "Prepare: what you will judge",
+   summary: "For paths with a choice, an agent prepares the thing you judge. Each kind has its own quality gate in code, so a weak offer goes back to the agent, not to you.",
+   table: { head: ["Kind", "What the agent hands in", "Gate checks (in code, no tokens)"], rows: [
+     ["Answer", "The answer with Spec IDs, or 2–4 options", "One recommendation and reason; each option has a gain and a cost"],
+     ["Web draft", "2–4 HTML variants, one recommended, “Swift needed?” with its reason", "Files exist and are kept in Hatch; recommendation; Swift verdict present"],
+     ["Swift round", "Swift options for the chosen variants, the manifest", "Builds; headless check draws every specimen; scenarios; recommendation"],
+     ["Written proposal", "Options with gain, cost, files and areas, risk, migration, test plan, size", "Every part present; one recommended; files exist in the repo"],
+     ["Findings", "Steps to reproduce, measurements, the cause and its evidence, fixes with gain and cost", "Reproduction and numbers present; one fix recommended"] ] },
+   happens: ["The agent works in its own workspace and hands in with <code>hatch offer</code>.", "Hatch runs the gate and either returns the problems to the agent or moves the ticket to Your call."],
+   auto: ["The gate, the retry, and an investigation with one small fix going straight on to build (see F3)."],
+   you: ["Nothing until the ticket is your call."],
+   today: [["ok", "Gate for Proposal manifests and Sketches, gain and cost on options", "ProposalValidator.swift"], ["gap", "Sketch files not kept (G11)", ""], ["no", "No written proposals, no findings", ""]],
+   decisions: [
+     { id: "V1", title: "Does every visual change start with a web draft?", context: "A draft is seconds and a few thousand tokens; a Swift round is a build and many more.",
+       options: [{ k: "A", t: "Always a web draft first", d: "The draft can say “Swift needed”; Try it in Swift is then the recommended button.", rec: true }, { k: "B", t: "The agent may skip to Swift, with a reason", d: "For motion, hover or glass." }, { k: "C", t: "Iris decides at filing", d: "" }],
+       why: "Most layout and order questions are settled at the draft, the cheapest point to change direction. Motion work reaches Swift one click after the draft." },
+     { id: "V2", title: "Who decides whether a draft needs Swift?", context: "",
+       options: [{ k: "A", t: "The agent recommends with a reason; you decide", d: "", rec: true }, { k: "B", t: "You, without a recommendation", d: "" }, { k: "C", t: "A rule: motion, hover or materials go to Swift", d: "" }],
+       why: "The agent has just drawn it and knows what HTML could not show; one recommendation with the reason is your rule. A fixed rule would be wrong both ways." },
+     { id: "W1", title: "What is in a written proposal?", context: "For architecture and structure: “one pool per server or one shared pool”.",
+       options: [{ k: "A", t: "Options with gain and cost, files and areas, risk, migration, test plan, rough size", d: "One recommended. About a page.", rec: true }, { k: "B", t: "Options and a recommendation only", d: "" }, { k: "C", t: "A full design document in the notebook", d: "" }],
+       why: "Files and risk are what make a structural choice comparable, and the test plan is what lets Hatch verify it later without you. A full document is more than most choices need; it can still be asked for." },
+     { id: "F1", title: "A problem with an unknown cause?", context: "Today a Bug goes straight to building.",
+       options: [{ k: "A", t: "Investigate first", d: "Reproduce, measure, find the cause, hand in findings.", rec: true }, { k: "B", t: "Build straight away, as today", d: "" }],
+       why: "“The driver is slow” fixed blind is a guess. An investigation costs one agent run and gives the cause and numbers, which the fix and the verify step both need." },
+     { id: "F2", title: "Who decides whether the cause is known?", context: "",
+       options: [{ k: "A", t: "Iris at filing; the build agent can switch to investigating", d: "Steps or a crash log mean known; “slow”, “sometimes” mean unknown.", rec: true }, { k: "B", t: "Every Bug is investigated", d: "" }, { k: "C", t: "The build agent always decides", d: "" }],
+       why: "Iris can tell from the prompt in most cases; letting the agent switch covers the ones that look simple and are not. Investigating every crash with a stack trace wastes a run." },
+   ] },
+ { id: "s-call", n: 7, title: "Your call: one set of exits for everything",
+   summary: "Whatever you are judging, the same buttons, with the recommended one prominent: Accept and build, Ask for more or a change, Record only, Split, Park or Drop. Accept always continues on the same ticket.",
+   happens: ["Accept moves the same ticket to Accepted, and the build agent gets what you chose: the option, the variant, the findings' fix.", "Ask for more or a change goes back to the agent with your note (Revising).", "Record only saves the decision in the notebook and closes the ticket.", "Split asks Iris to make a Theme with children from the choice."],
+   auto: ["Follow-up tickets from a Question's answer. The decision record in the notebook."],
+   you: ["The choice itself, in Decide or on the ticket. Quick ones are decided on the card; a Swift Stage needs a sitting."],
+   today: [["ok", "Question options, decision record, Stage Accept and Send back through the API", "Decisions.swift"], ["gap", "Sketch Make it real starts a new ticket (G12)", ""], ["no", "No follow-ups from answers (G9)", ""], ["gap", "Reply on a Question never reaches the agent (G10)", ""]],
+   decisions: [
+     { id: "Q4", title: "After you choose a Question's option?", context: "Today the Question closes and the decision is saved; nothing follows.",
+       options: [{ k: "A", t: "Iris drafts the follow-up tickets from your choice and files them", d: "Linked to the Question, shown in the summary with Undo.", rec: true }, { k: "B", t: "Hatch asks whether to make follow-ups", d: "" }, { k: "C", t: "Nothing, as today", d: "" }],
+       why: "A decision that nobody carries out is the dead end you noticed. Iris already has the question, the options and your choice; the follow-ups are a short call, and they are filed like any prompt." },
+     { id: "Q5", title: "Replying to an answer?", context: "",
+       options: [{ k: "A", t: "A reply that asks something sends it back to the agent", d: "A note does not. The thread marks which is which, as Note, Ask and Instruction do today.", rec: true }, { k: "B", t: "As today: replies stay in the thread", d: "" }],
+       why: "“And what about Postgres?” is a follow-up question; today it goes nowhere unless you write a new ticket." },
+     { id: "V3", title: "What does an accepted draft build from?", context: "",
+       options: [{ k: "A", t: "The chosen HTML, the mix and your pins, kept in Hatch", d: "Given to the build agent as files; it builds with the app's components; you check in a Preview.", rec: true }, { k: "B", t: "A written spec first, for you to approve", d: "" }],
+       why: "Accept draft is for small things, and a spec step would make them slow. The Preview is the real check and Fixing is one click from it." },
+     { id: "V4", title: "Can you decide drafts in Decide?", context: "Hatch draws HTML itself, so a draft needs no Stage.",
+       options: [{ k: "A", t: "Yes: the card shows the variants side by side with the exits", d: "", rec: true }, { k: "B", t: "No: the card opens the ticket", d: "" }],
+       why: "Most drafts are a quick look and a choice, which is what Decide is for. Swift rounds stay at the end of the session." },
+     { id: "W2", title: "After you accept a written proposal?", context: "",
+       options: [{ k: "A", t: "A decision in the notebook, and the same ticket builds it", d: "If it is large, Iris splits it into a Theme with children first.", rec: true }, { k: "B", t: "The decision only; build tickets by hand", d: "" }],
+       why: "The proposal already lists files, risk and tests: everything a build brief needs. A separate ticket would copy it." },
+     { id: "F3", title: "Findings with one small, obvious fix?", context: "",
+       options: [{ k: "A", t: "Go straight on to build and tell you", d: "Only when the fix is one option under the file limit; otherwise it is your call.", rec: true }, { k: "B", t: "Always show you the findings first", d: "" }],
+       why: "If the cause is found and there is one sensible fix, stopping for you adds a wait and no choice. You still see the findings and the numbers when you verify." },
+   ] },
+ { id: "s-swift", n: 8, title: "The Swift Stage, only when it is needed",
+   summary: "When you press Try it in Swift, an agent writes Swift options for the variants you chose. Hatch builds that Proposal's own Stage, runs it headless to check every specimen and scenario, and only then gives it to you.",
+   happens: ["The agent writes the round in the notebook's <code>specimens/&lt;ticket&gt;/</code> from a fixed template.", "At <code>hatch offer</code> Hatch builds the round and runs <code>--check</code>; a failure goes back to the agent with the log.", "Open Stage starts that Proposal's Stage; a new revision offers Reload; a crash shows “Stage closed unexpectedly” with Relaunch.", "Picks, pins, Accept and Send back go to Hatch over the local API, as built."],
+   auto: ["Build, check, Reload, crash handling."],
+   you: ["Judging in the Stage."],
+   today: [["ok", "StageKit: compare modes, scenarios, redlines, Mix, decision panel, keyboard", "Stage/Sources/StageKit"], ["ok", "Local API with outbox and token, tested", "HatchAPI"], ["no", "No per-Proposal build; Open Stage starts the toast app (G15)", "StageLauncher.swift:29"], ["gap", "Never run live with Hatch (G16)", ""]],
+   decisions: [
+     { id: "V5", title: "How does Hatch build a Proposal's Stage?", context: "",
+       options: [{ k: "A", t: "One rounds package Hatch keeps; one target per Proposal", d: "StageKit and the app's components built once; each round about 2 s, as measured in the spike.", rec: true }, { k: "B", t: "A separate package per Proposal", d: "Each first build recompiles StageKit (not measured; likely a minute or more)." }],
+       why: "A matches what was measured and keeps the check before Your call cheap enough for every offer. Each target builds on its own, so one broken round does not block the others." },
+     { id: "V6", title: "How does the Stage use the app's components (SC1–SC5)?", context: "Open since 4 October; DECISIONS.md section U.",
+       options: [{ k: "A", t: "Use my recommendations for all five", d: "A clean base-branch copy Hatch keeps; new values inside the option; “App today” drawn with the real component; component cost per option; plain SwiftUI with a banner when there is no package.", rec: true }, { k: "B", t: "Go through them one by one first", d: "" }],
+       why: "They keep the round honest about what ships today and leave nothing in the app from rejected options. Answering now means the round is built once." },
+   ] },
+ { id: "s-build", n: 9, title: "Build",
+   summary: "An agent builds in its own worktree on a ticket branch, declares its files, waits only when the plan is large, and hands in with <code>hatch ready</code>.",
+   happens: ["<code>hatch plan</code> claims the files; overlapping files queue the later ticket.", "A plan over the limit or in a protected area waits for you.", "A question while working pauses the agent there; it resumes where it stopped.", "A run that stops early is tried again once, then once more on the stronger model, then you are asked with the log."],
+   auto: ["Claims, queueing, freeing files when work is handed in, resuming the waiting ticket, retries."],
+   you: ["Large plans, questions only you can answer, the last resort when it keeps failing."],
+   today: [["ok", "Worktrees, branch guard, <code>hatch plan</code>, plan review, <code>--wait</code>", "CoreCommands.swift:180"], ["gap", "Questions restart the work (G21)", ""], ["gap", "Files freed only at Done (G22)", ""], ["gap", "Your Resume on Blocked fails (G24)", ""], ["gap", "“Try again / Stop” not handled (G27)", ""]],
+   decisions: [
+     { id: "B1", title: "When does a plan wait for you?", context: "Today: every Bug, and any plan over 8 files.",
+       options: [{ k: "A", t: "Over the file limit, or touching a protected area", d: "You mark areas as protected (for example the drivers). A plain Bug no longer waits.", rec: true }, { k: "B", t: "As today", d: "" }, { k: "C", t: "Never", d: "" }],
+       why: "Bugs waited because nobody had looked at the cause. With investigations (F1) the cause has been looked at, so a three-file fix should not wait for you. Size and sensitive areas are the real risk." },
+     { id: "B2", title: "When are a ticket's files freed for the next one?", context: "Today at Done, which never comes (G22).",
+       options: [{ k: "A", t: "When it is handed in to verify; the next one builds on top of the base branch", d: "If both end up in one Preview and clash, the conflict is shown as today.", rec: true }, { k: "B", t: "When it is merged", d: "" }, { k: "C", t: "Stack the next one on the same branch automatically", d: "" }],
+       why: "Once the work is handed in, nobody edits those files on that branch any more. Waiting for the merge holds the queue for as long as you take to verify." },
+     { id: "B3", title: "An agent that stops twice?", context: "Today: you are asked “Try again / Stop”, and neither works (G27).",
+       options: [{ k: "A", t: "Try once more on the stronger model, then ask you with the log", d: "The stronger model is a setting per task.", rec: true }, { k: "B", t: "Ask you after two stops, and make both answers work", d: "" }],
+       why: "Most stops are the model running out of room or getting lost; a stronger model often gets through. Asking you first is a stop for something Hatch can try itself." },
+   ] },
+ { id: "s-checks", n: 10, title: "Hatch's checks",
+   summary: "<code>hatch ready</code> runs the checks in code, per repository, and moves the ticket on only when they pass. What it checks depends on the path.",
+   table: { head: ["Check", "When", "Today"], rows: [
+     ["Merge the base branch in", "Always", "Built"],
+     ["Committed, no stray files", "Always", "Built"],
+     ["Build, tests for the area", "Always (no full suite; CI does that)", "Built"],
+     ["Spec updated or unchanged", "Projects with a notebook", "Built"],
+     ["Values typed in instead of components", "App repository", "Built (a note, never a failure)"],
+     ["Match check against the accepted option", "Visual changes", "Only a command, if set (G28)"],
+     ["A test that failed before the fix", "Bugs, where the area has tests", "Not built"],
+     ["Before and after numbers", "Slowness", "Not built"] ] },
+   happens: ["Failures go back to the agent with the output; it fixes and runs <code>hatch ready</code> again."],
+   auto: ["All of it."],
+   you: ["Nothing."],
+   today: [["ok", "Steps recorded as events and shown on the Work tab", "AgentCommands.swift:124"]],
+   decisions: [
+     { id: "F4", title: "How is a speed fix measured?", context: "",
+       options: [{ k: "A", t: "A measure command per area; numbers before and after are required; worse fails", d: "The investigation records the baseline; <code>hatch ready</code> records the result.", rec: true }, { k: "B", t: "The agent reports numbers in a note", d: "" }, { k: "C", t: "You check in a Preview", d: "" }],
+       why: "“Feels faster” is not a result. A command run the same way twice gives numbers you can trust, and it lets Hatch refuse a change that made things worse before you see it." },
+     { id: "F5", title: "Does a Bug fix need a test that failed first?", context: "",
+       options: [{ k: "A", t: "Yes, where the area has tests; Hatch checks it failed on the base branch", d: "", rec: true }, { k: "B", t: "Encouraged, not required", d: "" }],
+       why: "A test that failed before and passes after proves the fix and keeps the bug from coming back. Hatch can check it without tokens by running it on the base branch." },
+     { id: "K1", title: "The match check for visual changes?", context: "The design says a parts table plus accepted, Echo and diff images (I4).",
+       options: [{ k: "A", t: "Build it: parts at 0.5 pt, an image comparison, shown at verify", d: "From CONFORMANCE.md.", rec: true }, { k: "B", t: "Leave it to your eye in the Preview", d: "" }],
+       why: "It catches the spacing and size drift that is hard to see and easy to argue about, before you verify. It needs no model call." },
+   ] },
+ { id: "s-verify", n: 11, title: "Verify",
+   summary: "You are asked to verify only what you can see or what needs your judgement. Everything else is verified by its tests and CI.",
+   table: { head: ["Path", "Verified by", "Needs you"], rows: [
+     ["Visual change, small change", "A Preview with Iris's 2–5 item checklist", "Yes"],
+     ["Bug you can see", "A Preview, the reproduction steps as the checklist", "Yes"],
+     ["Slowness", "The numbers, and a Preview if it is visible", "Yes"],
+     ["Change with approaches, internal bug", "The test plan from the proposal, CI", "No"],
+     ["Chore", "CI", "No"] ] },
+   happens: ["Hatch builds one Preview with everything waiting to be verified in a project, opens the copy it built, and lists each ticket's checklist.", "Looks right moves the ticket on; Needs work sends it to Fixing with your note and screenshot."],
+   auto: ["Choosing tickets for the Preview, building it, opening the right app, verifying the ones tests cover."],
+   you: ["Looks right or Needs work, per ticket."],
+   today: [["ok", "Preview builder, conflicts name the pair, Needs work → Fixing", "PreviewBuilder.swift"], ["gap", "Open app opens a fixed path; Looks right moves nothing (G25)", ""], ["gap", "Checklist is the first line (G20)", ""]],
+   decisions: [
+     { id: "K2", title: "Which tickets need you to verify?", context: "Today every built ticket.",
+       options: [{ k: "A", t: "Only what you can see or measure; tests and CI verify the rest", d: "As in the table above. Each one still lists in the digest.", rec: true }, { k: "B", t: "Every ticket, as today", d: "" }, { k: "C", t: "You choose per ticket", d: "" }],
+       why: "You cannot see a connection pool change in a Preview; asking you to look is a stop that checks nothing. Its tests and CI are the real check." },
+     { id: "K3", title: "Who writes the checklist?", context: "",
+       options: [{ k: "A", t: "Iris, 2–5 items from the ticket and what you accepted", d: "One cheap call when the ticket reaches verify.", rec: true }, { k: "B", t: "The build agent at <code>hatch ready</code>", d: "" }, { k: "C", t: "As today: the first line", d: "" }],
+       why: "Iris knows what you asked for and what you chose, and is not the one who built it, so her checklist tests the work rather than describing it." },
+     { id: "K4", title: "How are tickets put into a Preview?", context: "Today you select them.",
+       options: [{ k: "A", t: "Hatch builds one with everything waiting in the project when you start verifying", d: "Conflicts still name the pair and offer drop, stack or ask the agent.", rec: true }, { k: "B", t: "You select them, as today", d: "" }],
+       why: "Verifying together is faster and finds clashes early. Selecting by hand only matters when there is a conflict, and the conflict screen handles that." },
+   ] },
+ { id: "s-land", n: 12, title: "Land",
+   summary: "Verified work merges into the integration branch, CI runs, and green work goes to dev and becomes Done. Themes finish when their children do. Decisions go to the notebook.",
+   happens: ["Looks right adds the ticket to the merge plan; Hatch merges when the plan is clean.", "Hatch pushes the integration branch, and promotion to dev goes through a pull request.", "Green CI promotes and moves the tickets to Done; a failure sends the ticket that broke it to Fixing with the log."],
+   auto: ["Merge, push, CI, promote, Done, Theme completion, notebook export."],
+   you: ["Only conflicts and CI that fails twice."],
+   today: [["ok", "Merge plan order, integration branch, CI read during sync, CI chip", "MergePlan.swift"], ["gap", "Nothing pushed; promote manual (G26)", ""], ["no", "Merged never becomes Done (G23)", ""]],
+   decisions: [
+     { id: "L1", title: "After Looks right?", context: "",
+       options: [{ k: "A", t: "Merge automatically when the plan is clean; ask only on conflicts", d: "", rec: true }, { k: "B", t: "You press Merge per plan", d: "" }],
+       why: "A clean plan of verified tickets has nothing left to decide; the button is a stop with no choice." },
+     { id: "L2", title: "How does work reach dev?", context: "Setup chose pull requests by default.",
+       options: [{ k: "A", t: "Push the integration branch; one pull request to dev, merged by Hatch on green CI", d: "", rec: true }, { k: "B", t: "Push straight to dev on green CI", d: "" }, { k: "C", t: "You press Promote, as today", d: "" }],
+       why: "A pull request keeps branch protection on dev and leaves a reviewable record of each landing; Hatch merging it on green keeps you out of the loop." },
+     { id: "L3", title: "When is a ticket Done?", context: "",
+       options: [{ k: "A", t: "When it reaches dev with green CI; a CI failure sends it to Fixing once, then asks you", d: "", rec: true }, { k: "B", t: "When it merges into the integration branch", d: "" }, { k: "C", t: "You close it", d: "" }],
+       why: "Done should mean it is in dev and passing. One automatic fix attempt covers most CI failures; a second failure is worth your attention." },
+   ] },
+ { id: "s-off", n: 13, title: "Off the path",
+   summary: "Park, drop, reopen and blocked, for any ticket, at any point.",
+   happens: ["Park keeps where it was and frees its files; Resume returns it there.", "Drop closes the GitHub issue as not planned; Reopen starts it again at filing.", "Blocked means waiting for files or stopped; Hatch resumes it when the files are free; you can resume one you stopped."],
+   auto: ["Blocked and its resume, GitHub closing and reopening."],
+   you: ["Park, Drop, Reopen, Resume when you choose."],
+   today: [["ok", "Park, Drop, Reopen, GitHub close reasons", "Store.swift:194–229"], ["gap", "Your Resume on Blocked fails (G24)", ""], ["gap", "Resumed tickets keep a stale taker (G22)", ""]],
+   decisions: [] },
+ { id: "s-informed", n: 14, title: "Keeping you informed without stopping you",
+   summary: "When Iris and Hatch act on their own, you need to be able to see what they did. A digest and the ticket history show it, and the count of what waits for you is the same everywhere.",
+   happens: ["Notifications only for things on the “needs you” list, plus failures.", "A daily digest on the Desk: what Iris filed and how, what finished without you, what was verified by CI.", "Agents can suggest follow-ups they find (“the same bug is in the Postgres driver”); those go to Iris like any prompt, marked with the ticket they came from."],
+   auto: ["The digest, notifications, follow-up filing."],
+   you: ["Reading it when you want."],
+   today: [["ok", "Notifications for your turn, one count for the Dock, toolbar and Desk", "AppState+Notifications.swift"], ["no", "No digest", ""], ["no", "Agents cannot suggest follow-ups", ""]],
+   decisions: [
+     { id: "A1", title: "How often should Hatch stop for you overall?", context: "",
+       options: [{ k: "A", t: "Only for the “needs you” list above", d: "", rec: true }, { k: "B", t: "Also to confirm every filing and every plan", d: "Careful." }, { k: "C", t: "A setting per project: Careful, Normal, Trusting", d: "" }],
+       why: "The list is where a stop adds a decision. A per-project setting is easy to add later if one project needs more care; starting with three levels means three behaviours to build and test." },
+     { id: "A2", title: "Follow-ups an agent finds during work?", context: "",
+       options: [{ k: "A", t: "<code>hatch suggest</code>: filed by Iris like a prompt, linked to where it came from", d: "Nothing starts outside its normal path.", rec: true }, { k: "B", t: "A note in the thread only", d: "" }],
+       why: "Agents often see the next problem. A note gets lost; a suggestion that Iris files is kept, and still goes through the same checks." },
+     { id: "A3", title: "A digest of what happened without you?", context: "",
+       options: [{ k: "A", t: "Yes, daily, on the Desk and in the menu bar", d: "", rec: true }, { k: "B", t: "No; the ticket history is enough", d: "" }],
+       why: "Trusting Iris to file and Hatch to land needs a place to glance at what they did. It costs nothing: it is read from the events Hatch already records." },
+     { id: "A4", title: "Issues opened by hand on GitHub?", context: "Today they arrive in Checking and wait (G6).",
+       options: [{ k: "A", t: "Filed by Iris like a prompt", d: "", rec: true }, { k: "B", t: "Left as drafts for you", d: "" }],
+       why: "Then a ticket written on your phone in GitHub takes the same path as one written in Hatch." },
+   ] },
+];
+
+// ---------- Worked examples ----------
+const EXAMPLES = [
+  { prompt: "The toast feels cramped when the message is long.", path: "Visual change", type: "Proposal", needs: 2, steps: [
+    ["iris", "Files it: visual change, area Notifications, priority normal, related to the earlier toast decision. Nothing to ask."],
+    ["agent", "Web draft: three variants. Recommends B (more padding, two-line wrap). Swift not needed: the change is spacing and wrapping, which HTML shows well."],
+    ["you", "Decide card: looks at the three side by side, presses Accept draft."],
+    ["agent", "Builds variant B with the app's components on <code>ticket/212-toast-spacing</code>."],
+    ["hatch", "Build, toast tests, match check at 0.5 pt, Spec TOAST-3 updated."],
+    ["you", "Preview, checklist: long message wraps to two lines; action stays visible at large text; dark mode. Looks right."],
+    ["hatch", "Merged, pushed, pull request to dev, green CI, Done."] ] },
+  { prompt: "Opening a big table on SQL Server is really slow.", path: "Problem, cause unknown", type: "Bug", needs: 2, steps: [
+    ["iris", "Files it: Bug, investigate first, area Drivers · SQL Server, priority high. One question, because “big” and “slow” could mean two things."],
+    ["you", "Answers from the notification: “About 200,000 rows” and “Slow before the first row shows”."],
+    ["iris", "Checks again with the answers; nothing more to ask."],
+    ["agent", "Investigation: reproduces with the measure command, 8.2 s to first row. Cause: all rows decoded before the grid shows any. Two fixes: stream rows in pages (recommended), or decode on a background task."],
+    ["you", "Decide card: findings with the numbers, chooses streaming."],
+    ["agent", "Builds it; test for first-row time."],
+    ["hatch", "Tests pass, measure: 0.4 s to first row (was 8.2 s). Better, so it passes."],
+    ["you", "Verify card: before and after numbers, and a Preview to scroll the grid. Looks right."],
+    ["hatch", "Merged, CI green, Done."] ] },
+  { prompt: "Should the connection pool be one actor per server, or one shared pool?", path: "Question → change with approaches", type: "Question", needs: 2, steps: [
+    ["iris", "Files it: Question, area Connections. Links the earlier decision on reconnects."],
+    ["agent", "Three options with gain and cost; recommends one actor per server because it removes the shared lock."],
+    ["you", "Chooses one actor per server."],
+    ["hatch", "Saves the architecture decision in the notebook."],
+    ["iris", "Drafts the follow-up: “Move the pool to one actor per server”, files it as a change with approaches already decided, links it to the Question."],
+    ["agent", "Plans the build: 11 files, over the limit of 8, so the plan waits for you (B1)."],
+    ["you", "Approves the plan in Decide."],
+    ["hatch", "Tests and CI verify it (nothing to see in a Preview). Merged, Done. It shows in the digest."] ] },
+  { prompt: "Crash when I close a tab while a query is running. (crash log pasted)", path: "Bug, cause known", type: "Bug", needs: 1, steps: [
+    ["iris", "Files it: Bug, cause known from the stack trace, area Query editor, priority urgent (a crash). Jumps the queue."],
+    ["agent", "Writes a test that crashes on the base branch, then the fix: cancel the query before the tab is released."],
+    ["hatch", "The test failed on the base branch and passes now. Build, tests, Spec unchanged."],
+    ["you", "Preview, checklist from the steps: start a long query, close the tab, no crash. Looks right."],
+    ["hatch", "Merged, CI, Done."] ] },
+  { prompt: "Rename Run to Execute everywhere.", path: "Small change", type: "Tweak", needs: 1, steps: [
+    ["iris", "Files it: Tweak, area Query editor. Asks one thing, because the keyboard shortcut is named too: “Keep ⌘R?” with Keep picked."],
+    ["you", "Leaves the guess: one click."],
+    ["agent", "Renames the button, menu item and help text."],
+    ["you", "Preview: three places to look at. Looks right."],
+    ["hatch", "Merged, Done."] ] },
+  { prompt: "Bump postgres-wire to 2.3.", path: "Chore", type: "Tweak", needs: 0, steps: [
+    ["iris", "Files it: chore, area Drivers · Postgres."],
+    ["agent", "Updates the package, fixes one renamed call."],
+    ["hatch", "Build, driver tests, CI green. Merged, Done."],
+    ["hatch", "Listed in the digest: “Bumped postgres-wire to 2.3, verified by CI”."] ] },
+  { prompt: "Redo the query editor: tabs, history, and a results grid where I can pin columns.", path: "Big or several things", type: "Theme", needs: "3+", steps: [
+    ["iris", "Proposes a split: Theme “Query editor redo” with three children: Tabs (visual change), History (Question first: where it is stored), Pinned columns (visual change, Swift likely for dragging)."],
+    ["you", "Confirms the split on one card."],
+    ["agent", "Each child takes its own path in parallel, within the slot limit."],
+    ["you", "Answers the History question; judges two drafts; tries Pinned columns in Swift, because dragging needs it, and accepts in the Stage."],
+    ["hatch", "The Theme shows 1 of 3 done, then 3 of 3, and finishes itself."] ] },
+];
+
+// ---------- Rendering ----------
+const allDecisions = STAGES.flatMap(s => s.decisions.map(d => ({ ...d, stage: s.id })));
+const saved = {};
+let db = null;
+
+function el(tag, attrs, html) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) { if (k === "class") e.className = v; else e.setAttribute(k, v); }
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+
+function renderGaps() {
+  const root = document.getElementById("gapList");
+  for (const g of GAPS) {
+    const box = el("div", { class: "gapgroup" });
+    box.appendChild(el("h3", {}, g.group));
+    for (const [id, kind, what, why, where] of g.items) {
+      const card = el("div", { class: "gap " + kind, id: "gap-" + id });
+      card.appendChild(el("div", { class: "id" }, id));
+      card.appendChild(el("div", { class: "what" }, what));
+      card.appendChild(el("div", { class: "why" }, why));
+      card.appendChild(el("div", { class: "where" }, where));
+      box.appendChild(card);
+    }
+    root.appendChild(box);
+  }
+}
+
+function list(items) { return "<ul>" + items.map(i => "<li>" + i + "</li>").join("") + "</ul>"; }
+
+function renderStages() {
+  const root = document.getElementById("stageList");
+  for (const s of STAGES) {
+    const card = el("article", { class: "stage", id: s.id });
+    card.appendChild(el("header", {}, `<span class="num">Stage ${s.n}</span><h3>${s.title}</h3><p class="prose">${s.summary}</p>`));
+    if (s.table) {
+      const t = `<div class="subtable"><table><thead><tr>${s.table.head.map(h => "<th>" + h + "</th>").join("")}</tr></thead><tbody>${s.table.rows.map(r => "<tr>" + r.map(c => "<td>" + c + "</td>").join("") + "</tr>").join("")}</tbody></table></div>`;
+      card.appendChild(el("div", {}, t));
+    }
+    const cols = el("div", { class: "cols" });
+    cols.appendChild(el("div", { class: "col" }, "<h4>What happens</h4>" + list(s.happens)));
+    cols.appendChild(el("div", { class: "col" }, "<h4>Iris and Hatch, on their own</h4>" + list(s.auto)));
+    cols.appendChild(el("div", { class: "col you" }, "<h4>Needs you</h4>" + list(s.you)));
+    const tags = { ok: "built", gap: "partial", no: "missing", new: "new" };
+    cols.appendChild(el("div", { class: "col" }, "<h4>Today</h4><ul class=\"status-list\">" + s.today.map(([k, t, r]) => `<li><span class="tag ${k}">${tags[k]}</span><span>${t}${r ? `<span class="ref">${r}</span>` : ""}</span></li>`).join("") + "</ul>"));
+    card.appendChild(cols);
+    if (s.decisions.length) {
+      const head = el("div", { class: "decisions-head" }, `<h4>Your decisions for this stage (${s.decisions.length})</h4>`);
+      const useRec = el("button", { class: "quiet", type: "button", id: "rec-" + s.id }, "Use my recommendations for the unanswered ones");
+      useRec.addEventListener("click", () => useRecommendations(s));
+      head.appendChild(useRec);
+      card.appendChild(head);
+      for (const d of s.decisions) card.appendChild(renderDecision(d));
+    }
+    root.appendChild(card);
+  }
+}
+
+function renderDecision(d) {
+  const card = el("div", { class: "decision", id: "card-" + d.id });
+  card.appendChild(el("header", {}, `<span class="id">${d.id}</span><h4>${d.title}</h4>`));
+  if (d.context) card.appendChild(el("p", { class: "context" }, d.context));
+  const opts = el("div", { class: "options", role: "radiogroup", "aria-label": d.title });
+  for (const o of d.options) {
+    const label = el("label", { class: "opt", for: d.id + "-" + o.k });
+    const input = el("input", { type: "radio", name: d.id, value: o.k, id: d.id + "-" + o.k });
+    input.addEventListener("change", () => markDirty(d.id));
+    label.appendChild(input);
+    label.appendChild(el("div", {}, `<b>${o.k} · ${o.t}</b>${o.rec ? '<span class="rec">★ recommended</span>' : ""}${o.d ? `<span class="d">${o.d}</span>` : ""}`));
+    opts.appendChild(label);
+  }
+  card.appendChild(opts);
+  card.appendChild(el("p", { class: "reason" }, "<b>Why I recommend it: </b>" + d.why));
+  const ta = el("textarea", { id: d.id + "-note", rows: "2", placeholder: "Note (optional)", "aria-label": "Note on " + d.id });
+  ta.addEventListener("input", () => markDirty(d.id));
+  card.appendChild(ta);
+  const row = el("div", { class: "saverow" });
+  const btn = el("button", { class: "save", type: "button", id: d.id + "-save" }, "Save " + d.id);
+  btn.addEventListener("click", () => save(d.id));
+  row.appendChild(btn);
+  row.appendChild(el("span", { class: "status", id: d.id + "-status" }, "Not answered yet"));
+  card.appendChild(row);
+  return card;
+}
+
+function applySaved() {
+  for (const d of allDecisions) {
+    const v = saved[d.id];
+    if (!v) continue;
+    const input = document.getElementById(d.id + "-" + v.choice);
+    if (input) input.checked = true;
+    document.getElementById(d.id + "-note").value = v.note || "";
+    const s = document.getElementById(d.id + "-status");
+    s.className = "status ok"; s.textContent = "Saved";
+  }
+  updateButtons(); updateProgress();
+}
+
+function markDirty(id) {
+  const s = document.getElementById(id + "-status");
+  s.className = "status"; s.textContent = "Not saved";
+  updateButtons();
+}
+
+function updateButtons() {
+  for (const d of allDecisions) {
+    const btn = document.getElementById(d.id + "-save");
+    const picked = document.querySelector('input[name="' + d.id + '"]:checked');
+    btn.disabled = !db || !picked;
+    btn.title = !db ? "Saving needs the answer store; use Copy my answers and paste them in chat." : (!picked ? "Pick an option first." : "");
+  }
+  for (const s of STAGES) { const b = document.getElementById("rec-" + s.id); if (b) b.disabled = !db; }
+}
+
+function updateProgress() {
+  const n = allDecisions.filter(d => saved[d.id]).length;
+  document.getElementById("countText").textContent = n + " of " + allDecisions.length + " answered";
+  document.getElementById("countBar").style.width = (100 * n / allDecisions.length) + "%";
+}
+
+async function save(id) {
+  const picked = document.querySelector('input[name="' + id + '"]:checked');
+  const status = document.getElementById(id + "-status");
+  if (!picked || !db) return;
+  const body = { choice: picked.value, note: document.getElementById(id + "-note").value.trim(), at: new Date().toISOString() };
+  status.className = "status"; status.textContent = "Saving…";
+  try {
+    await db.doc("answers/" + id).set(body);
+    saved[id] = body;
+    status.className = "status ok"; status.textContent = "Saved";
+    updateProgress();
+  } catch (e) {
+    status.className = "status err";
+    status.textContent = "Could not save (" + (e && e.code ? e.code : "error") + "). Use Copy my answers instead.";
+  }
+}
+
+async function useRecommendations(stage) {
+  for (const d of stage.decisions) {
+    if (saved[d.id]) continue;
+    const rec = d.options.find(o => o.rec);
+    const input = document.getElementById(d.id + "-" + rec.k);
+    input.checked = true;
+    await save(d.id);
+  }
+}
+
+document.getElementById("copyAnswers").addEventListener("click", async () => {
+  const lines = allDecisions.map(d => {
+    const picked = document.querySelector('input[name="' + d.id + '"]:checked');
+    const note = document.getElementById(d.id + "-note").value.trim();
+    return picked ? d.id + " " + picked.value + (note ? " — " + note : "") : null;
+  }).filter(Boolean);
+  const text = lines.length ? lines.join("\n") : "No answers picked yet.";
+  const status = document.getElementById("copyStatus");
+  try { await navigator.clipboard.writeText(text); status.textContent = lines.length + " copied"; }
+  catch (e) { status.textContent = "Copy refused: " + lines.join(", "); }
+});
+
+function renderExamples() {
+  const root = document.getElementById("exampleList");
+  const who = { iris: "Iris", agent: "Agent", hatch: "Hatch", you: "You" };
+  for (const x of EXAMPLES) {
+    const card = el("article", { class: "example" });
+    card.appendChild(el("p", { class: "prompt" }, "“" + x.prompt + "”"));
+    card.appendChild(el("div", { class: "meta" }, `<span class="chip">${x.path}</span><span class="chip">${x.type}</span><span class="chip you">Needs you: ${x.needs}</span>`));
+    card.appendChild(el("ul", { class: "trace" }, x.steps.map(([w, t]) => `<li class="${w === "you" ? "you" : ""}"><span class="who ${w}">${who[w]}</span><span>${t}</span></li>`).join("")));
+    root.appendChild(card);
+  }
+}
+
+renderGaps(); renderStages(); renderExamples(); updateButtons(); updateProgress();
+
+(async () => {
+  const note = document.getElementById("storeNote");
+  try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch (e) { db = null; }
+  if (!db) {
+    note.textContent = "Answers cannot be saved in this view. Pick your options, press Copy my answers at the top, and paste them in chat.";
+    updateButtons();
+    return;
+  }
+  try {
+    const snap = await db.collection("answers").get();
+    for (const doc of snap.docs) { const v = doc.data(); if (v) saved[doc.id] = v; }
+    note.textContent = "Answers are saved for Claude to read as you go. You can change one and save again.";
+  } catch (e) {
+    note.textContent = "Saved answers could not be read just now; saving still works.";
+  }
+  applySaved();
+})();
+</script>
