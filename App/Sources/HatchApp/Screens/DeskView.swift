@@ -33,6 +33,8 @@ struct DeskView: View {
     @State private var selection: Int?
     @State private var collapsed: Set<String> = []
     @AppStorage("hatch.deskListWidth") private var listWidth = 380.0
+    @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var keys = ShortcutStore.shared
     @State private var plan: AcceptPlan?
     @State private var notice: String?
     @State private var loaded = false
@@ -230,6 +232,7 @@ struct DeskView: View {
 
     @ViewBuilder private func rowMenu(_ ticket: Ticket) -> some View {
         Button("Open") { open(ticket) }
+        Button("Open in New Window") { openWindow(id: "ticket", value: ticket.id) }
         if canAccept(ticket) { Button("Accept recommendation") { prepareAccept(ticket) } }
         Button("Park") { park(ticket) }
         Button("Ask") { ask(ticket) }
@@ -291,11 +294,12 @@ struct DeskView: View {
 
     private var shortcutButtons: some View {
         ZStack {
-            Button("Next") { moveSelection(by: 1) }.keyboardShortcut("j", modifiers: [])
-            Button("Previous") { moveSelection(by: -1) }.keyboardShortcut("k", modifiers: [])
-            Button("Open") { if let t = selectedTicket { open(t) } }.keyboardShortcut(.return, modifiers: [])
-            Button("Park") { if let t = selectedTicket { park(t) } }.keyboardShortcut("p", modifiers: [])
-            Button("Accept") { if let t = selectedTicket { prepareAccept(t) } }.keyboardShortcut("a", modifiers: [])
+            Button("Next") { moveSelection(by: 1) }.shortcut("list.next", keys)
+            Button("Previous") { moveSelection(by: -1) }.shortcut("list.previous", keys)
+            Button("Open") { if let t = selectedTicket { open(t) } }.shortcut("list.open", keys)
+            Button("Open in New Window") { if let t = selectedTicket { openWindow(id: "ticket", value: t.id) } }.shortcut("list.openWindow", keys)
+            Button("Park") { if let t = selectedTicket { park(t) } }.shortcut("list.park", keys)
+            Button("Accept") { if let t = selectedTicket { prepareAccept(t) } }.shortcut("list.accept", keys)
         }
         .frame(width: 0, height: 0)
         .opacity(0)

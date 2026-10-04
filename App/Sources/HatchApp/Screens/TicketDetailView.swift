@@ -5,6 +5,16 @@ import HatchCore
 enum TicketTab: String, CaseIterable, Identifiable {
     case overview, options, thread, work, history
     var id: String { rawValue }
+    /// For the Ticket menu; the page itself says Variants for a Sketch.
+    var menuTitle: String {
+        switch self {
+        case .overview: "Overview"
+        case .options: "Variants or Options"
+        case .thread: "Thread"
+        case .work: "Work"
+        case .history: "History"
+        }
+    }
 }
 
 /// What the banner says and which buttons it offers for a ticket in its current status (decision F2).
@@ -35,6 +45,7 @@ struct TicketDetailView: View {
     /// Inside the Desk: one flat page in the Desk's card, no back link. On its own page the sections are separate panels.
     var embedded = false
     @EnvironmentObject var state: AppState
+    @Environment(\.ticketOpener) private var opener
     @State private var ticket: Ticket?
     @State private var tab: TicketTab = .overview
     @State private var openQuestions = 0
@@ -44,6 +55,7 @@ struct TicketDetailView: View {
     @State private var questionOptions: [QuestionOption] = []
     @State private var deciding = false
     @State private var threadKind: NoteKind = .note
+    @State private var sendingBack = false
     /// An agent's plan waiting for the owner (decision DC8), and the sheet for sending it back with a note.
     @State private var pendingPlan: PlanReview?
     @State private var sendingPlanBack = false
@@ -74,6 +86,10 @@ struct TicketDetailView: View {
         }
         .sheet(isPresented: $deciding) {
             if let ticket { QuestionDecisionSheet(ticket: ticket, options: questionOptions) }
+        }
+        .focusedSceneValue(\.ticketActions, ticket.map { actions(for: $0) })
+        .sheet(isPresented: $sendingBack) {
+            if let ticket, let target = sendBackTarget(ticket) { SendBackSheet(ticket: ticket, target: target) }
         }
         .sheet(isPresented: $sendingPlanBack) {
             if let plan = pendingPlan { PlanSendBackSheet(plan: plan) }
@@ -276,6 +292,7 @@ struct TicketDetailView: View {
             let moved: Ticket? = state.perform("Could not submit the ticket") { try state.store.move(id, to: .checking, actor: .owner, reason: "submitted for check") }
             if moved != nil { VettingBridge.start(ticketId: id, state: state) }
         case .previews:
+            if opener?.isTicketWindow == true { HatchWindows.showMain() }
             state.navigate(to: .previews)
         case .closeAsAnswered:
             move(to: .done)
@@ -302,6 +319,40 @@ struct TicketDetailView: View {
     private func resume() {
         let id = ticketId
         _ = state.perform("Could not resume the ticket") { try state.store.resume(id, actor: .owner) }
+    }
+
+    // MARK: Keyboard (the Ticket menu)
+
+    /// Where "send back with notes" goes from here: more variants or options, or fixes after verifying.
+    private func sendBackTarget(_ t: Ticket) -> Status? {
+        let target: Status
+        switch t.status {
+        case .yourCall: target = .revising
+        case .toVerify: target = .fixing
+        default: return nil
+        }
+        return canMove(t, to: target) ? target : nil
+    }
+
+    private func actions(for t: Ticket) -> TicketActions {
+        let spec = bannerSpec(t)
+        var resumeTitle: String?
+        var resumeAction: (() -> Void)?
+        switch t.status {
+        case .blocked, .parked: resumeTitle = "Resume"; resumeAction = { resume() }
+        case .done, .dropped:
+            if canMove(t, to: .draft) { resumeTitle = "Reopen"; resumeAction = { move(to: .draft) } }
+        default: break
+        }
+        return TicketActions(
+            tabs: visibleTabs(t),
+            selectTab: { tab = $0 },
+            primaryTitle: spec.primaryTitle, primary: handler(spec.primary, t),
+            secondaryTitle: spec.secondaryTitle, secondary: handler(spec.secondary, t),
+            sendBack: sendBackTarget(t) == nil ? nil : { sendingBack = true },
+            park: canMove(t, to: .parked) ? { move(to: .parked) } : nil,
+            resumeTitle: resumeTitle, resume: resumeAction,
+            drop: canMove(t, to: .dropped) ? { confirmDrop = true } : nil)
     }
 
     // MARK: Tabs
@@ -380,7 +431,8 @@ struct TicketDetailView: View {
         let plan = try? state.store.latestPlanReview(ticketId: ticketId)
         let waiting = plan?.state == .pending ? plan : nil
         if waiting != pendingPlan { pendingPlan = waiting }
-        if state.selectedTicketId != ticketId { state.selectedTicketId = ticketId }
+        // A ticket window is not the main window's selection.
+        if opener == nil, state.selectedTicketId != ticketId { state.selectedTicketId = ticketId }
     }
 }
 
@@ -451,6 +503,51 @@ struct QuestionDecisionSheet: View {
             state.notebookChanged(projectId: projectId)
             dismiss()
         }
+    }
+}
+
+
+/// Send a ticket back with notes: the note goes to the agent as an instruction and the ticket moves to the status
+/// that makes it work again (Revising for a Sketch or Proposal, Fixing after verifying). The same two writes the
+/// Sketch board and Previews make, so the history reads the same.
+struct SendBackSheet: View {
+    let ticket: Ticket
+    let target: Status
+    @EnvironmentObject var state: AppState
+    @Environment(\.dismiss) private var dismiss
+    @State private var notes = ""
+
+    private var trimmed: String { notes.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Send \(ticket.displayNumber) back").font(.headline)
+            Text("The agent reads your notes and the ticket moves to \(target.displayName).")
+                .font(.callout).foregroundStyle(.secondary)
+            TextEditor(text: $notes)
+                .font(.body)
+                .frame(minHeight: 120)
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Send Back") { send() }
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(trimmed.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+    }
+
+    private func send() {
+        let id = ticket.id, body = trimmed, status = target
+        let done: Ticket? = state.perform("Send back") {
+            try state.store.addNote(id, kind: .instruction, author: "owner", body: body)
+            return try state.store.move(id, to: status, actor: .owner, reason: body)
+        }
+        if done != nil { dismiss() }
     }
 }
 

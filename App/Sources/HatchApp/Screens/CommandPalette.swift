@@ -264,7 +264,7 @@ struct CommandPalette: View {
                 .onKeyPress(.tab) { toggleActions(); return .handled }
                 .onKeyPress(.escape) { escape(); return .handled }
                 .onKeyPress(keys: [.return]) { press in
-                    activate(command: press.modifiers.contains(.command))
+                    activate(command: press.modifiers.contains(.command), window: press.modifiers.contains(.option))
                     return .handled
                 }
         }
@@ -372,7 +372,10 @@ struct CommandPalette: View {
                 hint(["esc"], "Back")
             } else {
                 hint(["↵"], selectedHit?.id == "capture" ? "Capture" : "Open")
-                if selectedHit?.ticket != nil { hint(["⇥"], "Actions") }
+                if selectedHit?.ticket != nil {
+                    hint(ShortcutStore.shared.chord("palette.openWindow")?.symbols ?? [], "New window")
+                    hint(["⇥"], "Actions")
+                }
                 if scope != .all && hasProjects && trimmed.isEmpty { hint(["⌫"], "Everything") }
                 hint(["esc"], "Close")
             }
@@ -452,7 +455,13 @@ struct CommandPalette: View {
         if actionsFor != nil { actionsFor = nil } else { close() }
     }
 
-    private func activate(command: Bool) {
+    private func activate(command: Bool, window: Bool = false) {
+        // ⌥Return opens the ticket in a window of its own.
+        if window, let ticket = actionsFor ?? selectedHit?.ticket {
+            close()
+            openWindow(id: "ticket", value: ticket.id)
+            return
+        }
         if let ticket = actionsFor {
             let actions = ticketActions(ticket)
             if actions.indices.contains(actionSelection) { run(actions[actionSelection]) }
@@ -632,6 +641,8 @@ struct CommandPalette: View {
             }
         }
         var out = [Hit(id: "open", symbol: "arrow.up.forward.square", title: "Open", trailing: .keys(["↵"]), run: { state.open(t) })]
+        out.append(Hit(id: "window", symbol: "macwindow", title: "Open in New Window",
+                       trailing: .keys(ShortcutStore.shared.chord("palette.openWindow")?.symbols ?? []), run: { openWindow(id: "ticket", value: id) }))
         if t.status == .draft, allowed(.checking) {
             out.append(move("Submit for check", "paperplane", to: .checking) { VettingBridge.start(ticketId: id, state: state) })
         }

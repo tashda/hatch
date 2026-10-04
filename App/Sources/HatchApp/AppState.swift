@@ -21,9 +21,12 @@ final class AppState: ObservableObject {
     private var notebookDirty: Set<Int> = []
     private var notebookDebounce: DispatchWorkItem?
 
-    @Published var route: Route = .desk
-    @Published private(set) var backStack: [Route] = []
-    @Published private(set) var forwardStack: [Route] = []
+    /// Where the main window is, with its Back and Forward. Settings and ticket windows keep their own history.
+    @Published private(set) var history = PageHistory<Route>(start: .desk)
+    var route: Route {
+        get { history.current }
+        set { history.replaceCurrent(with: newValue) }
+    }
     /// A card the current page asks the Iris inspector to show at its top (the Desk's decision brief).
     @Published var inspectorTop: AnyView?
     @Published var selectedProjectKey: String? {        // nil means "All projects" (decision B2, B3)
@@ -358,10 +361,7 @@ final class AppState: ObservableObject {
     /// Every page change goes through here, so Back and Forward always return to where you were.
     func navigate(to destination: Route) {
         if case .ticket(let id) = destination { noteRecent(id) }
-        guard destination != route else { return }
-        backStack.append(route)
-        forwardStack.removeAll()
-        route = destination
+        history.visit(destination)
     }
 
     /// Opens the palette on a scope; the same shortcut again closes it, as Spotlight does.
@@ -376,21 +376,12 @@ final class AppState: ObservableObject {
         UserDefaults.standard.set(recentTicketIds, forKey: "hatch.recentTickets")
     }
 
-    var canGoBack: Bool { !backStack.isEmpty }
-    var canGoForward: Bool { !forwardStack.isEmpty }
-    var backTitle: String? { backStack.last?.title }
+    var canGoBack: Bool { history.canGoBack }
+    var canGoForward: Bool { history.canGoForward }
+    var backTitle: String? { history.backPage?.title }
 
-    func goBack() {
-        guard let previous = backStack.popLast() else { return }
-        forwardStack.append(route)
-        route = previous
-    }
-
-    func goForward() {
-        guard let next = forwardStack.popLast() else { return }
-        backStack.append(route)
-        route = next
-    }
+    func goBack() { history.goBack() }
+    func goForward() { history.goForward() }
 }
 
 /// Where Hatch keeps its files (database, token, caches). Overridable with HATCH_HOME for tests and the CLI.
