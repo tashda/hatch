@@ -37,6 +37,7 @@ struct DeskView: View {
     @ObservedObject private var keys = ShortcutStore.shared
     @State private var plan: AcceptPlan?
     @State private var notice: String?
+    @State private var closing: Ticket?
     @State private var loaded = false
     @State private var projectNames: [Int: String] = [:]
     /// Everything waiting for the owner, for the Decide card at the top (DC1).
@@ -71,6 +72,12 @@ struct DeskView: View {
                 if confirmed { execute(item) }
                 plan = nil
             }
+        }
+        .confirmationDialog("Close this ticket?", isPresented: Binding(get: { closing != nil }, set: { if !$0 { closing = nil } }), presenting: closing) { t in
+            Button("Close", role: .destructive) { close(t); closing = nil }
+            Button("Cancel", role: .cancel) { closing = nil }
+        } message: { t in
+            Text("\(t.displayNumber) is dropped, and closed on GitHub as not planned. You can reopen it later.")
         }
         .background(shortcutButtons)
     }
@@ -196,7 +203,8 @@ struct DeskView: View {
                           onOpen: { open(ticket) },
                           onPark: { park(ticket) },
                           onAsk: { ask(ticket) },
-                          onAccept: { prepareAccept(ticket) })
+                          onAccept: { prepareAccept(ticket) },
+                          onClose: canClose(ticket) ? { closing = ticket } : nil)
                 .frame(maxHeight: 460)
         )
     }
@@ -211,7 +219,8 @@ struct DeskView: View {
                               onOpen: { open(ticket) },
                               onPark: { park(ticket) },
                               onAsk: { ask(ticket) },
-                              onAccept: { prepareAccept(ticket) })
+                              onAccept: { prepareAccept(ticket) },
+                              onClose: canClose(ticket) ? { closing = ticket } : nil)
             } else {
                 ContentUnavailableView("Select a ticket", systemImage: "tray", description: Text("Move with J and K. Return opens it."))
             }
@@ -236,12 +245,21 @@ struct DeskView: View {
         if canAccept(ticket) { Button("Accept recommendation") { prepareAccept(ticket) } }
         Button("Park") { park(ticket) }
         Button("Ask") { ask(ticket) }
+        if canClose(ticket) {
+            Divider()
+            Button("Close Ticket\u{2026}", role: .destructive) { closing = ticket }
+        }
     }
 
     /// Full triage from the list (decision C5): only where Hatch has a recommendation or suggested answers.
     private func canAccept(_ ticket: Ticket) -> Bool {
         if ticket.status == .yourCall && ticket.type == .proposal { return !(infos[ticket.id]?.recommendations.isEmpty ?? true) }
-        return ticket.status == .needsAnswers && !(questions[ticket.id] ?? []).isEmpty
+        return ticket.status == .needsAnswers && (questions[ticket.id] ?? []).contains { !$0.suggestions.isEmpty }
+    }
+
+    /// Closing is dropping: the same move as Drop in the ticket's menu.
+    private func canClose(_ ticket: Ticket) -> Bool {
+        Workflow.isAllowed(type: ticket.type, from: ticket.status, to: .dropped, actor: .owner)
     }
 
     // MARK: Empty state (C6)
@@ -372,6 +390,11 @@ struct DeskView: View {
 
     private func open(_ ticket: Ticket) {
         state.open(ticket)
+    }
+
+    private func close(_ ticket: Ticket) {
+        let id = ticket.id
+        _ = state.perform("Could not close the ticket") { try state.store.move(id, to: .dropped, actor: .owner, reason: "closed from the Desk") }
     }
 
     private func park(_ ticket: Ticket) {

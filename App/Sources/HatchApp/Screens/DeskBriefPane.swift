@@ -12,6 +12,8 @@ struct DeskBriefPane: View {
     let onPark: () -> Void
     let onAsk: () -> Void
     let onAccept: () -> Void
+    /// Drops the ticket (the owner confirms first). Nil when the ticket cannot be dropped from where it is.
+    var onClose: (() -> Void)? = nil
 
     private var copy: DeskCopy {
         DeskCopy.make(ticket: ticket, info: info, openQuestions: questions.count)
@@ -159,13 +161,19 @@ struct DeskBriefPane: View {
             Button(action: onAsk) { Label { Text("Ask") } icon: { Image("IrisIcon") } }
                 .buttonStyle(.glass)
                 .help("Ask (\u{2325}\u{2318}A)")
+            if let onClose {
+                Button(action: onClose) { Label("Close", systemImage: "xmark.circle") }
+                    .buttonStyle(.glass)
+                    .help("Close this ticket: it is dropped, and you can reopen it later")
+            }
         }
         .controlSize(.large)
     }
 
     private var canAccept: Bool {
         if ticket.status == .yourCall && ticket.type == .proposal { return !info.recommendations.isEmpty }
-        return ticket.status == .needsAnswers && !questions.isEmpty
+        // Accept uses each question's first suggested answer, so a question with none cannot be accepted.
+        return ticket.status == .needsAnswers && questions.contains { !$0.suggestions.isEmpty }
     }
 
     private var hint: some View {

@@ -265,7 +265,7 @@ public enum BriefBuilder {
     public static func rules(kind: AgentTaskKind?, ticket t: Ticket, config: ProjectConfig?) -> [String] {
         let common = [
             "Hatch changes the status, never you. Do not edit labels, state or the database; use the commands under Next.",
-            "If something blocks you and only the owner can answer, run `hatch ask` with your recommendation. Do not guess.",
+            "If something blocks you and only the owner can answer, run `hatch ask` with one `--suggest` for each answer you see, your recommendation first (the owner accepts the first one with a click). Options belong in `--suggest`, not in the question text. Do not guess.",
         ]
         switch kind {
         case nil:
@@ -335,13 +335,13 @@ public enum BriefBuilder {
             let file: String
             switch t.type { case .sketch: file = "sketch.json"; case .question: file = "--answer \"...\""; default: file = "manifest.json" }
             return ["hatch offer \(n) \(file)     # when ready; Hatch checks it and moves the ticket",
-                    "hatch ask \(n) \"...\"     # only if you are blocked",
+                    "hatch ask \(n) \"...\" --suggest \"your recommendation\" --suggest \"another answer\"     # only if you are blocked",
                     "hatch note \(n) \"...\"    # context for the owner"]
         case .build?, .fix?:
             return (kind == .build ? ["hatch plan \(n) --files <paths>   # before you edit"] : [])
                 + ["hatch check \(n) --build   # compile; only errors and warnings",
                    "hatch ready \(n)     # when the work is done",
-                   "hatch ask \(n) \"...\"     # only if you are blocked",
+                   "hatch ask \(n) \"...\" --suggest \"your recommendation\" --suggest \"another answer\"     # only if you are blocked",
                    "hatch note \(n) \"...\"    # progress for the owner"]
         }
     }

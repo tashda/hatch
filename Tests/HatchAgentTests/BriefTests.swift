@@ -62,12 +62,12 @@ final class BriefTests: XCTestCase {
         6. Write a question as what to do, then what to decide. Choice names are short and stable.
         7. Mark exactly one preset `isRecommended: true` so the owner can try your whole recommendation in one click.
         8. Hatch changes the status, never you. Do not edit labels, state or the database; use the commands under Next.
-        9. If something blocks you and only the owner can answer, run `hatch ask` with your recommendation. Do not guess.
+        9. If something blocks you and only the owner can answer, run `hatch ask` with one `--suggest` for each answer you see, your recommendation first (the owner accepts the first one with a click). Options belong in `--suggest`, not in the question text. Do not guess.
         10. Hand it in with `hatch offer`. Hatch runs the quality gate and builds the Stage; errors come back to you. Never move the status yourself.
 
         ## Next
         hatch offer #151 manifest.json     # when ready; Hatch checks it and moves the ticket
-        hatch ask #151 "..."     # only if you are blocked
+        hatch ask #151 "..." --suggest "your recommendation" --suggest "another answer"     # only if you are blocked
         hatch note #151 "..."    # context for the owner
 
         """

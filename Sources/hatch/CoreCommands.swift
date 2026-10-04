@@ -193,7 +193,11 @@ enum CoreCommands {
     static func ask(_ c: Context) throws {
         let t = try c.ticket(c.args.pos(1))
         let text = c.args.rest(from: 2)
-        guard !text.isEmpty else { throw CLIError("Usage: hatch ask #151 \"the question\" [--suggest answer]...") }
+        guard !text.isEmpty else { throw CLIError("Usage: hatch ask #151 \"the question\" --suggest \"your recommendation\" [--suggest \"another answer\"]...") }
+        // Accept on the Desk takes the first suggestion, so a question with none cannot be answered from there (decision IR17).
+        guard !c.args.list("suggest").isEmpty else {
+            throw CLIError("Offer the answers you see, your recommendation first: hatch ask '\(t.displayNumber)' \"the question\" --suggest \"your recommendation\" --suggest \"another answer\". Put each option in its own --suggest, not in the question text.")
+        }
         let q = try c.store.ask(t.id, text: text, suggestions: c.args.list("suggest"), by: c.args.option("by") ?? t.takenBy ?? "agent")
         let after = try c.store.ticket(id: t.id)!
         c.out.emit(["question": .int(q.id), "status": .string(after.status.rawValue)], text: "Asked. \(after.displayNumber) is now \(after.status.displayName); the owner will answer.")
