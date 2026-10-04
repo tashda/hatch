@@ -1327,6 +1327,16 @@ The owner asked why setup made both a components and a notebook repository, and 
 | CO7 | What counts as a component | Read from Swift text and asset catalogs: `static let` colors, fonts and sizes in extensions or enums, public views, styles and View modifiers (any name in a plain folder of the app target), and color sets. Packages count only public names. |
 | CO8 | A folder in the app target | Allowed (many large apps have a `DesignSystem` folder), but marked "not a package yet": the app can use it, a Proposal cannot import it. Moving it into a package is a ticket like any other. |
 
+Conflicts (agreed 2026-10-04, not built yet). The principle: Hatch finds conflicts for free, settles only the mechanical ones, and asks the owner about anything that changes the look, with one recommendation. It never guesses what a value means.
+
+| Id | Question | Choice |
+|---|---|---|
+| CO9 | Two or more sets of components (Echo has a package and a `DesignSystem` folder) | Setup shows them all and asks. Recommended: use the package and add a draft ticket to merge the other into it; also "use X only" or "use Y". The scan stops leaving the folders not chosen out of the typed-in count, so their values are no longer invisible (today every candidate folder is skipped). |
+| CO10 | "Hatch starts them" when components exist | Not the default when anything is found. If chosen anyway, Review says it adds another set beside the ones found, and the start ticket names them so the agent reuses them. |
+| CO11 | Same name, different values | One Question ticket with options and a recommendation (PS16), all such clashes in one Question. The answer becomes a decision. |
+| CO12 | Values that are nearly the same, and typed-in values equal to a name | Near duplicates are listed in the brief of the ticket that moves that kind; the agent proposes the merges and the owner approves them in the plan. An exact match is replaced without asking, since nothing visible changes. |
+| CO13 | When tickets are made and where conflicts show | Setup's Review lists what will be added (for example "1 question: two sets of components"). Everything is a draft, kept in Hatch until submitted, as today. A rescan offers tickets, never opens them by itself. Where the owner works through these is open: the owner asked for a dedicated way to go over everything that needs a decision, not a section on the Components page. |
+
 ## U. How the Stage uses components (open, asked 2026-10-04, ids SC1 to SC5)
 
 Not answered yet and not built. They apply once the Stage is built per Proposal (S1); today the Stage is one prebuilt app (the toast spike). ★ marks the recommendation.
