@@ -846,7 +846,7 @@ struct ProjectSetupAssistant: View {
                 }
             }
             Text("When \(Text(model.integrationBranch).font(.body.monospaced())) passes CI").font(.headline)
-            HXPromotionChoice(promotion: $model.promotion, base: model.baseBranch)
+            HXSetupGroup { HXPromotionChoice(promotion: $model.promotion, base: model.baseBranch) }
         }
     }
 
@@ -953,16 +953,27 @@ struct HXSetupHeader: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(tint == .primary ? Color(nsColor: .windowBackgroundColor) : .white)
-                .frame(width: 36, height: 36)
-                .background(tint, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            HXIconTile(symbol: symbol, tint: tint)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.title3.weight(.semibold))
                 Text(detail).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+/// The tinted symbol tile that marks each part of a project, in the assistant's headers and on the settings cards.
+struct HXIconTile: View {
+    let symbol: String
+    let tint: Color
+    var size: CGFloat = 36
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.47, weight: .medium))
+            .foregroundStyle(tint == .primary ? Color(nsColor: .windowBackgroundColor) : .white)
+            .frame(width: size, height: size)
+            .background(tint, in: RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
     }
 }
 
@@ -1133,20 +1144,20 @@ struct HXBranchFlow: View {
     }
 }
 
+/// The three ways Hatch's branch reaches the base branch. Only the rows, so the container groups them:
+/// an `HXSetupGroup` in the assistant, the Branches card in Project settings.
 struct HXPromotionChoice: View {
     @Binding var promotion: Promotion
     let base: String
 
     var body: some View {
-        HXSetupGroup {
-            HXRadioRow(selected: promotion == .pullRequest, title: "Hatch opens a pull request, you merge it",
-                       detail: "One pull request per batch on GitHub. Works with branch protection on \(base).",
-                       recommended: true) { promotion = .pullRequest }
-            HXRadioRow(selected: promotion == .automatic, title: "Hatch merges automatically",
-                       detail: "Fastest. Good once you trust the CI.") { promotion = .automatic }
-            HXRadioRow(selected: promotion == .manual, title: "Leave it on the branch",
-                       detail: "You merge it into \(base) yourself, whenever you like.") { promotion = .manual }
-        }
+        HXRadioRow(selected: promotion == .pullRequest, title: "Hatch opens a pull request, you merge it",
+                   detail: "One pull request per batch on GitHub. Works with branch protection on \(base).",
+                   recommended: true) { promotion = .pullRequest }
+        HXRadioRow(selected: promotion == .automatic, title: "Hatch merges automatically",
+                   detail: "Fastest. Good once you trust the CI.") { promotion = .automatic }
+        HXRadioRow(selected: promotion == .manual, title: "Leave it on the branch",
+                   detail: "You merge it into \(base) yourself, whenever you like.") { promotion = .manual }
     }
 }
 
