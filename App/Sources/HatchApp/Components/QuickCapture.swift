@@ -57,7 +57,8 @@ final class QuickCapture: NSObject, NSWindowDelegate {
         // macOS draws the shadow from the bar's own shape, as for Spotlight; a SwiftUI shadow would be cut off at the
         // window's edge and show as a grey rectangle.
         p.hasShadow = true
-        p.isMovableByWindowBackground = true
+        // Moved by dragging its edge or Iris's mark (WindowDragGesture), never by a drag on a screenshot being marked up.
+        p.isMovableByWindowBackground = false
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.delegate = self
         let host = NSHostingController(rootView: QuickCaptureView(draft: draft, close: { [weak self] in self?.hide() })
@@ -79,8 +80,6 @@ final class QuickCapture: NSObject, NSWindowDelegate {
 
     func hide() {
         holdOpen = false
-        markupWindow?.orderOut(nil)
-        markupWindow = nil
         panel?.orderOut(nil)
         panel = nil
         if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
@@ -89,17 +88,44 @@ final class QuickCapture: NSObject, NSWindowDelegate {
 
     /// A click in another app, or in one of Hatch's own windows, closes the bar (it keeps the draft).
     private func clickedElsewhere() {
-        guard !holdOpen, markupWindow == nil, panel != nil else { return }
+        guard !holdOpen, panel != nil else { return }
         hide()
     }
 
-    /// Where Spotlight sits: centred, a little above the middle of the screen with the pointer.
+    /// Where the bar was last dragged to, or where Spotlight sits: centred, a little above the middle of the screen
+    /// with the pointer. A remembered place on a screen that is no longer there is forgotten.
     private func place(_ p: NSPanel) {
-        let mouse = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else { return }
-        let f = screen.visibleFrame
-        anchor = NSPoint(x: f.midX, y: f.maxY - f.height * 0.22)
+        let d = UserDefaults.standard
+        if let x = d.object(forKey: Self.anchorX) as? Double, let y = d.object(forKey: Self.anchorY) as? Double,
+           NSScreen.screens.contains(where: { $0.visibleFrame.insetBy(dx: -1, dy: -1).contains(NSPoint(x: x, y: y)) }) {
+            anchor = NSPoint(x: x, y: y)
+        } else {
+            let mouse = NSEvent.mouseLocation
+            guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else { return }
+            let f = screen.visibleFrame
+            anchor = NSPoint(x: f.midX, y: f.maxY - f.height * 0.22)
+        }
         keepAnchored(p)
+    }
+
+    private static let anchorX = "hatch.quickCapture.x", anchorY = "hatch.quickCapture.y"
+
+    /// Dragged somewhere: it opens there next time.
+    nonisolated func windowDidMove(_ notification: Notification) {
+        Task { @MainActor in
+            guard let p = self.panel else { return }
+            let top = NSPoint(x: p.frame.midX, y: p.frame.maxY)
+            guard top != self.anchor else { return }
+            self.anchor = top
+            UserDefaults.standard.set(Double(top.x), forKey: Self.anchorX)
+            UserDefaults.standard.set(Double(top.y), forKey: Self.anchorY)
+        }
+    }
+
+    /// Puts the cursor after the remembered text rather than selecting it, so typing adds to it.
+    func moveCaretToEnd() {
+        guard let editor = panel?.firstResponder as? NSTextView else { return }
+        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
     }
 
     private func keepAnchored(_ p: NSWindow) {
@@ -121,30 +147,6 @@ final class QuickCapture: NSObject, NSWindowDelegate {
             self.clickedElsewhere()
         }
     }
-
-    /// Mark-up opens in a window of its own above the bar. A sheet on the bar's transparent window would draw that
-    /// whole window grey behind it.
-    func markUp(_ data: Data, save: @escaping (Data) -> Void) {
-        holdOpen = true
-        // No close button: Save and Cancel are the only ways out, so the bar always knows mark-up has ended.
-        let w = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 560), styleMask: [.titled, .resizable, .fullSizeContentView],
-                        backing: .buffered, defer: false)
-        w.titlebarAppearsTransparent = true
-        w.titleVisibility = .hidden
-        w.level = .floating
-        w.isReleasedWhenClosed = false
-        let done: () -> Void = { [weak self, weak w] in
-            w?.orderOut(nil)
-            self?.markupWindow = nil
-            self?.holdOpen = false
-            self?.panel?.makeKeyAndOrderFront(nil)
-        }
-        w.contentView = NSHostingView(rootView: ScreenshotMarkupSheet(data: data, save: save, onClose: done))
-        w.center()
-        markupWindow = w
-        w.makeKeyAndOrderFront(nil)
-    }
-    private var markupWindow: NSPanel?
 
     /// Drag a rectangle over anything on screen: the bar steps aside while you drag and comes back with the picture.
     /// Nil when the drag was cancelled with Esc.
@@ -206,6 +208,10 @@ final class QuickCaptureDraft: ObservableObject {
     @Published var prompt = ""
     @Published var shots: [PendingShot] = []
     @Published var projectId: Int?
+    #if DEBUG
+    /// `--quick-capture-markup <png>`: open with this screenshot in mark-up, to look at it without clicking.
+    var openMarkupOnShow = false
+    #endif
 
     var isEmpty: Bool { prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && shots.isEmpty }
 
@@ -228,11 +234,16 @@ struct QuickCaptureView: View {
     let close: () -> Void
 
     @State private var problem: String?
+    /// The screenshot being marked up, inside the bar.
+    @State private var markingUp: PendingShot?
+    /// The name and key of the control under the pointer. Tooltips do not show for a panel while Hatch is not the
+    /// active app, so the bar shows it itself, as Raycast does.
+    @State private var hint: String?
     @ObservedObject private var keys = ShortcutStore.shared
     @FocusState private var focused: Bool
 
     private var canSend: Bool { draft.projectId != nil && !draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    private var hasTray: Bool { !draft.shots.isEmpty || problem != nil }
+    private var hasTray: Bool { !draft.shots.isEmpty || problem != nil || markingUp != nil }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -252,7 +263,13 @@ struct QuickCaptureView: View {
         .pastesScreenshots { images in draft.shots += images.map { PendingShot(name: $0.name, data: $0.data) } }
         .onAppear {
             if draft.projectId == nil || !state.projects.contains(where: { $0.id == draft.projectId }) { draft.projectId = startProject }
-            DispatchQueue.main.async { focused = true }
+            #if DEBUG
+            if draft.openMarkupOnShow, let first = draft.shots.first { markingUp = first; draft.openMarkupOnShow = false }
+            #endif
+            DispatchQueue.main.async {
+                focused = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { QuickCapture.shared.moveCaretToEnd() }
+            }
         }
     }
 
@@ -263,6 +280,8 @@ struct QuickCaptureView: View {
             Image("IrisIcon")
                 .resizable().scaledToFit().frame(width: 20, height: 20)
                 .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+                .gesture(WindowDragGesture())
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 7 }
             TextField("What do you want?", text: $draft.prompt, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -272,6 +291,11 @@ struct QuickCaptureView: View {
                 .onSubmit { send() }
                 .onKeyPress(.escape) { close(); return .handled }
             HStack(spacing: 6) {
+                if let hint {
+                    Text(hint).font(.callout).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                        .padding(.trailing, 4)
+                        .transition(.opacity)
+                }
                 if state.projects.count > 1 { projectMenu }
                 if !draft.isEmpty {
                     Button { startFresh() } label: { Image(systemName: "eraser") }
@@ -280,7 +304,7 @@ struct QuickCaptureView: View {
                         .font(.title3)
                         .foregroundStyle(.secondary)
                         .shortcut("capture.fresh", keys)
-                        .help(keys.help("Start fresh", "capture.fresh"))
+                        .onHover { showHint($0, "Start fresh", "capture.fresh") }
                 }
                 Button { captureArea() } label: { Image(systemName: "rectangle.dashed") }
                     .buttonStyle(.borderless)
@@ -288,7 +312,7 @@ struct QuickCaptureView: View {
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .shortcut("capture.area", keys)
-                    .help(keys.help("Capture an area of the screen", "capture.area"))
+                    .onHover { showHint($0, "Capture an area", "capture.area") }
                 Button { send() } label: {
                     Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 22, height: 22)
                 }
@@ -296,12 +320,20 @@ struct QuickCaptureView: View {
                 .buttonBorderShape(.circle)
                 .focusEffectDisabled()
                 .disabled(!canSend)
-                .help("Send to Iris (↩). ⌥↩ starts a new line.")
+                .onHover { showHint($0, "Send to Iris  ↩", nil) }
             }
             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 7 }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 17)
+        // Dragging the bar anywhere but the text moves it; it opens there next time.
+        .background { Color.clear.contentShape(Rectangle()).gesture(WindowDragGesture()) }
+    }
+
+    private func showHint(_ hovering: Bool, _ title: String, _ id: String?) {
+        withAnimation(.easeOut(duration: 0.12)) {
+            hint = hovering ? title + (id.flatMap { keys.hint($0) }.map { "  \($0)" } ?? "") : nil
+        }
     }
 
     private var projectMenu: some View {
@@ -324,7 +356,11 @@ struct QuickCaptureView: View {
             if let problem {
                 Text(problem).font(.callout).foregroundStyle(Theme.critical).fixedSize(horizontal: false, vertical: true)
             }
-            if !draft.shots.isEmpty {
+            if let shot = markingUp {
+                ScreenshotMarkupSheet(data: shot.data, save: { png in
+                    if let i = draft.shots.firstIndex(where: { $0.id == shot.id }) { draft.shots[i] = PendingShot(name: shot.name, data: png) }
+                }, onClose: { markingUp = nil; focused = true }, compact: true)
+            } else if !draft.shots.isEmpty {
                 HStack(spacing: 8) {
                     ForEach(draft.shots) { shot in thumbnail(shot) }
                     Spacer(minLength: 0)
@@ -372,13 +408,8 @@ struct QuickCaptureView: View {
         focused = true
     }
 
-    private func markUp(_ shot: PendingShot) {
-        let id = shot.id, name = shot.name
-        let draft = self.draft
-        QuickCapture.shared.markUp(shot.data) { png in
-            if let i = draft.shots.firstIndex(where: { $0.id == id }) { draft.shots[i] = PendingShot(name: name, data: png) }
-        }
-    }
+    /// Mark-up opens inside the bar, under the field: Box, Arrow, Note, Undo, then Done.
+    private func markUp(_ shot: PendingShot) { markingUp = shot }
 
     private func captureArea() {
         problem = AreaCapture.permissionProblem()

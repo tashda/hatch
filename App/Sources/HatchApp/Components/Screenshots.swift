@@ -157,6 +157,8 @@ struct ScreenshotMarkupSheet: View {
     let save: (Data) -> Void
     /// Set when the view is in a window of its own rather than a sheet (Quick Capture), to close that window.
     var onClose: (() -> Void)? = nil
+    /// Inside Quick Capture's bar: no title, a smaller canvas, Done instead of Save.
+    var compact = false
 
     private func finish() { if let onClose { onClose() } else { dismiss() } }
 
@@ -173,7 +175,7 @@ struct ScreenshotMarkupSheet: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
-                Text("Mark up").font(.title3.weight(.semibold))
+                if !compact { Text("Mark up").font(.title3.weight(.semibold)) }
                 Picker("Tool", selection: $tool) {
                     Label("Box", systemImage: "rectangle").tag(Tool.box)
                     Label("Arrow", systemImage: "arrow.up.right").tag(Tool.arrow)
@@ -200,12 +202,12 @@ struct ScreenshotMarkupSheet: View {
                 Text("Marks are drawn into the saved image.").font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Cancel") { finish() }.keyboardShortcut(.cancelAction)
-                Button("Save") { if let png = render() { save(png) }; finish() }
+                Button(compact ? "Done" : "Save") { if let png = render() { save(png) }; finish() }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }
         }
-        .padding(20)
-        .frame(minWidth: 640, idealWidth: 900, minHeight: 480, idealHeight: 680)
+        .padding(compact ? 0 : 20)
+        .frame(minWidth: compact ? nil : 640, idealWidth: compact ? nil : 900, minHeight: compact ? 360 : 480, idealHeight: compact ? 360 : 680)
         .onAppear { if marks.isEmpty { marks = initial } }
     }
 

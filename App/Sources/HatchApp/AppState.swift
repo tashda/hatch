@@ -150,6 +150,11 @@ final class AppState: ObservableObject {
                 let text = i + 1 < args.count && !args[i + 1].hasPrefix("-") ? args[i + 1] : ""
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) { QuickCapture.shared.show(prefill: text) }
             }
+            if let i = args.firstIndex(of: "--quick-capture-markup"), i + 1 < args.count, let data = FileManager.default.contents(atPath: args[i + 1]) {
+                QuickCapture.shared.draft.shots = [PendingShot(name: "shot.png", data: data)]
+                QuickCapture.shared.draft.openMarkupOnShow = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { QuickCapture.shared.show() }
+            }
             #endif
         }
         maintainStorageIfDue()
