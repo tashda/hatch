@@ -54,6 +54,8 @@ struct RootView: View {
         // The system's soft scroll edge under the toolbar, forced on every scroll view in the window
         // (macOS 27 defaults to the hard edge).
         .scrollEdgeEffectStyle(.soft, for: .top)
+        // Never the hard toolbar background, also on pages without a scroll view under the toolbar.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .toolbar { LiveToolbar() }
     }
 
@@ -206,12 +208,21 @@ struct LiveToolbar: ToolbarContent {
 
         ToolbarSpacer(.fixed)
 
-        ToolbarItem(placement: .navigation) {
-            ProjectTitleMenu()
-                .padding(.horizontal, 6)
-                .glassEffect(.regular.interactive())
+        if state.projects.isEmpty {
+            // A plain toolbar button, so the system draws its glass.
+            ToolbarItem(placement: .navigation) {
+                Button { state.showAddProject = true } label: { Label("Set up a project", systemImage: "plus") }
+                    .labelStyle(.titleAndIcon)
+                    .help("Set up your first project")
+            }
+        } else {
+            ToolbarItem(placement: .navigation) {
+                ProjectTitleMenu()
+                    .padding(.horizontal, 6)
+                    .glassEffect(.regular.interactive())
+            }
+            .sharedBackgroundVisibility(.hidden)
         }
-        .sharedBackgroundVisibility(.hidden)
 
         ToolbarItem(placement: .principal) {
             Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
@@ -222,7 +233,7 @@ struct LiveToolbar: ToolbarContent {
 }
 
 /// The project as the window's title control (decision LK2, option D): tile and name; a click opens the list of projects.
-/// With no project it is the way to set one up; "All projects" is offered only when there are two or more.
+/// "All projects" is offered only when there are two or more; with none, the toolbar shows Set up a project instead.
 struct ProjectTitleMenu: View {
     @EnvironmentObject var state: AppState
 
@@ -233,20 +244,7 @@ struct ProjectTitleMenu: View {
     }
 
     var body: some View {
-        let projects = state.projects
-        if projects.isEmpty {
-            Button { state.showAddProject = true } label: {
-                Label("Set up a project", systemImage: "plus")
-                    .labelStyle(.titleAndIcon)
-                    .fontWeight(.semibold)
-                    .padding(.horizontal, 4)
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, 6)
-            .help("Set up your first project")
-        } else {
-            menu(projects)
-        }
+        menu(state.projects)
     }
 
     private func menu(_ projects: [Project]) -> some View {
