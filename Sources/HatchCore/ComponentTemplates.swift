@@ -19,8 +19,8 @@ public enum ComponentTemplates {
 
     // Both templates need two places the standard list lacks: a page's own content area (where cards, sheets and toasts
     // sit) and the row of actions under a page or ticket title. Added as data, as DS5 allows.
-    static let page = ComponentPlace("page", "Page", "The content area of a screen, where cards, sheets and toasts appear.")
-    static let actionRow = ComponentPlace("actionRow", "Action row", "The actions under a page or ticket title.")
+    static let page = ComponentPlace.page
+    static let actionRow = ComponentPlace.actionRow
 
     /// Values every template shares: the system's own colors and text styles, named by meaning.
     static func baseFoundations(cardRadius: Double, floating: String) -> [ComponentFoundation] {

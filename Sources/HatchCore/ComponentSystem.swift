@@ -325,6 +325,18 @@ public struct ComponentPlace: Codable, Equatable, Sendable, Identifiable {
 
     public init(_ id: String, _ title: String, _ summary: String) { self.id = id; self.title = title; self.summary = summary }
 
+    /// Two places most apps need beyond the standard ones (the templates add them, and the inventory finds Page): the
+    /// content area of a screen, and the actions under a page title.
+    public static let page = ComponentPlace("page", "Page", "The content area of a screen or sheet, where cards, sheets and toasts appear.")
+    public static let actionRow = ComponentPlace("actionRow", "Action row", "The actions under a page or ticket title.")
+    public static let common: [ComponentPlace] = [page, actionRow]
+
+    /// A place's title from the standard and common lists, or its id.
+    public static func title(_ id: String?) -> String {
+        guard let id else { return "Place unknown" }
+        return (standard + common).first { $0.id == id }?.title ?? id
+    }
+
     /// The places every system has (DS5). A system adds its own in `places`.
     public static let standard: [ComponentPlace] = [
         ComponentPlace("toolbar", "Toolbar", "The window's toolbar."),

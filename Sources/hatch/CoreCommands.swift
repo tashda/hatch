@@ -60,7 +60,9 @@ enum CoreCommands {
     // hatch components scan <dir>  -> what Hatch finds in any app folder (no project needed)
     // hatch components roles [--template glass] [--element button] [--matrix] [--readme] -> the design system's roles (DS2)
     // hatch components templates   -> the templates a system can start from (DS6)
+    // hatch components inventory [<app folder>] [--element button] [--all] -> every control, by place and look (DS4)
     static func components(_ c: Context) throws {
+        if c.args.pos(1) == "inventory" { try componentInventory(c); return }
         if c.args.pos(1) == "templates" {
             let list = ComponentTemplates.all
             c.out.emit(.array(list.map { ["id": .string($0.id), "title": .string($0.title), "summary": .string($0.summary)] }),
@@ -98,6 +100,52 @@ enum CoreCommands {
         }
         c.out.emit(["components": .string(label), "colors": .int(catalog.colors.count), "fonts": .int(catalog.fonts.count),
                     "sizes": .int(catalog.sizes.count), "views": .int(catalog.views.count)], text: lines.joined(separator: "\n"))
+    }
+
+    /// Every control in the app by place and look: what setup recommends from. Free: it reads Swift text.
+    static func componentInventory(_ c: Context) throws {
+        let root: String, excluding: [String]
+        if let dir = c.args.pos(2) {
+            root = (dir as NSString).expandingTildeInPath; excluding = []
+        } else {
+            let project = try c.project()
+            guard let app = project.config?.repo(.app)?.localPath else {
+                throw CLIError("\(project.name) has no app clone on this Mac. Give a folder: hatch components inventory <app folder>.")
+            }
+            root = app; excluding = [project.config?.components?.path].compactMap { $0 }
+        }
+        let inv = ComponentInventoryScanner.scan(appRoot: root, excluding: excluding)
+        var elements = inv.elements
+        if let only = c.args.option("element") { elements = elements.filter { $0 == only } }
+        let cap = c.args.flag("all") ? Int.max : 4
+        var lines = ["\(inv.uses.count) controls in \(inv.swiftFiles) Swift files."]
+        for e in elements {
+            let element = ComponentElement.named(e)
+            lines.append("\n\(element?.plural ?? e) (\(inv.uses.filter { $0.element == e }.count))")
+            for (place, count) in inv.places(of: e) {
+                let looks = inv.clusters(element: e, place: place)
+                let title = ComponentPlace.title(place)
+                lines.append("  \(title) (\(count)): \(looks.count) look\(looks.count == 1 ? "" : "s")")
+                for l in looks.prefix(cap) {
+                    let n = String(l.count).padding(toLength: 4, withPad: " ", startingAt: 0)
+                    lines.append("    \(n) \(l.signature)" + (l.importance == .other ? "" : " [\(l.importance.title.lowercased())]") + "   e.g. " + l.examples.joined(separator: ", "))
+                }
+                if looks.count > cap { lines.append("         and \(looks.count - cap) more (--all)") }
+                if place == nil {
+                    lines.append("    most in: " + inv.unknownFiles(element: e, limit: 4).map { "\(($0.file as NSString).lastPathComponent) \($0.count)" }.joined(separator: ", "))
+                }
+            }
+        }
+        let cov = inv.coverage
+        lines.append("\nUsing a role: \(cov.withRole) of \(cov.total).")
+        let json: JSONValue = ["controls": .int(inv.uses.count), "files": .int(inv.swiftFiles), "withRole": .int(cov.withRole),
+                               "unknownPlace": .int(inv.uses.filter { $0.place == nil }.count),
+                               "uses": .array(inv.uses.map { u in
+                                   ["element": .string(u.element), "place": u.place.map { .string($0) } ?? .null, "look": .string(u.signature),
+                                    "importance": .string(u.importance.rawValue), "file": .string(u.file), "line": .int(u.line),
+                                    "trail": .array(u.trail.map { .string($0) })]
+                               })]
+        c.out.emit(json, text: lines.joined(separator: "\n"))
     }
 
     /// The rules, read from a template or from the project's notebook. Read-only: the system changes through Hatch.
