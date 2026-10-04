@@ -34,15 +34,56 @@ public struct CodexCLIRunner: AgentRunner {
     public var timeout: TimeInterval
     public var environment: [String: String]?
     public var extraArguments: [String]
+    /// Text-only work (Iris, Ask): Codex's tools are switched off, so their descriptions are not sent with every call.
+    /// Measured with gpt-6-luna: about 8.4k input tokens instead of about 15k.
+    public var lean: Bool
 
     public init(executable: String = "codex", model: String? = nil, effort: String? = nil, workingDirectory: URL? = nil,
-                timeout: TimeInterval = 300, environment: [String: String]? = nil, extraArguments: [String] = []) {
+                timeout: TimeInterval = 300, environment: [String: String]? = nil, extraArguments: [String] = [], lean: Bool = false) {
         self.executable = executable; self.model = model; self.effort = effort; self.workingDirectory = workingDirectory
-        self.timeout = timeout; self.environment = environment; self.extraArguments = extraArguments
+        self.timeout = timeout; self.environment = environment; self.extraArguments = extraArguments; self.lean = lean
     }
 
-    func arguments(model: String?) -> [String] {
+    /// Codex features that only add tools a text answer never uses. Only the ones the installed Codex lists are
+    /// switched off, because Codex stops on a feature name it does not know.
+    static let toolFeatures = ["apps", "browser_use", "browser_use_external", "computer_use", "image_generation", "multi_agent",
+                               "plugins", "remote_plugin", "skill_search", "tool_suggest", "view_image", "goals", "sleep_tool",
+                               "in_app_browser", "workspace_dependencies", "worktrees", "shell_tool", "unified_exec"]
+    /// Settings that trim the system prompt. Unknown keys only cause a warning, so these are always safe.
+    static let leanSettings = ["-c", "web_search=\"disabled\"", "-c", "include_permissions_instructions=false",
+                               "-c", "include_environment_context=false"]
+
+    private static let featureLock = NSLock()
+    nonisolated(unsafe) private static var featureCache: [String: Set<String>] = [:]
+
+    /// The features this Codex has switched on, from `codex features list` (asked once per program path).
+    static func enabledFeatures(_ program: String, environment: [String: String]?) -> Set<String> {
+        featureLock.lock()
+        if let cached = featureCache[program] { featureLock.unlock(); return cached }
+        featureLock.unlock()
+        var found: Set<String> = []
+        if let r = try? AgentProcess.spawn(program, ["features", "list"], stdin: nil, directory: nil, environment: environment, timeout: 20), r.status == 0 {
+            found = parseFeatures(r.stdout)
+        }
+        featureLock.lock(); featureCache[program] = found; featureLock.unlock()
+        return found
+    }
+
+    /// Lines look like `apps   stable   true`; the last word says whether it is on.
+    static func parseFeatures(_ text: String) -> Set<String> {
+        Set(text.split(whereSeparator: \.isNewline).compactMap { line in
+            let words = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            guard words.count >= 2, words.last == "true" else { return nil }
+            return String(words[0])
+        })
+    }
+
+    func arguments(model: String?, disabling features: [String] = []) -> [String] {
         var args = ["exec", "--json", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only", "-c", "mcp_servers={}"]
+        if lean {
+            for f in features { args += ["--disable", f] }
+            args += Self.leanSettings
+        }
         if let model, !model.isEmpty { args += ["--model", model] }
         if let effort, !effort.isEmpty { args += ["-c", "model_reasoning_effort=\"\(effort)\""] }
         return args + extraArguments + ["-"]
@@ -50,10 +91,18 @@ public struct CodexCLIRunner: AgentRunner {
 
     public func run(prompt: String, options: AgentOptions) throws -> AgentOutput {
         guard let program = AgentProcess.locate(executable) else { throw AgentRunnerError.executableNotFound(executable) }
-        let r = try AgentProcess.spawn(program, arguments(model: options.model ?? model), stdin: prompt,
-                                       directory: options.workingDirectory ?? workingDirectory, environment: environment,
-                                       timeout: options.timeout ?? timeout)
-        return try Self.parse(r.stdout, status: r.status, stderr: r.stderr)
+        let features = lean ? Self.toolFeatures.filter(Self.enabledFeatures(program, environment: environment).contains) : []
+        let call = { (features: [String]) throws -> AgentOutput in
+            let r = try AgentProcess.spawn(program, self.arguments(model: options.model ?? self.model, disabling: features), stdin: prompt,
+                                           directory: options.workingDirectory ?? self.workingDirectory, environment: self.environment,
+                                           timeout: options.timeout ?? self.timeout)
+            return try Self.parse(r.stdout, status: r.status, stderr: r.stderr)
+        }
+        do { return try call(features) }
+        catch AgentRunnerError.failed(_, let message) where !features.isEmpty && message.lowercased().contains("feature") {
+            // A Codex that refuses one of the names: answer anyway, with its full tool set.
+            return try call([])
+        }
     }
 
     /// Reads the JSONL events: the last `agent_message` is the answer, `turn.completed` has the usage,

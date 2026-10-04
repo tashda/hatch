@@ -87,7 +87,7 @@ public enum AgentFactory {
                                      environment: try claudeEnvironment(p, secrets: context.secrets, thinking: thinking))
         case .codex:
             runner = CodexCLIRunner(executable: p.executable ?? "codex", model: model, effort: effort, workingDirectory: dir, timeout: timeout,
-                                    environment: AgentProcess.environment(), extraArguments: p.extraArguments)
+                                    environment: AgentProcess.environment(), extraArguments: p.extraArguments, lean: true)
         case .geminiCLI:
             var add: [String: String] = [:]
             if let key = context.secrets.apiKey(for: p) { add["GEMINI_API_KEY"] = key }

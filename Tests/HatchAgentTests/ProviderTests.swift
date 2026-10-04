@@ -234,6 +234,38 @@ final class ProviderProgramTests: XCTestCase {
         XCTAssertEqual(try String(contentsOfFile: dir.appendingPathComponent("stdin.txt").path), "the prompt")
     }
 
+    func testCodexFeatureListIsRead() {
+        let list = "apps                 stable             true\nartifact             under development  false\nshell_tool  stable  true\n"
+        XCTAssertEqual(CodexCLIRunner.parseFeatures(list), ["apps", "shell_tool"])
+    }
+
+    /// Lean Codex switches off only the tool features this Codex lists as on, and trims the system prompt.
+    func testLeanCodexDisablesOnlyListedFeatures() throws {
+        let exe = try fake("codex-lean", #"""
+        if [ "$1" = "features" ]; then printf 'apps  stable  true\nshell_tool  stable  true\ngoals  stable  false\nmy_own  stable  true\n'; exit 0; fi
+        printf '%s\n' "$@" > "\#(argsFile)"
+        cat > /dev/null
+        echo '{"type":"item.completed","item":{"type":"agent_message","text":"OK"}}'
+        """#)
+        _ = try CodexCLIRunner(executable: exe, lean: true).run(prompt: "p", options: AgentOptions())
+        let a = try args()
+        XCTAssertEqual(a.indices.filter { a[$0] == "--disable" }.map { a[$0 + 1] }, ["apps", "shell_tool"])
+        XCTAssertTrue(a.contains("include_environment_context=false"))
+        XCTAssertTrue(a.contains("web_search=\"disabled\""))
+    }
+
+    func testLeanCodexRetriesWithoutDisablesWhenAFeatureIsRefused() throws {
+        let exe = try fake("codex-old", #"""
+        if [ "$1" = "features" ]; then printf 'apps  stable  true\n'; exit 0; fi
+        for a in "$@"; do if [ "$a" = "--disable" ]; then echo "Error: Unknown feature flag: apps" >&2; exit 1; fi; done
+        printf '%s\n' "$@" > "\#(argsFile)"
+        cat > /dev/null
+        echo '{"type":"item.completed","item":{"type":"agent_message","text":"OK"}}'
+        """#)
+        XCTAssertEqual(try CodexCLIRunner(executable: exe, lean: true).run(prompt: "p", options: AgentOptions()).text, "OK")
+        XCTAssertFalse(try args().contains("--disable"))
+    }
+
     func testOpenCodeArguments() throws {
         let exe = try fake("opencode", #"""
         printf '%s\n' "$@" > "\#(argsFile)"
