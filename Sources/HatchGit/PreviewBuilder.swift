@@ -54,9 +54,9 @@ public final class PreviewBuilder: @unchecked Sendable {
         let branch = Self.branchName(number)
         let preview = try store.createPreview(name: Self.displayName(number), branch: branch, ticketIds: tickets.map(\.id))
         let root = try workspaces.workspaceRoot(for: repo)
-        try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
         let repoName = URL(fileURLWithPath: repoDir).lastPathComponent
-        let path = URL(fileURLWithPath: root).appendingPathComponent("\(repoName)-\(branch.replacingOccurrences(of: "/", with: "-"))").path
+        let path = WorkspaceManager.folder(root: root, tag: branch.replacingOccurrences(of: "/", with: "-"), repoName: repoName)
+        try FileManager.default.createDirectory(atPath: URL(fileURLWithPath: path).deletingLastPathComponent().path, withIntermediateDirectories: true)
 
         let start = try git.resolve(git.tip(of: repo.defaultBranch, repo: repoDir), in: repoDir)
         git.run_ignoringFailure(["worktree", "prune"], in: repoDir)

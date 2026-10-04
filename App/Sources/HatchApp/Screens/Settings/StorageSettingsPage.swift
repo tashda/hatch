@@ -292,7 +292,10 @@ struct StorageReport: Sendable {
         for ws in workspaces {
             let url = URL(fileURLWithPath: ws.path)
             let parent = url.deletingLastPathComponent()
-            if parent.lastPathComponent == ".hatch-workspaces" { add(parent) } else if ws.state == "active" { add(url) }
+            // <root>/<ticket>/<repo> now; <root>/<repo>-<ticket> before.
+            let root = parent.deletingLastPathComponent()
+            if root.lastPathComponent == ".hatch-workspaces" { add(root) }
+            else if parent.lastPathComponent == ".hatch-workspaces" { add(parent) } else if ws.state == "active" { add(url) }
         }
         // A workspace inside a folder already counted is not counted twice.
         let keys = folders.keys.sorted()

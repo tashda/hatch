@@ -134,7 +134,7 @@ public final class MergeExecutor: @unchecked Sendable {
     func integrationWorktree(repo: Repo, branch: String) throws -> String {
         let repoDir = try workspaces.repoPath(repo)
         let name = URL(fileURLWithPath: repoDir).lastPathComponent
-        let path = URL(fileURLWithPath: try workspaces.workspaceRoot(for: repo)).appendingPathComponent("\(name)-integration-\(branch.replacingOccurrences(of: "/", with: "-"))").path
+        let path = WorkspaceManager.folder(root: try workspaces.workspaceRoot(for: repo), tag: "integration-\(branch.replacingOccurrences(of: "/", with: "-"))", repoName: name)
         if workspaces.registeredWorktrees(repoDir).contains(where: { WorkspaceManager.samePath($0, path) }) { return path }
         git.run_ignoringFailure(["worktree", "prune"], in: repoDir)
         try FileManager.default.createDirectory(atPath: URL(fileURLWithPath: path).deletingLastPathComponent().path, withIntermediateDirectories: true)

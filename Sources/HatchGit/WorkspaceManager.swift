@@ -58,9 +58,15 @@ public final class WorkspaceManager: @unchecked Sendable {
 
     public func workspaceRoot(for repo: Repo) throws -> String { if let root { return root }; return Self.defaultRoot(forRepoPath: try repoPath(repo)) }
 
+    /// `<root>/<tag>/<repo folder>`. The folder keeps the repository's own name: SwiftPM names a package after its folder, so a
+    /// package that depends on a sibling or a parent by name (the Stage on `hatch`) cannot build in a folder called `hatch-1`.
+    public static func folder(root: String, tag: String, repoName: String) -> String {
+        URL(fileURLWithPath: root).appendingPathComponent(tag, isDirectory: true).appendingPathComponent(repoName, isDirectory: true).path
+    }
+
     public func path(for ticket: Ticket, repo: Repo) throws -> String {
         let name = URL(fileURLWithPath: try repoPath(repo)).lastPathComponent
-        return URL(fileURLWithPath: try workspaceRoot(for: repo)).appendingPathComponent("\(name)-\(Self.ticketToken(ticket))").path
+        return Self.folder(root: try workspaceRoot(for: repo), tag: Self.ticketToken(ticket), repoName: name)
     }
 
     // MARK: Create, list, remove
@@ -75,8 +81,20 @@ public final class WorkspaceManager: @unchecked Sendable {
            Self.samePath(existing.path, path), registeredWorktrees(repoDir).contains(where: { Self.samePath($0, path) }) {
             return existing
         }
+        // A worktree made under the old layout (`<repo>-<ticket>`) is moved to `<ticket>/<repo>`. This runs when work is about
+        // to start, so no agent has it open. If the move fails the old one keeps working.
+        if let old = try store.workspace(ticketId: ticket.id, repoId: repo.id), old.state == "active", !Self.samePath(old.path, path),
+           registeredWorktrees(repoDir).contains(where: { Self.samePath($0, old.path) }), !FileManager.default.fileExists(atPath: path) {
+            do {
+                try FileManager.default.createDirectory(atPath: URL(fileURLWithPath: path).deletingLastPathComponent().path, withIntermediateDirectories: true)
+                try git.git(["worktree", "move", old.path, path], in: repoDir)
+                let moved = try store.saveWorkspace(ticketId: ticket.id, repoId: repo.id, path: path, branch: old.branch, baseSha: old.baseSha)
+                try store.record(ticket.id, actor: "hatch", kind: "workspace", payload: ["path": .string(path), "branch": .string(old.branch), "moved": .string(old.path)])
+                return moved
+            } catch { return old }
+        }
         git.run_ignoringFailure(["worktree", "prune"], in: repoDir)
-        try FileManager.default.createDirectory(atPath: try workspaceRoot(for: repo), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: URL(fileURLWithPath: path).deletingLastPathComponent().path, withIntermediateDirectories: true)
 
         let branch = Self.branchName(for: ticket)
         let start = git.tip(of: repo.defaultBranch, repo: repoDir)

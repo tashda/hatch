@@ -27,7 +27,7 @@ final class WorkspaceTests: GitTestCase {
         let t = try makeTicket("Toast spacing", gh: 151)
         let ws = try manager.create(ticket: t, repo: app)
         XCTAssertEqual(ws.branch, "ticket/151-toast-spacing")
-        XCTAssertEqual(ws.path, tmp + "/projects/.hatch-workspaces/echo-151")
+        XCTAssertEqual(ws.path, tmp + "/projects/.hatch-workspaces/151/echo")
         XCTAssertTrue(FileManager.default.fileExists(atPath: ws.path + "/README.md"))
         XCTAssertEqual(try g(["rev-parse", "--abbrev-ref", "HEAD"], ws.path), "ticket/151-toast-spacing")
         XCTAssertEqual(ws.baseSha, try g(["rev-parse", "dev"], app.localPath!))
@@ -44,10 +44,32 @@ final class WorkspaceTests: GitTestCase {
         XCTAssertEqual(try manager.list().count, 1)
     }
 
+    func testAWorktreeKeepsTheRepositorysFolderNameSoPackagesThatNameItStillBuild() throws {
+        let ws = try manager.create(ticket: try makeTicket("Toast spacing", gh: 151), repo: app)
+        XCTAssertEqual(URL(fileURLWithPath: ws.path).lastPathComponent, URL(fileURLWithPath: app.localPath!).lastPathComponent,
+                       "SwiftPM names a package after its folder; `hatch-1` broke the Stage's dependency on `hatch`")
+    }
+
+    func testAWorktreeFromTheOldLayoutIsMovedWhenWorkIsAboutToStart() throws {
+        let t = try makeTicket("Toast spacing", gh: 151)
+        let root = tmp + "/projects/.hatch-workspaces"
+        let old = root + "/echo-151"
+        try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+        try g(["worktree", "add", "--no-track", "-b", "ticket/151-toast-spacing", old, "dev"], app.localPath!)
+        try write(old, "wip.txt", "unsaved work")
+        try store.saveWorkspace(ticketId: t.id, repoId: app.id, path: old, branch: "ticket/151-toast-spacing", baseSha: try g(["rev-parse", "dev"], app.localPath!))
+        let ws = try manager.create(ticket: t, repo: app)
+        XCTAssertEqual(ws.path, root + "/151/echo")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: old))
+        XCTAssertEqual(read(ws.path, "wip.txt"), "unsaved work", "the work comes along")
+        XCTAssertEqual(try g(["rev-parse", "--abbrev-ref", "HEAD"], ws.path), "ticket/151-toast-spacing")
+        XCTAssertEqual(try manager.list().count, 1)
+    }
+
     func testCustomRoot() throws {
         manager.root = tmp + "/elsewhere"
         let ws = try manager.create(ticket: try makeTicket("x", gh: 5), repo: app)
-        XCTAssertEqual(ws.path, tmp + "/elsewhere/echo-5")
+        XCTAssertEqual(ws.path, tmp + "/elsewhere/5/echo")
     }
 
     func testMainCheckoutIsNeverTouched() throws {

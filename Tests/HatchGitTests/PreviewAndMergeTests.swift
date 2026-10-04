@@ -149,7 +149,7 @@ final class PreviewAndMergeTests: GitTestCase {
         XCTAssertEqual(run.results.count, 1, "no tag, no app step after the failed merge")
         XCTAssertEqual(run.failedStep?.kind, .mergeTickets)
         XCTAssertEqual(try g(["tag", "--list", "v*"], ds.localPath!), "")
-        let wt = URL(fileURLWithPath: ds.localPath!).deletingLastPathComponent().appendingPathComponent(".hatch-workspaces/echo-ds-integration-hatch").path
+        let wt = URL(fileURLWithPath: ds.localPath!).deletingLastPathComponent().appendingPathComponent(".hatch-workspaces/integration-hatch/echo-ds").path
         XCTAssertEqual(try g(["status", "--porcelain"], wt), "", "aborted merge leaves a clean worktree")
     }
 
