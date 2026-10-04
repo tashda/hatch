@@ -134,6 +134,7 @@ public enum ShortcutCatalog {
         .init("page.health", "Health", .pages, .app, .init("h", [.control, .command])),
         .init("page.newTicket", "New Ticket", .pages, .app, .init("n", cmd)),
         .init("go.places", "Go to…", .pages, .app, .init("k", [.shift, .command])),
+        .init("decide.open", "Decide", .pages, .app, .init("d", [.shift, .command])),
         // The saved views listed under Views in the sidebar, in order.
         .init("view.1", "Saved view 1", .pages, .app, .init("1", [.option, .command])),
         .init("view.2", "Saved view 2", .pages, .app, .init("2", [.option, .command])),

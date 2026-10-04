@@ -60,8 +60,8 @@ enum Fixture {
             ],
             specimens: [
                 ManifestSpecimen(id: "today", title: "Echo today", isEchoToday: true, designWidth: 340, designHeight: 480),
-                ManifestSpecimen(id: "a", title: "Tight", designWidth: 340, designHeight: 480),
-                ManifestSpecimen(id: "b", title: "Airy", designWidth: 400, designHeight: 480),
+                ManifestSpecimen(id: "a", title: "Tight", designWidth: 340, designHeight: 480, gain: "Fits more on screen", cost: "Feels cramped in dark mode"),
+                ManifestSpecimen(id: "b", title: "Airy", designWidth: 400, designHeight: 480, gain: "Calmer and easier to read", cost: "Shows fewer toasts at once"),
             ],
             questions: [ManifestQuestion(id: "extra", title: "Empty state", question: "Is the empty state clear?",
                                          choices: [ManifestChoice(id: "yes", name: "Yes"), ManifestChoice(id: "no", name: "Needs changes")], recommended: "yes", why: "The hint names the next step.")],

@@ -267,13 +267,13 @@ public enum BriefBuilder {
             case .question:
                 return [
                     "Answer in words. Look up the Spec and the earlier decisions first and name the Spec IDs the answer touches.",
-                    "Give one recommendation and the reason. When the answer is a choice (how to build something, which approach), offer the options with `hatch options` (2 to 4, each with a short title and what it costs), recommend one and say why. The owner's choice becomes a recorded decision.",
+                    "Give one recommendation and the reason. When the answer is a choice (how to build something, which approach), offer the options with `hatch options` (2 to 4, each with a short title, one line of what it gains and one of what it costs), recommend one and say why. The owner's choice becomes a recorded decision.",
                 ] + common + ["Hand the answer in with `hatch offer`. Never move the status yourself."]
             default:
                 return [
                     "Look up the area in the Spec and note the Spec IDs you change; put them in the manifest `specs` and in the summary.",
                     "The first specimen is Echo today (`isEchoToday: true`), drawn from what Echo really does (read the real view, not memory).",
-                    "Then 2 to 4 proposals as Swift specimens in the specimens repo, same sample data in all, each with `designWidth` and `designHeight` (340 to 700 wide, up to about 620 tall). No title inside a specimen.",
+                    "Then 2 to 4 proposals as Swift specimens in the specimens repo, same sample data in all, each with `designWidth` and `designHeight` (340 to 700 wide, up to about 620 tall), and one line each of what it gains (`gain`) and costs (`cost`). No title inside a specimen.",
                     "Cover the standard scenarios (Rest, Hover, Pressed, Focus, Disabled, Empty, Error, Long text, Many items, Loading), or mark one `applicable: false` with a `notApplicableReason`.",
                     "Every control with a `question`, every question and the specimen topic carries ONE recommendation and its reason: the option you would ship, not a safe middle. The reason says what the others cost.",
                     "Write a question as what to do, then what to decide. Choice names are short and stable.",

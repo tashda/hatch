@@ -107,6 +107,8 @@ struct HatchCommands: Commands {
                     Button(ShortcutCatalog.command(id)?.title ?? route.title) { state.navigate(to: route) }.shortcut(id, keys)
                 }
             }
+            Divider()
+            Button("Decide") { state.openDecide() }.shortcut("decide.open", keys).disabled(state.decisionCount == 0)
             let views = Array(state.savedViews().prefix(9).enumerated())
             if !views.isEmpty {
                 Divider()

@@ -162,6 +162,22 @@ enum CoreCommands {
     // hatch plan #144 --files "a/b.swift,c/**" [--repo app]
     static func plan(_ c: Context) throws {
         let t = try c.ticket(c.args.pos(1))
+        // hatch plan #144 --wait: block until the owner decides a plan that waits for approval (decision DC8).
+        if c.args.flag("wait") || c.args.flag("status") {
+            guard var review = try c.store.latestPlanReview(ticketId: t.id) else { throw CLIError("\(t.displayNumber) has no plan waiting for the owner.") }
+            let deadline = Date().addingTimeInterval(c.args.flag("wait") ? 3600 : 0)
+            while review.state == .pending && Date() < deadline {
+                Thread.sleep(forTimeInterval: 5)
+                review = try c.store.planReview(id: review.id) ?? review
+            }
+            let note = review.note.map { "\nThe owner's note: \($0)" } ?? ""
+            switch review.state {
+            case .approved: c.out.emit(["plan": "approved"], text: "The owner approved the plan. Go ahead." + note)
+            case .sentBack: c.out.emit(["plan": "sent-back"], text: "The owner sent the plan back. Change it and run hatch plan again." + note)
+            case .pending: c.out.emit(["plan": "pending"], text: "The plan still waits for the owner. Run hatch plan \(t.displayNumber) --wait to wait for the answer.")
+            }
+            return
+        }
         let files = (c.args.option("files") ?? c.args.rest(from: 2)).split(whereSeparator: { $0 == "," || $0 == "\n" }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         guard !files.isEmpty else { throw CLIError("Usage: hatch plan #144 --files \"path/one.swift,folder/**\" [--repo app]") }
         var repoId: Int?
@@ -174,6 +190,16 @@ enum CoreCommands {
         let after = try c.store.ticket(id: t.id)!
         switch outcome {
         case .granted:
+            // A Bug, or more files than the project allows, waits for the owner to approve the plan (decisions I2, DC8).
+            let limit = (try c.store.project(id: t.projectId))?.config?.planApprovalFileThreshold ?? 8
+            let approved = (try c.store.latestPlanReview(ticketId: t.id))?.state == .approved
+            if !approved && (t.type == .bug || files.count > limit) {
+                let reason = t.type == .bug ? "a Bug" : "\(files.count) files, over the limit of \(limit)"
+                try c.store.requestPlanReview(ticketId: t.id, files: files, reason: reason)
+                c.out.emit(["claim": "granted", "plan": "pending", "files": .int(files.count)],
+                           text: "Claim granted, but this plan waits for the owner (\(reason)). Do not edit yet. Run hatch plan \(t.displayNumber) --wait to wait for the answer.")
+                return
+            }
             c.out.emit(["claim": "granted", "files": .int(files.count)], text: "Claim granted for \(files.count) path(s). Go ahead.")
         case .queued(let behind):
             let names = try behind.compactMap { try c.store.ticket(id: $0)?.displayNumber }

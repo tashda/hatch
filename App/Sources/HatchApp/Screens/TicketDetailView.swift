@@ -27,6 +27,8 @@ enum BannerAction {
     case resume
     case reopen
     case decideQuestion
+    case approvePlan
+    case sendBackPlan
 }
 
 struct BannerSpec {
@@ -54,6 +56,9 @@ struct TicketDetailView: View {
     @State private var deciding = false
     @State private var threadKind: NoteKind = .note
     @State private var sendingBack = false
+    /// An agent's plan waiting for the owner (decision DC8), and the sheet for sending it back with a note.
+    @State private var pendingPlan: PlanReview?
+    @State private var sendingPlanBack = false
 
     var body: some View {
         Group {
@@ -85,6 +90,9 @@ struct TicketDetailView: View {
         .focusedSceneValue(\.ticketActions, ticket.map { actions(for: $0) })
         .sheet(isPresented: $sendingBack) {
             if let ticket, let target = sendBackTarget(ticket) { SendBackSheet(ticket: ticket, target: target) }
+        }
+        .sheet(isPresented: $sendingPlanBack) {
+            if let plan = pendingPlan { PlanSendBackSheet(plan: plan) }
         }
         .confirmationDialog("Drop this ticket?", isPresented: $confirmDrop) {
             Button("Drop", role: .destructive) { move(to: .dropped) }
@@ -194,6 +202,16 @@ struct TicketDetailView: View {
     }
 
     private func bannerSpec(_ t: Ticket) -> BannerSpec {
+        if let plan = pendingPlan {
+            return BannerSpec(message: "The agent's plan waits for you: \(plan.reason), \(Format.count(plan.files.count, "file")). It does not start until you decide.",
+                              primaryTitle: "Approve the plan", primary: .approvePlan,
+                              secondaryTitle: "Send back…", secondary: .sendBackPlan)
+        }
+        if t.status == .draft && t.type == .question && !questionOptions.isEmpty {
+            let rec = questionOptions.first(where: \.recommended)
+            return BannerSpec(message: "Hatch prepared \(questionOptions.count) options" + (rec.map { "; it recommends \($0.key)." } ?? "."),
+                              primaryTitle: "Choose an option", primary: .decideQuestion)
+        }
         switch t.status {
         case .draft:
             return BannerSpec(message: "This is a draft. Submit it and Iris checks it before any work starts.",
@@ -280,6 +298,12 @@ struct TicketDetailView: View {
             move(to: .draft)
         case .decideQuestion:
             deciding = true
+        case .approvePlan:
+            if let plan = pendingPlan {
+                _ = state.perform("Could not approve the plan") { try state.store.decidePlanReview(id: plan.id, approve: true, note: nil) }
+            }
+        case .sendBackPlan:
+            sendingPlanBack = true
         }
     }
 
@@ -400,6 +424,9 @@ struct TicketDetailView: View {
         let questions = ((try? state.store.questions(ticketId: ticketId)) ?? []).count
         if notes + questions != threadCount { threadCount = notes + questions }
         info = ProposalInfo.load(store: state.store, ticket: t)
+        let plan = try? state.store.latestPlanReview(ticketId: ticketId)
+        let waiting = plan?.state == .pending ? plan : nil
+        if waiting != pendingPlan { pendingPlan = waiting }
         // A ticket window is not the main window's selection.
         if opener == nil, state.selectedTicketId != ticketId { state.selectedTicketId = ticketId }
     }
@@ -461,9 +488,11 @@ struct QuestionDecisionSheet: View {
 
     private func decide() {
         guard let choice else { return }
-        let id = ticket.id, projectId = ticket.projectId, why = reason, kind = kind
+        let id = ticket.id, projectId = ticket.projectId, why = reason, kind = kind, prepared = ticket.status == .draft
         let done: Bool? = state.perform("Could not record the decision") {
-            _ = try state.store.decideQuestion(ticketId: id, choice: choice, reason: why, kind: kind)
+            // A Question Hatch prepared is still a draft; it takes its path on the way (decision CO11).
+            if prepared { _ = try state.store.decidePreparedQuestion(ticketId: id, choice: choice, reason: why, kind: kind) }
+            else { _ = try state.store.decideQuestion(ticketId: id, choice: choice, reason: why, kind: kind) }
             return true
         }
         if done == true {
@@ -515,5 +544,33 @@ struct SendBackSheet: View {
             return try state.store.move(id, to: status, actor: .owner, reason: body)
         }
         if done != nil { dismiss() }
+    }
+}
+
+/// Sends an agent's plan back with a note saying what to change (decision DC8).
+struct PlanSendBackSheet: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.dismiss) private var dismiss
+    let plan: PlanReview
+    @State private var note = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Send the plan back").font(.title3.weight(.semibold))
+            Text(plan.files.prefix(10).joined(separator: "\n") + (plan.files.count > 10 ? "\n+ \(plan.files.count - 10) more" : ""))
+                .font(.caption.monospaced()).foregroundStyle(.secondary)
+            TextField("What should change?", text: $note, axis: .vertical).textFieldStyle(.roundedBorder).lineLimit(3...6)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Send Back") {
+                    let id = plan.id, text = note
+                    if state.perform("Could not send the plan back", { try state.store.decidePlanReview(id: id, approve: false, note: text) }) != nil { dismiss() }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(note.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20).frame(width: 460)
     }
 }

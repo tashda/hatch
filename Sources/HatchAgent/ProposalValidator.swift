@@ -20,7 +20,7 @@ public enum ProposalValidator {
 
     /// The gate. Add a rule here and write one test for its code.
     public static let rules: [Rule] = [
-        echoTodayFirst, enoughProposals, specimenSizes, specimenSizeAdvice, duplicateIDs, controlQuestions, controlChoices,
+        echoTodayFirst, enoughProposals, specimenGainCost, specimenSizes, specimenSizeAdvice, duplicateIDs, controlQuestions, controlChoices,
         questionRules, exhibitTopicRules, standardScenarios, presetRules, revisionRules, specIDAdvice,
     ]
 
@@ -54,6 +54,16 @@ public enum ProposalValidator {
         guard n < 2 else { return [] }
         return [.error("specimens.too-few", "There \(n == 1 ? "is 1 proposal" : "are \(n) proposals") besides Echo today; the owner needs at least 2 to choose between.",
                        "Offer at least 2 different proposals after Echo today (2 to 4 is the usual range).")]
+    }
+
+    /// Each proposal says what it gains and what it costs, so the owner can weigh them side by side in Decide (DC5).
+    static func specimenGainCost(_ i: Input) -> [GateIssue] {
+        i.manifest.proposalSpecimens.compactMap { s in
+            let missing = [("gain", s.gain), ("cost", s.cost)].filter { ($0.1 ?? "").trimmingCharacters(in: .whitespaces).isEmpty }.map(\.0)
+            guard !missing.isEmpty else { return nil }
+            return .error("specimen.gain-cost", "Proposal '\(s.id)' has no \(missing.joined(separator: " or ")).",
+                          "Add one line of what choosing it gains (\"gain\") and one of what it costs (\"cost\").")
+        }
     }
 
     static func specimenSizes(_ i: Input) -> [GateIssue] {

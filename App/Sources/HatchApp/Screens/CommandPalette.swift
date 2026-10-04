@@ -254,7 +254,7 @@ struct CommandPalette: View {
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                     .help("Backspace searches everything")
             }
-            TextField(hasProjects ? scope.placeholder : "Search actions", text: $query)
+            TextField(scope.placeholder, text: $query)
                 .textFieldStyle(.plain)
                 .font(.title2)
                 .focused($focused)
@@ -691,6 +691,8 @@ struct CommandPalette: View {
         }
         var hits: [Hit] = [
             Hit(id: "new", symbol: "plus", title: "New ticket", trailing: .keys(["⌘", "N"]), run: { state.navigate(to: .newTicket) }),
+            Hit(id: "decide", symbol: "checklist", title: AttributedString(state.decisionCount > 0 ? "Decide · \(state.decisionCount) waiting" : "Decide"),
+                trailing: .keys(["⇧", "⌘", "D"]), run: { state.openDecide() }),
             Hit(id: "iris-toggle", symbol: "sparkles", title: state.showAskPanel ? "Hide Iris" : "Show Iris",
                 trailing: .keys(["⌥", "⌘", "A"]), run: { state.showAskPanel.toggle() }),
             Hit(id: "sync", symbol: "arrow.triangle.2.circlepath", title: "Sync with GitHub", trailing: .keys(["⇧", "⌘", "R"]),

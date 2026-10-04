@@ -446,6 +446,31 @@ public enum TypedValues {
         return out
     }
 
+    /// The values themselves: colors as hex and sizes as numbers, with counts, so moving them can match each one to a
+    /// name in the components (decision CO12). Font sizes are left out: a size alone does not say which style it is.
+    public static func literals(in text: String) -> (colors: [String: Int], sizes: [Double: Int]) {
+        var colors: [String: Int] = [:], sizes: [Double: Int] = [:]
+        for line in text.components(separatedBy: "\n") {
+            let kinds = kinds(in: line)
+            guard !kinds.isEmpty else { continue }
+            let code = ComponentReader.stripComment(line)
+            if kinds.contains(.color), let start = code.range(of: "Color(") {
+                var token = ColorToken(name: "", light: nil, dark: nil, system: nil, file: "")
+                ComponentReader.parseColor(String(code[start.lowerBound...]), into: &token)
+                if let hex = token.light?.hex { colors[hex, default: 0] += 1 }
+            }
+            if kinds.contains(.size) {
+                let range = NSRange(code.startIndex..., in: code)
+                for m in sizeValuePattern.matches(in: code, range: range) {
+                    if let r = Range(m.range(at: 1), in: code), let v = Double(code[r]) { sizes[v, default: 0] += 1 }
+                }
+            }
+        }
+        return (colors, sizes)
+    }
+
+    static let sizeValuePattern = ComponentReader.re(#"(?:\.padding\(\s*(?:\.\w+\s*,\s*)?|cornerRadius:\s*|\.cornerRadius\(\s*|spacing:\s*)([1-9][0-9]*(?:\.[0-9]+)?)"#)
+
     /// The typed-in values on lines a change adds, from `git diff -U0` output. Files under `excluding` (the components
     /// folder, relative to the repository root) are skipped: that is where values belong.
     public static func inDiff(_ diff: String, excluding: String?) -> [Finding] {
@@ -504,9 +529,15 @@ public struct ComponentsScan: Equatable, Sendable {
     /// Files with the most typed-in values, most first (relative paths).
     public var typedFiles: [(path: String, count: Int)]
     public var swiftFiles: Int
+    /// Colors typed into views, by hex, with how often each appears (decision CO12).
+    public var colorLiterals: [String: Int]
+    /// Padding, spacing and corner radii typed into views, by value, with how often each appears.
+    public var sizeLiterals: [Double: Int]
 
-    public init(candidates: [ComponentsCandidate], typed: [TypedValues.Kind: Int], typedFiles: [(path: String, count: Int)], swiftFiles: Int) {
+    public init(candidates: [ComponentsCandidate], typed: [TypedValues.Kind: Int], typedFiles: [(path: String, count: Int)], swiftFiles: Int,
+                colorLiterals: [String: Int] = [:], sizeLiterals: [Double: Int] = [:]) {
         self.candidates = candidates; self.typed = typed; self.typedFiles = typedFiles; self.swiftFiles = swiftFiles
+        self.colorLiterals = colorLiterals; self.sizeLiterals = sizeLiterals
     }
 
     public var typedTotal: Int { typed.values.reduce(0, +) }
@@ -517,6 +548,7 @@ public struct ComponentsScan: Equatable, Sendable {
 
     public static func == (a: ComponentsScan, b: ComponentsScan) -> Bool {
         a.candidates == b.candidates && a.typed == b.typed && a.swiftFiles == b.swiftFiles
+            && a.colorLiterals == b.colorLiterals && a.sizeLiterals == b.sizeLiterals
             && a.typedFiles.map(\.path) == b.typedFiles.map(\.path) && a.typedFiles.map(\.count) == b.typedFiles.map(\.count)
     }
 
@@ -591,8 +623,11 @@ public enum ComponentsScanner {
         }
         candidates.sort { $0.score > $1.score }
 
-        let skip = (candidates.map(\.path) + [excluding].compactMap { $0 }).map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+        // Only the chosen folder (or the likeliest one) holds values by right; a second set's values count as typed in,
+        // so they are not invisible (decision CO9).
+        let skip = [excluding ?? candidates.first?.path].compactMap { $0 }.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
         var typed: [TypedValues.Kind: Int] = [:], perFile: [(String, Int)] = []
+        var colors: [String: Int] = [:], sizes: [Double: Int] = [:]
         for url in files {
             let rel = relative(url, to: root)
             if skip.contains(where: { rel.hasPrefix($0) }) || rel.split(separator: "/").contains(where: { $0.hasSuffix("Tests") }) { continue }
@@ -602,9 +637,13 @@ public enum ComponentsScanner {
             guard n > 0 else { continue }
             for (k, v) in counts { typed[k, default: 0] += v }
             perFile.append((rel, n))
+            let found = TypedValues.literals(in: text)
+            for (k, v) in found.colors { colors[k, default: 0] += v }
+            for (k, v) in found.sizes { sizes[k, default: 0] += v }
         }
         perFile.sort { $0.1 > $1.1 || ($0.1 == $1.1 && $0.0 < $1.0) }
-        return ComponentsScan(candidates: candidates, typed: typed, typedFiles: perFile.prefix(8).map { (path: $0.0, count: $0.1) }, swiftFiles: files.count)
+        return ComponentsScan(candidates: candidates, typed: typed, typedFiles: perFile.prefix(8).map { (path: $0.0, count: $0.1) }, swiftFiles: files.count,
+                              colorLiterals: colors, sizeLiterals: sizes)
     }
 
     /// Everything in a components folder: tokens and views from its Swift files, colors from its asset catalogs.
@@ -673,22 +712,126 @@ public enum ComponentsScanner {
     }
 }
 
+// MARK: - Conflicts
+
+/// One name defined with different values, in two sets of components or twice in one (decision CO11).
+public struct NameClash: Equatable, Sendable {
+    public struct Value: Equatable, Sendable {
+        /// The folder of the set, relative to the app's root, and the file inside it.
+        public var folder: String
+        public var file: String
+        /// "#2B59C2", "Headline, semibold" or "12".
+        public var value: String
+    }
+    public var name: String
+    public var values: [Value]
+}
+
+/// A value typed into views and the name in the components it matches, exactly or nearly (decision CO12).
+public struct ValueMatch: Equatable, Sendable {
+    public var literal: String
+    public var count: Int
+    public var name: String?
+    public var nameValue: String?
+    public var exact: Bool
+}
+
+public enum ComponentConflicts {
+    /// Names whose values differ, within the chosen set and between it and the others. Same value is not a clash.
+    public static func clashes(chosen: ComponentsCandidate, others: [ComponentsCandidate]) -> [NameClash] {
+        var byName: [String: [NameClash.Value]] = [:], order: [String] = []
+        for set in [chosen] + others {
+            for (name, file, value) in values(set.catalog) {
+                if byName[name] == nil { order.append(name) }
+                byName[name, default: []].append(NameClash.Value(folder: set.path, file: file, value: value))
+            }
+        }
+        return order.compactMap { name in
+            let vs = byName[name]!
+            guard vs.count > 1, Set(vs.map(\.value)).count > 1 else { return nil }
+            return NameClash(name: name, values: vs)
+        }
+    }
+
+    static func values(_ c: ComponentCatalog) -> [(String, String, String)] {
+        c.colors.map { t in (t.name, t.file, t.light.map { $0.hex + (t.dark.map { "/" + $0.hex } ?? "") } ?? t.system ?? "?") }
+            + c.fonts.map { ($0.name, $0.file, $0.summary) }
+            + c.sizes.map { ($0.name, $0.file, ComponentCatalog.number($0.value)) }
+    }
+
+    /// How often each name's last part (`.accent` for `Color.accent`) appears in the app's Swift files, to say which
+    /// value most views already use. A text count: close enough to recommend, never used to decide by itself.
+    public static func usage(of names: [String], appRoot: String) -> [String: Int] {
+        let members = Dictionary(names.map { ($0, "." + ($0.split(separator: ".").last.map(String.init) ?? $0)) }, uniquingKeysWith: { a, _ in a })
+        var out: [String: Int] = [:]
+        for url in ComponentsScanner.swiftFiles(under: URL(fileURLWithPath: appRoot)) {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            for (name, member) in members where text.contains(member) {
+                out[name, default: 0] += text.components(separatedBy: member).count - 1
+            }
+        }
+        return out
+    }
+
+    /// Typed-in colors matched to the components' colors: equal (replace without asking) or within a few steps of one
+    /// (a merge the owner approves). Without components, near duplicates among the typed-in colors themselves.
+    public static func colorMatches(_ literals: [String: Int], catalog: ComponentCatalog?) -> [ValueMatch] {
+        let named = (catalog?.colors ?? []).compactMap { t in t.light.map { (t.name, $0) } }
+        return matches(literals.compactMap { k, v in ComponentReader.rgba(hex: k).map { (k, $0, v) } }, named: named, near: { colorDistance($0, $1) < 0.03 }, show: { $0.hex })
+    }
+
+    public static func sizeMatches(_ literals: [Double: Int], catalog: ComponentCatalog?) -> [ValueMatch] {
+        let named = (catalog?.sizes ?? []).map { ($0.name, $0.value) }
+        return matches(literals.map { (ComponentCatalog.number($0.key), $0.key, $0.value) }, named: named,
+                       near: { abs($0 - $1) <= max(1, 0.1 * max($0, $1)) && $0 != $1 }, show: { ComponentCatalog.number($0) })
+    }
+
+    static func matches<V: Equatable>(_ literals: [(String, V, Int)], named: [(String, V)], near: (V, V) -> Bool, show: (V) -> String) -> [ValueMatch] {
+        let sorted = literals.sorted { $0.2 > $1.2 || ($0.2 == $1.2 && $0.0 < $1.0) }
+        var out: [ValueMatch] = []
+        for (i, lit) in sorted.enumerated() {
+            if let n = named.first(where: { $0.1 == lit.1 }) {
+                out.append(ValueMatch(literal: lit.0, count: lit.2, name: n.0, nameValue: show(n.1), exact: true))
+            } else if let n = named.first(where: { near($0.1, lit.1) }) {
+                out.append(ValueMatch(literal: lit.0, count: lit.2, name: n.0, nameValue: show(n.1), exact: false))
+            } else if named.isEmpty, let more = sorted[..<i].first(where: { near($0.1, lit.1) }) {
+                // No names yet: a rarer value next to a more used one is probably meant to be the same.
+                out.append(ValueMatch(literal: lit.0, count: lit.2, name: nil, nameValue: more.0, exact: false))
+            }
+        }
+        return out
+    }
+
+    static func colorDistance(_ a: ComponentRGBA, _ b: ComponentRGBA) -> Double {
+        let d = [a.red - b.red, a.green - b.green, a.blue - b.blue, a.alpha - b.alpha]
+        return d.map { $0 * $0 }.reduce(0, +).squareRoot()
+    }
+}
+
 // MARK: - The tickets that start or grow the components
 
-/// The draft tickets Hatch adds when a project has no components yet (decision CO3). They are drafts: the owner reads
-/// and submits them, so nothing starts working on the app without a yes.
+/// The draft tickets Hatch adds for the components (decisions CO3, CO9 to CO12). They are drafts: the owner reads and
+/// submits them, so nothing starts working on the app without a yes. All carry the area `Components`, which the
+/// Components page and a Decide session filtered to components look for.
 public enum ComponentsSetup {
     public struct Draft: Equatable, Sendable {
         public var type: TicketType
         public var title: String
         public var body: String
+        /// A Question Hatch has already prepared: its options, so the owner can choose without an agent (CO11).
+        public var options: [QuestionOption] = []
+        public var area: String? = ComponentsSetup.area
+        public init(type: TicketType, title: String, body: String, options: [QuestionOption] = []) {
+            self.type = type; self.title = title; self.body = body; self.options = options
+        }
     }
 
+    public static let area = "Components"
     public static let startTitle = "Start the components package"
 
     /// One Tweak for a new or small app; for a larger one a Theme holding the start and one Tweak per kind of value.
-    /// The first draft is the parent when there is more than one.
-    public static func drafts(appName: String, config: ComponentsConfig, scan: ComponentsScan?) -> [Draft] {
+    /// `existing` names component folders already in the app, so the agent reuses them instead of adding another set (CO10).
+    public static func drafts(appName: String, config: ComponentsConfig, scan: ComponentsScan?, existing: [String] = []) -> [Draft] {
         let product = config.product ?? (config.path as NSString).lastPathComponent
         var start = """
             Make a local Swift package at `\(config.path)` inside the app repository, with one library, `\(product)`, and add it to the app as a local package.
@@ -702,6 +845,9 @@ public enum ComponentsSetup {
             Keep it small: only what \(appName) uses. Do not change screens in this ticket beyond importing the package.
 
             """
+        if !existing.isEmpty {
+            start += "The app already has components in \(existing.map { "`\($0)`" }.joined(separator: ", ")). Start from what is there: move it into the package instead of writing a second set.\n\n"
+        }
         if let scan, !scan.isSmall, let summary = scan.typedSummary {
             start += "The app types \(summary) straight into views today. Name the values used most often so the next tickets can move them over.\n"
         }
@@ -710,32 +856,80 @@ public enum ComponentsSetup {
         let drafts = [Draft(type: .theme, title: "Components for \(appName)",
                             body: "Move \(appName)'s colors, type and sizes into `\(config.path)` one kind at a time, so no single change touches every screen. Submit the start first; the others build on it. After these, views that still type values in move over when a ticket touches them.\n"),
                       Draft(type: .tweak, title: startTitle, body: start)]
-        return drafts + moveDrafts(config: config, scan: scan)
+        return drafts + moveDrafts(config: config, scan: scan, catalog: nil)
     }
 
-    /// One Tweak per kind of value typed into views, to move them into the components. Also offered on the Components
-    /// page once the components exist.
-    public static func moveDrafts(config: ComponentsConfig, scan: ComponentsScan) -> [Draft] {
+    /// One Tweak per kind of value typed into views, to move them into the components. With the components' catalog,
+    /// each ticket lists the values that equal a name (replace them) and the ones close to a name (propose a merge in
+    /// the plan); without it, the typed-in values that look meant to be the same (decision CO12).
+    public static func moveDrafts(config: ComponentsConfig, scan: ComponentsScan, catalog: ComponentCatalog? = nil) -> [Draft] {
         let product = config.product ?? (config.path as NSString).lastPathComponent
         var drafts: [Draft] = []
         let files = scan.typedFiles.prefix(5).map { "`\($0.path)` (\($0.count))" }.joined(separator: ", ")
         for kind in TypedValues.Kind.allCases {
             guard let n = scan.typed[kind], n > 0 else { continue }
             let what: String
+            var matches: [ValueMatch] = []
             switch kind {
-            case .color: what = "colors (`Color(red:…)`, `Color(hex:)`, `NSColor(…)`)"
+            case .color: what = "colors (`Color(red:…)`, `Color(hex:)`, `NSColor(…)`)"; matches = ComponentConflicts.colorMatches(scan.colorLiterals, catalog: catalog)
             case .font: what = "font sizes (`.system(size:)`, `.custom(_:size:)`)"
-            case .size: what = "padding, spacing and corner radii written as numbers"
+            case .size: what = "padding, spacing and corner radii written as numbers"; matches = ComponentConflicts.sizeMatches(scan.sizeLiterals, catalog: catalog)
             }
-            drafts.append(Draft(type: .tweak, title: "Move typed-in \(kind.plural) into components", body: """
+            var body = """
                 Replace the \(n) \(what) in views with names from `\(product)`. Add a name when one is missing; reuse one when two values are meant to be the same.
 
                 Work area by area. If it is more than about 30 files, do the most used values first and say in a note what is left.
-                \(files.isEmpty ? "" : "\nMost of them are in \(files).\n")
-                The look must not change; check the screens you touched in light and dark.
 
-                """))
+                """
+            if !files.isEmpty { body += "Most of them are in \(files).\n\n" }
+            let exact = matches.filter(\.exact).prefix(8), near = matches.filter { !$0.exact }.prefix(8)
+            if !exact.isEmpty {
+                body += "Equal to a name, replace without asking: " + exact.map { "\($0.literal) → \($0.name!) (\($0.count))" }.joined(separator: ", ") + ".\n\n"
+            }
+            if !near.isEmpty {
+                body += "Close to " + (near.first?.name == nil ? "a more used value" : "a name") + ", probably meant to be the same: "
+                    + near.map { "\($0.literal) (\($0.count)) ~ \($0.name ?? $0.nameValue ?? "")" + ($0.name != nil ? " \($0.nameValue ?? "")" : "") }.joined(separator: ", ")
+                    + ". List the merges you propose in your plan; the owner approves them before you change anything, because a merge changes how the app looks.\n\n"
+            }
+            body += "Otherwise the look must not change; check the screens you touched in light and dark.\n"
+            drafts.append(Draft(type: .tweak, title: "Move typed-in \(kind.plural) into components", body: body))
         }
         return drafts
+    }
+
+    /// Merging a second set of components into the chosen one (decision CO9).
+    public static func mergeDraft(into chosen: ComponentsCandidate, from other: ComponentsCandidate) -> Draft {
+        Draft(type: .tweak, title: "Merge \((other.path as NSString).lastPathComponent) into \((chosen.path as NSString).lastPathComponent)", body: """
+            `\(other.path)` is a second set of components (\(other.summary)) next to `\(chosen.path)`, the one the project uses. Move what it has into `\(chosen.path)` and change the views that use it.
+
+            Where both define a name with different values, follow the decision on the Question about them; do not choose yourself. Reuse a name when the values are equal. Delete `\(other.path)` when nothing uses it any more.
+
+            """)
+    }
+
+    /// The Question about names with two values, prepared by Hatch with its options, so it needs no agent (CO11).
+    /// Recommended: keep the chosen set's values, the ones Proposals import.
+    public static func clashQuestion(_ clashes: [NameClash], chosen: ComponentsCandidate, usage: [String: Int]) -> Draft? {
+        guard !clashes.isEmpty else { return nil }
+        let names = clashes.count == 1 ? "`\(clashes[0].name)`" : "\(clashes.count) names"
+        var body = "These names have different values in the app's components. Only you know which is right.\n\n"
+        for c in clashes.prefix(12) {
+            body += "- `\(c.name)`" + (usage[c.name].map { " (used about \($0) times)" } ?? "") + ": "
+                + c.values.map { "\($0.value) in `\($0.folder)`" }.joined(separator: ", ") + "\n"
+        }
+        if clashes.count > 12 { body += "- and \(clashes.count - 12) more\n" }
+        let chosenName = (chosen.path as NSString).lastPathComponent
+        let options = [
+            QuestionOption(key: "A", title: "Keep \(chosenName)'s values", detail: "The other values change to match", recommended: true,
+                           why: "\(chosenName) is the set the project uses and Proposals import; its values are what most new work will see.",
+                           gain: "One value per name, matching the package", cost: "Views that used the other values change slightly"),
+            QuestionOption(key: "B", title: "Keep the other set's values", detail: "\(chosenName) changes to match",
+                           gain: "Views that use the other set do not change", cost: "Everything built on \(chosenName) changes slightly"),
+            QuestionOption(key: "C", title: "Keep both, rename the other set's", detail: "Both values stay under different names",
+                           gain: "Nothing changes now", cost: "Two names that look alike; the choice comes back later"),
+        ]
+        var draft = Draft(type: .question, title: "Two values for \(names)", body: body, options: options)
+        draft.area = area
+        return draft
     }
 }
