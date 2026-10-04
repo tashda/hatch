@@ -273,6 +273,14 @@ public enum Schema {
             error TEXT
         );
         """,
+        // Which provider, model and task each run used, and its cache reads, for Usage and Reports (tokens only).
+        """
+        ALTER TABLE agent_run ADD COLUMN provider TEXT;
+        ALTER TABLE agent_run ADD COLUMN model TEXT;
+        ALTER TABLE agent_run ADD COLUMN role TEXT;
+        ALTER TABLE agent_run ADD COLUMN cache_tokens INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX agent_run_provider ON agent_run(provider, started_at);
+        """,
     ]
 
     public static func migrate(_ db: Database) throws {

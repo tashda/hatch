@@ -82,6 +82,7 @@ enum HXAskAdapter {
         /// The provider's name, which signs the answer in the ticket thread.
         var author: String
         var label: String
+        var model: String?
     }
 
     /// Runs the Ask task with the provider and model chosen in Settings, off the main thread.
@@ -91,7 +92,7 @@ enum HXAskAdapter {
             let out = try agent.runner.run(prompt: prompt, options: AgentOptions())
             let text = out.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if text.isEmpty { throw AgentRunnerError.badOutput("\(agent.provider.name) returned an empty answer.") }
-            return Answer(text: text, tokensIn: out.tokensIn, tokensOut: out.tokensOut, author: agent.provider.name, label: agent.label)
+            return Answer(text: text, tokensIn: out.tokensIn, tokensOut: out.tokensOut, author: agent.provider.name, label: agent.label, model: agent.model)
         }.value
     }
 }
@@ -146,8 +147,18 @@ extension AppState {
     /// One look for waiting work, off the main thread (it makes workspaces).
     func tickLauncher() {
         guard let l = launcher else { return }
+        // Above the daily pause limit, running agents finish but nothing new starts until tomorrow.
+        if checkUsage() == .pause { return }
         l.update(.init(home: paths.root, hatchPath: Self.hatchCommand(store: store), context: agentContext))
         DispatchQueue.global(qos: .utility).async { l.tick() }
+    }
+
+    /// Compares today's tokens with the limits and updates `usageLevel`.
+    @discardableResult func checkUsage() -> UsageLimits.Level {
+        let t = (try? store.tokenTotals(since: Calendar.current.startOfDay(for: Date()))) ?? (input: 0, output: 0)
+        let level = UsageLimits.load(from: store).level(today: t.input + t.output)
+        if usageLevel != level { usageLevel = level }
+        return level
     }
 
     func agentRunsChanged() {

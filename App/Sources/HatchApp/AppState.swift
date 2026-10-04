@@ -57,6 +57,8 @@ final class AppState: ObservableObject {
     /// Agents the launcher is running now, for the footer, the ticket and the Agents page.
     @Published var agentRuns: [AgentRunInfo] = []
     @Published var agentsPaused = false
+    /// Today's tokens against the daily limits on Settings › Usage; above the pause limit no new work starts.
+    @Published var usageLevel: UsageLimits.Level = .fine
     var launcher: AgentLauncher?
     var launchTimer: Timer?
     @Published private(set) var exportingNotebooks = false

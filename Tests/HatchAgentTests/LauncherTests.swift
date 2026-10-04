@@ -13,7 +13,8 @@ final class AgentStreamTests: XCTestCase {
         let result = AgentStream.parse(#"{"type":"result","subtype":"success","is_error":false,"result":"Done.","usage":{"input_tokens":100,"cache_read_input_tokens":900,"output_tokens":40}}"#)
         XCTAssertEqual(result?.finished, true)
         XCTAssertEqual(result?.isError, false)
-        XCTAssertEqual(result?.tokensIn, 1000)
+        XCTAssertEqual(result?.tokensIn, 100, "cache reads are counted apart")
+        XCTAssertEqual(result?.cacheTokens, 900)
         XCTAssertNil(AgentStream.parse("not json"))
     }
 

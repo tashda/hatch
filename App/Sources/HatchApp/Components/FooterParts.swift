@@ -266,6 +266,7 @@ struct FooterStatusGlyph: View {
         if s.failed > 0 || s.message != nil || state.notebookProblem != nil { return .problem }
         if state.syncing || state.exportingNotebooks || s.pending > 0 { return .busy }
         if s.lastOK == nil && state.projects.contains(where: { !($0.config?.ticketsRepo ?? "").isEmpty }) { return .attention }
+        if state.usageLevel != .fine { return .attention }
         return .calm
     }
 
@@ -295,6 +296,10 @@ struct FooterStatusGlyph: View {
                             tint: (try? state.store.notebookStatus(projectId: p.id).error) ?? nil == nil ? .secondary : Theme.critical)
                 }
                 CardRow(label: "Decisions", value: decisionsLine)
+                if state.usageLevel != .fine {
+                    CardRow(label: "Usage", value: state.usageLevel == .pause ? "Above the pause limit; nothing new starts today" : "Above the daily warning",
+                            tint: .orange)
+                }
                 if let ci { CardRow(label: "CI on \(state.hxProject?.config?.integrationBranch ?? "hatch")", value: ci,
                                     tint: ci.hasPrefix("failing") ? Theme.critical : .secondary) }
             }
@@ -306,7 +311,7 @@ struct FooterStatusGlyph: View {
         switch level {
         case .calm: "Everything is saved"
         case .busy: "Saving…"
-        case .attention: "Not synced yet"
+        case .attention: state.usageLevel == .pause ? "Agents paused for today" : state.usageLevel == .warn ? "Many tokens used today" : "Not synced yet"
         case .problem: "Something needs a look"
         }
     }

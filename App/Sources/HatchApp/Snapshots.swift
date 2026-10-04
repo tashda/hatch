@@ -140,6 +140,20 @@ enum Snapshots {
         _ = try! store.take(tickets[5].id, agent: "Jon")
         let completedRun = try! store.startRun(ticketId: tickets[8].id, agent: "Jon", step: "Preview passed")
         try! store.endRun(completedRun, tokensIn: 18400, tokensOut: 2300, outcome: "ok")
+        // Two weeks of runs for Usage and Reports: Claude Code builds and prepares, Codex sometimes, Iris every day.
+        let kinds: [(provider: String, model: String, role: String, tokens: Int)] = [
+            ("Claude Code", "claude-sonnet-5-5", "build", 180_000), ("Claude Code", "claude-opus-5-5", "prepare", 90_000),
+            ("Claude Code", "claude-haiku-4-5", "iris", 6_000), ("Claude Code", "claude-sonnet-5-5", "ask", 4_000),
+            ("Codex", "gpt-5.5-codex", "fix", 60_000)]
+        for day in 0..<14 {
+            for (i, k) in kinds.enumerated() where (day + i) % 3 != 0 || k.role == "iris" {
+                let start = Calendar.current.date(byAdding: .hour, value: -(day * 24 + i * 2 + 1), to: Date())!
+                let tokens = k.tokens * (1 + (day * 7 + i * 3) % 5) / 3
+                try! store.recordRun(ticketId: tickets[(day + i) % tickets.count].id, agent: k.role == "iris" ? "Iris" : "Agent", step: nil,
+                                     provider: k.provider, model: k.model, role: k.role, tokensIn: tokens * 4 / 5, tokensOut: tokens / 5,
+                                     cacheTokens: tokens * 3, outcome: "ok", startedAt: start, endedAt: start.addingTimeInterval(600))
+            }
+        }
         try! store.logPull(summary: "17 issues updated", ok: true)
         try! store.logPull(summary: "Preview status unavailable", ok: false, error: "Checks are still running.")
         let paths = AppPaths(root: FileManager.default.temporaryDirectory.appendingPathComponent("hatch-snapshots-\(getpid())"))
