@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings pages</title>
+<style>
+  :root {
+    --page: #ececee; --sheet: #fbfbfd; --group: #f2f2f5; --row-line: #e1e1e6; --text: #1d1d1f; --secondary: #6e6e73;
+    --tertiary: #a1a1a6; --blue: #0a66d8; --blue-soft: #e7f0fd; --green: #248a3d; --green-soft: #e6f4ea; --amber: #a05a00;
+    --amber-soft: #fdf1df; --field: #ffffff; --line: #d6d6db; --side: #f4f4f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #161618; --sheet: #232326; --group: #2c2c30; --row-line: #3a3a3f; --text: #f2f2f4; --secondary: #a3a3aa;
+      --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+      --amber-soft: #3d2e14; --field: #1b1b1e; --line: #46464c; --side: #29292c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1060px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; font-weight: 600; margin: 56px 0 6px; }
+  h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--secondary); font-size: 14px; max-width: 720px; }
+  .muted { color: var(--secondary); }
+  .small { font-size: 11.5px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .note { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 12px; padding: 16px 18px; }
+  .rec { border: 2px solid var(--blue); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--blue-soft); color: var(--blue); margin-bottom: 8px; }
+  .badge.green { background: var(--green-soft); color: var(--green); }
+  .badge.amber { background: var(--amber-soft); color: var(--amber); }
+
+  .sheet { background: var(--sheet); border-radius: 16px; border: 1px solid var(--row-line); box-shadow: 0 20px 50px rgba(0,0,0,.14); overflow: hidden; }
+  .sheet-title { font-size: 15px; font-weight: 600; padding: 20px 24px 4px; }
+  .group-h { font-size: 12px; font-weight: 600; margin: 16px 24px 6px; }
+  .group { background: var(--group); border-radius: 10px; margin: 0 16px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; min-height: 38px; }
+  .row + .row { border-top: 1px solid var(--row-line); margin: 0 0; }
+  .row .val { color: var(--secondary); text-align: right; }
+  .inline-field { color: var(--text); text-align: right; min-width: 160px; outline: none; }
+  .inline-field.ph { color: var(--tertiary); }
+  .boxed { background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; width: 55%; min-height: 24px; }
+  .footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--row-line); margin-top: 18px; }
+  .btn { font: inherit; border: 0; border-radius: 7px; padding: 5px 14px; background: var(--group); color: var(--text); box-shadow: inset 0 0 0 0.5px var(--line); cursor: pointer; }
+  .btn.primary { background: var(--blue); color: #fff; box-shadow: none; }
+  .popup { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; padding: 3px 6px 3px 9px; background: var(--field); box-shadow: 0 0 0 0.5px var(--line), 0 1px 1px rgba(0,0,0,.05); }
+  .popup::after { content: "⌃⌄"; font-size: 9px; letter-spacing: -2px; writing-mode: vertical-lr; color: var(--secondary); }
+  .check { color: var(--green); font-weight: 600; }
+  .info { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--tertiary); color: var(--secondary); font-size: 10px; font-weight: 600; margin-left: 4px; vertical-align: 1px; }
+  .radio { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; }
+  .radio + .radio { border-top: 1px solid var(--row-line); }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--field); flex: none; margin-top: 2px; }
+  .dot.on { border: 4px solid var(--blue); }
+  .icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-size: 17px; flex: none; color: #fff; }
+  .i-tickets { background: #5e5ce6; } .i-code { background: #0a84ff; } .i-design { background: #ff6482; } .i-branch { background: #30a46c; } .i-gh { background: #1d1d1f; }
+  @media (prefers-color-scheme: dark) { .i-gh { background: #f2f2f4; color: #1d1d1f; } }
+
+  /* Concept A: assistant */
+  .assistant { display: grid; grid-template-columns: 200px 1fr; min-height: 520px; }
+  .steps { background: var(--side); padding: 18px 10px; border-right: 1px solid var(--row-line); }
+  .step { display: flex; gap: 9px; align-items: center; padding: 7px 10px; border-radius: 7px; cursor: pointer; color: var(--secondary); }
+  .step .n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); }
+  .step.done .n { background: var(--green); color: #fff; box-shadow: none; }
+  .step.on { background: var(--blue-soft); color: var(--text); font-weight: 600; }
+  .step.on .n { background: var(--blue); color: #fff; box-shadow: none; }
+  .pane { display: none; flex-direction: column; }
+  .pane.on { display: flex; }
+  .pane-body { padding: 26px 28px 0; flex: 1; }
+  .pane-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+  .pane-head h3 { font-size: 17px; margin: 0; }
+  .example { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; margin: 14px 0 0; background: var(--sheet); }
+  .example .label { font-size: 11px; font-weight: 600; color: var(--secondary); margin-bottom: 6px; }
+  .issue { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; }
+  .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; background: var(--group); color: var(--secondary); box-shadow: inset 0 0 0 0.5px var(--line); }
+  .swatches { display: flex; gap: 6px; margin-top: 4px; }
+  .swatches span { width: 22px; height: 22px; border-radius: 6px; }
+  .flow { display: flex; align-items: center; gap: 0; margin: 18px 0 6px; flex-wrap: wrap; row-gap: 10px; }
+  .node { padding: 7px 12px; border-radius: 9px; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .node.hatch { background: var(--green-soft); color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+  .node.base { background: var(--blue-soft); color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+  .arrow { display: flex; flex-direction: column; align-items: center; padding: 0 8px; color: var(--secondary); font-size: 11px; min-width: 96px; }
+  .arrow .line { height: 1px; background: var(--secondary); width: 100%; position: relative; margin: 4px 0; }
+  .arrow .line::after { content: ""; position: absolute; right: -1px; top: -4px; border-left: 7px solid var(--secondary); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; }
+
+  /* Concept B: cards */
+  .card { background: var(--group); border-radius: 12px; margin: 0 16px 12px; padding: 14px; }
+  .card-head { display: flex; gap: 12px; align-items: center; }
+  .card-head .grow { flex: 1; }
+  .card .sub { color: var(--secondary); font-size: 12px; }
+  .card .row { padding: 8px 0 0; min-height: 0; }
+  .card .row + .row { border-top: 0; }
+
+  /* Compare */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .qa { counter-reset: q; }
+  .qa .q { display: grid; grid-template-columns: 28px 1fr; gap: 6px 10px; padding: 14px 0; border-top: 1px solid var(--row-line); }
+  .qa .q::before { counter-increment: q; content: counter(q); width: 22px; height: 22px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); font-weight: 600; font-size: 12px; display: grid; place-items: center; }
+  .qa .q > div { grid-column: 2; }
+  .qa .q > div:first-of-type { grid-row: 1; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--group); padding: 1px 5px; border-radius: 4px; }
+  .qform { padding: 16px 0; border-top: 1px solid var(--row-line); }
+  .qform:first-child { border-top: 0; padding-top: 4px; }
+  .qform h3 { font-size: 14px; margin-bottom: 2px; }
+  .qform .why { color: var(--secondary); margin-bottom: 10px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+  .opt { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--group); box-shadow: inset 0 0 0 1px transparent; cursor: pointer; }
+  .opt:hover { box-shadow: inset 0 0 0 1px var(--line); }
+  .opt.on { background: var(--blue-soft); box-shadow: inset 0 0 0 1.5px var(--blue); }
+  .opt input { display: none; }
+  .opt .rec-tag { font-size: 10.5px; font-weight: 600; color: var(--blue); margin-left: 4px; }
+  .opt .d { color: var(--secondary); font-size: 12px; }
+  .qnote { width: 100%; margin-top: 8px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; resize: vertical; min-height: 34px; }
+
+  .win { display: grid; grid-template-columns: 210px 1fr; min-height: 560px; }
+  .sb { background: var(--side); padding: 16px 10px; border-right: 1px solid var(--row-line); }
+  .sb .it { display:flex; gap:9px; align-items:center; padding:6px 10px; border-radius:7px; color: var(--text); }
+  .sb .it.on { background: var(--blue-soft); font-weight:600; }
+  .pg { padding: 22px 26px 26px; }
+  .pg h4 { font-size: 20px; margin: 0 0 14px; font-weight: 600; }
+  .sec-h { font-size: 12.5px; font-weight: 600; margin: 18px 4px 6px; }
+  .sec-f { font-size: 11.5px; color: var(--secondary); margin: 6px 4px 0; line-height: 1.45; }
+  .frm { background: var(--group); border-radius: 10px; }
+  .frow { display:flex; align-items:center; justify-content:space-between; gap: 12px; padding: 8px 12px; min-height: 40px; }
+  .frow + .frow { border-top: 1px solid var(--row-line); }
+  .frow .t { display:flex; flex-direction:column; }
+  .frow .s { font-size: 11.5px; color: var(--secondary); }
+  .pv { display:inline-flex; align-items:center; gap:8px; color: var(--text); }
+  .chev { width: 20px; height: 20px; border-radius: 50%; display:inline-grid; place-items:center; font-size: 9px; color: var(--secondary); background: transparent; }
+  .pv:hover .chev, .chev.hov { background: var(--row-line); }
+  .chev::before { content: "⌃\A⌄"; white-space: pre; line-height: 6px; display:block; text-align:center; margin-top:-1px; }
+  .sw { width: 32px; height: 19px; border-radius: 10px; background: var(--blue); position: relative; display:inline-block; }
+  .sw::after { content:""; position:absolute; right:2px; top:2px; width:15px; height:15px; border-radius:50%; background:#fff; }
+  .sw.off { background: var(--line); } .sw.off::after { right:auto; left:2px; }
+  .ib { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--tertiary); display:inline-grid; place-items:center; font-size: 11px; color: var(--secondary); font-weight:600; }
+  .tile { width: 26px; height: 26px; border-radius: 7px; display:grid; place-items:center; color:#fff; font-size: 13px; font-weight: 700; flex:none; }
+  .menu { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 9px; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 5px; min-width: 230px; font-size: 13px; }
+  .menu .mh { font-size: 11px; font-weight: 600; color: var(--secondary); padding: 6px 10px 2px; }
+  .menu .mi { padding: 4px 10px 4px 24px; border-radius: 5px; position: relative; display:flex; justify-content:space-between; gap: 16px; }
+  .menu .mi.ck::before { content: "✓"; position:absolute; left: 8px; }
+  .menu .mi.hl { background: var(--blue); color: #fff; }
+  .menu .mi .r { color: var(--secondary); font-size: 11.5px; }
+  .menu .mi.hl .r { color: #dbe8ff; }
+  .menu .sep { height: 1px; background: var(--row-line); margin: 4px 8px; }
+  .bad { border: 2px solid #e5484d; }
+  .lbl { font-size: 11px; font-weight: 700; letter-spacing: .02em; margin-bottom: 8px; }
+  .lbl.bad-t { color: #e5484d; } .lbl.good-t { color: var(--green); }
+  .stp { display:inline-flex; flex-direction:column; border: 1px solid var(--line); border-radius: 6px; overflow:hidden; font-size: 8px; line-height: 9px; background: var(--field); }
+  .stp span { padding: 0 4px; } .stp span + span { border-top: 1px solid var(--line); }
+  .pick-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pick { background: var(--group); border-radius: 10px; padding: 10px 12px; display:flex; gap: 10px; align-items:flex-start; }
+  .pick.on { box-shadow: inset 0 0 0 2px var(--blue); background: var(--blue-soft); }
+  .pick .d { font-size: 11.5px; color: var(--secondary); }
+  .ok { color: var(--green); font-weight: 600; }
+  table.rules { width:100%; border-collapse: collapse; font-size: 12.5px; }
+  table.rules td, table.rules th { text-align:left; padding: 8px 8px; border-top: 1px solid var(--row-line); vertical-align: top; }
+  table.rules th { color: var(--secondary); font-weight: 600; border-top: 0; }
+  .pv { white-space: nowrap; }
+  @media (max-width: 900px) { .win { grid-template-columns: 1fr; } .sb { display: none; } }
+  .opt3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(270px,1fr)); gap: 14px; margin-top: 12px; }
+  .cap { font-size: 11px; font-weight: 700; margin-bottom: 6px; color: var(--secondary); }
+  .cap.capr { color: var(--blue); }
+  .dot-ok { width:8px; height:8px; border-radius:50%; background: var(--green); display:inline-block; margin-right:6px; }
+  .dot-bad { width:8px; height:8px; border-radius:50%; background:#e5484d; display:inline-block; margin-right:6px; }
+  .pushbtn { font: inherit; font-size: 12.5px; border: 0; border-radius: 6px; padding: 3px 10px; background: var(--field); box-shadow: 0 0 0 .5px var(--line), 0 1px 1px rgba(0,0,0,.06); }
+  .pm { display:inline-flex; border-radius: 5px; box-shadow: 0 0 0 .5px var(--line); background: var(--field); font-size: 13px; }
+  .pm span { padding: 1px 9px; } .pm span + span { border-left: .5px solid var(--line); }
+  .chevr { color: var(--tertiary); }
+  #summary { width: 100%; min-height: 150px; font: 12px ui-monospace, Menlo, monospace; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--field); color: var(--text); }
+  .tilei { width: 26px; height: 26px; border-radius: 7px; display:grid; place-items:center; color:#fff; font-size: 13px; flex:none; }
+  .warn { color: #c77700; }
+  .seg { display:inline-flex; border-radius: 7px; background: var(--row-line); padding: 2px; font-size: 12px; }
+  .seg span { padding: 2px 10px; border-radius: 5px; } .seg span.on { background: var(--field); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .cap.capr { color: var(--blue); }
+
+  .foot { display:flex; align-items:center; gap: 14px; padding: 8px 16px; border-radius: 0 0 14px 14px; background: var(--side); border: 1px solid var(--row-line); font-size: 12px; color: var(--secondary); min-height: 34px; }
+  .slot { width: 11px; height: 11px; border-radius: 50%; display:inline-block; border: 1px solid var(--tertiary); }
+  .slot.on { background: linear-gradient(#22a5b8, #0b6e80); border: 3px solid rgba(11,110,128,.3); box-shadow: 0 0 4px rgba(11,110,128,.5); width: 11px; height: 11px; box-sizing: border-box; }
+  .slot.ring { background: conic-gradient(#0b6e80 0 65%, var(--row-line) 65% 100%); border: 0; }
+  .slots { display:inline-flex; gap: 7px; align-items:center; }
+  .spin { display:inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--row-line); border-top-color: var(--secondary); }
+  .okc { color: var(--green); } .attn { color: #c77700; } .bad { color: #e5484d; }
+  .pill { display:inline-flex; align-items:center; gap: 6px; padding: 2px 9px; border-radius: 10px; background: var(--group); box-shadow: inset 0 0 0 .5px var(--line); font-size: 11.5px; color: var(--text); }
+  .card { background: color-mix(in srgb, var(--sheet) 82%, transparent); backdrop-filter: blur(20px); border: 1px solid var(--row-line); border-radius: 16px; box-shadow: 0 14px 40px rgba(0,0,0,.18); padding: 14px 16px; font-size: 12.5px; max-width: 340px; }
+  .card h5 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+  .card .ln { display:flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+  .card .ln span:first-child { color: var(--secondary); }
+  .ev { display:flex; gap: 8px; padding: 3px 0; } .ev .t { color: var(--tertiary); min-width: 46px; }
+  .meter { height: 6px; border-radius: 3px; background: var(--row-line); overflow: hidden; } .meter i { display:block; height: 100%; background: #0b6e80; }
+  .grow { flex: 1; }
+  .elem { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 760px) { .elem { grid-template-columns: 1fr; } }
+
+  .avatar { width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(135deg,#6e7bff,#2b3a8a); color:#fff; display:grid; place-items:center; font-size: 20px; font-weight: 600; flex:none; }
+  .hdrcard { display:flex; gap: 14px; align-items:center; background: var(--group); border-radius: 12px; padding: 14px; }
+  .badge2 { font-size: 10.5px; padding: 1px 7px; border-radius: 9px; background: var(--blue-soft); color: var(--blue); margin-left: 4px; }
+  .lock { color: var(--secondary); font-size: 11px; }
+  .sbh { font-size: 10.5px; color: var(--tertiary); padding: 10px 10px 2px; font-weight: 600; }
+  .appicon { width: 22px; height: 22px; border-radius: 5px; display:inline-grid; place-items:center; color:#fff; font-size: 11px; font-weight: 700; flex:none; }
+  .bar { display:flex; align-items:flex-end; gap: 4px; height: 60px; }
+  .bar i { display:block; width: 14px; background: #0b6e80; border-radius: 3px 3px 0 0; }
+  .newtag { font-size: 9.5px; font-weight: 700; color: var(--green); margin-left: 6px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Settings, every page</h1>
+  <p class="lead">The Agents page set the grammar: one grouped Form per page, a row holds a label and one value, pickers are Apple's with the round chevron, actions sit in section headers or under a list, explanations are one footer line, details open in a sheet. Below, every page in that grammar: the sidebar first, GitHub redesigned with much more to see, the existing pages redone, and three new pages. The questions at the bottom decide which ones we build.</p>
+
+  <h2>The sidebar</h2>
+  <p class="lead">Grouped like System Settings, so it can grow: <b>Hatch</b> (how the app behaves), <b>Connections</b> (services), <b>This Mac</b> (programs and files). Project settings stay in the main window, next to the project.</p>
+
+  <h2>GitHub: much more to see</h2>
+  <p class="lead">Today: an account line and a block of repositories per project. Proposed: who you are, what Hatch may do and what is missing (with the fix one click away), how sync is doing, and every repository Hatch uses with its role and state. Tickets repositories get their own section, with the default and which projects share each.</p>
+  <div class="sheet" style="margin-top:14px"><div class="win"><div class="sb"><div class="sbh">Hatch</div><div class="it">⚙︎ General<span class=newtag>NEW</span></div><div class="it">🔔︎ Notifications<span class=newtag>NEW</span></div><div class="it">⌘ Agents</div><div class="sbh">Connections</div><div class="it on">⌥ GitHub</div><div class="sbh">This Mac</div><div class="it">⚒︎ Tools</div><div class="it">▤ Storage</div><div class="it">◔ Usage<span class=newtag>NEW</span></div></div><div class="pg"><h4>GitHub</h4><div class="hdrcard"><div class="avatar">K</div><div style="flex:1"><div style="font-size:15px;font-weight:600">Kenneth Berg</div><div class="s">@tashda · connected through the Hatch GitHub App</div></div><span class="pushbtn">Manage on GitHub…</span></div><div class="sec-h" style="display:flex;justify-content:space-between">Access</div><div class="frm"><div class="frow"><div class="t"><span>Repositories Hatch can see</span><span class="s">The Hatch app is installed on your account</span></div><span class="s" style="text-align:right">All repositories <span class="okc">✓</span></span></div><div class="frow"><div class="t"><span>Issues</span></div><span class="s" style="text-align:right"><span class="okc">✓</span> read and write</span></div><div class="frow"><div class="t"><span>Contents</span><span class="s">Needed to create Hatch's branch and save screenshots</span></div><span class="s" style="text-align:right"><span class="bad">✗</span> missing</span></div><div class="frow"><div class="t"><span>Pull requests</span><span class="s">Needed to open the pull request into dev</span></div><span class="s" style="text-align:right"><span class="bad">✗</span> missing</span></div><div class="frow"><div class="t"><span>Checks and commit statuses</span></div><span class="s" style="text-align:right"><span class="okc">✓</span> read</span></div></div><div class="sec-f">Missing permissions are granted on GitHub; Hatch checks again when you come back. <a style="color:var(--blue)">Fix on GitHub…</a></div><div class="sec-h" style="display:flex;justify-content:space-between">Sync<span style='color:var(--blue);font-weight:400'>Sync Now</span></div><div class="frm"><div class="frow"><div class="t"><span>Last sync</span></div><span class="s" style="text-align:right">today 17:42, 3 changes</span></div><div class="frow"><div class="t"><span>Waiting · failed</span></div><span class="s" style="text-align:right">0 · 0</span></div><div class="frow"><div class="t"><span>Check GitHub every</span></div><span class="s" style="text-align:right"><span class="pv">Minute <span class="chev"></span></span></span></div><div class="frow"><div class="t"><span>API calls left this hour</span></div><span class="s" style="text-align:right">4,812 of 5,000</span></div></div><div class="sec-h" style="display:flex;justify-content:space-between">Tickets repositories<span style='color:var(--blue);font-weight:400'>Add…</span></div><div class="frm"><div class="frow"><div class="t"><span>🔒 tashda/hatch-tickets <span class=badge2>Default</span></span><span class="s">Labels all present</span></div><span class="s" style="text-align:right">Echo, Lumen</span></div><div class="frow"><div class="t"><span>🔒 tashda/client-tickets</span></div><span class="s" style="text-align:right">Acme</span></div></div><div class="sec-f">A tickets repository can be shared by several projects; new projects use the default.</div><div class="sec-h" style="display:flex;justify-content:space-between">Project repositories</div><div class="frm"><div class="frow"><div class="t"><span>🔒 tashda/echo <span class=badge2>App</span></span><span class="s">CI on hatch <span class="okc">✓</span> passing</span></div><span class="s" style="text-align:right">Echo · dev</span></div><div class="frow"><div class="t"><span>🔒 tashda/echo-notebook <span class=badge2>Notebook</span></span><span class="s">Pushed 3 min ago</span></div><span class="s" style="text-align:right">Echo · main</span></div><div class="frow"><div class="t"><span>tashda/echo-design-system <span class=badge2>Components</span></span></div><span class="s" style="text-align:right">Echo · main</span></div></div><div style="text-align:right;margin-top:10px"><span class="pushbtn" style="color:#e5484d">Disconnect…</span></div></div></div></div>
+
+  <h2>General (new)</h2>
+  <p class="lead">How the app behaves: start at login, what opens first, the Dock badge, an optional menu bar item that shows agents and status like the footer, and confirmations.</p>
+  <div class="sheet" style="margin-top:14px"><div class="win"><div class="sb"><div class="sbh">Hatch</div><div class="it on">⚙︎ General<span class=newtag>NEW</span></div><div class="it">🔔︎ Notifications<span class=newtag>NEW</span></div><div class="it">⌘ Agents</div><div class="sbh">Connections</div><div class="it">⌥ GitHub</div><div class="sbh">This Mac</div><div class="it">⚒︎ Tools</div><div class="it">▤ Storage</div><div class="it">◔ Usage<span class=newtag>NEW</span></div></div><div class="pg"><h4>General</h4><div class="sec-h" style="display:flex;justify-content:space-between">Start</div><div class="frm"><div class="frow"><div class="t"><span>Open Hatch at login</span></div><span class="s" style="text-align:right"><span class="sw off"></span></span></div><div class="frow"><div class="t"><span>When Hatch opens</span></div><span class="s" style="text-align:right"><span class="pv">The Desk <span class="chev"></span></span></span></div><div class="frow"><div class="t"><span>Project on opening</span></div><span class="s" style="text-align:right"><span class="pv">The last one <span class="chev"></span></span></span></div></div><div class="sec-h" style="display:flex;justify-content:space-between">Dock and menu bar</div><div class="frm"><div class="frow"><div class="t"><span>Dock badge</span></div><span class="s" style="text-align:right"><span class="pv">Tickets waiting for you <span class="chev"></span></span></span></div><div class="frow"><div class="t"><span>Show in the menu bar</span><span class="s">Agents and status, like the footer</span></div><span class="s" style="text-align:right"><span class="sw"></span></span></div></div><div class="sec-h" style="display:flex;justify-content:space-between">Tickets</div><div class="frm"><div class="frow"><div class="t"><span>Ask before dropping a ticket</span></div><span class="s" style="text-align:right"><span class="sw"></span></span></div><div class="frow"><div class="t"><span>New ticket type</span></div><span class="s" style="text-align:right"><span class="pv">Ask me <span class="chev"></span></span></span></div></div></div></div></div>
+
+  <h2>Notifications (new)</h2>
+  <p class="lead">Which events deserve a notification. Default: only things that need you or went wrong; every status change is off.</p>
+  <div class="sheet" style="margin-top:14px"><div class="win"><div class="sb"><div class="sbh">Hatch</div><div class="it">⚙︎ General<span class=newtag>NEW</span></div><div class="it on">🔔︎ Notifications<span class=newtag>NEW</span></div><div class="it">⌘ Agents</div><div class="sbh">Connections</div><div class="it">⌥ GitHub</div><div class="sbh">This Mac</div><div class="it">⚒︎ Tools</div><div class="it">▤ Storage</div><div class="it">◔ Usage<span class=newtag>NEW</span></div></div><div class="pg"><h4>Notifications</h4><div class="sec-h" style="display:flex;justify-content:space-between">Tell me when</div><div class="frm"><div class="frow"><div class="t"><span>A ticket waits for me</span><span class="s">A choice, an answer or a Preview to verify</span></div><span class="s" style="text-align:right"><span class="sw"></span></span></div><div class="frow"><div class="t"><span>An agent hands in</span></div><span class="s" style="text-align:right"><span class="sw"></span></span></div><div class="frow"><div class="t"><span>An agent stops or needs me</span></div><span class="s" style="text-align:right"><span class="sw"></span></span></div><div class="frow"><div class="t"><span>CI fails on Hatch's branch</span></div><span class="s" style="text-align:right"><span class="sw"></span></span></div><div class="frow"><div class="t"><span>Sync or the notebook fails</span></div><span class="s" style="text-align:right"><span class="sw"></span></span></div><div class="frow"><div class="t"><span>Every status change</span></div><span class="s" style="text-align:right"><span class="sw off"></span></span></div></div><div class="sec-h" style="display:flex;justify-content:space-between">How<span style='color:var(--blue);font-weight:400'>Send a Test</span></div><div class="frm"><div class="frow"><div class="t"><span>Sound</span></div><span class="s" style="text-align:right"><span class="pv">Only for things that need me <span class="chev"></span></span></span></div><div class="frow"><div class="t"><span>Group by project</span></div><span class="s" style="text-align:right"><span class="sw"></span></span></div></div><div class="sec-f">Hatch follows Focus and macOS notification settings. <a style="color:var(--blue)">Open Notification Settings…</a></div></div></div></div>
+
+  <h2>Tools (was Apps)</h2>
+  <p class="lead">Today: three bare path fields. Proposed: what Hatch found on this Mac with versions and a check (Xcode, git, the hatch command, agent programs), which apps it opens things in, and the project apps as rows with their icons instead of typed paths.</p>
+  <div class="sheet" style="margin-top:14px"><div class="win"><div class="sb"><div class="sbh">Hatch</div><div class="it">⚙︎ General<span class=newtag>NEW</span></div><div class="it">🔔︎ Notifications<span class=newtag>NEW</span></div><div class="it">⌘ Agents</div><div class="sbh">Connections</div><div class="it">⌥ GitHub</div><div class="sbh">This Mac</div><div class="it on">⚒︎ Tools</div><div class="it">▤ Storage</div><div class="it">◔ Usage<span class=newtag>NEW</span></div></div><div class="pg"><h4>Tools</h4><div class="sec-h" style="display:flex;justify-content:space-between">Found on this Mac</div><div class="frm"><div class="frow"><div class="t"><span><span class="appicon" style="background:#1c7cf4">X</span>&nbsp; Xcode</span><span class="s">xcode-select points here</span></div><span class="s" style="text-align:right">27.0 <span class="okc">✓</span></span></div><div class="frow"><div class="t"><span><span class="appicon" style="background:#f05133">g</span>&nbsp; Git</span></div><span class="s" style="text-align:right">2.51 <span class="okc">✓</span></span></div><div class="frow"><div class="t"><span><span class="appicon" style="background:#555">⌘</span>&nbsp; hatch command</span></div><span class="s" style="text-align:right">Built in · in PATH <span class="okc">✓</span></span></div><div class="frow"><div class="t"><span><span class="appicon" style="background:#d97757">C</span>&nbsp; Claude Code</span><span class="s">Set up in Agents</span></div><span class="s" style="text-align:right">2.1.289 <span class="okc">✓</span></span></div></div><div class="sec-h" style="display:flex;justify-content:space-between">Open with</div><div class="frm"><div class="frow"><div class="t"><span>Terminal</span></div><span class="s" style="text-align:right"><span class="pv">Terminal <span class="chev"></span></span></span></div><div class="frow"><div class="t"><span>Code editor</span></div><span class="s" style="text-align:right"><span class="pv">Xcode <span class="chev"></span></span></span></div><div class="frow"><div class="t"><span>Git client</span></div><span class="s" style="text-align:right"><span class="pv">None <span class="chev"></span></span></span></div></div><div class="sec-f">Used by Open in Terminal, Open in Editor and Take Over.</div><div class="sec-h" style="display:flex;justify-content:space-between">Project apps<span style='color:var(--blue);font-weight:400'>Choose…</span></div><div class="frm"><div class="frow"><div class="t"><span>Preview copy</span></div><span class="s" style="text-align:right"><span class="appicon" style="background:#7a5af8">E</span> Echo (Preview).app</span></div><div class="frow"><div class="t"><span>Hatch Stage</span></div><span class="s" style="text-align:right">Built into Hatch <span class="okc">✓</span></span></div><div class="frow"><div class="t"><span>Spec app</span></div><span class="s" style="text-align:right">Not set</span></div></div></div></div></div>
+
+  <h2>Storage (was Local data)</h2>
+  <p class="lead">Today: two paths. Proposed: what takes space (database, agent workspaces, logs), clean-up rules so worktrees and logs do not pile up, and a plain statement of what is safe elsewhere.</p>
+  <div class="sheet" style="margin-top:14px"><div class="win"><div class="sb"><div class="sbh">Hatch</div><div class="it">⚙︎ General<span class=newtag>NEW</span></div><div class="it">🔔︎ Notifications<span class=newtag>NEW</span></div><div class="it">⌘ Agents</div><div class="sbh">Connections</div><div class="it">⌥ GitHub</div><div class="sbh">This Mac</div><div class="it">⚒︎ Tools</div><div class="it on">▤ Storage</div><div class="it">◔ Usage<span class=newtag>NEW</span></div></div><div class="pg"><h4>Storage</h4><div class="sec-h" style="display:flex;justify-content:space-between">On this Mac<span style='color:var(--blue);font-weight:400'>Show in Finder</span></div><div class="frm"><div class="frow"><div class="t"><span>Hatch folder</span></div><span class="s" style="text-align:right">~/Library/Application Support/Hatch</span></div><div class="frow"><div class="t"><span>Database</span></div><span class="s" style="text-align:right">18 MB · 1,204 tickets</span></div><div class="frow"><div class="t"><span>Agent workspaces</span></div><span class="s" style="text-align:right">6 · 2.1 GB</span></div><div class="frow"><div class="t"><span>Agent logs</span></div><span class="s" style="text-align:right">142 MB</span></div><div class="frow"><div class="t"><span>Attachments cache</span></div><span class="s" style="text-align:right">64 MB</span></div></div><div class="sec-h" style="display:flex;justify-content:space-between">Clean up<span style='color:var(--blue);font-weight:400'>Clean Up Now…</span></div><div class="frm"><div class="frow"><div class="t"><span>Remove workspaces of finished tickets</span></div><span class="s" style="text-align:right"><span class="pv">After 7 days <span class="chev"></span></span></span></div><div class="frow"><div class="t"><span>Keep agent logs</span></div><span class="s" style="text-align:right"><span class="pv">30 days <span class="chev"></span></span></span></div></div><div class="sec-h" style="display:flex;justify-content:space-between">Safety</div><div class="frm"><div class="frow"><div class="t"><span>Everything that matters is in git and on GitHub</span><span class="s">Tickets in GitHub issues, decisions and the Spec in each notebook</span></div><span class="s" style="text-align:right"><span class="okc">✓</span></span></div><div class="frow"><div class="t"><span>Back up the database</span></div><span class="s" style="text-align:right"><span class="pv">Daily, keep 7 <span class="chev"></span></span></span></div></div></div></div></div>
+
+  <h2>Usage (new)</h2>
+  <p class="lead">Cost matters (rule 4). Tokens per day and per task from the run records Hatch already keeps, and an optional warning or pause above a daily amount.</p>
+  <div class="sheet" style="margin-top:14px"><div class="win"><div class="sb"><div class="sbh">Hatch</div><div class="it">⚙︎ General<span class=newtag>NEW</span></div><div class="it">🔔︎ Notifications<span class=newtag>NEW</span></div><div class="it">⌘ Agents</div><div class="sbh">Connections</div><div class="it">⌥ GitHub</div><div class="sbh">This Mac</div><div class="it">⚒︎ Tools</div><div class="it">▤ Storage</div><div class="it on">◔ Usage<span class=newtag>NEW</span></div></div><div class="pg"><h4>Usage</h4><div class="frm" style="padding:12px"><div class="s" style="margin-bottom:6px">Tokens per day, last 14 days</div><div class="bar"><i style="height:20%"></i><i style="height:35%"></i><i style="height:15%"></i><i style="height:60%"></i><i style="height:45%"></i><i style="height:30%"></i><i style="height:80%"></i><i style="height:55%"></i><i style="height:25%"></i><i style="height:40%"></i><i style="height:70%"></i><i style="height:50%"></i><i style="height:35%"></i><i style="height:65%"></i></div></div><div class="sec-h" style="display:flex;justify-content:space-between">This week</div><div class="frm"><div class="frow"><div class="t"><span>Build</span></div><span class="s" style="text-align:right">1.2M</span></div><div class="frow"><div class="t"><span>Prepare options</span></div><span class="s" style="text-align:right">640k</span></div><div class="frow"><div class="t"><span>Check new tickets</span></div><span class="s" style="text-align:right">58k</span></div><div class="frow"><div class="t"><span>Answer questions</span></div><span class="s" style="text-align:right">31k</span></div></div><div class="sec-h" style="display:flex;justify-content:space-between">Limits</div><div class="frm"><div class="frow"><div class="t"><span>Warn me above</span></div><span class="s" style="text-align:right"><span class="pv">2M tokens a day <span class="chev"></span></span></span></div><div class="frow"><div class="t"><span>Pause agents above</span></div><span class="s" style="text-align:right"><span class="pv">Never <span class="chev"></span></span></span></div></div><div class="sec-f">Usage is counted from what each program reports. Plans have their own limits; Hatch only warns.</div></div></div></div>
+
+  <h2>Agents</h2>
+  <p class="lead">Stays as built; it is the model for the others.</p>
+
+  <h2>Decisions I need from you</h2>
+  <p class="lead">My recommendation is already selected. Your answers appear as text in the box at the bottom, ready to copy; or just tell me in chat.</p>
+  <form id="answers" class="note" style="margin-top:12px"></form>
+  <textarea id="summary" readonly></textarea>
+</main>
+<script>
+  const QUESTIONS = [
+    { id: 'sidebar', title: 'Sidebar: Hatch, Connections, This Mac', why: 'Groups like System Settings, so new pages have an obvious place.', rec: 'yes', options: [
+      ['yes', 'Yes, three groups', 'General, Notifications, Agents · GitHub · Tools, Storage, Usage'], ['flat', 'One flat list', 'As today'] ] },
+    { id: 'github', title: 'GitHub as shown', why: 'You see who you are, what Hatch may do and what is missing with the fix, how sync is doing, and every repository with its role.', rec: 'yes', options: [
+      ['yes', 'Yes, as shown', 'Account, access, sync, tickets repositories, project repositories'], ['lighter', 'Lighter', 'Account, access and sync only'] ] },
+    { id: 'general', title: 'A General page', why: 'Start at login, what opens first, the Dock badge and a menu bar item have no home today.', rec: 'yes', options: [
+      ['yes', 'Yes', 'With the menu bar item off by default'], ['no', 'No', 'Not now'] ] },
+    { id: 'notifications', title: 'A Notifications page', why: 'Hatch works in the background; you choose which events interrupt you, and only things that need you are on by default.', rec: 'yes', options: [
+      ['yes', 'Yes', 'Per event, with a test'], ['no', 'No', 'Keep today\'s fixed set'] ] },
+    { id: 'tools', title: 'Tools instead of Apps', why: 'It shows what Hatch found and whether it works, and lets you pick Terminal and editor, instead of typing paths.', rec: 'yes', options: [
+      ['yes', 'Yes, as shown', 'Found tools, Open with, project apps'], ['paths', 'Keep path fields', 'Restyled only'] ] },
+    { id: 'storage', title: 'Storage instead of Local data', why: 'Agent workspaces and logs grow with every ticket; clean-up rules keep the Mac tidy.', rec: 'yes', options: [
+      ['yes', 'Yes, with clean-up rules', 'Workspaces after 7 days, logs 30 days'], ['paths', 'Only show the paths', 'As today, restyled'] ] },
+    { id: 'usage', title: 'A Usage page', why: 'Hatch already records tokens per run; a page and an optional daily warning keep cost visible.', rec: 'yes', options: [
+      ['yes', 'Yes, with a warning above a daily amount', 'Pause above an amount is off by default'], ['no', 'No', 'The Agents page is enough'] ] },
+    { id: 'menubar', title: 'A menu bar item', why: 'Agents and status at a glance when Hatch is in the background; off by default so it never clutters the menu bar unasked.', rec: 'off', options: [
+      ['off', 'Offered in General, off by default', 'You switch it on'], ['on', 'On by default', ''], ['no', 'Not at all', ''] ] }
+  ];
+  const KEY = 'hatch.settingsPages';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  const form = document.getElementById('answers');
+  function render() {
+    form.innerHTML = '';
+    QUESTIONS.forEach(q => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const box = document.createElement('div');
+      box.className = 'qform';
+      box.innerHTML = `<h3>${q.title}</h3><div class="why">Why I recommend it: ${q.why}</div><div class="opts"></div><textarea class="qnote" rows="1" placeholder="Note (optional)"></textarea>`;
+      const opts = box.querySelector('.opts');
+      q.options.forEach(([value, label, detail]) => {
+        const o = document.createElement('label');
+        o.className = 'opt' + (a.choice === value ? ' on' : '');
+        o.innerHTML = `<input type="radio" name="${q.id}" value="${value}" ${a.choice === value ? 'checked' : ''}><span class="dot ${a.choice === value ? 'on' : ''}"></span><span><b>${label}</b>${value === q.rec ? '<span class="rec-tag">Recommended</span>' : ''}<br><span class="d">${detail}</span></span>`;
+        o.addEventListener('click', () => { saved[q.id] = { choice: value, note: box.querySelector('.qnote').value }; store(); render(); });
+        opts.appendChild(o);
+      });
+      const note = box.querySelector('.qnote');
+      note.value = a.note || '';
+      note.addEventListener('input', () => { saved[q.id] = { choice: (saved[q.id] || a).choice, note: note.value }; store(); });
+      form.appendChild(box);
+    });
+  }
+  function store() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} }
+  function summary() {
+    return QUESTIONS.map(q => {
+      const a = saved[q.id] || { choice: q.rec, note: '' };
+      const label = q.options.find(o => o[0] === a.choice)[1];
+      return `- ${q.title}: ${label}${a.choice === q.rec ? ' (recommended)' : ''}${a.note ? ' | Note: ' + a.note : ''}`;
+    }).join('\n');
+  }
+  window.hatchAnswers = summary;
+  (document.getElementById('copy')||{addEventListener(){}}).addEventListener('click', async () => {
+    const status = document.getElementById('status');
+    try { await navigator.clipboard.writeText(summary()); status.textContent = 'Copied. Paste it in chat.'; }
+    catch (e) { status.textContent = 'Could not copy here. Tell me in chat that you are done and I will read them.'; }
+  });
+  (document.getElementById('reset')||{addEventListener(){}}).addEventListener('click', () => { saved = {}; store(); render(); });
+  render();
+  const sumBox = document.getElementById('summary');
+  const showSummary = () => { sumBox.value = summary(); };
+  document.addEventListener('click', () => setTimeout(showSummary, 0));
+  document.addEventListener('input', () => setTimeout(showSummary, 0));
+  showSummary();
+</script>
+</body>
+</html>
