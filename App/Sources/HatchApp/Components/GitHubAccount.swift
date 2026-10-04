@@ -311,7 +311,7 @@ struct HXRepositorySelectionSheet: View {
                         assignmentRow(.tickets, title: "Tickets",
                                       detail: ticketsLocked ? "Issues and attachments. Fixed after the first ticket." : "Issues and attachments. Private repositories only.")
                         assignmentRow(.app, title: "Project", detail: "App source and Specs")
-                        assignmentRow(.designSystem, title: "Components", detail: "Colors, type and shared views")
+                        assignmentRow(.designSystem, title: "Components", detail: "Only when they are a separate repository; most apps keep them inside")
                     } footer: {
                         statusLine
                     }

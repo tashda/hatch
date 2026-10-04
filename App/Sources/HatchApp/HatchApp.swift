@@ -85,6 +85,7 @@ struct HatchCommands: Commands {
             Button("Previews") { state.navigate(to: .previews) }.keyboardShortcut("4")
             Button("Specs") { state.navigate(to: .specs) }.keyboardShortcut("5")
             Button("Decisions") { state.navigate(to: .decisions) }.keyboardShortcut("6")
+            Button("Components") { state.navigate(to: .components) }
             Button("Agents") { state.navigate(to: .agents) }.keyboardShortcut("7")
             Button("Log") { state.navigate(to: .log) }.keyboardShortcut("8")
             Button("Project Settings") { state.navigate(to: .projects) }.keyboardShortcut("9")

@@ -12,7 +12,7 @@ Written so a fresh session (or a person) can pick up without this conversation. 
 | The new home of the app | `tashda/hatch` (private, created, empty at the start of the build) |
 | Tickets (GitHub Issues) | `tashda/hatch-tickets` (private; has issue forms, `labels.json`, `attachments/`) |
 | Echo-today views and rounds | `tashda/echo-specimens` (private, empty) |
-| Extracted design system | `tashda/echo-design-system` (private, empty; do **not** extract from Echo without the owner's go) |
+| Components | Inside the app (decision CO1); `tashda/echo-design-system` is no longer needed |
 | The interactive design page and answers | https://claude.ai/artifact/STGbCJYZxTST7zHXzntxyN, source in `design-page/`, answers in `design-page/db/` |
 
 ## Packages in `Hatch/`
@@ -47,7 +47,7 @@ When the module agents are done and CI is green: `git subtree split --prefix=Hat
 3. Wire `StageKit` to `HatchAPI.StageClient`; launch the Stage from the app (`StageLauncher`).
 4. App screens: compile on CI and fix; then the first real run on the owner's Mac.
 5. Measure the round-only Stage build time on the macOS runner (decision S1/O1). If it is slow, revisit S1.
-6. Echo-side changes, only with the owner's agreement: `hatch` branch trigger in `ci-light.yml`, DEBUG "Preview" banner in Echo, extraction of EchoDesignSystem into `tashda/echo-design-system` (tagged), `echo-specimens` with the "Echo today" views.
+6. Echo-side changes, only with the owner's agreement: `hatch` branch trigger in `ci-light.yml`, DEBUG "Preview" banner in Echo, `echo-specimens` with the "Echo today" views.
 7. Import the existing Echo Labs rounds (`hatch import-labs`) once the owner has chosen whether the imported tickets should be pushed to GitHub.
 8. `CLAUDE.md` for the Hatch repo (the Echo one is gitignored; commit a trimmed one in the new repo).
 

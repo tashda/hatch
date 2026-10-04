@@ -47,7 +47,6 @@ enum Snapshots {
             RepoConfig(role: .app, remote: "acme/app", branch: "main", localPath: "/tmp/hatch-demo/app",
                        buildCommand: "xcodebuild -scheme Acme build", testPlans: ["UnitTests"], testCommand: "swift test --filter AcmeTests"),
             RepoConfig(role: .tickets, remote: "acme/hatch-tickets", branch: "main"),
-            RepoConfig(role: .designSystem, remote: "acme/design-system", branch: "main", localPath: "/tmp/hatch-demo/design-system"),
             RepoConfig(role: .notebook, remote: "acme/app-notebook", branch: "main", localPath: "/tmp/hatch-demo/app-notebook"),
             RepoConfig(role: .specimens, remote: "acme/specimens", branch: "main", localPath: "/tmp/hatch-demo/Specimens"),
         ], areas: [
@@ -56,6 +55,7 @@ enum Snapshots {
             AreaConfig(name: "Notifications", paths: ["Sources/Notifications/**"], specPrefix: "NOTIF"),
         ], docs: ["README.md", "Design/CONTRIBUTING.md"], maxAgents: 3, integrationBranch: "hatch")
         config.promotion = .pullRequest
+        config.components = ComponentsConfig(path: "Packages/AcmeComponents", product: "AcmeComponents")
         let p = try! store.upsertProject(key: "acme", name: "Acme", config: config)
         // Agents settings with a model list, as after the first fetch, so Settings › Agents shows its real rows.
         var agents = AgentSettings.initial(detect: false)
@@ -169,7 +169,7 @@ enum Snapshots {
         }
         let first = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Toast spacing and corner radius" })?.id
         var routes: [(String, Route, TicketTab?)] = [("desk", .desk, nil), ("tickets", .tickets, nil), ("board", .board, nil),
-                                                      ("previews", .previews, nil), ("specs", .specs, nil), ("decisions", .decisions, nil),
+                                                      ("previews", .previews, nil), ("specs", .specs, nil), ("decisions", .decisions, nil), ("components", .components, nil),
                                                       ("agents", .agents, nil), ("health", .health, nil), ("log", .log, nil), ("project", .projects, nil),
                                                       ("new-ticket", .newTicket, nil)]
         if let first {
@@ -275,7 +275,7 @@ enum Snapshots {
     /// or "settings-agents".
     @MainActor private static func runOne(_ name: String, state: AppState, into folder: URL) async {
         let routes: [String: Route] = ["desk": .desk, "tickets": .tickets, "board": .board, "previews": .previews, "specs": .specs,
-                                       "decisions": .decisions, "agents": .agents, "health": .health, "log": .log, "project": .projects,
+                                       "decisions": .decisions, "components": .components, "agents": .agents, "health": .health, "log": .log, "project": .projects,
                                        "new-ticket": .newTicket]
         if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
@@ -285,6 +285,10 @@ enum Snapshots {
             } else if name.hasPrefix("settings") {
                 state.snapshotPresentation = .settings
                 if name == "settings-agents" { state.settingsPage = .agents }
+            } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count).prefix { $0.isNumber }) {
+                // add-project-5: one step of the setup assistant, numbered as in the full run.
+                state.snapshotPresentation = .addProject
+                state.snapshotSetupStep = n - 1
             }
             try? await Task.sleep(nanoseconds: 900_000_000)
             if let window = NSApp.windows.first(where: { $0.isVisible }) { save(window, name: name, mode: mode, into: folder) }

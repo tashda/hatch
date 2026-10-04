@@ -174,7 +174,7 @@ private struct GitHubSettingsPage: View {
                     Section {
                         repositoryRow("Tickets", detail: "Issues and attachments", remote: repository(project, role: .tickets))
                         repositoryRow("Project", detail: "App source and Specs", remote: repository(project, role: .app))
-                        repositoryRow("Components", detail: "Colors, type and shared views", remote: repository(project, role: .designSystem))
+                        repositoryRow("Components", detail: "Only when they are a separate repository", remote: repository(project, role: .designSystem))
                         HStack {
                             Spacer()
                             Button("Choose repositories…") { selectedProjectForRepositories = project }

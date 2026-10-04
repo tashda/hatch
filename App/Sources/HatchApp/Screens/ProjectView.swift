@@ -59,6 +59,12 @@ struct ProjectForm: View {
     @State private var appPath: String?
     @State private var baseBranch = "main"
     @State private var branches: [String] = []
+    /// Where the components are (decision CO1): inside the app, a separate repository, or none yet.
+    @State private var componentsMode: HXComponentsMode = .none
+    @State private var componentsFolder = ""
+    @State private var componentsProduct: String?
+    /// Folders in the app's clone that look like components, for the folder menu.
+    @State private var componentCandidates: [ComponentsCandidate] = []
     @State private var componentsRepo: String?
     @State private var componentsPath: String?
     @State private var notebookRepo: String?
@@ -103,7 +109,7 @@ struct ProjectForm: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
         .onAppear {
             if !loaded { load(); loaded = true }
-            if Snapshots.demoMode { fillDemoAccount() } else { account.refresh(); loadBranches(); suggestBuild(fill: false) }
+            if Snapshots.demoMode { fillDemoAccount() } else { account.refresh(); loadBranches(); suggestBuild(fill: false); scanComponents() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .hxGitHubAccountChanged)) { _ in
             if !Snapshots.demoMode { account.refresh() }
@@ -211,17 +217,70 @@ struct ProjectForm: View {
         }
     }
 
+    private var componentsSummary: String {
+        switch componentsMode {
+        case .inApp: return componentsFolder.isEmpty ? "Choose the folder" : "\(componentsFolder) in the app"
+        case .separate: return componentsRepo ?? "Choose the repository"
+        case .none: return "None yet: start them on the Components page"
+        }
+    }
+
     private var componentsCard: some View {
-        HXSettingsCard(symbol: "paintpalette", tint: .pink, title: "Components",
-                       summary: componentsRepo == nil ? "None: they live inside the app" : "Proposals build against them",
-                       info: "The package with the app's colors, type and shared views, when it is its own repository. Optional. Proposals built with it use your real colors and type.") {
-            HXSetupRow("Repository") {
-                repoPicker("Components repository", selection: Binding(get: { componentsRepo }, set: { changeRepo(.designSystem, to: $0) }),
-                           from: allRepos.filter { $0.fullName != appRepo }, none: "None")
+        HXSettingsCard(symbol: "paintpalette", tint: .pink, title: "Components", summary: componentsSummary,
+                       info: "Named colors, type, sizes and shared views. They live inside the app, usually as a local package; a separate repository is for a package several apps share. Proposals built with them use your real colors and type.") {
+            HXSetupRow("Where") {
+                Picker("Where", selection: $componentsMode) {
+                    Text("In the app").tag(HXComponentsMode.inApp)
+                    Text("Separate repository").tag(HXComponentsMode.separate)
+                    Text("None").tag(HXComponentsMode.none)
+                }
+                .labelsHidden().pickerStyle(.menu).fixedSize()
             }
-            if componentsRepo != nil {
-                folderRow(.designSystem, repo: componentsRepo, path: $componentsPath)
+            if componentsMode == .inApp {
+                HXSetupRow("Folder") {
+                    HStack(spacing: 6) {
+                        TextField("Packages/AppComponents", text: Binding(get: { componentsFolder }, set: { setComponentsFolder($0) }))
+                            .textFieldStyle(.plain).font(.body.monospaced()).multilineTextAlignment(.trailing).labelsHidden()
+                        if !componentCandidates.isEmpty {
+                            Menu {
+                                ForEach(componentCandidates, id: \.path) { c in
+                                    Button("\(c.path) · \(c.summary)") { setComponentsFolder(c.path) }
+                                }
+                            } label: { Image(systemName: "chevron.up.chevron.down") }
+                            .menuStyle(.button).buttonStyle(.borderless).menuIndicator(.hidden).fixedSize()
+                            .help("Folders in the app that look like components")
+                        }
+                    }
+                }
+                HXSetupRow("Import") {
+                    Text(componentsProduct.map { "import \($0)" } ?? "Not a package: Proposals cannot import it")
+                        .font(componentsProduct == nil ? .body : .body.monospaced()).foregroundStyle(.secondary)
+                }
+            } else if componentsMode == .separate {
+                HXSetupRow("Repository") {
+                    repoPicker("Components repository", selection: Binding(get: { componentsRepo }, set: { changeRepo(.designSystem, to: $0) }),
+                               from: allRepos.filter { $0.fullName != appRepo }, none: "None")
+                }
+                if componentsRepo != nil {
+                    folderRow(.designSystem, repo: componentsRepo, path: $componentsPath)
+                }
             }
+        }
+    }
+
+    /// A found folder brings its library name; a typed one is taken to be a package named after its folder.
+    private func setComponentsFolder(_ path: String) {
+        let trimmed = path.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        componentsFolder = path
+        if let c = componentCandidates.first(where: { $0.path == trimmed }) { componentsProduct = c.isPackage ? c.product : nil }
+        else { componentsProduct = trimmed.isEmpty ? nil : (trimmed as NSString).lastPathComponent }
+    }
+
+    private func scanComponents() {
+        guard let path = appPath, !Snapshots.demoMode else { return }
+        Task {
+            let scan = await Task.detached { ComponentsScanner.scan(appRoot: path) }.value
+            if appPath == path { componentCandidates = scan.candidates }
         }
     }
 
@@ -411,7 +470,7 @@ struct ProjectForm: View {
             appRepo = repo; appPath = nil; branches = []
             baseBranch = account.repos.first { $0.fullName == repo }?.defaultBranch ?? "main"
             loadBranches()
-            findClone(of: repo, role: .app) { appPath = $0; suggestBuild(fill: true) }
+            findClone(of: repo, role: .app) { appPath = $0; suggestBuild(fill: true); scanComponents() }
         case .designSystem:
             guard repo != componentsRepo else { return }
             componentsRepo = repo; componentsPath = nil
@@ -451,7 +510,7 @@ struct ProjectForm: View {
         }
         message = ""
         path.wrappedValue = url.path
-        if role == .app { suggestBuild(fill: true) }
+        if role == .app { suggestBuild(fill: true); scanComponents() }
     }
 
     private func loadBranches() {
@@ -514,6 +573,9 @@ struct ProjectForm: View {
         testCommand = app?.testCommand ?? ""
         componentsRepo = config.repo(.designSystem)?.remote
         componentsPath = config.repo(.designSystem)?.localPath
+        componentsFolder = config.components?.path ?? ""
+        componentsProduct = config.components?.product
+        componentsMode = config.components != nil ? .inApp : (componentsRepo != nil ? .separate : .none)
         notebookRepo = config.repo(.notebook)?.remote
         notebookPath = config.repo(.notebook)?.localPath
         integrationBranch = config.integrationBranch
@@ -563,7 +625,9 @@ struct ProjectForm: View {
             repo.buildCommand = trimmed(buildCommand)
             repo.testCommand = trimmed(testCommand)
         }
-        set(.designSystem, remote: componentsRepo, path: componentsPath)
+        set(.designSystem, remote: componentsMode == .separate ? componentsRepo : nil, path: componentsPath)
+        let folder = componentsFolder.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        config.components = componentsMode == .inApp && !folder.isEmpty ? ComponentsConfig(path: folder, product: componentsProduct) : nil
         set(.notebook, remote: notebookRepo, path: notebookPath)
 
         config.integrationBranch = trimmed(integrationBranch) ?? "hatch"
@@ -785,3 +849,6 @@ struct HXAreaEditSheet: View {
         .frame(width: 480)
     }
 }
+
+/// Where a project's components are, as Project settings offers it.
+enum HXComponentsMode: Hashable { case inApp, separate, none }

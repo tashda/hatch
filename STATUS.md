@@ -2,6 +2,17 @@
 
 Updated 2026-10-04 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
 
+## Local verification (macOS, 2026-10-04): components inside the app
+
+Decisions CO1 to CO8 (DECISIONS.md section T).
+
+- **Core** (`HatchCore/Components.swift`): `components` in `project.json` (folder and library); a reader for colors, fonts, sizes, views, styles and View modifiers in Swift text, and color sets in asset catalogs; a scanner that finds candidate folders in an app's clone and counts values typed into views; the check on a diff's added lines; the draft tickets that start components. No model calls.
+- **CLI**: `hatch components` (the project's components as agents see them; `--all`, `--values`) and `hatch components scan <folder>` (any app, no project needed). `hatch ready` notes typed-in values on added lines (a note and a `typed-values` event, never a failure).
+- **Briefs** list the components by name for work that draws (CO5).
+- **App**: the Components page (Reference section, Go menu, command palette); the setup assistant's Components step (use what is found, Hatch starts them with draft tickets, separate repository, not now); Project settings' Components card (in the app with a folder menu of found candidates, separate repository, none). Hatch no longer creates a components repository.
+- **Verified**: `swift test` (all bundles, 0 failures, 10 new tests), Xcode app build, snapshots of the Components page and the setup step in light and dark (sample data). Real scans: Echo (2566 Swift files, about 4 s) finds `Packages/EchoDesignSystem` (135 colors, 38 type styles, 105 sizes, 13 views and styles) and `Echo/Sources/Shared/DesignSystem`; Hatch itself finds `App/Sources/HatchApp/Components` and 556 typed-in values (mostly padding and spacing numbers); EchoSense finds nothing.
+- **Not verified**: the Project settings Components card was compiled but not looked at (it sits below the snapshot's fold); Use, Start Components and Add Tickets on the live page with a real project; the setup Add with "Hatch starts them" against GitHub; the typed-values note inside a real `hatch ready`. The Stage does not import components yet.
+
 ## Local verification (macOS, 2026-10-04): agent providers and models per task
 
 - **Providers** (`HatchAgent/Providers.swift`, `ProviderRunners.swift`, `AgentFactory.swift`, `ModelCatalog.swift`): Claude Code (Claude account, Anthropic key, or an Anthropic-compatible endpoint such as Z.ai's GLM Coding Plan), Codex, Gemini CLI, opencode, the Anthropic API, and any OpenAI-compatible API (OpenAI, OpenRouter, Z.ai, Gemini, Ollama, LM Studio). Presets for each in Settings, Agents. Providers can be switched on and off; a task set to a switched-off or removed provider fails with a message that says so, never a silent fallback.
@@ -91,5 +102,5 @@ The App starts the Stage API at launch; the Stage can clear a verdict. `hatch-de
 
 - Wiring `StageKit` to `HatchAPI.StageClient` and launching the Stage from the app end to end.
 - Measuring the round-only Stage build time (decision S1/O1).
-- Echo-side changes that need the owner's agreement: a `hatch` trigger in `ci-light.yml`, a DEBUG "Preview" banner, extracting EchoDesignSystem into `tashda/echo-design-system`, the "Echo today" views into `tashda/echo-specimens`, splitting Echo Lab Tools, the Echo Labs rebuild-flake fix.
+- Echo-side changes that need the owner's agreement: a `hatch` trigger in `ci-light.yml`, a DEBUG "Preview" banner, the "Echo today" views into `tashda/echo-specimens`, splitting Echo Lab Tools, the Echo Labs rebuild-flake fix.
 - Importing the real Echo Labs rounds into the owner's database and choosing whether to push them to GitHub (`hatch import-labs --enqueue`).

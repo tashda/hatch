@@ -32,7 +32,9 @@ final class ProjectSetupModel: ObservableObject {
     }
 
     enum TicketsChoice { case useDefault, create, existing }
-    enum DesignChoice { case existing, create, none }
+    /// Components (decision CO2): use a folder Hatch found in the app, start them with draft tickets, use a separate
+    /// repository (a package several apps share), or not now.
+    enum DesignChoice { case found, start, separate, none }
     enum NotebookChoice { case create, existing }
 
     @Published var step: Step = .github
@@ -51,18 +53,23 @@ final class ProjectSetupModel: ObservableObject {
     private var forwarders: [AnyCancellable] = []
 
     @Published var appRepo: String? { didSet { appRepoChanged(from: oldValue) } }
-    @Published var localPath: String? { didSet { if localPath != oldValue { suggestBuild(); inspectRules() } } }
+    @Published var localPath: String? { didSet { if localPath != oldValue { suggestBuild(); inspectRules(); scanComponents() } } }
     @Published var clones: [String] = []
     @Published var searchingClones = false
     @Published var cloning = false
 
-    @Published var designChoice: DesignChoice = .none
+    @Published var designChoice: DesignChoice = .start
+    /// Set once the owner picks a choice, so a finished scan no longer changes it.
+    @Published var designTouched = false
+    @Published var componentsScan: ComponentsScan?
+    @Published var scanningComponents = false
+    /// The found folder to use, relative to the app's clone.
+    @Published var foundPath: String?
+    /// Where new components go; follows the project name until the owner types their own.
+    @Published var startPath = ""
+    @Published var startPathEdited = false
     @Published var designExisting: String? { didSet { if designExisting != oldValue { designPath = nil; findClone(of: designExisting) { [weak self] in self?.designPath = $0 } } } }
-    /// Follows the app repository's name until the owner types their own.
-    @Published var designNewName = ""
-    @Published var designNameEdited = false
-    @Published var designPrivate = true
-    /// The clone of an existing components repository on this Mac; agents building a ticket work in it too.
+    /// The clone of a separate components repository on this Mac; agents building a ticket work in it too.
     @Published var designPath: String?
 
     @Published var notebookChoice: NotebookChoice = .create
@@ -143,13 +150,41 @@ final class ProjectSetupModel: ObservableObject {
     /// Where a new repository goes: the app repository's owner, or the signed-in account.
     var newRepoOwner: String { appRepo?.split(separator: "/").first.map(String.init) ?? login ?? "you" }
 
-    var designRepo: String? {
+    /// A separate components repository, the advanced choice.
+    var designRepo: String? { designChoice == .separate ? designExisting : nil }
+
+    /// Components inside the app: a folder found there, or the one the start ticket makes.
+    var componentsConfig: ComponentsConfig? {
         switch designChoice {
-        case .existing: return designExisting
-        case .none: return nil
-        case .create:
-            let n = designNewName.trimmingCharacters(in: .whitespaces)
-            return n.isEmpty ? nil : "\(newRepoOwner)/\(n)"
+        case .found:
+            return componentsScan?.candidates.first { $0.path == foundPath }?.config
+        case .start:
+            let path = (startPathEdited ? startPath : ComponentsConfig.suggested(appName: displayName).path)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+            guard !path.isEmpty else { return nil }
+            return ComponentsConfig(path: path, product: (path as NSString).lastPathComponent)
+        case .separate, .none:
+            return nil
+        }
+    }
+
+    func chooseDesign(_ choice: DesignChoice) {
+        designChoice = choice
+        designTouched = true
+    }
+
+    /// Reads the app's clone for components and typed-in values. A finished scan picks the likely choice until the
+    /// owner picks one: use what was found, else start them.
+    private func scanComponents() {
+        guard let path = localPath, !demo else { return }
+        scanningComponents = true
+        Task {
+            let scan = await Task.detached { ComponentsScanner.scan(appRoot: path) }.value
+            guard localPath == path else { return }
+            componentsScan = scan
+            scanningComponents = false
+            if foundPath == nil || !scan.candidates.contains(where: { $0.path == foundPath }) { foundPath = scan.candidates.first?.path }
+            if !designTouched { designChoice = scan.candidates.isEmpty ? .start : .found }
         }
     }
 
@@ -182,7 +217,7 @@ final class ProjectSetupModel: ObservableObject {
         case .project: return appRepo != nil && !name.trimmingCharacters(in: .whitespaces).isEmpty
         case .tickets: return ticketsRepo != nil
         case .code: return appRepo != nil && localPath != nil
-        case .design: return designChoice == .none || designRepo != nil
+        case .design: return designChoice == .none || designRepo != nil || componentsConfig != nil
         case .notebook: return notebookRepo != nil
         case .agents: return true
         case .branches: return !baseBranch.isEmpty && !integrationBranch.trimmingCharacters(in: .whitespaces).isEmpty
@@ -222,16 +257,19 @@ final class ProjectSetupModel: ObservableObject {
         demo = true
         account.user = GitHubUser(login: "tashda", name: "Kenneth Berg")
         account.repos = [GitHubRepoSummary(fullName: "tashda/echo", isPrivate: true, defaultBranch: "dev"),
-                         GitHubRepoSummary(fullName: "tashda/echo-design-system", isPrivate: true),
                          GitHubRepoSummary(fullName: "tashda/hatch-tickets", isPrivate: true)]
         ticketsChoice = .create
         appRepo = "tashda/echo"
         localPath = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Development/echo").path
         clones = [localPath!]
         branches = ["main", "dev"]
-        designChoice = .existing
-        designExisting = "tashda/echo-design-system"
-        designPath = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Development/echo-design-system").path
+        var tokens = ComponentCatalog()
+        ComponentReader.read("public extension Color {\n static let surface = Color.secondary\n static let accent = Color.blue\n}\npublic enum Spacing { public static let m: CGFloat = 12 }\npublic struct Card: View { }\n",
+                             file: "Tokens.swift", requirePublic: true, into: &tokens)
+        componentsScan = ComponentsScan(candidates: [ComponentsCandidate(path: "Packages/EchoDesignSystem", isPackage: true, product: "EchoDesignSystem", catalog: tokens)],
+                                        typed: [.color: 57, .font: 186, .size: 559], typedFiles: [], swiftFiles: 2566)
+        foundPath = "Packages/EchoDesignSystem"
+        designChoice = .found
         existingRulesLines = 474
         self.step = step
     }
@@ -242,14 +280,14 @@ final class ProjectSetupModel: ObservableObject {
             let raw = repo.split(separator: "/").last.map(String.init) ?? repo
             setName(raw.prefix(1).uppercased() + raw.dropFirst(), edited: false)
         }
-        let repoName = (repo.split(separator: "/").last.map(String.init) ?? "app").lowercased()
-        if !designNameEdited { designNewName = "\(repoName)-components" }
         if !notebookNameEdited { notebookNewName = Notebook.suggestedName(appRepo: repo) }
         baseBranch = appRepoSummary?.defaultBranch ?? "main"
         branches = []
         guard !demo else { return }
         localPath = nil
         clones = []
+        componentsScan = nil
+        foundPath = nil
         loadBranches(repo)
         findClones(repo)
     }
@@ -350,8 +388,10 @@ final class ProjectSetupModel: ObservableObject {
         error = nil
         let createTickets = ticketsChoice == .create
         let base = baseBranch, integration = integrationBranch.trimmingCharacters(in: .whitespaces)
-        let design = designRepo, createDesign = designChoice == .create, designPrivate = designPrivate
+        let design = designRepo, components = componentsConfig
         let designFolder = designPath ?? design.map(siblingFolder(for:))
+        let componentDrafts = designChoice == .start && components != nil
+            ? ComponentsSetup.drafts(appName: displayName, config: components!, scan: componentsScan) : []
         let createNotebook = notebookChoice == .create
         let notebookFolder = notebookPath ?? siblingFolder(for: notebook)
         let login = login, name = displayName, promotion = promotion, agents = effectiveAgents
@@ -381,11 +421,8 @@ final class ProjectSetupModel: ObservableObject {
                                             buildCommand: agents.build, testCommand: agents.test),
                                  RepoConfig(role: .tickets, remote: tickets, branch: "main")]
                     if let design, let designFolder {
-                        let branch = createDesign
-                            ? try ensureRepo(design, description: "Components for \(name): colors, type and views.", isPrivate: designPrivate).branch
-                            : knownBranches[design] ?? "main"
                         try ensureClone(design, at: designFolder)
-                        repos.append(RepoConfig(role: .designSystem, remote: design, branch: branch, localPath: designFolder))
+                        repos.append(RepoConfig(role: .designSystem, remote: design, branch: knownBranches[design] ?? "main", localPath: designFolder))
                     }
                     let nb = createNotebook
                         ? try ensureRepo(notebook, description: "What is decided about \(name) and how work on it is done.", isPrivate: true)
@@ -396,6 +433,7 @@ final class ProjectSetupModel: ObservableObject {
                     var config = ProjectConfig(name: name, ticketsRepo: tickets, repos: repos, maxAgents: agents.max,
                                                integrationBranch: integration, planApprovalFileThreshold: agents.threshold)
                     config.promotion = promotion
+                    config.components = components
                     let files = Notebook.scaffold(config: config, notebookRepo: notebook, rules: RulesPlacer.existingRules(in: appPath))
                     // A repository GitHub just made has its own one-line README; the notebook's replaces it.
                     if nb.created, let readme = files["README.md"] { try NotebookWriter.write(["README.md": readme], in: notebookFolder) }
@@ -433,6 +471,8 @@ final class ProjectSetupModel: ObservableObject {
                 return project
             }
             if let created {
+                // Drafts, so the owner reads them before any agent touches the app (decision CO3).
+                if !componentDrafts.isEmpty { state.addComponentTickets(projectId: created.id, drafts: componentDrafts) }
                 state.selectedProjectKey = created.key
                 state.navigate(to: .desk)
                 done()
@@ -727,37 +767,47 @@ struct ProjectSetupAssistant: View {
     private var designPage: some View {
         VStack(alignment: .leading, spacing: 16) {
             HXSetupHeader(symbol: "paintpalette", tint: .pink, title: "Components",
-                          detail: "The package with the app's colors, type and shared views, when it is its own repository. Optional.")
+                          detail: "Named colors, type, sizes and shared views that every screen uses. They live inside the app, usually as a local package, so the app gets no new dependency.")
             HXSetupGroup {
-                HXRadioRow(selected: model.designChoice == .existing, title: "Use an existing repository",
-                           detail: "The app and Proposals import it.") { model.designChoice = .existing } trailing: {
+                if model.scanningComponents {
+                    HXSetupRow("Looking") {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Reading \(model.displayName)'s code…").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                let candidates = model.componentsScan?.candidates ?? []
+                if !candidates.isEmpty {
+                    HXRadioRow(selected: model.designChoice == .found, title: "Use what is in the app",
+                               detail: foundDetail, recommended: true) { model.chooseDesign(.found) } trailing: {
+                        if candidates.count > 1 {
+                            Picker("Folder", selection: Binding(get: { model.foundPath }, set: { model.foundPath = $0; model.chooseDesign(.found) })) {
+                                ForEach(candidates, id: \.path) { Text($0.path).tag(String?.some($0.path)) }
+                            }
+                            .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
+                        } else {
+                            Text(candidates[0].path).font(.callout.monospaced()).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                HXRadioRow(selected: model.designChoice == .start, title: "Hatch starts them",
+                           detail: startDetail, recommended: candidates.isEmpty && !model.scanningComponents) { model.chooseDesign(.start) } trailing: {
+                    TextField("Folder", text: Binding(get: { model.startPathEdited ? model.startPath : ComponentsConfig.suggested(appName: model.displayName).path },
+                                                      set: { model.startPath = $0; model.startPathEdited = true; model.chooseDesign(.start) }))
+                        .textFieldStyle(.plain).font(.callout.monospaced()).multilineTextAlignment(.trailing).frame(width: 220).labelsHidden()
+                }
+                HXRadioRow(selected: model.designChoice == .separate, title: "A separate repository",
+                           detail: "For a package several apps share. The app imports it by version.") { model.chooseDesign(.separate) } trailing: {
                     Picker("Repository", selection: Binding(get: { model.designExisting },
-                                                            set: { model.designExisting = $0; model.designChoice = .existing })) {
+                                                            set: { model.designExisting = $0; model.chooseDesign(.separate) })) {
                         Text("Choose…").tag(String?.none)
                         ForEach(model.account.repos.filter { $0.fullName != model.appRepo }) { Text($0.fullName).tag(String?.some($0.fullName)) }
                     }
                     .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).fixedSize()
                 }
-                HXRadioRow(selected: model.designChoice == .create, title: "Hatch creates one",
-                           detail: "A new repository, for agents to move the app's shared views into.") { model.designChoice = .create } trailing: {
-                    HStack(spacing: 2) {
-                        Text("\(model.newRepoOwner)/").foregroundStyle(.secondary)
-                        TextField("Name", text: Binding(get: { model.designNewName },
-                                                        set: { model.designNewName = $0; model.designNameEdited = true; model.designChoice = .create }))
-                            .textFieldStyle(.plain).frame(width: 170).labelsHidden()
-                    }
-                }
-                if model.designChoice == .create {
-                    HXSetupRow("Visibility") {
-                        Picker("Visibility", selection: $model.designPrivate) {
-                            Text("Private").tag(true)
-                            Text("Public").tag(false)
-                        }
-                        .labelsHidden().pickerStyle(.segmented).fixedSize()
-                    }
-                }
-                HXRadioRow(selected: model.designChoice == .none, title: "No separate repository",
-                           detail: "They live inside the app. Proposals build against the app's own code.") { model.designChoice = .none }
+                HXRadioRow(selected: model.designChoice == .none, title: "Not now",
+                           detail: "Proposals use plain SwiftUI and only look roughly like the app. You can start them later on the Components page.") { model.chooseDesign(.none) }
                 if let repo = model.designRepo {
                     HXSetupRow("On this Mac") {
                         Text(model.designPath.map(hxAbbreviated) ?? "Hatch clones it to \(hxAbbreviated(model.siblingFolder(for: repo)))")
@@ -765,12 +815,24 @@ struct ProjectSetupAssistant: View {
                     }
                 }
             }
-            missingRepositoryButton
             HXSetupExample("Why it matters") {
-                Text("A Proposal shows options side by side. Built with your components, they use your real colors and type, so what you choose is what ships. Agents building a ticket work in this repository too.")
+                Text("A Proposal shows options side by side. Built with your components, they use your real colors and type, so what you choose is what ships. Agents get the list of names in their brief and reuse them instead of copying values from other views.")
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var foundDetail: String {
+        guard let c = model.componentsScan?.candidates.first(where: { $0.path == model.foundPath }) ?? model.componentsScan?.candidates.first else { return "" }
+        return c.summary + (c.isPackage ? "." : ". A folder in the app, not a package yet, so Proposals cannot import it until it moves into one.")
+    }
+
+    private var startDetail: String {
+        guard let scan = model.componentsScan else { return "Adds a draft ticket: an agent makes a small local package with Apple's defaults given names." }
+        guard let typed = scan.typedSummary, !scan.isSmall else {
+            return "Adds a draft ticket: an agent makes a small local package with Apple's defaults given names. Nothing changes until you submit it."
+        }
+        return "The app types \(typed) into views. Adds draft tickets: one starts the package, then one per kind moves the values over. Nothing changes until you submit them."
     }
 
     private var notebookPage: some View {
@@ -861,8 +923,12 @@ struct ProjectSetupAssistant: View {
                             text: "\(model.ticketsRepo ?? "") for tickets" + (model.makeDefault && model.ticketsChoice != .useDefault ? ", the new default" : ""))
                 HXReviewRow(verb: "Uses", text: "\(model.appRepo ?? "") at \(hxAbbreviated(model.localPath ?? ""))")
                 if let d = model.designRepo {
-                    HXReviewRow(verb: model.designChoice == .create ? "Creates" : "Uses",
-                                text: "\(d)\(model.designChoice == .create ? (model.designPrivate ? ", private," : ", public,") : "") for components")
+                    HXReviewRow(verb: "Uses", text: "\(d) for components")
+                } else if let c = model.componentsConfig {
+                    HXReviewRow(verb: model.designChoice == .start ? "Adds" : "Uses",
+                                text: model.designChoice == .start
+                                    ? "draft tickets to start the components in \(c.path)"
+                                    : "\(c.path) as the components")
                 }
                 if let n = model.notebookRepo {
                     HXReviewRow(verb: model.notebookChoice == .create ? "Creates" : "Uses",

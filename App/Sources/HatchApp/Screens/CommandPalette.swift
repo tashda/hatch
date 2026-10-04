@@ -699,13 +699,13 @@ struct CommandPalette: View {
     }
 
     private func placeGroups() -> [Group] {
-        let routes: [(Route, String)] = [
+        let routes: [(Route, String?)] = [
             (.desk, "1"), (.tickets, "2"), (.board, "3"), (.previews, "4"), (.specs, "5"),
-            (.decisions, "6"), (.agents, "7"), (.log, "8"), (.projects, "9"),
+            (.decisions, "6"), (.components, nil), (.agents, "7"), (.log, "8"), (.projects, "9"),
         ]
         let pages = routes.map { route, key in
             Hit(id: "go-\(route.title)", symbol: route.symbol, title: AttributedString(route == .projects ? "Project settings" : route.title),
-                trailing: .keys(["⌘", key]), run: { state.navigate(to: route) })
+                trailing: key.map { .keys(["⌘", $0]) } ?? .none, run: { state.navigate(to: route) })
         }
         let projects = state.projects
         var projectHits = projects.map { p in

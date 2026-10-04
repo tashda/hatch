@@ -1287,7 +1287,7 @@ Concept pages: `design-review/add-project-concepts.html` and `design-review/proj
 | PS5 | The app's folder on this Mac | Found automatically (a clone whose remote is the repository), or cloned by Hatch; Choose… remains. |
 | PS6 | How `hatch` reaches the base branch | Hatch opens a pull request, the owner merges; automatic and manual are settings in Project settings too (owner's note). Overrides I6's automatic promotion as the default. |
 | PS7 | Agent settings | Their own step: use the defaults or customize (agents at once, plan approval threshold, build and test commands). The build command is suggested from the clone. |
-| PS8 | Components repository | Use an existing one, have Hatch create one (name from the app, private or public), or none. |
+| PS8 | Components repository | Use an existing one, have Hatch create one (name from the app, private or public), or none. **Replaced by CO1:** components live inside the app; a separate repository is advanced and never created by Hatch. |
 | PS9 | A notebook repository per project | Yes. Decisions, Spec, agent rules and Proposal options live there as plain files, so the project can be picked up with any agent without Hatch. Nothing that matters lives only in Hatch's database. |
 | PS10 | Its name | Notebook, repository `<app>-notebook` (tool-neutral). |
 | PS11 | "Design system" | Renamed Components. |
@@ -1311,3 +1311,18 @@ Concept page: `design-review/command-palette-concepts.html`. All answers were th
 | CP6 | When nothing matches | Capture as a draft (the default on Return) and New ticket with this title (cmd-Return). Ask Iris waits, as in CP5. |
 | CP7 | Matching | Fuzzy on titles: the letters in order, each at a word start or right after the previous one, matched letters in bold. Your-turn and recent tickets rank higher, finished ones lower. Full-text search adds body matches. |
 | CP8 | Shortcuts in rows | Shown on the right of actions and places, as menus do (an exception added to DESIGN.md). |
+
+## T. Components inside the app (answered 2026-10-04, ids CO1 to CO8)
+
+The owner asked why setup made both a components and a notebook repository, and whether components are needed at all, for any macOS app rather than Echo. Answers below; CO1 replaces PS8, and PS11's name Components stays.
+
+| Id | Question | Choice |
+|---|---|---|
+| CO1 | Where components live | Inside the app repository, normally as a local Swift package (`Packages/<App>Components`), so the app gets no new dependency and a change is one branch and one pull request. A separate repository stays only as an advanced choice for a package several apps share (the `design-system` repo role). Hatch no longer creates a components repository. The setting is `components` in `project.json` (folder and library name). |
+| CO2 | Setup | The Components step reads the app's clone (no model call) and offers: use what is in the app (recommended when found), Hatch starts them (recommended otherwise), a separate repository, or not now. |
+| CO3 | Starting them | Draft tickets, never a silent write into the app: a new or small app gets one Tweak that starts a small package with Apple's defaults given names; a larger app (30 or more typed-in values) gets a Theme with the start and one Tweak per kind of value (colors, font sizes, sizes). The owner submits them. |
+| CO4 | A Components page | Yes, under Reference: colors as swatches (light and dark), type drawn in its own font, sizes as bars, views and styles by name, and the values still typed into views with the files that hold most. Setup and Use / Start live there too. Views are not drawn in Hatch: it never compiles project code; the Stage draws them. |
+| CO5 | Agents | Briefs for work that draws (not Questions, Themes or vetting) list the components by name, a few per kind; a Sketch also gets color values. A few hundred tokens at most. `hatch components` lists them in full. |
+| CO6 | Keeping on track | `hatch ready` notes values typed into views on the lines a ticket adds, outside the components. A note, never a failure: a text check can over-count. The notebook's starter rules say to use the components. |
+| CO7 | What counts as a component | Read from Swift text and asset catalogs: `static let` colors, fonts and sizes in extensions or enums, public views, styles and View modifiers (any name in a plain folder of the app target), and color sets. Packages count only public names. |
+| CO8 | A folder in the app target | Allowed (many large apps have a `DesignSystem` folder), but marked "not a package yet": the app can use it, a Proposal cannot import it. Moving it into a package is a ticket like any other. |

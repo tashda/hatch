@@ -52,6 +52,7 @@ struct SidebarView: View {
             Section("Reference") {
                 SidebarRow(route: .specs).tag(Route.specs)
                 SidebarRow(route: .decisions).tag(Route.decisions)
+                SidebarRow(route: .components).tag(Route.components)
             }
             Section("Machine") {
                 SidebarRow(route: .agents).tag(Route.agents)

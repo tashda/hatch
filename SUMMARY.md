@@ -170,8 +170,8 @@ Each command validates the move, writes SQLite and GitHub, records the sync, and
 | `hatch` | The app, the `hatch` CLI, StageKit, core. **Needs to be created by the owner** (see below). |
 | `hatch-tickets` (private) | Issues and `attachments/` |
 | `echo-notebook` | Decisions, Spec, agent rules, NOW.md and `specimens/` (Echo today and one folder per round); replaces `echo-specimens` (PS9) |
-| `echo-design-system` | Components: EchoDesignSystem extracted from Echo, tagged (renamed Components, PS11) |
-| Echo (`tashda/echo`) | The app. Changes later: a `hatch` trigger in `ci-light.yml`, a DEBUG "Preview" banner, EchoDesignSystem moves out |
+| Components | Not a repository (CO1): a local package inside the app, such as Echo's `Packages/EchoDesignSystem`. Hatch finds or starts it and shows it on the Components page. `tashda/echo-design-system` is no longer needed. |
+| Echo (`tashda/echo`) | The app. Changes later: a `hatch` trigger in `ci-light.yml`, a DEBUG "Preview" banner |
 
 ## 7. Where the owner chose differently from my recommendation
 
@@ -183,7 +183,7 @@ Each command validates the move, writes SQLite and GitHub, records the sync, and
 
 0. Tidy: fix the Echo Labs rebuild flake; commit a trimmed `CLAUDE.md` and the round guide; split Echo Lab Tools out of Echo Labs.
 1. **Stage spike:** the toast round (round 18) as a Stage app with the specimens kit; measure the round-only build time.
-2. Foundation: extract EchoDesignSystem to its own tagged repo; SQLite, GitHub sync with `sync_log`, projects and repos, the `hatch` command.
+2. Foundation: SQLite, GitHub sync with `sync_log`, projects and repos, the `hatch` command.
 3. Desk, Tickets, Board, composer with Iris's check and rewrite, ticket view.
 4. Sketch.
 5. Full Stage: compare modes, scenarios, redlines, Mix column, decision panel, quality gate, revisions.
@@ -195,5 +195,5 @@ Each command validates the move, writes SQLite and GitHub, records the sync, and
 - Round-only Stage build time is unmeasured (assumption behind S1).
 - Repos must be created by the owner: this cloud session cannot create GitHub repositories (access is limited to `tashda/echo`).
 - Building and viewing the SwiftUI app needs macOS. The cloud container is Linux. Core logic is built and tested here; SwiftUI code can only be compile-checked on the owner's Mac or through CI on the `xcode-27` self-hosted runner.
-- The Echo CI change (`hatch` branch trigger), the Preview banner in Echo and the EchoDesignSystem extraction touch the Echo repo and need the owner's agreement when we get there.
+- The Echo CI change (`hatch` branch trigger) and the Preview banner in Echo touch the Echo repo and need the owner's agreement when we get there.
 - Names of the four new repos should be confirmed by the owner.

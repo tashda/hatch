@@ -94,6 +94,7 @@ public struct SizeToken: Equatable, Sendable {
     public var name: String
     public var value: Double
     public var file: String
+    public init(name: String, value: Double, file: String) { self.name = name; self.value = value; self.file = file }
 }
 
 public struct ViewEntry: Equatable, Sendable {
@@ -176,6 +177,9 @@ public enum ComponentReader {
                     if let member = staticMember(rest), !requirePublic || member.isPublic || scope.publicExtension {
                         add(member, owner: decl.name, chain: chain + [decl.name], file: file, into: &catalog)
                     }
+                    if scope.isViewExtension, let name = modifierFunction(rest), !requirePublic || scope.publicExtension || rest.contains("public ") {
+                        catalog.views.append(ViewEntry(name: ".\(name)()", kind: .modifier, file: file))
+                    }
                 }
             } else if var p = pending, code.contains("{") {
                 p.level = before + 1
@@ -222,7 +226,7 @@ public enum ComponentReader {
     static func staticMember(_ line: String) -> Member? {
         guard let m = firstMatch(memberPattern, line), let name = m[2], let value = m[4] else { return nil }
         let modifiers = m[1] ?? ""
-        return Member(name: name, type: m[3], value: value.trimmingCharacters(in: .whitespaces),
+        return Member(name: name, type: m[3], value: value.trimmingCharacters(in: CharacterSet(charactersIn: " ;")),
                       isPublic: modifiers.contains("public") || modifiers.contains("open"))
     }
 
@@ -480,6 +484,10 @@ public struct ComponentsCandidate: Equatable, Sendable {
     public var product: String?
     public var catalog: ComponentCatalog
 
+    public init(path: String, isPackage: Bool, product: String?, catalog: ComponentCatalog) {
+        self.path = path; self.isPackage = isPackage; self.product = product; self.catalog = catalog
+    }
+
     public var config: ComponentsConfig { ComponentsConfig(path: path, product: isPackage ? product : nil) }
 
     /// "12 colors, 6 type styles, 3 sizes, 9 views".
@@ -496,6 +504,10 @@ public struct ComponentsScan: Equatable, Sendable {
     /// Files with the most typed-in values, most first (relative paths).
     public var typedFiles: [(path: String, count: Int)]
     public var swiftFiles: Int
+
+    public init(candidates: [ComponentsCandidate], typed: [TypedValues.Kind: Int], typedFiles: [(path: String, count: Int)], swiftFiles: Int) {
+        self.candidates = candidates; self.typed = typed; self.typedFiles = typedFiles; self.swiftFiles = swiftFiles
+    }
 
     public var typedTotal: Int { typed.values.reduce(0, +) }
     /// Few typed-in values: a new or small app, where one ticket starts the components. Otherwise they are moved over
@@ -695,9 +707,17 @@ public enum ComponentsSetup {
         }
         guard let scan, !scan.isSmall else { return [Draft(type: .tweak, title: startTitle, body: start)] }
 
-        var drafts = [Draft(type: .theme, title: "Components for \(appName)",
+        let drafts = [Draft(type: .theme, title: "Components for \(appName)",
                             body: "Move \(appName)'s colors, type and sizes into `\(config.path)` one kind at a time, so no single change touches every screen. Submit the start first; the others build on it. After these, views that still type values in move over when a ticket touches them.\n"),
                       Draft(type: .tweak, title: startTitle, body: start)]
+        return drafts + moveDrafts(config: config, scan: scan)
+    }
+
+    /// One Tweak per kind of value typed into views, to move them into the components. Also offered on the Components
+    /// page once the components exist.
+    public static func moveDrafts(config: ComponentsConfig, scan: ComponentsScan) -> [Draft] {
+        let product = config.product ?? (config.path as NSString).lastPathComponent
+        var drafts: [Draft] = []
         let files = scan.typedFiles.prefix(5).map { "`\($0.path)` (\($0.count))" }.joined(separator: ", ")
         for kind in TypedValues.Kind.allCases {
             guard let n = scan.typed[kind], n > 0 else { continue }

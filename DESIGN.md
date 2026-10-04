@@ -37,6 +37,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 | Destructive action | Menu item then confirmation sheet | `role: .destructive` |
 | Filter or search | Search field with tokens, saved views | `.searchable` |
 | Search and commands across the app | Floating glass command palette, scoped by prefix or shortcut (CP1 to CP8) | `commandPaletteOverlay()`, `.glassEffect` |
+| A project's own colors, type and sizes (Components page) | Swatches (light beside dark), a type sample in its own font, size bars. The one other place colour that is not turn or a problem appears: it is the project's data, not Hatch's look | `ComponentSwatch`, `ComponentRender` |
 | Nothing to show | Empty state with next step | `ContentUnavailableView` |
 | Work in progress | Spinner in the row, text says what | `ProgressView` |
 | Short feedback | Toast capsule | `HXToast` |

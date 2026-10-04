@@ -66,6 +66,14 @@ final class ComponentsTests: XCTestCase {
         XCTAssertEqual(cat.views.map(\.kind), [.view, .style, .modifier])
     }
 
+    func testOneLineDeclarationsAndSemicolonsAreRead() {
+        var cat = ComponentCatalog()
+        ComponentReader.read("public extension Spacing { static let s: CGFloat = 8; }\npublic extension View { func card() -> some View { self } }\n",
+                             file: "T.swift", requirePublic: true, into: &cat)
+        XCTAssertEqual(cat.sizes.map(\.value), [8])
+        XCTAssertEqual(cat.views.map(\.name), [".card()"])
+    }
+
     func testAFolderInTheAppTargetCountsInternalNames() {
         var cat = ComponentCatalog()
         ComponentReader.read(tokens, file: "Tokens.swift", requirePublic: false, into: &cat)
