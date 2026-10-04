@@ -20,7 +20,7 @@ public enum ProposalValidator {
 
     /// The gate. Add a rule here and write one test for its code.
     public static let rules: [Rule] = [
-        echoTodayFirst, enoughProposals, specimenGainCost, specimenSizes, specimenSizeAdvice, duplicateIDs, controlQuestions, controlChoices,
+        todayFirst, enoughProposals, specimenGainCost, specimenSizes, specimenSizeAdvice, duplicateIDs, controlQuestions, controlChoices,
         questionRules, exhibitTopicRules, standardScenarios, presetRules, revisionRules, specIDAdvice,
     ]
 
@@ -31,20 +31,20 @@ public enum ProposalValidator {
 
     // MARK: Specimens
 
-    static func echoTodayFirst(_ i: Input) -> [GateIssue] {
+    static func todayFirst(_ i: Input) -> [GateIssue] {
         let s = i.manifest.specimens
         let today = s.filter(\.isEchoToday)
         if today.isEmpty {
-            return [.error("echo-today.missing", "There is no Echo today specimen, so the owner has nothing to judge the options against.",
-                           "Add a first specimen with isEchoToday true, drawn from what Echo really does (read the real view, not memory).")]
+            return [.error("today.missing", "There is no Today specimen, so the owner has nothing to judge the options against.",
+                           "Add a first specimen with isToday true, drawn from what the app really does now (read the real view in the app workspace, not memory).")]
         }
         var out: [GateIssue] = []
         if s.first?.isEchoToday != true {
-            out.append(.error("echo-today.first", "Echo today must be the first specimen, but '\(s.first?.id ?? "")' comes first.",
-                              "Move the Echo today specimen to the top of the specimens list."))
+            out.append(.error("today.first", "The Today specimen must be the first specimen, but '\(s.first?.id ?? "")' comes first.",
+                              "Move the Today specimen to the top of the specimens list."))
         }
         if today.count > 1 {
-            out.append(.error("echo-today.duplicate", "\(today.count) specimens are marked isEchoToday.", "Keep exactly one Echo today specimen."))
+            out.append(.error("today.duplicate", "\(today.count) specimens are marked isToday.", "Keep exactly one Today specimen."))
         }
         return out
     }
@@ -52,8 +52,8 @@ public enum ProposalValidator {
     static func enoughProposals(_ i: Input) -> [GateIssue] {
         let n = i.manifest.proposalSpecimens.count
         guard n < 2 else { return [] }
-        return [.error("specimens.too-few", "There \(n == 1 ? "is 1 proposal" : "are \(n) proposals") besides Echo today; the owner needs at least 2 to choose between.",
-                       "Offer at least 2 different proposals after Echo today (2 to 4 is the usual range).")]
+        return [.error("specimens.too-few", "There \(n == 1 ? "is 1 proposal" : "are \(n) proposals") besides Today; the owner needs at least 2 to choose between.",
+                       "Offer at least 2 different proposals after Today (2 to 4 is the usual range).")]
     }
 
     /// Each proposal says what it gains and what it costs, so the owner can weigh them side by side in Decide (DC5).
@@ -70,7 +70,7 @@ public enum ProposalValidator {
         i.manifest.specimens.compactMap { s in
             guard (s.designWidth ?? 0) > 0, (s.designHeight ?? 0) > 0 else {
                 return .error("specimen.size-missing", "Specimen '\(s.id)' has no designWidth and designHeight.",
-                              "Set both to the size Echo really draws it at; the Stage scales from them and 100% zoom depends on them.")
+                              "Set both to the size the app really draws it at; the Stage scales from them and 100% zoom depends on them.")
             }
             return nil
         }
@@ -81,7 +81,7 @@ public enum ProposalValidator {
             guard let w = s.designWidth, let h = s.designHeight, w > 0, h > 0 else { return nil }
             guard !widthRange.contains(w) || h > maxHeight else { return nil }
             return .warning("specimen.size-range", "Specimen '\(s.id)' is designed at \(Int(w)) x \(Int(h)); 340 to 700 wide and about 620 tall judges best.",
-                            "Use a size in that range, or scroll inside the specimen. Ignore this if Echo really draws it that size.")
+                            "Use a size in that range, or scroll inside the specimen. Ignore this if the app really draws it that size.")
         }
     }
 
@@ -173,10 +173,10 @@ public enum ProposalValidator {
                               "Recommend one proposal: \(proposals.joined(separator: ", "))."))
         } else if !proposals.contains(t.recommended!) {
             out.append(.error("topic.recommend-not-proposal", "The specimen topic recommends '\(t.recommended!)', which is not one of the proposals.",
-                              "Recommend one of the proposals (not Echo today): \(proposals.joined(separator: ", "))."))
+                              "Recommend one of the proposals (not Today): \(proposals.joined(separator: ", "))."))
         }
         if (t.why ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            out.append(.error("topic.why-missing", "The specimen topic '\(t.id)' has no reason.", "Say why the recommended proposal beats Echo today and what it costs."))
+            out.append(.error("topic.why-missing", "The specimen topic '\(t.id)' has no reason.", "Say why the recommended proposal beats Today and what it costs."))
         }
         return out
     }

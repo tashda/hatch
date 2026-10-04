@@ -59,13 +59,13 @@ enum Fixture {
                 ManifestControl(id: "speed", title: "Speed", choices: [ManifestChoice(id: "std", name: "Standard"), ManifestChoice(id: "slow", name: "Slow")], defaultChoice: "std"),
             ],
             specimens: [
-                ManifestSpecimen(id: "today", title: "Echo today", isEchoToday: true, designWidth: 340, designHeight: 480),
+                ManifestSpecimen(id: "today", title: "Today", isEchoToday: true, designWidth: 340, designHeight: 480),
                 ManifestSpecimen(id: "a", title: "Tight", designWidth: 340, designHeight: 480, gain: "Fits more on screen", cost: "Feels cramped in dark mode"),
                 ManifestSpecimen(id: "b", title: "Airy", designWidth: 400, designHeight: 480, gain: "Calmer and easier to read", cost: "Shows fewer toasts at once"),
             ],
             questions: [ManifestQuestion(id: "extra", title: "Empty state", question: "Is the empty state clear?",
                                          choices: [ManifestChoice(id: "yes", name: "Yes"), ManifestChoice(id: "no", name: "Needs changes")], recommended: "yes", why: "The hint names the next step.")],
-            exhibitTopic: ManifestTopic(question: "Which proposal do you prefer?", recommended: "a", why: "It beats Echo today without adding height."),
+            exhibitTopic: ManifestTopic(question: "Which proposal do you prefer?", recommended: "a", why: "It beats Today without adding height."),
             presets: [ManifestPreset(id: "rec", name: "My recommendation", values: ["style": "quiet"], isRecommended: true)],
             scenarios: scenarios)
     }

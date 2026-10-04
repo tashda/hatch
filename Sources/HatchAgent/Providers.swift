@@ -224,7 +224,7 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
     case iris, ask, prepare, build, fix
     /// Iris again, on a stronger model, when she is unsure about a ticket's path (decision WF-T7).
     case irisUnsure
-    /// An agent that stopped twice gets one more run on this model before the owner is asked (decision WF-B3).
+    /// An agent that stopped twice gets one more run on this model before it is blocked (decision WF-B3).
     case rescue
 
     public var id: String { rawValue }
@@ -261,8 +261,8 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
         case .prepare: "Writes a Proposal's options or a Sketch's variants, and revises them after your feedback."
         case .build: "Builds what you accepted in the ticket's own copy of the code, including its plan."
         case .fix: "Fixes what you found while verifying a ticket."
-        case .irisUnsure: "Files a ticket again when Iris is unsure which way it should go, before you are asked."
-        case .rescue: "Runs once more when a coding agent stopped twice before handing in, before you are asked."
+        case .irisUnsure: "Files a ticket again when Iris is unsure which way it should go, before the ticket is blocked."
+        case .rescue: "Runs once more when a coding agent stopped twice before handing in, before the ticket is blocked."
         }
     }
 

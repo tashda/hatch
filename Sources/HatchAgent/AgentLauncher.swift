@@ -266,9 +266,14 @@ public final class AgentLauncher: @unchecked Sendable {
                     logPath: logs.appendingPathComponent("\(t.ghNumber ?? t.id)-\(stamp).jsonl").path)
     }
 
+    /// Programs that only read. Writing and deleting programs (rm, mv, sed -i, find -delete, tee) are left out on purpose.
+    static let readOnlyShell = ["cat", "ls", "head", "tail", "wc", "grep", "rg", "sort", "uniq", "diff", "pwd", "which"]
+
     /// Claude Code, headless: the brief on stdin, a live stream on stdout, only the tools the work needs (decision 3).
     public static func claudeArguments(model: String?, effort: String?, otherDirectories: [String], commands: [String]) -> [String] {
         var tools = ["Read", "Edit", "MultiEdit", "Write", "Glob", "Grep", "TodoWrite", "Bash(git *)", "Bash(hatch *)"]
+        // Read-only shell, so "cat x | head; ls" is not refused (an agent took one refusal for "no shell at all" and gave up).
+        tools += readOnlyShell.map { "Bash(\($0) *)" }
         // The build and test commands the project names, by their program (xcodebuild, swift, make…).
         for c in commands {
             guard let program = c.split(separator: " ").first.map(String.init), !program.isEmpty,
@@ -285,7 +290,7 @@ public final class AgentLauncher: @unchecked Sendable {
         if let model { args += ["--model", model] }
         if let effort { args += ["--effort", effort] }
         for d in otherDirectories { args += ["--add-dir", d] }
-        args += ["--append-system-prompt", "You are a coding agent started by Hatch. Work only in your workspaces. Use the hatch commands in the brief to plan, ask and hand in; never change a ticket's status any other way. When the work is done, hand it in as the brief says and stop."]
+        args += ["--append-system-prompt", "You are a coding agent started by Hatch. Work only in your workspaces. Use the hatch commands in the brief to plan, ask and hand in; never change a ticket's status any other way. Your shell runs git, hatch, the project's build commands and read-only commands (cat, ls, head, tail, wc, grep, rg, sort, uniq, diff); use Read, Glob, Grep, Write and Edit for the rest. One refused command does not mean the shell is closed: use another tool or command and carry on. Write ticket numbers in quotes, as hatch offer '#5' (an unquoted # starts a shell comment). Do not ask the owner for access to a workspace or a file: your workspaces are listed in the brief, so work from those. When the work is done, hand it in as the brief says and stop."]
         return args
     }
 
@@ -381,18 +386,18 @@ public final class AgentLauncher: @unchecked Sendable {
             do { try launch(again, attempt: attempt + 1) } catch { lock.withLock { lastError[plan.ticketId] = "\(error)" } }
             return
         }
-        // Stopped twice: one more run on the stronger model before the owner is asked (decision WF-B3).
+        // Stopped twice: one more run on the stronger model before the ticket is blocked (decision WF-B3).
         if attempt == Self.retries + 1, let rescue = rescuePlan(plan) {
             _ = try? store.addNote(plan.ticketId, kind: .system, author: "hatch",
                                    body: "The agent stopped again (exit \(exitCode)). Trying once more with \(rescue.model ?? "the stronger model").\n\n\(tail)")
             do { try launch(rescue, attempt: attempt + 1); return } catch { lock.withLock { lastError[plan.ticketId] = "\(error)" } }
         }
-        // Ask first, so the ticket is out of the agent's hands before it is released and no tick takes it up again.
-        // "Try again" sends it back to the work; "Stop working on it" parks it there (HatchStore.answer).
-        _ = try? store.ask(plan.ticketId, text: "The agent stopped twice before handing in (exit \(exitCode)). Its last lines are in the thread. Should it try again?",
-                           suggestions: [HatchStore.agentStoppedTryAgain, HatchStore.agentStoppedStop], by: "Hatch")
-        try? store.release(plan.ticketId, reason: "stopped twice")
+        // Every run failed. Another try would meet the same setup, so "try again?" only sends the owner a question they cannot
+        // answer usefully. Park the ticket as Blocked with the last lines in its thread; Resume starts the agent again.
+        try? store.release(plan.ticketId, reason: "stopped on every try")
         _ = try? store.addNote(plan.ticketId, kind: .system, author: "hatch", body: tail)
+        _ = try? store.move(plan.ticketId, to: .blocked, actor: .hatch,
+                            reason: "The agent stopped \(attempt) times without handing in (exit \(exitCode)). Its last lines are in the thread. Resume starts it again.")
     }
 
     /// The same run on the model chosen for "Second try" in Settings, Agents, when it is Claude Code and a different model.
@@ -442,7 +447,8 @@ public enum AgentWorkspaces {
 
     public static func roles(for kind: AgentTaskKind) -> [RepoRole] {
         switch kind {
-        case .prepare, .revise: [.specimens, .notebook]
+        // The app too: the Today specimen is drawn from the real views, so the agent must be able to read them.
+        case .prepare, .revise: [.specimens, .notebook, .app, .designSystem]
         case .build, .fix: [.app, .designSystem, .notebook]
         case .vet: []
         }

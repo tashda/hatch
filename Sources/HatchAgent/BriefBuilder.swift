@@ -288,8 +288,8 @@ public enum BriefBuilder {
             default:
                 return [
                     "Look up the area in the Spec and note the Spec IDs you change; put them in the manifest `specs` and in the summary.",
-                    "The first specimen is Echo today (`isEchoToday: true`), drawn from what Echo really does (read the real view, not memory).",
-                    "Then 2 to 4 proposals as Swift specimens in the specimens repo, same sample data in all, each with `designWidth` and `designHeight` (340 to 700 wide, up to about 620 tall), and one line each of what it gains (`gain`) and costs (`cost`). No title inside a specimen.",
+                    "The first specimen is Today (`isToday: true`), drawn from what the app really does now. Read the real view in the app workspace listed under Repos, not from memory.",
+                    "Then 2 to 4 proposals as Swift specimens in `specimens/<ticket>/` of the notebook workspace (a separate specimens repo only if Repos lists one), same sample data in all, each with `designWidth` and `designHeight` (340 to 700 wide, up to about 620 tall), and one line each of what it gains (`gain`) and costs (`cost`). No title inside a specimen.",
                     "Cover the standard scenarios (Rest, Hover, Pressed, Focus, Disabled, Empty, Error, Long text, Many items, Loading), or mark one `applicable: false` with a `notApplicableReason`.",
                     "Every control with a `question`, every question and the specimen topic carries ONE recommendation and its reason: the option you would ship, not a safe middle. The reason says what the others cost.",
                     "Write a question as what to do, then what to decide. Choice names are short and stable.",

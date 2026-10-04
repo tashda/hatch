@@ -146,7 +146,7 @@ public struct ManifestControl: Codable, Equatable, Sendable {
     }
 }
 
-/// One thing drawn on the stage. The first is Echo today (`isEchoToday`), then each proposal.
+/// One thing drawn on the stage. The first is the app as it is today (`isToday`; `isEchoToday` from Echo Labs is still accepted), then each proposal.
 public struct ManifestSpecimen: Codable, Equatable, Sendable {
     public var id: String
     public var title: String
@@ -165,12 +165,15 @@ public struct ManifestSpecimen: Codable, Equatable, Sendable {
         self.gain = gain; self.cost = cost
     }
     private enum CodingKeys: String, CodingKey { case id, title, summary, isEchoToday, designWidth, designHeight, addedIn, gain, cost }
+    /// What the brief tells agents to write. Read only; the stored form stays `isEchoToday`.
+    private enum AliasKeys: String, CodingKey { case isToday }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? id
         summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
-        isEchoToday = try c.decodeIfPresent(Bool.self, forKey: .isEchoToday) ?? false
+        let alias = try decoder.container(keyedBy: AliasKeys.self)
+        isEchoToday = try c.decodeIfPresent(Bool.self, forKey: .isEchoToday) ?? alias.decodeIfPresent(Bool.self, forKey: .isToday) ?? false
         designWidth = try c.decodeIfPresent(Double.self, forKey: .designWidth)
         designHeight = try c.decodeIfPresent(Double.self, forKey: .designHeight)
         addedIn = try c.decodeIfPresent(Int.self, forKey: .addedIn)

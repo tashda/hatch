@@ -136,7 +136,7 @@ final class OfferServiceTests: XCTestCase {
         var m = Fixture.manifest(); m.specimens.removeFirst(); m.questions[0].why = nil
         let result = try offers.offer(ticketId: t.id, manifest: m)
         guard case .rejected(let issues) = result else { return XCTFail() }
-        XCTAssertTrue(Set(codes(issues)).isSuperset(of: ["echo-today.missing", "question.why-missing"]))
+        XCTAssertTrue(Set(codes(issues)).isSuperset(of: ["today.missing", "question.why-missing"]))
         let after = try store.ticket(id: t.id)!
         XCTAssertEqual(after, t)
         XCTAssertNil(try store.proposalManifest(ticketId: t.id))

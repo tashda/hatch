@@ -18,9 +18,9 @@ final class ValidatorTests: XCTestCase {
         XCTAssertEqual(ProposalValidator.validate(Fixture.manifest()), [])
     }
 
-    func testEchoTodayMissing() { assertFires("echo-today.missing") { $0.specimens.removeFirst() } }
-    func testEchoTodayMustBeFirst() { assertFires("echo-today.first") { $0.specimens.swapAt(0, 1) } }
-    func testEchoTodayOnlyOnce() { assertFires("echo-today.duplicate") { $0.specimens[1].isEchoToday = true } }
+    func testEchoTodayMissing() { assertFires("today.missing") { $0.specimens.removeFirst() } }
+    func testEchoTodayMustBeFirst() { assertFires("today.first") { $0.specimens.swapAt(0, 1) } }
+    func testTodayOnlyOnce() { assertFires("today.duplicate") { $0.specimens[1].isEchoToday = true } }
     func testNeedsTwoProposals() { assertFires("specimens.too-few") { $0.specimens.removeLast(); $0.exhibitTopic = nil } }
     func testZeroProposalsAlsoFails() { assertFires("specimens.too-few") { $0.specimens = [$0.specimens[0]]; $0.exhibitTopic = nil } }
     func testSpecimenNeedsWidth() { assertFires("specimen.size-missing") { $0.specimens[1].designWidth = nil } }
@@ -76,7 +76,7 @@ final class ValidatorTests: XCTestCase {
     func testReportTellsTheAgentWhatToDo() {
         var m = Fixture.manifest(); m.specimens.removeFirst()
         let report = ProposalValidator.validate(m).report
-        XCTAssertTrue(report.contains("ERROR [echo-today.missing]"))
+        XCTAssertTrue(report.contains("ERROR [today.missing]"))
         XCTAssertTrue(report.contains("Fix:"))
     }
 

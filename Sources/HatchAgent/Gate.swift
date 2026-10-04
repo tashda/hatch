@@ -4,7 +4,7 @@ import Foundation
 public struct GateIssue: Codable, Equatable, Sendable {
     public enum Severity: String, Codable, Sendable { case error, warning }
     public var severity: Severity
-    /// Stable machine-readable code, such as `echo-today.first`. Tests and tooling match on this, not on the words.
+    /// Stable machine-readable code, such as `today.first`. Tests and tooling match on this, not on the words.
     public var code: String
     public var message: String
     /// What to change, in one sentence.

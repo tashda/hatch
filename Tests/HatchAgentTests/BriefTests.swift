@@ -55,8 +55,8 @@ final class BriefTests: XCTestCase {
 
         ## Rules for this task
         1. Look up the area in the Spec and note the Spec IDs you change; put them in the manifest `specs` and in the summary.
-        2. The first specimen is Echo today (`isEchoToday: true`), drawn from what Echo really does (read the real view, not memory).
-        3. Then 2 to 4 proposals as Swift specimens in the specimens repo, same sample data in all, each with `designWidth` and `designHeight` (340 to 700 wide, up to about 620 tall), and one line each of what it gains (`gain`) and costs (`cost`). No title inside a specimen.
+        2. The first specimen is Today (`isToday: true`), drawn from what the app really does now. Read the real view in the app workspace listed under Repos, not from memory.
+        3. Then 2 to 4 proposals as Swift specimens in `specimens/<ticket>/` of the notebook workspace (a separate specimens repo only if Repos lists one), same sample data in all, each with `designWidth` and `designHeight` (340 to 700 wide, up to about 620 tall), and one line each of what it gains (`gain`) and costs (`cost`). No title inside a specimen.
         4. Cover the standard scenarios (Rest, Hover, Pressed, Focus, Disabled, Empty, Error, Long text, Many items, Loading), or mark one `applicable: false` with a `notApplicableReason`.
         5. Every control with a `question`, every question and the specimen topic carries ONE recommendation and its reason: the option you would ship, not a safe middle. The reason says what the others cost.
         6. Write a question as what to do, then what to decide. Choice names are short and stable.
@@ -96,7 +96,8 @@ final class BriefTests: XCTestCase {
         let t = try Fixture.preparing(store, project)
         let prepare = try brief(t, kind: .prepare), build = try brief(t, kind: .build), revise = try brief(t, kind: .revise)
         let fix = try brief(t, kind: .fix), vet = try brief(t, kind: .vet)
-        XCTAssertTrue(prepare.contains("Echo today"))
+        XCTAssertTrue(prepare.contains("`isToday: true`"))
+        XCTAssertFalse(prepare.contains("Echo today"))
         XCTAssertTrue(prepare.contains("hatch offer"))
         XCTAssertTrue(prepare.contains("Never move the status yourself"))
         XCTAssertTrue(revise.contains("Keep every earlier option"))

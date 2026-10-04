@@ -25,6 +25,8 @@ final class AgentStreamTests: XCTestCase {
         XCTAssertTrue(args.contains("Bash(xcodebuild *)"))
         XCTAssertTrue(args.contains("Bash(swift *)"))
         XCTAssertTrue(args.contains("Bash(hatch *)"))
+        for program in ["cat", "ls", "head", "grep"] { XCTAssertTrue(args.contains("Bash(\(program) *)"), "\(program) is read-only and allowed") }
+        XCTAssertFalse(args.contains { $0.hasPrefix("Bash(rm") || $0.hasPrefix("Bash(sed") || $0.hasPrefix("Bash(find") }, "nothing that writes or deletes")
         XCTAssertFalse(args.contains { $0.hasPrefix("WebFetch") })
         XCTAssertEqual(args[args.firstIndex(of: "--model")! + 1], "claude-opus-5-5")
         XCTAssertEqual(args[args.firstIndex(of: "--effort")! + 1], "high")
@@ -40,7 +42,9 @@ final class AgentStreamTests: XCTestCase {
 
     func testWorkspacesPerKindOfWork() {
         XCTAssertEqual(AgentWorkspaces.roles(for: .build), [.app, .designSystem, .notebook])
-        XCTAssertEqual(AgentWorkspaces.roles(for: .revise), [.specimens, .notebook], "revising works where preparing did")
+        XCTAssertEqual(AgentWorkspaces.roles(for: .revise), AgentWorkspaces.roles(for: .prepare), "revising works where preparing did")
+        XCTAssertTrue(AgentWorkspaces.roles(for: .prepare).contains(.app), "the Today specimen is drawn from the real app code")
+        XCTAssertTrue(AgentWorkspaces.roles(for: .prepare).contains(.notebook))
         XCTAssertTrue(AgentWorkspaces.roles(for: .vet).isEmpty)
     }
 }
@@ -98,16 +102,16 @@ final class AgentLauncherTests: XCTestCase {
         while !condition() && Date() < end { RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
     }
 
-    func testAnAgentThatStopsTwiceAsksTheOwner() throws {
+    func testAnAgentThatKeepsStoppingIsBlockedNotAskedAbout() throws {
         let l = launcher(program: try fakeClaude(code: 1))
         l.tick()
         XCTAssertEqual(try store.ticket(id: ticket.id)?.status, .building, "taken and moved into Building")
-        waitUntil { (try? store.ticket(id: ticket.id))?.status == .needsAnswers }
+        waitUntil { (try? store.ticket(id: ticket.id))?.status == .blocked }
         let after = try XCTUnwrap(store.ticket(id: ticket.id))
-        XCTAssertEqual(after.status, .needsAnswers, "a second stop puts it on the owner's Desk")
+        XCTAssertEqual(after.status, .blocked, "when every run fails the ticket is blocked, not put to the owner as a question")
         XCTAssertNil(after.takenBy)
         XCTAssertTrue(l.running.isEmpty)
-        XCTAssertEqual(try store.questions(ticketId: ticket.id, openOnly: true).count, 1)
+        XCTAssertTrue(try store.questions(ticketId: ticket.id).isEmpty, "\"try again?\" is not a question the owner can answer usefully")
     }
 
     func testAHandedInRunIsLeftAlone() throws {

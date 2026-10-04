@@ -10,12 +10,18 @@ final class ManifestTests: XCTestCase {
     func testEmptyObjectDecodesAndGateSaysWhatIsMissing() throws {
         let m = try ProposalManifest.parse(json: "{}")
         XCTAssertEqual(m.revision, 1)
-        XCTAssertTrue(codes(ProposalValidator.validate(m)).contains("echo-today.missing"))
+        XCTAssertTrue(codes(ProposalValidator.validate(m)).contains("today.missing"))
     }
 
     func testEchoLabsWordExhibitsIsAccepted() throws {
         let m = try ProposalManifest.parse(json: #"{"exhibits":[{"id":"today","isEchoToday":true,"designWidth":340,"designHeight":400}]}"#)
         XCTAssertEqual(m.specimens.first?.id, "today")
+    }
+
+    func testIsTodayIsAcceptedAndStoredAsBefore() throws {
+        let m = try ProposalManifest.parse(json: #"{"specimens":[{"id":"today","isToday":true,"designWidth":340,"designHeight":400}]}"#)
+        XCTAssertTrue(m.specimens[0].isEchoToday)
+        XCTAssertTrue(try m.jsonString().contains("isEchoToday"), "saved manifests keep the old key, so stored proposals still load")
     }
 
     func testDefaultKeyIsDefault() throws {

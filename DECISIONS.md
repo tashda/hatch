@@ -1494,3 +1494,10 @@ Page: https://claude.ai/artifact/WLEm158ifiUuQdPNuGjxzs (source `design-review/d
 - **TS2 · Source of truth: `.xcresult` bundles**, read with `xcresulttool`. While a run goes, XCTest output lines give live progress; when it ends the bundle replaces them. Reason: only the bundle has every test, suite, duration, failure message and file:line, including Swift Testing.
 - **TS3 · Attribution through `hatch check`.** `hatch check` records each test run (ticket, agent holding it, branch, commit, scope, counts, result path) and reports failing tests from the record. Runs started outside `hatch check` are not watched; `hatch tests record <x.xcresult>` adds one by hand.
 - **TS4 · The catalog is read from the test sources** (free, no build): bundle, suite, test. Tests that ran but were not found by the scan are added after the run. Page: Runs and Tests (by bundle and suite, last result, who ran it, history), plus a card for the run in progress. Failed is the only coloured state.
+
+## Z. Agents that could not work (found from the first real run, 2026-10-04, ids AG1 to AG4)
+
+- **AG1 · Preparing and revising get the app workspace too** (with the notebook, where specimens are written). Reason: the Today specimen has to be drawn from the real views, and a notebook-only agent could only guess or ask for access nobody could give.
+- **AG2 · "Echo today" is now "Today"** in the brief, the quality gate, its error codes and the banner. `isToday` is accepted in a manifest; the stored key stays `isEchoToday`, so saved proposals still load. Reason: the owner never opened Echo, and agents took the word for a real product.
+- **AG3 · Agents may run read-only shell commands** (cat, ls, head, tail, wc, grep, rg, sort, uniq, diff, pwd, which), and are told one refusal is not "no shell". Nothing that writes or deletes. Reason: a refused `cat x | head; ls` made agents stop without trying `hatch`; 11 of 14 Proposal preparations ended that way.
+- **AG4 · An agent that stopped on every try is Blocked, not a question.** The last lines go in the thread and Resume starts it again. Reason: "try again?" was asked five times and always met the same setup.

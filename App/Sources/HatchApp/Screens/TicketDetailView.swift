@@ -275,7 +275,7 @@ struct TicketDetailView: View {
         switch t.type {
         case .proposal:
             let n = max(info.optionCount, 1)
-            return BannerSpec(message: "Judge \(Format.count(n, "option")) against Echo today. Revision \(t.revision).",
+            return BannerSpec(message: "Judge \(Format.count(n, "option")) against Today. Revision \(t.revision).",
                               primaryTitle: "Open the Proposal", primary: .openStage)
         case .sketch:
             return BannerSpec(message: "Choose a direction from the variants, or ask for more.",
