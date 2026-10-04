@@ -41,12 +41,35 @@ public extension HatchStore {
                 try db.execute("INSERT INTO claim(ticket_id, repo_id, path_glob, state, at) VALUES(?,?,?,?,?)", [.int(ticketId), .opt(repoId), .text(p), .text(state), .date(now())])
             }
             try record(ticketId, actor: "hatch", kind: "claim", payload: ["paths": .array(uniquePaths.map { .string($0) }), "state": .string(state), "behind": .array(behind.map { .int($0) })])
+            try linkTicketsSharingFiles(ticketId: ticketId, repoId: repoId, paths: uniquePaths)
             if behind.isEmpty { return .granted }
             if Workflow.isAllowed(type: t.type, from: t.status, to: .blocked, actor: .hatch) {
                 let names = try behind.compactMap { try ticket(id: $0)?.displayNumber }.joined(separator: ", ")
                 try move(ticketId, to: .blocked, actor: .hatch, reason: "waits for \(names) (same files)")
             }
             return .queued(behind: behind)
+        }
+    }
+
+    /// The strongest evidence that two tickets are related (decision IR9): their plans name the same files. Linked by Hatch,
+    /// with the files as the reason, on both tickets. At most `maxLinks` per plan, the most shared files first; a pair
+    /// that is already linked is left alone, so planning again adds nothing.
+    static let maxLinks = 3
+
+    private func linkTicketsSharingFiles(ticketId: Int, repoId: Int?, paths: [String]) throws {
+        let others = try db.query("SELECT * FROM claim WHERE ticket_id != ? AND state != 'released' AND repo_id IS ?", [.int(ticketId), .opt(repoId)], map: Self.claim)
+        var shared: [Int: [String]] = [:]
+        for o in others {
+            for p in paths where Glob.mayOverlap(p, o.pathGlob) {
+                let name = (p.contains("*") ? o.pathGlob : p)
+                if !(shared[o.ticketId] ?? []).contains(name) { shared[o.ticketId, default: []].append(name) }
+            }
+        }
+        let linked = Set(try links(ticketId: ticketId).map { $0.outgoing ? $0.link.toId : $0.link.fromId })
+        for (other, files) in shared.sorted(by: { ($1.value.count, $0.key) < ($0.value.count, $1.key) }).prefix(Self.maxLinks) where !linked.contains(other) {
+            guard let o = try ticket(id: other), o.status != .dropped else { continue }
+            let names = files.sorted().prefix(2).map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
+            try link(from: ticketId, to: other, kind: .related, by: "hatch", why: "both plans change \(names)")
         }
     }
 

@@ -174,6 +174,24 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(hits.first?.code, "NOTIF-1.2")
     }
 
+    func testPlansThatNameTheSameFilesLinkTheirTicketsWithTheFilesAsTheReason() throws {
+        let a = try walk(ticket(.tweak, "Row density"), to: .building)
+        let b = try walk(ticket(.tweak, "Row hover"), to: .building)
+        let c = try walk(ticket(.tweak, "Toast padding"), to: .building)
+        try store.claim(ticketId: a.id, repoId: nil, paths: ["Echo/Explorer/RowView.swift", "Echo/Explorer/RowStyle.swift"])
+        try store.claim(ticketId: c.id, repoId: nil, paths: ["Echo/Toast/ToastView.swift"])
+        try store.claim(ticketId: b.id, repoId: nil, paths: ["Echo/Explorer/RowView.swift"])
+        XCTAssertEqual(try store.links(ticketId: b.id).map { $0.link.kind }, [.related], "only the ticket that shares a file")
+        XCTAssertEqual(try store.links(ticketId: b.id).first.map { $0.outgoing ? $0.link.toId : $0.link.fromId }, a.id)
+        let link = try XCTUnwrap(try store.events(ticketId: b.id, kinds: ["link"]).first)
+        XCTAssertEqual(link.actor, "hatch")
+        XCTAssertEqual(link.payload["why"]?.stringValue, "both plans change RowView.swift")
+        XCTAssertFalse(try store.events(ticketId: a.id, kinds: ["link"]).isEmpty, "the reason is on both tickets")
+        let before = try store.events(ticketId: b.id, kinds: ["link"]).count
+        try store.claim(ticketId: b.id, repoId: nil, paths: ["Echo/Explorer/RowView.swift"])
+        XCTAssertEqual(try store.events(ticketId: b.id, kinds: ["link"]).count, before, "planning again adds nothing")
+    }
+
     func testClaimsQueueTheLaterTicketAndWakeItOnRelease() throws {
         let a = try walk(ticket(.tweak, "Row density"), to: .building)
         let b = try walk(ticket(.tweak, "Row hover"), to: .building)
