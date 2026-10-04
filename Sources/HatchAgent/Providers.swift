@@ -218,9 +218,10 @@ public struct ProviderPreset: Identifiable, Sendable {
     }
 }
 
-/// The kinds of work that call a model. Each picks its own provider and model.
+/// The kinds of work that call a model. Each uses the default provider and model unless it has its own.
+/// Iris and Ask send one prompt; the coding tasks run an agent program in a ticket's workspace.
 public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
-    case iris, ask
+    case iris, ask, prepare, build, fix
 
     public var id: String { rawValue }
 
@@ -228,6 +229,20 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .iris: "Iris (vetting)"
         case .ask: "Ask"
+        case .prepare: "Prepare options"
+        case .build: "Build"
+        case .fix: "Fix after review"
+        }
+    }
+
+    /// What the task does, as its name in the list.
+    public var taskTitle: String {
+        switch self {
+        case .iris: "Check new tickets"
+        case .ask: "Answer questions"
+        case .prepare: "Prepare options"
+        case .build: "Build"
+        case .fix: "Fix after review"
         }
     }
 
@@ -235,30 +250,53 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .iris: "Checks each new ticket: questions, a rewrite, the type and duplicates."
         case .ask: "Answers your questions about the current ticket or screen."
+        case .prepare: "Writes a Proposal's options or a Sketch's variants, and revises them after your feedback."
+        case .build: "Builds what you accepted in the ticket's own copy of the code, including its plan."
+        case .fix: "Fixes what you found while verifying a ticket."
         }
     }
 
-    /// One recommendation with its reason (rule 3), in one line for the section footer.
+    /// One recommendation with its reason (rule 3), in one line.
     public var recommendation: String {
         switch self {
         case .iris: "Recommended: Haiku with thinking off, about 6 seconds per check with the same questions. Sonnet if rewrites read poorly."
         case .ask: "Recommended: Sonnet, quick answers with good judgement and far less of your plan than Opus."
+        case .prepare: "Recommended: Opus with high effort. You judge the options side by side, so their quality matters most."
+        case .build: "Recommended: Sonnet. It builds what you already decided, quickly and within your plan."
+        case .fix: "Recommended: Sonnet. Fixes are small and specific."
         }
     }
 
-    /// The model the recommendation names, as a Claude model family, to mark it in the model menu.
+    /// The Claude model family the recommendation names, to mark it in the model menu.
     public var recommendedModel: String {
         switch self {
         case .iris: "haiku"
-        case .ask: "sonnet"
+        case .ask, .build, .fix: "sonnet"
+        case .prepare: "opus"
         }
     }
 
-    /// What the task does, as the title of its section.
-    public var taskTitle: String {
+    /// Coding tasks run an agent program that edits files, so only program providers can do them.
+    public var isCoding: Bool { self == .prepare || self == .build || self == .fix }
+
+    /// SF Symbol for the task's tile.
+    public var symbol: String {
         switch self {
-        case .iris: "Check new tickets"
-        case .ask: "Answer questions"
+        case .iris: "checkmark.seal"
+        case .ask: "bubble.left"
+        case .prepare: "square.on.square"
+        case .build: "hammer"
+        case .fix: "wrench.adjustable"
+        }
+    }
+
+    /// The task that does a kind of agent work: revising is preparing again.
+    public static func forWork(_ kind: AgentTaskKind) -> AgentRole {
+        switch kind {
+        case .vet: .iris
+        case .prepare, .revise: .prepare
+        case .build: .build
+        case .fix: .fix
         }
     }
 
@@ -267,6 +305,7 @@ public enum AgentRole: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .iris: 240
         case .ask: 180
+        case .prepare, .build, .fix: 3 * 3600
         }
     }
 }
@@ -314,7 +353,7 @@ public struct AgentSettings: Codable, Equatable, Sendable {
     public var providers: [AgentProvider]
     /// Keyed by `AgentRole.rawValue`, so a role added later decodes from an older file.
     public var roles: [String: RoleChoice]
-    /// The program provider that runs coding agents (the agents that build tickets). Nil means Claude Code.
+    /// Replaced by the coding tasks (Prepare, Build, Fix); kept so older settings still decode.
     public var codingProviderId: String?
     /// The provider and model every task uses unless it has its own choice.
     public var defaultChoice: RoleChoice?
@@ -343,6 +382,8 @@ public struct AgentSettings: Codable, Equatable, Sendable {
             // Measured on five real tickets: same questions and rewrites, about 6 s instead of 35 to 60 s,
             // and about a twelfth of the output tokens, compared with thinking on.
             AgentRole.iris.rawValue: RoleChoice(providerId: claudeProviderId, model: "haiku", thinking: false),
+            // Options are judged side by side, so they get the strongest model; building and fixing follow the default.
+            AgentRole.prepare.rawValue: RoleChoice(providerId: claudeProviderId, model: "opus", effort: "high"),
         ])
         s.defaultChoice = RoleChoice(providerId: claudeProviderId)
         return s
