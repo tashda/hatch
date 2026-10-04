@@ -5,10 +5,13 @@ import HatchCore
 struct CommandPalette: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
 
     @State private var query = ""
     @State private var selection = 0
     @FocusState private var focused: Bool
+    /// Read once when the palette opens; the Keychain is not read on every keystroke.
+    @State private var githubConnected = HXKeychain.read() != nil
 
     struct Hit: Identifiable {
         let id: String
@@ -22,26 +25,59 @@ struct CommandPalette: View {
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    /// What can be done right now. Until there is a project nothing but setup works, so only setup is offered:
+    /// Connect GitHub while there is no token, Set up a project, Settings.
     private func commands() -> [Hit] {
+        let hasProjects = !state.projects.isEmpty
+        var hits: [Hit] = []
+        if !githubConnected {
+            hits.append(Hit(id: "cmd-github", title: "Connect GitHub", subtitle: "Command", symbol: "link", run: { connectGitHub(hasProjects) }))
+        }
+        if !hasProjects {
+            hits.append(Hit(id: "cmd-add-project", title: "Set up a project", subtitle: "Command", symbol: "square.stack.3d.up",
+                            run: { state.showAddProject = true }))
+            hits.append(settingsHit)
+            return hits
+        }
         let list: [(String, String, Route)] = [
             ("Go to Desk", "tray", .desk), ("Go to Tickets", "list.bullet", .tickets), ("Go to Board", "rectangle.split.3x1", .board),
             ("Go to Previews", "eye", .previews), ("Go to Specs", "doc.text", .specs), ("Go to Decisions", "flag", .decisions),
             ("Go to Agents", "cpu", .agents), ("Go to Log", "list.bullet.rectangle", .log), ("Go to Project", "gearshape", .projects),
         ]
-        var hits: [Hit] = [
+        hits.insert(contentsOf: [
             Hit(id: "cmd-new", title: "New ticket", subtitle: "Command", symbol: "plus", run: { state.navigate(to: .newTicket) }),
             Hit(id: "cmd-ask", title: "Iris", subtitle: "Command", symbol: "sparkles", run: { state.showAskPanel.toggle() }),
-        ]
+        ], at: 0)
         for entry in list {
             let route = entry.2
             hits.append(Hit(id: "cmd-" + entry.0, title: entry.0, subtitle: "Command", symbol: entry.1, run: { state.navigate(to: route) }))
         }
+        hits.append(Hit(id: "cmd-add-project", title: "Add project", subtitle: "Command", symbol: "square.stack.3d.up",
+                        run: { state.showAddProject = true }))
+        hits.append(settingsHit)
         return hits
+    }
+
+    private var settingsHit: Hit {
+        Hit(id: "cmd-settings", title: "Settings", subtitle: "Command", symbol: "gearshape.2", run: { openWindow(id: "settings") })
+    }
+
+    /// Without a project, connecting is the first step of Set up a project, so it opens there; afterwards it is Settings > GitHub.
+    private func connectGitHub(_ hasProjects: Bool) {
+        if hasProjects {
+            state.settingsPage = .github
+            openWindow(id: "settings")
+        } else {
+            state.showAddProject = true
+        }
     }
 
     private var hits: [Hit] {
         let q = trimmed
         if q.isEmpty { return commands() }
+        let lower = q.lowercased()
+        // No project: no tickets or Spec to search and nowhere to capture a draft.
+        if state.projects.isEmpty { return commands().filter { $0.title.lowercased().contains(lower) } }
         var out: [Hit] = []
 
         if let t = try? state.store.resolve(q) {
@@ -57,7 +93,6 @@ struct CommandPalette: View {
                                run: { state.navigate(to: .specs) }))
             }
         }
-        let lower = q.lowercased()
         out += commands().filter { $0.title.lowercased().contains(lower) }
         out.append(Hit(id: "cmd-capture", title: "Capture \u{201C}\(q)\u{201D} as a draft", subtitle: "Quick capture · only a title",
                        symbol: "plus.circle", run: { captureDraft(title: q) }))
@@ -87,7 +122,7 @@ struct CommandPalette: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TextField("Search tickets, Spec items and commands", text: $query)
+            TextField(state.projects.isEmpty ? "Search commands" : "Search tickets, Spec items and commands", text: $query)
                 .textFieldStyle(.plain)
                 .font(.title3)
                 .padding(14)

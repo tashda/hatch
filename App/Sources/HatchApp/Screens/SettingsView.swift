@@ -39,6 +39,15 @@ struct SettingsView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 680, minHeight: 480)
+        .onAppear(perform: showRequestedPage)
+        .onChange(of: state.settingsPage) { _, _ in showRequestedPage() }
+    }
+
+    /// Another screen (Cmd-K's Connect GitHub) can ask for a page; the window may already be open.
+    private func showRequestedPage() {
+        guard let page = state.settingsPage else { return }
+        selection = page
+        state.settingsPage = nil
     }
 
     private func settingsLink(_ page: SettingsPage) -> some View {
@@ -52,7 +61,7 @@ struct SettingsView: View {
     }
 }
 
-private enum SettingsPage: Hashable {
+enum SettingsPage: Hashable {
     case workspace, agents, github, apps
     var title: String {
         switch self {

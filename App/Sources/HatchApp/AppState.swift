@@ -35,6 +35,8 @@ final class AppState: ObservableObject {
     }
     @Published var showPalette = false
     @Published var showAddProject = false
+    /// The Settings page to show when the Settings window opens next (or now, if it is open).
+    @Published var settingsPage: SettingsPage?
     @Published var searchText = ""
     @Published var syncSummary = SyncSummary()
     /// Snapshot harness only: selects each ticket subview without changing the normal navigation model.
