@@ -66,7 +66,7 @@ final class NotebookTests: GitTestCase {
     }
 }
 
-final class NotebookExportTests: GitTestCase {
+class NotebookExportTestsBase: GitTestCase {
     /// A notebook clone with a bare remote, so the export's push is real.
     func makeNotebook() throws -> String {
         let remote = tmp + "/remote-notebook.git"
@@ -79,7 +79,9 @@ final class NotebookExportTests: GitTestCase {
         project = try store.upsertProject(key: "echo", name: "Echo", config: config)
         return dir
     }
+}
 
+final class NotebookExportTests: NotebookExportTestsBase {
     func testExportWritesDecisionsAndNowAndPushes() throws {
         let dir = try makeNotebook()
         let t = try store.createTicket(projectId: project.id, type: .proposal, title: "Toast spacing", ghNumber: 151)
@@ -119,5 +121,17 @@ final class NotebookExportTests: GitTestCase {
         XCTAssertEqual(found.first?.kind, .architecture)
         XCTAssertEqual(found.first?.reason, "Servers recover.")
         _ = dir
+    }
+}
+
+final class NotebookKindTests: NotebookExportTestsBase {
+    func testChangingTheKindRewritesTheFile() throws {
+        let dir = try makeNotebook()
+        let t = try store.createTicket(projectId: project.id, type: .question, title: "Retries", ghNumber: 160)
+        let id = try store.recordDecision(ticketId: t.id, kind: .architecture, title: "Retries", summary: "Back off.")
+        try NotebookExport.run(store: store, projectId: project.id, token: nil, push: false, git: git)
+        try store.setDecisionKind(id, kind: .workflow)
+        try NotebookExport.run(store: store, projectId: project.id, token: nil, push: false, git: git)
+        XCTAssertTrue(try String(contentsOfFile: dir + "/decisions/0160-retries.md", encoding: .utf8).contains("kind: workflow"))
     }
 }

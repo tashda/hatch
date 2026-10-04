@@ -53,6 +53,12 @@ public enum NotebookExport {
             taken.insert(path)
             written.append((d.id, path))
         }
+        // A decision's kind can be changed later; its file follows. Nothing else in a written decision changes.
+        for d in try store.decisionRecords(projectId: projectId) {
+            guard let path = d.filePath, let text = try? String(contentsOfFile: dir + "/" + path, encoding: .utf8),
+                  let parsed = Notebook.parseDecision(text), parsed.kind != d.kind else { continue }
+            try NotebookWriter.write([path: text.replacingOccurrences(of: "kind: \(parsed.kind.rawValue)\n", with: "kind: \(d.kind.rawValue)\n")], in: dir)
+        }
         result.decisionsWritten = written.count
 
         // 3. The index and NOW.md, made from the database. NOW.md is compared by hash, so an unchanged state writes nothing.
