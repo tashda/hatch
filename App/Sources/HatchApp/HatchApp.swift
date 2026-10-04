@@ -5,6 +5,14 @@ import HatchCore
 struct HatchApp: App {
     @StateObject private var state = (Snapshots.folder == nil && !Snapshots.demoMode) ? AppState.live() : Snapshots.demoState()
 
+    init() {
+        // Snapshot and demo runs share the app's preferences and saved windows. They neither restore nor save window
+        // state, so they always open their own window and never change the one the owner gets next.
+        if Snapshots.demoMode {
+            UserDefaults.standard.setVolatileDomain(["ApplePersistenceIgnoreState": true], forName: UserDefaults.argumentDomain)
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

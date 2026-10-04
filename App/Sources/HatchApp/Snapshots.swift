@@ -59,7 +59,10 @@ enum Snapshots {
         let p = try! store.upsertProject(key: "acme", name: "Acme", config: config)
         // Agents settings with a model list, as after the first fetch, so Settings › Agents shows its real rows.
         var agents = AgentSettings.initial(detect: false)
-        agents.providers[0].models = ModelCatalog.claudeAliases
+        agents.providers[0].models = ModelCatalog.claudeAliases + [
+            ModelInfo(id: "claude-opus-5-5", name: "Opus 5.5"), ModelInfo(id: "claude-sonnet-5-5", name: "Sonnet 5.5"),
+            ModelInfo(id: "claude-haiku-4-5", name: "Haiku 4.5"), ModelInfo(id: "claude-sonnet-5", name: "Sonnet 5", featured: false)]
+        agents.upgradeModels()
         agents.providers[0].modelsFetchedAt = Date()
         try? agents.save(to: store)
         try! store.setSetting(hxDefaultTicketsSetting, "acme/hatch-tickets")
@@ -143,13 +146,10 @@ enum Snapshots {
         return AppState(store: store, paths: paths)
     }
 
-    /// A snapshot run shares preferences with the real app, so its window must not save its frame or state:
-    /// otherwise the app the owner runs next opens where the snapshot window was.
+    /// A snapshot run shares preferences with the real app, so its window must not save its frame: otherwise the app
+    /// the owner runs next opens where the snapshot window was. Saved window state is ignored in `HatchApp.init`.
     @MainActor private static func keepWindowStateOut() {
-        for w in NSApp.windows {
-            w.setFrameAutosaveName("")
-            w.isRestorable = false
-        }
+        for w in NSApp.windows { w.setFrameAutosaveName("") }
     }
 
     /// `--only <name>`: draw one screen in light and dark and quit, for a quick look at a single page.

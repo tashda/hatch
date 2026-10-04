@@ -16,6 +16,9 @@ struct AgentSettingsPage: View {
     @State private var testing: Set<String> = []
     @State private var tests: [String: Result<ProbeResult, ProbeFailure>] = [:]
     @State private var details: AgentProvider?
+    @State private var taskSheet: AgentRole?
+    /// Each task's last check, kept between launches so a task is checked when it changes and once a day.
+    @State private var checks: [String: TaskCheck] = [:]
     @State private var adding = false
     @State private var maxAgents = 3
     @State private var loaded = false
@@ -28,12 +31,7 @@ struct AgentSettingsPage: View {
     var body: some View {
         Form {
             if let settings {
-                ForEach(AgentRole.allCases) { role in
-                    TaskSection(role: role, settings: settings,
-                                onChange: { choice in update { $0.setChoice(choice, for: role) } },
-                                test: tests["role-\(role.rawValue)"], testing: testing.contains("role-\(role.rawValue)"),
-                                onTest: { testRole(role) })
-                }
+                tasksSection(settings)
                 codingSection(settings)
                 providersSection(settings)
             } else {
@@ -50,6 +48,11 @@ struct AgentSettingsPage: View {
                                  onTest: { testProvider($0) }, onRefresh: { refreshModels($0) },
                                  onSave: { saved, key in save(saved, key: key) }, onRemove: { remove($0) })
         }
+        .sheet(item: $taskSheet) { role in
+            TaskSheet(role: role, settings: settings ?? AgentSettings(), check: checks[role.rawValue],
+                      checking: testing.contains("role-\(role.rawValue)"),
+                      onChange: { own in update { $0.setChoice(own, for: role) } }, onTest: { testRole(role) })
+        }
         .sheet(isPresented: $adding) {
             AddProviderSheet(settings: settings ?? AgentSettings(), context: state.agentContext) { provider, key, uses in
                 add(provider, key: key, uses: uses)
@@ -58,6 +61,22 @@ struct AgentSettingsPage: View {
     }
 
     // MARK: Sections
+
+    /// The default every task uses, then one line per task: what it uses and whether it works.
+    private func tasksSection(_ settings: AgentSettings) -> some View {
+        Section {
+            ChoiceRows(settings: settings, choice: settings.defaultChoice, recommendedModel: nil, providerLabel: "Default provider",
+                       modelLabel: "Default model") { c in update { $0.defaultChoice = c } }
+            ForEach(AgentRole.allCases) { role in
+                TaskListRow(role: role, settings: settings, check: checks[role.rawValue],
+                            checking: testing.contains("role-\(role.rawValue)")) { taskSheet = role }
+            }
+        } header: {
+            Text("Tasks")
+        } footer: {
+            Text("Each task uses the default unless you choose otherwise. Hatch checks a task when its model changes, and once a day.")
+        }
+    }
 
     private func codingSection(_ settings: AgentSettings) -> some View {
         let programs = settings.providers.filter { $0.kind.isProgram }
@@ -92,12 +111,14 @@ struct AgentSettingsPage: View {
                 ProviderListRow(provider: provider, status: statuses[provider.id], usedBy: usage(of: provider.id),
                                 onToggle: { on in setEnabled(provider, on) }, onDetails: { details = provider })
             }
-            Button { adding = true } label: { Label("Add Provider…", systemImage: "plus") }
-                .buttonStyle(.borderless)
         } header: {
             Text("Providers")
         } footer: {
-            Text("A program uses the plan it is signed in with. An API key is billed per token; keys are kept in the Keychain.")
+            HStack(alignment: .top) {
+                Text("A program uses the plan it is signed in with. An API key is billed per token; keys are kept in the Keychain.")
+                Spacer(minLength: 16)
+                Button("Add Provider…") { adding = true }
+            }
         }
     }
 
@@ -119,22 +140,35 @@ struct AgentSettingsPage: View {
         loaded = true
         let store = state.store
         let demo = Snapshots.demoMode
+        checks = TaskCheck.load(from: store)
         Task {
-            let first = await Task.detached { AgentSettings.load(from: store, detect: !demo) }.value
+            var first = await Task.detached { AgentSettings.load(from: store, detect: !demo) }.value
+            let moved = first.upgradeModels()
             settings = first
             guard !demo else { return }
             // First run: save the detected setup, so the CLI and Iris see the same providers as this page.
-            if (try? store.setting(AgentSettings.settingKey)) == nil { persist(first) }
+            if (try? store.setting(AgentSettings.settingKey)) == nil || !moved.isEmpty { persist(first) }
             checkAll()
             for p in first.providers where p.enabled && ModelCatalog.isStale(p) { refreshModels(p.id) }
+            // Once a day, each task is checked again.
+            for role in AgentRole.allCases where first.choice(role) != nil {
+                if let c = checks[role.rawValue], Date().timeIntervalSince(c.at) < 86_400 { continue }
+                testRole(role)
+            }
         }
     }
 
+    /// Applies a change, saves it, and checks every task whose provider or model it changed.
     private func update(_ change: (inout AgentSettings) -> Void) {
         guard var s = settings else { return }
+        let before = settings
         change(&s)
         settings = s
         persist(s)
+        guard !Snapshots.demoMode else { return }
+        for role in AgentRole.allCases where s.choice(role) != before?.choice(role) {
+            if s.choice(role) == nil { checks[role.rawValue] = nil; TaskCheck.save(checks, to: state.store) } else { testRole(role) }
+        }
     }
 
     private func persist(_ s: AgentSettings) {
@@ -215,6 +249,7 @@ struct AgentSettingsPage: View {
                 guard var current = s.provider(id) else { return }
                 current.models = p.models; current.modelsFetchedAt = p.modelsFetchedAt; current.modelsError = p.modelsError
                 s.update(current)
+                s.upgradeModels()
             }
         }
     }
@@ -225,11 +260,23 @@ struct AgentSettingsPage: View {
     }
 
     private func testRole(_ role: AgentRole) {
-        guard let settings else { return }
-        let context = state.agentContext
-        runTest(key: "role-\(role.rawValue)") {
-            let agent = try AgentFactory.resolve(role, settings: settings, context: context)
-            return try ProviderCheck.test(agent.provider, model: agent.model, effort: agent.effort, thinking: agent.thinking, context: context)
+        guard let settings, !Snapshots.demoMode else { return }
+        let context = state.agentContext, key = "role-\(role.rawValue)"
+        guard !testing.contains(key) else { return }
+        testing.insert(key)
+        Task {
+            let check = await Task.detached { () -> TaskCheck in
+                do {
+                    let agent = try AgentFactory.resolve(role, settings: settings, context: context)
+                    let r = try ProviderCheck.test(agent.provider, model: agent.model, effort: agent.effort, thinking: agent.thinking, context: context)
+                    return TaskCheck(ok: true, seconds: r.seconds, message: nil, model: r.model, at: Date())
+                } catch {
+                    return TaskCheck(ok: false, seconds: nil, message: "\(error)", model: nil, at: Date())
+                }
+            }.value
+            testing.remove(key)
+            checks[role.rawValue] = check
+            TaskCheck.save(checks, to: state.store)
         }
     }
 
@@ -262,130 +309,128 @@ private func testLine(_ result: Result<ProbeResult, AgentSettingsPage.ProbeFailu
     }
 }
 
-// MARK: Task section
+// MARK: Tasks
 
-/// One task: which provider runs it, with which model, and the switches that model takes. The recommendation is the
-/// section's one-line footer; Test is in its header and its result is a row.
-private struct TaskSection: View {
-    let role: AgentRole
+/// A task's last check: whether its provider and model answered, how fast, or why not.
+struct TaskCheck: Codable, Equatable {
+    var ok: Bool
+    var seconds: Double?
+    var message: String?
+    var model: String?
+    var at: Date
+
+    static let settingKey = "agent_task_checks"
+
+    static func load(from store: HatchStore) -> [String: TaskCheck] {
+        guard let raw = try? store.setting(settingKey) else { return [:] }
+        let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601
+        return (try? d.decode([String: TaskCheck].self, from: Data(raw.utf8))) ?? [:]
+    }
+
+    static func save(_ checks: [String: TaskCheck], to store: HatchStore) {
+        let e = JSONEncoder(); e.dateEncodingStrategy = .iso8601
+        guard let data = try? e.encode(checks) else { return }
+        try? store.setSetting(settingKey, String(decoding: data, as: UTF8.self))
+    }
+
+    /// The status line: how long it took, or the first line of why it failed.
+    var line: String {
+        ok ? "answered in \(String(format: "%.1f", seconds ?? 0)) s"
+           : (message?.split(separator: "\n").first.map(String.init) ?? "Failed")
+    }
+}
+
+/// The name a model is shown by: its listed name, or its id when the list does not have it.
+private func modelName(_ id: String?, in provider: AgentProvider?) -> String {
+    guard let id else { return provider?.defaultModel.flatMap { provider?.model($0)?.name ?? $0 } ?? "Default" }
+    return provider?.model(id)?.name ?? id
+}
+
+/// Provider, model, and the effort or thinking switch when the model takes one. Used for the default and in a task's sheet.
+private struct ChoiceRows: View {
     let settings: AgentSettings
-    let onChange: (RoleChoice?) -> Void
-    let test: Result<ProbeResult, AgentSettingsPage.ProbeFailure>?
-    let testing: Bool
-    let onTest: () -> Void
+    let choice: RoleChoice?
+    let recommendedModel: String?
+    var providerLabel = "Provider"
+    var modelLabel = "Model"
+    let onChange: (RoleChoice) -> Void
 
     @State private var customModel = ""
     @State private var askingCustom = false
 
-    private var choice: RoleChoice? { settings.choice(role) }
     private var provider: AgentProvider? { choice.flatMap { settings.provider($0.providerId) } }
     private var selectedModel: ModelInfo? { provider?.model(choice?.model ?? provider?.defaultModel) }
 
     var body: some View {
-        Section {
-            Picker("Provider", selection: providerBinding) {
-                Text("Off").tag("")
-                ForEach(settings.providers.filter { $0.enabled || $0.id == choice?.providerId }) { p in
-                    Text(p.enabled ? p.name : "\(p.name) (off)").tag(p.id)
-                }
+        Picker(providerLabel, selection: Binding(get: { choice?.providerId ?? "" }, set: { id in
+            if !id.isEmpty { onChange(RoleChoice(providerId: id)) }
+        })) {
+            if choice == nil { Text("Choose…").tag("") }
+            ForEach(settings.providers.filter { $0.enabled || $0.id == choice?.providerId }) { p in
+                Text(p.enabled ? p.name : "\(p.name) (off)").tag(p.id)
             }
-            if let provider {
-                Picker("Model", selection: modelBinding) {
-                    Text(provider.defaultModel.map { "Default (\(title(for: $0, in: provider)))" } ?? "Default").tag("")
-                    let featured = provider.models.filter(\.featured)
-                    let older = provider.models.filter { !$0.featured }
-                    ForEach(featured) { m in Text(menuTitle(m, provider)).tag(m.id) }
-                    if !older.isEmpty {
-                        Section("Older models") { ForEach(older) { m in Text(menuTitle(m, provider)).tag(m.id) } }
-                    }
-                    if let current = choice?.model, provider.model(current) == nil { Text(current).tag(current) }
-                    Divider()
-                    Text("Other Model…").tag(Self.otherTag)
-                }
-                if let efforts = selectedModel?.efforts, !efforts.isEmpty {
-                    Picker("Effort", selection: effortBinding) {
-                        Text(selectedModel?.defaultEffort.map { "Default (\($0.capitalized))" } ?? "Default").tag("")
-                        ForEach(efforts, id: \.self) { Text($0.capitalized).tag($0) }
-                    }
-                }
-                // Only for a known model without effort levels; the program's own default model is unknown here.
-                if provider.kind == .claudeCode, let m = selectedModel, m.efforts.isEmpty {
-                    Toggle("Thinking", isOn: thinkingBinding)
-                        .help("Off sends MAX_THINKING_TOKENS=0 to Claude Code: faster and far fewer tokens for short, structured work")
-                }
-                if !provider.enabled {
-                    Label("\(provider.name) is off, so this task cannot run.", systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(Theme.critical)
-                }
-            }
-            if let line = testLine(test) {
-                LabeledContent("Last test") {
-                    Text(line.text).foregroundStyle(line.failed ? Theme.critical : .secondary).help(line.help)
-                }
-            }
-        } header: {
-            HStack {
-                Text(role.taskTitle)
-                Text(role == .iris ? "Iris" : "Ask").foregroundStyle(.secondary).fontWeight(.regular)
-                Spacer()
-                Button(testing ? "Testing…" : "Test", action: onTest)
-                    .controlSize(.small)
-                    .disabled(testing || provider?.enabled != true)
-                    .help("Send a one-line prompt with this task's provider and model")
-            }
-        } footer: {
-            Text(provider == nil ? "\(role.detail) Off: it does not run." : role.recommendation)
         }
-        .alert("Other model", isPresented: $askingCustom) {
-            TextField("Model id", text: $customModel)
-            Button("Use") {
-                let name = customModel.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !name.isEmpty { set(model: name) }
+        if let provider {
+            Picker(modelLabel, selection: modelBinding) {
+                Text(provider.defaultModel.map { "Default (\(modelName($0, in: provider)))" } ?? "Default").tag("")
+                // Real versions only; tasks move to newer ones on their own (the provider's switch).
+                let listed = provider.models.filter { !$0.isAlias }
+                ForEach(listed.filter(\.featured)) { m in Text(title(m, provider)).tag(m.id) }
+                let older = listed.filter { !$0.featured }
+                if !older.isEmpty {
+                    Section("Older models") { ForEach(older) { m in Text(title(m, provider)).tag(m.id) } }
+                }
+                if let current = choice?.model, provider.model(current) == nil || provider.model(current)?.isAlias == true {
+                    Text(current).tag(current)
+                }
+                Divider()
+                Text("Other Model…").tag(Self.otherTag)
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Type the model id exactly as \(provider?.name ?? "the provider") expects it.")
+            .alert("Other model", isPresented: $askingCustom) {
+                TextField("Model id", text: $customModel)
+                Button("Use") {
+                    let name = customModel.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty { set(model: name) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Type the model id exactly as \(provider.name) expects it.")
+            }
+            if let efforts = selectedModel?.efforts, !efforts.isEmpty {
+                Picker("Effort", selection: Binding(get: { choice?.effort ?? "" }, set: { e in
+                    guard var c = choice else { return }
+                    c.effort = e.isEmpty ? nil : e
+                    onChange(c)
+                })) {
+                    Text(selectedModel?.defaultEffort.map { "Default (\($0.capitalized))" } ?? "Default").tag("")
+                    ForEach(efforts, id: \.self) { Text($0.capitalized).tag($0) }
+                }
+            }
+            if provider.kind == .claudeCode, let m = selectedModel, m.efforts.isEmpty {
+                Toggle("Thinking", isOn: Binding(get: { choice?.thinking ?? true }, set: { on in
+                    guard var c = choice else { return }
+                    c.thinking = on ? nil : false
+                    onChange(c)
+                }))
+                .help("Off sends MAX_THINKING_TOKENS=0 to Claude Code: faster and far fewer tokens for short, structured work")
+            }
         }
     }
 
     static let otherTag = "\u{0}other"
 
-    /// Short plain names; the recommended model says so.
-    private func menuTitle(_ m: ModelInfo, _ provider: AgentProvider) -> String {
+    private func title(_ m: ModelInfo, _ provider: AgentProvider) -> String {
         let name = m.name ?? m.id
-        let recommended = provider.kind == .claudeCode && m.id == role.recommendedModel
-        return recommended ? "\(name) · Recommended" : name
-    }
-
-    private func title(for id: String, in provider: AgentProvider) -> String { provider.model(id)?.name ?? id }
-
-    private var providerBinding: Binding<String> {
-        Binding(get: { choice?.providerId ?? "" }, set: { id in
-            onChange(id.isEmpty ? nil : RoleChoice(providerId: id))
-        })
+        guard provider.kind == .claudeCode, let r = recommendedModel, AgentSettings.family(of: m.id) == r,
+              provider.models.first(where: { !$0.isAlias && $0.featured && AgentSettings.family(of: $0.id) == r })?.id == m.id
+        else { return name }
+        return "\(name) · Recommended"
     }
 
     private var modelBinding: Binding<String> {
         Binding(get: { choice?.model ?? "" }, set: { id in
             if id == Self.otherTag { customModel = choice?.model ?? ""; askingCustom = true; return }
             set(model: id.isEmpty ? nil : id)
-        })
-    }
-
-    /// On unless the task turned it off; Claude Code thinks by default.
-    private var thinkingBinding: Binding<Bool> {
-        Binding(get: { choice?.thinking ?? true }, set: { on in
-            guard var c = choice else { return }
-            c.thinking = on ? nil : false
-            onChange(c)
-        })
-    }
-
-    private var effortBinding: Binding<String> {
-        Binding(get: { choice?.effort ?? "" }, set: { e in
-            guard var c = choice else { return }
-            c.effort = e.isEmpty ? nil : e
-            onChange(c)
         })
     }
 
@@ -397,6 +442,141 @@ private struct TaskSection: View {
         // A model with effort levels controls thinking through effort; the on/off switch is only for models without.
         if let p = provider, let info = p.model(model ?? p.defaultModel), !info.efforts.isEmpty { c.thinking = nil }
         onChange(c)
+    }
+}
+
+/// One task in the list: its name, then what it uses and whether it works. Opens the task's sheet.
+private struct TaskListRow: View {
+    let role: AgentRole
+    let settings: AgentSettings
+    let check: TaskCheck?
+    let checking: Bool
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(role.taskTitle).foregroundStyle(.primary)
+                    HStack(spacing: 6) {
+                        Circle().fill(dotColor).frame(width: 7, height: 7)
+                        Text(statusLine).font(.callout).foregroundStyle(check?.ok == false && !checking ? Theme.critical : .secondary)
+                            .lineLimit(1).truncationMode(.tail)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the settings for \(role.taskTitle)")
+    }
+
+    private var uses: String {
+        let own = settings.ownChoice(role)
+        if own?.isOff == true { return "Off" }
+        guard let own else { return "Same as default" }
+        let provider = settings.provider(own.providerId)
+        var text = modelName(own.model, in: provider)
+        if own.thinking == false { text += ", thinking off" }
+        if own.providerId != settings.defaultChoice?.providerId { text += " · \(provider?.name ?? "missing provider")" }
+        return text
+    }
+
+    private var statusLine: String {
+        if settings.choice(role) == nil { return uses == "Off" ? "Off: it does not run" : "No provider chosen" }
+        if checking { return "\(uses) · checking…" }
+        guard let check else { return "\(uses) · not checked yet" }
+        return "\(uses) · \(check.line)"
+    }
+
+    private var dotColor: Color {
+        if settings.choice(role) == nil || checking || check == nil { return .secondary.opacity(0.5) }
+        return check!.ok ? Theme.finished : Theme.critical
+    }
+}
+
+/// A task's own settings: the default, its own provider and model, or off; its last check and Test Again.
+private struct TaskSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let role: AgentRole
+    let settings: AgentSettings
+    let check: TaskCheck?
+    let checking: Bool
+    let onChange: (RoleChoice?) -> Void
+    let onTest: () -> Void
+
+    private enum Mode: String { case useDefault, own, off }
+
+    private var mode: Mode {
+        guard let own = settings.ownChoice(role) else { return .useDefault }
+        return own.isOff ? .off : .own
+    }
+
+    private var defaultTitle: String {
+        guard let d = settings.defaultChoice, let p = settings.provider(d.providerId) else { return "The default" }
+        return "The default (\(modelName(d.model, in: p)) · \(p.name))"
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(role.taskTitle).font(.title3.weight(.semibold))
+                Text(role.detail).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24).padding(.top, 20)
+            Form {
+                Section {
+                    Picker("Use", selection: Binding(get: { mode }, set: { m in
+                        switch m {
+                        case .useDefault: onChange(nil)
+                        case .off: onChange(.off)
+                        case .own: onChange(settings.choice(role) ?? settings.defaultChoice ?? settings.providers.first.map { RoleChoice(providerId: $0.id) })
+                        }
+                    })) {
+                        Text(defaultTitle).tag(Mode.useDefault)
+                        Text("Its own provider and model").tag(Mode.own)
+                        Text("Off").tag(Mode.off)
+                    }
+                    if mode == .own {
+                        ChoiceRows(settings: settings, choice: settings.ownChoice(role), recommendedModel: role.recommendedModel) { onChange($0) }
+                    }
+                } footer: {
+                    Text(role.recommendation)
+                }
+                if mode != .off {
+                    Section {
+                        LabeledContent("Last check") {
+                            if checking { Text("Checking…").foregroundStyle(.secondary) }
+                            else if let check {
+                                Text(check.ok ? "Answered in \(String(format: "%.1f", check.seconds ?? 0)) s, \(check.at.formatted(.relative(presentation: .named)))" : "Failed")
+                                    .foregroundStyle(check.ok ? Color.secondary : Theme.critical)
+                            } else { Text("Not checked yet").foregroundStyle(.secondary) }
+                        }
+                        if let check, !check.ok, let message = check.message {
+                            Text(message).font(.callout).foregroundStyle(Theme.critical).textSelection(.enabled)
+                        }
+                    } header: {
+                        HStack {
+                            Text("Status")
+                            Spacer()
+                            Button("Test Again", action: onTest).buttonStyle(.link).disabled(checking)
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            Divider()
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 20).padding(.vertical, 14)
+        }
+        .frame(width: 520, height: 480)
     }
 }
 
@@ -494,37 +674,46 @@ private struct ProviderDetailsSheet: View {
             }
             .padding(.horizontal, 24).padding(.top, 20)
             Form {
-                Section("Status") {
+                Section {
                     Toggle("On", isOn: $provider.enabled)
                     LabeledContent("Connection") {
-                        Label(status?.summary ?? "Not checked yet", systemImage: status?.ready == false ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        Text(status?.summary.trimmingCharacters(in: CharacterSet(charactersIn: ".")) ?? "Not checked yet")
                             .foregroundStyle(status?.ready == false ? Theme.critical : .secondary)
                     }
                     LabeledContent("Used by", value: usedBy.isEmpty ? "Nothing yet" : usedBy.joined(separator: ", "))
-                    LabeledContent("Last test") {
-                        HStack(spacing: 8) {
-                            if let line = testLine(test) {
-                                Text(line.text).foregroundStyle(line.failed ? Theme.critical : .secondary).help(line.help)
-                            } else {
-                                Text("Not tested").foregroundStyle(.secondary)
-                            }
-                            Button(testing ? "Testing…" : "Test") { onTest(provider) }.disabled(testing)
-                        }
+                    LabeledContent("Last check") {
+                        if testing { Text("Checking…").foregroundStyle(.secondary) }
+                        else if let line = testLine(test) {
+                            Text(line.text).foregroundStyle(line.failed ? Theme.critical : .secondary).help(line.help)
+                        } else { Text("Not checked yet").foregroundStyle(.secondary) }
+                    }
+                } header: {
+                    HStack {
+                        Text("Status")
+                        Spacer()
+                        Button("Test Again") { onTest(provider) }.buttonStyle(.link).disabled(testing)
                     }
                 }
-                Section("Models") {
+                Section {
                     Picker("Default model", selection: Binding(get: { provider.defaultModel ?? "" },
                                                                 set: { provider.defaultModel = $0.isEmpty ? nil : $0 })) {
                         Text(provider.kind.isProgram ? "The program's default" : "None").tag("")
-                        ForEach(provider.models) { m in Text(m.name ?? m.id).tag(m.id) }
-                        if let d = provider.defaultModel, provider.model(d) == nil { Text(d).tag(d) }
+                        ForEach(provider.models.filter { !$0.isAlias }) { m in Text(m.name ?? m.id).tag(m.id) }
+                        if let d = provider.defaultModel, provider.model(d) == nil || provider.model(d)?.isAlias == true { Text(d).tag(d) }
                     }
                     LabeledContent("Available") {
-                        HStack(spacing: 8) {
-                            Text(modelsLine).foregroundStyle(provider.modelsError == nil ? Color.secondary : Theme.critical)
-                            Button(refreshing ? "Refreshing…" : "Refresh") { onRefresh(provider.id) }.disabled(refreshing)
-                        }
+                        Text(modelsLine).foregroundStyle(provider.modelsError == nil ? Color.secondary : Theme.critical)
                     }
+                    Toggle("Move tasks to new versions", isOn: Binding(get: { provider.movesToNewVersions },
+                                                                      set: { provider.autoUpgrade = $0 ? nil : false }))
+                } header: {
+                    HStack {
+                        Text("Models")
+                        Spacer()
+                        Button(refreshing ? "Refreshing…" : "Refresh") { onRefresh(provider.id) }.buttonStyle(.link).disabled(refreshing)
+                    }
+                } footer: {
+                    Text("When the list shows a newer version of a model a task uses, the task moves to it.")
                 }
                 connectionSection
                 Section("Advanced") {
@@ -639,7 +828,7 @@ private struct ProviderDetailsSheet: View {
         if let e = provider.modelsError { return e }
         guard let at = provider.modelsFetchedAt else { return refreshing ? "Fetching…" : "Not fetched yet" }
         let count = provider.models.filter { !$0.isAlias }.count
-        return "\(count) model\(count == 1 ? "" : "s"), \(at.formatted(.relative(presentation: .named)))"
+        return "\(count), updated \(at.formatted(.relative(presentation: .named)))"
     }
 
     private func save() {
