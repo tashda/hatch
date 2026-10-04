@@ -4,8 +4,14 @@ import HatchCore
 import HatchSync
 
 /// The GitHub token Hatch stores, in the macOS Keychain. Nothing else is written to disk.
+/// Debug builds keep it in UserDefaults instead: every rebuild has a new signature, and the Keychain asks for the
+/// login password each time. Release builds always use the Keychain.
 enum HXKeychain {
     private static let service = "app.hatch.github"
+
+    #if DEBUG
+    private static func debugKey(_ account: String) -> String { "hatch.debug.github.\(account)" }
+    #endif
 
     private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
@@ -16,6 +22,10 @@ enum HXKeychain {
     }
 
     private static func read(_ account: String) -> String? {
+        #if DEBUG
+        let stored = UserDefaults.standard.string(forKey: debugKey(account)) ?? ""
+        return stored.isEmpty ? nil : stored
+        #else
         var q = query(account)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -23,6 +33,7 @@ enum HXKeychain {
         guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
         let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? nil : text
+        #endif
     }
 
     @discardableResult
@@ -46,14 +57,25 @@ enum HXKeychain {
     static func expiry() -> Date? { read("expiry").flatMap(Double.init).map(Date.init(timeIntervalSince1970:)) }
 
     private static func writeItem(_ account: String, _ text: String) -> Bool {
+        #if DEBUG
+        UserDefaults.standard.set(text, forKey: debugKey(account))
+        return true
+        #else
         var q = query(account)
         q[kSecValueData as String] = Data(text.utf8)
         q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         return SecItemAdd(q as CFDictionary, nil) == errSecSuccess
+        #endif
     }
 
     static func delete() {
-        for account in ["token", "refresh", "expiry"] { SecItemDelete(query(account) as CFDictionary) }
+        for account in ["token", "refresh", "expiry"] {
+            #if DEBUG
+            UserDefaults.standard.removeObject(forKey: debugKey(account))
+            #else
+            SecItemDelete(query(account) as CFDictionary)
+            #endif
+        }
     }
 }
 
@@ -61,7 +83,7 @@ enum HXGitHub {
     /// The client every part of the app uses. Refresh expiring GitHub App authorization before API calls.
     static func client() -> GitHubClient {
         refreshAuthorizationIfNeeded()
-        return GitHubClient(token: HXKeychain.read())
+        return GitHubClient(token: HXKeychain.read(), fallback: false)
     }
 
     private static func refreshAuthorizationIfNeeded() {
@@ -122,7 +144,7 @@ final class GitHubAccountModel: ObservableObject {
         busy = true
         Task {
             let probe = await Task.detached { () -> Probe in
-                let source = GitHubClient.tokenSource(stored: HXKeychain.read())
+                let source: GitHubTokenSource = HXKeychain.read() == nil ? .none : .stored
                 guard source != .none else { return Probe(source: source, user: nil, repos: [], error: nil) }
                 let client = HXGitHub.client()
                 do {

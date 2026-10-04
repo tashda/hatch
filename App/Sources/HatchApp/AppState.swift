@@ -106,7 +106,7 @@ final class AppState: ObservableObject {
         let store = store
         Task {
             let outcome = await Task.detached { () -> (ok: Bool, message: String?) in
-                guard GitHubClient.tokenSource(stored: HXKeychain.read()) != .none else {
+                guard HXKeychain.read() != nil else {
                     return (false, "Not connected to GitHub. Add a token in Settings.")
                 }
                 let engine = SyncEngine(store: store, tracker: HXGitHub.client())

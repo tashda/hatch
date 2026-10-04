@@ -283,7 +283,7 @@ enum HXCIAdapter {
     /// One line the UI can show: "passing", "running", "failing: name", or why it is unknown.
     static func status(remote: String, ref: String) -> String {
         do {
-            let engine = SyncEngine(store: try HatchStore.inMemory(), tracker: GitHubClient())
+            let engine = SyncEngine(store: try HatchStore.inMemory(), tracker: HXGitHub.client())
             let state = try engine.ciStatus(repo: remote, ref: ref)
             switch state {
             case .passed: return "passing"

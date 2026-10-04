@@ -64,18 +64,22 @@ public final class GitHubClient: IssueTracker, @unchecked Sendable {
     public let transport: HTTPTransport
     public let baseURL: String
     private var token: String?
+    private let usesFallback: Bool
     private let lock = NSLock()
     /// ETag and body per page URL, so an unchanged issue list costs no rate limit (a 304 is free).
     private var etags: [String: (etag: String, body: Data)] = [:]
 
-    /// Token order: the parameter, `GITHUB_TOKEN`, then `gh auth token`.
-    public init(token: String? = nil, transport: HTTPTransport = URLSessionTransport(), baseURL: String = "https://api.github.com") {
-        self.token = token; self.transport = transport; self.baseURL = baseURL
+    /// Token order: the parameter, `GITHUB_TOKEN`, then `gh auth token`. The app passes `fallback: false`, so it uses only
+    /// the account the owner connected in Hatch and Disconnect really disconnects; the `hatch` command keeps the fallback.
+    public init(token: String? = nil, fallback: Bool = true, transport: HTTPTransport = URLSessionTransport(),
+                baseURL: String = "https://api.github.com") {
+        self.token = token; self.usesFallback = fallback; self.transport = transport; self.baseURL = baseURL
     }
 
     func resolveToken() throws -> String {
         lock.lock(); defer { lock.unlock() }
         if let token, !token.isEmpty { return token }
+        guard usesFallback else { throw TrackerError.noToken }
         if let env = ProcessInfo.processInfo.environment["GITHUB_TOKEN"], !env.isEmpty { token = env; return env }
         if let out = Self.runGh(), !out.isEmpty { token = out; return out }
         throw TrackerError.noToken
