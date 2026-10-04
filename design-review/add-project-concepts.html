@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add project concepts</title>
+<style>
+  :root {
+    --page: #ececee; --sheet: #fbfbfd; --group: #f2f2f5; --row-line: #e1e1e6; --text: #1d1d1f; --secondary: #6e6e73;
+    --tertiary: #a1a1a6; --blue: #0a66d8; --blue-soft: #e7f0fd; --green: #248a3d; --green-soft: #e6f4ea; --amber: #a05a00;
+    --amber-soft: #fdf1df; --field: #ffffff; --line: #d6d6db; --side: #f4f4f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #161618; --sheet: #232326; --group: #2c2c30; --row-line: #3a3a3f; --text: #f2f2f4; --secondary: #a3a3aa;
+      --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+      --amber-soft: #3d2e14; --field: #1b1b1e; --line: #46464c; --side: #29292c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1060px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 19px; font-weight: 600; margin: 56px 0 6px; }
+  h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--secondary); font-size: 14px; max-width: 720px; }
+  .muted { color: var(--secondary); }
+  .small { font-size: 11.5px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .note { background: var(--sheet); border: 1px solid var(--row-line); border-radius: 12px; padding: 16px 18px; }
+  .rec { border: 2px solid var(--blue); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--blue-soft); color: var(--blue); margin-bottom: 8px; }
+  .badge.green { background: var(--green-soft); color: var(--green); }
+  .badge.amber { background: var(--amber-soft); color: var(--amber); }
+
+  .sheet { background: var(--sheet); border-radius: 16px; border: 1px solid var(--row-line); box-shadow: 0 20px 50px rgba(0,0,0,.14); overflow: hidden; }
+  .sheet-title { font-size: 15px; font-weight: 600; padding: 20px 24px 4px; }
+  .group-h { font-size: 12px; font-weight: 600; margin: 16px 24px 6px; }
+  .group { background: var(--group); border-radius: 10px; margin: 0 16px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; min-height: 38px; }
+  .row + .row { border-top: 1px solid var(--row-line); margin: 0 0; }
+  .row .val { color: var(--secondary); text-align: right; }
+  .inline-field { color: var(--text); text-align: right; min-width: 160px; outline: none; }
+  .inline-field.ph { color: var(--tertiary); }
+  .boxed { background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; width: 55%; min-height: 24px; }
+  .footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--row-line); margin-top: 18px; }
+  .btn { font: inherit; border: 0; border-radius: 7px; padding: 5px 14px; background: var(--group); color: var(--text); box-shadow: inset 0 0 0 0.5px var(--line); cursor: pointer; }
+  .btn.primary { background: var(--blue); color: #fff; box-shadow: none; }
+  .popup { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; padding: 3px 6px 3px 9px; background: var(--field); box-shadow: 0 0 0 0.5px var(--line), 0 1px 1px rgba(0,0,0,.05); }
+  .popup::after { content: "⌃⌄"; font-size: 9px; letter-spacing: -2px; writing-mode: vertical-lr; color: var(--secondary); }
+  .check { color: var(--green); font-weight: 600; }
+  .info { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--tertiary); color: var(--secondary); font-size: 10px; font-weight: 600; margin-left: 4px; vertical-align: 1px; }
+  .radio { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; }
+  .radio + .radio { border-top: 1px solid var(--row-line); }
+  .dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--field); flex: none; margin-top: 2px; }
+  .dot.on { border: 4px solid var(--blue); }
+  .icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-size: 17px; flex: none; color: #fff; }
+  .i-tickets { background: #5e5ce6; } .i-code { background: #0a84ff; } .i-design { background: #ff6482; } .i-branch { background: #30a46c; } .i-gh { background: #1d1d1f; }
+  @media (prefers-color-scheme: dark) { .i-gh { background: #f2f2f4; color: #1d1d1f; } }
+
+  /* Concept A: assistant */
+  .assistant { display: grid; grid-template-columns: 200px 1fr; min-height: 520px; }
+  .steps { background: var(--side); padding: 18px 10px; border-right: 1px solid var(--row-line); }
+  .step { display: flex; gap: 9px; align-items: center; padding: 7px 10px; border-radius: 7px; cursor: pointer; color: var(--secondary); }
+  .step .n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 600; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); }
+  .step.done .n { background: var(--green); color: #fff; box-shadow: none; }
+  .step.on { background: var(--blue-soft); color: var(--text); font-weight: 600; }
+  .step.on .n { background: var(--blue); color: #fff; box-shadow: none; }
+  .pane { display: none; flex-direction: column; }
+  .pane.on { display: flex; }
+  .pane-body { padding: 26px 28px 0; flex: 1; }
+  .pane-head { display: flex; gap: 14px; align-items: center; margin-bottom: 14px; }
+  .pane-head h3 { font-size: 17px; margin: 0; }
+  .example { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; margin: 14px 0 0; background: var(--sheet); }
+  .example .label { font-size: 11px; font-weight: 600; color: var(--secondary); margin-bottom: 6px; }
+  .issue { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; }
+  .chip { font-size: 10.5px; padding: 1px 7px; border-radius: 10px; background: var(--group); color: var(--secondary); box-shadow: inset 0 0 0 0.5px var(--line); }
+  .swatches { display: flex; gap: 6px; margin-top: 4px; }
+  .swatches span { width: 22px; height: 22px; border-radius: 6px; }
+  .flow { display: flex; align-items: center; gap: 0; margin: 18px 0 6px; flex-wrap: wrap; row-gap: 10px; }
+  .node { padding: 7px 12px; border-radius: 9px; background: var(--group); box-shadow: inset 0 0 0 1px var(--line); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .node.hatch { background: var(--green-soft); color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+  .node.base { background: var(--blue-soft); color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+  .arrow { display: flex; flex-direction: column; align-items: center; padding: 0 8px; color: var(--secondary); font-size: 11px; min-width: 96px; }
+  .arrow .line { height: 1px; background: var(--secondary); width: 100%; position: relative; margin: 4px 0; }
+  .arrow .line::after { content: ""; position: absolute; right: -1px; top: -4px; border-left: 7px solid var(--secondary); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; }
+
+  /* Concept B: cards */
+  .card { background: var(--group); border-radius: 12px; margin: 0 16px 12px; padding: 14px; }
+  .card-head { display: flex; gap: 12px; align-items: center; }
+  .card-head .grow { flex: 1; }
+  .card .sub { color: var(--secondary); font-size: 12px; }
+  .card .row { padding: 8px 0 0; min-height: 0; }
+  .card .row + .row { border-top: 0; }
+
+  /* Compare */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .qa { counter-reset: q; }
+  .qa .q { display: grid; grid-template-columns: 28px 1fr; gap: 6px 10px; padding: 14px 0; border-top: 1px solid var(--row-line); }
+  .qa .q::before { counter-increment: q; content: counter(q); width: 22px; height: 22px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); font-weight: 600; font-size: 12px; display: grid; place-items: center; }
+  .qa .q > div { grid-column: 2; }
+  .qa .q > div:first-of-type { grid-row: 1; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--group); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Add project: concepts</h1>
+  <p class="lead">What a project is made of, three ways to set one up, and the details you asked about: fields, GitHub, the app folder, Hatch's branch and what each repository is. Each part has one recommendation. The questions at the bottom are what I need from you.</p>
+
+  <h2>What a project is made of</h2>
+  <p class="lead">These pieces work together; none of them replaces another. The app folder is not an alternative to GitHub: it is your clone of the same app repository, on this Mac, where agents build and test.</p>
+  <div class="grid3" style="margin-top:16px">
+    <div class="note">
+      <div class="pane-head" style="margin-bottom:8px"><div class="icon i-gh">⌥</div><h3>GitHub account</h3></div>
+      <p class="muted">Who Hatch acts as. Set up once for the whole app, not per project. Hatch only sees repositories its GitHub App is installed on.</p>
+    </div>
+    <div class="note">
+      <div class="pane-head" style="margin-bottom:8px"><div class="icon i-tickets">#</div><h3>Tickets <span class="muted small">required</span></h3></div>
+      <p class="muted">A private repository whose Issues are your tickets. One for all projects, so ticket numbers never clash. Hatch can create it.</p>
+    </div>
+    <div class="note">
+      <div class="pane-head" style="margin-bottom:8px"><div class="icon i-code">{}</div><h3>App code <span class="muted small">required</span></h3></div>
+      <p class="muted">The repository agents change (<code>tashda/echo</code>), plus your clone of it on this Mac. Agents work in their own copies of that clone (git worktrees) and never touch your working files.</p>
+    </div>
+    <div class="note">
+      <div class="pane-head" style="margin-bottom:8px"><div class="icon i-design">◐</div><h3>Design system <span class="muted small">optional</span></h3></div>
+      <p class="muted">The package with your colors, type and components. Proposals are built against it so previews look like the real app. Skip it if the design system lives inside the app.</p>
+    </div>
+    <div class="note">
+      <div class="pane-head" style="margin-bottom:8px"><div class="icon i-branch">⑂</div><h3>Hatch's branch</h3></div>
+      <p class="muted">Approved work collects on a <code>hatch</code> branch. CI checks it, then it moves to your base branch (<code>dev</code>). Your base branch never gets an untested merge.</p>
+    </div>
+    <div class="note">
+      <div class="pane-head" style="margin-bottom:8px"><div class="icon" style="background:#8e8e93">◫</div><h3>Specimens <span class="muted small">automatic</span></h3></div>
+      <p class="muted">Where Proposal code lives (<code>echo-specimens</code>). Hatch creates it when the first Proposal needs it, so it is not part of setup.</p>
+    </div>
+  </div>
+
+  <h2>Three ways to set up a project</h2>
+  <p class="lead">All three use the same smart defaults: the name comes from the app repository, the key comes from the name, the folder is found on this Mac, and the base branch is the repository's default branch.</p>
+  <div class="grid3" style="margin-top:16px">
+    <div class="note rec">
+      <span class="badge">Recommended</span>
+      <h3>A · Setup assistant</h3>
+      <p class="muted">One sheet, with the steps listed on the left. Each step asks one thing, explains it, shows an example and is already filled in, so most steps are only Continue. It explains each part the first time you see it, without a manual.</p>
+    </div>
+    <div class="note">
+      <h3>B · One page of cards</h3>
+      <p class="muted">A single scrolling sheet with one card per part, each with its explanation and a picker. Faster for someone who already knows Hatch, but it is a lot at once on first run. I suggest this layout for Project settings, where you edit an existing project.</p>
+    </div>
+    <div class="note">
+      <h3>C · Start from the app repository</h3>
+      <p class="muted">Pick <code>tashda/echo</code>. Hatch fills in everything else and shows a summary with a Change button on each row. The fastest option, but it teaches nothing, so a design repository or the branch flow stays a mystery.</p>
+    </div>
+  </div>
+
+  <h2>A · Setup assistant (click the steps)</h2>
+  <p class="lead">Native fields with no white boxes, every repository chosen inline, and an example on each step.</p>
+  <div class="sheet" style="margin-top:16px">
+    <div class="assistant">
+      <div class="steps" id="steps">
+        <div class="step done" data-s="0"><span class="n">✓</span>GitHub</div>
+        <div class="step on" data-s="1"><span class="n">2</span>Project</div>
+        <div class="step" data-s="2"><span class="n">3</span>Tickets</div>
+        <div class="step" data-s="3"><span class="n">4</span>App code</div>
+        <div class="step" data-s="4"><span class="n">5</span>Design system</div>
+        <div class="step" data-s="5"><span class="n">6</span>Branches</div>
+        <div class="step" data-s="6"><span class="n">7</span>Review</div>
+      </div>
+      <div>
+        <!-- 0 GitHub -->
+        <div class="pane" data-p="0">
+          <div class="pane-body">
+            <div class="pane-head"><div class="icon i-gh">⌥</div><div><h3>Connect GitHub</h3><div class="muted">Only once. Every project uses this account.</div></div></div>
+            <div class="grid2">
+              <div>
+                <div class="group-h" style="margin-left:0">Before</div>
+                <div class="group" style="margin:0;padding:18px;text-align:center">
+                  <p class="muted">Hatch needs your permission to read and write issues and branches.</p>
+                  <button class="btn primary">Connect with GitHub</button>
+                </div>
+                <div class="group-h" style="margin-left:0">While connecting</div>
+                <div class="group" style="margin:0;padding:18px;text-align:center">
+                  <p class="muted">Enter this code on GitHub</p>
+                  <div style="font: 600 22px ui-monospace, Menlo, monospace; letter-spacing: .08em">K4F2-9QXD</div>
+                  <p class="muted small" style="margin-top:8px">GitHub opened in your browser. Waiting…</p>
+                </div>
+              </div>
+              <div>
+                <div class="group-h" style="margin-left:0">Connected</div>
+                <div class="group" style="margin:0">
+                  <div class="row"><span style="display:flex;gap:10px;align-items:center"><span class="icon i-gh" style="width:28px;height:28px;border-radius:50%;font-size:12px">KB</span><span><b>tashda</b><br><span class="muted small">Kenneth Berg</span></span></span><span class="check">Connected</span></div>
+                  <div class="row"><span>Repositories Hatch can see</span><span class="val">34</span></div>
+                  <div class="row"><span class="muted small">Missing a repository? Install Hatch on it on GitHub.</span><button class="btn">Manage on GitHub</button></div>
+                </div>
+                <p class="muted small" style="margin-top:10px">Settings › GitHub shows the same panel, with Disconnect. After Disconnect, Hatch is not connected: it no longer quietly uses the <code>gh</code> command's login.</p>
+              </div>
+            </div>
+          </div>
+          <div class="footer"><span></span><span><button class="btn">Cancel</button> <button class="btn primary" data-go="1">Continue</button></span></div>
+        </div>
+        <!-- 1 Project -->
+        <div class="pane on" data-p="1">
+          <div class="pane-body">
+            <div class="pane-head"><div class="icon" style="background:#ff9f0a">E</div><div><h3>Name the project</h3><div class="muted">What you call it in Hatch.</div></div></div>
+            <div class="compare">
+              <div>
+                <div class="group-h" style="margin-left:0">Proposed: native, like System Settings</div>
+                <div class="group" style="margin:0">
+                  <div class="row"><span>Name</span><span class="inline-field" contenteditable>Echo</span></div>
+                  <div class="row"><span>Color</span><span style="display:flex;gap:6px"><span style="width:16px;height:16px;border-radius:50%;background:#ff9f0a;box-shadow:0 0 0 2px var(--sheet),0 0 0 3.5px #ff9f0a"></span><span style="width:16px;height:16px;border-radius:50%;background:#0a84ff"></span><span style="width:16px;height:16px;border-radius:50%;background:#30d158"></span><span style="width:16px;height:16px;border-radius:50%;background:#bf5af2"></span></span></div>
+                </div>
+                <p class="muted small" style="margin-top:8px">The text sits on the row, with no box, until you click it. The key (<code>echo</code>, used in labels such as <code>project:echo</code>) is made from the name and shown only under Review › Advanced.</p>
+              </div>
+              <div>
+                <div class="group-h" style="margin-left:0">Today</div>
+                <div class="group" style="margin:0">
+                  <div class="row"><span>Name</span><span class="boxed"></span></div>
+                  <div class="row"><span>Key</span><span class="boxed"></span></div>
+                </div>
+                <p class="muted small" style="margin-top:8px">Two white boxes, and a Key with no explanation.</p>
+              </div>
+            </div>
+          </div>
+          <div class="footer"><button class="btn" data-go="0">Back</button><span><button class="btn">Cancel</button> <button class="btn primary" data-go="2">Continue</button></span></div>
+        </div>
+        <!-- 2 Tickets -->
+        <div class="pane" data-p="2">
+          <div class="pane-body">
+            <div class="pane-head"><div class="icon i-tickets">#</div><div><h3>Where tickets live</h3><div class="muted">A private GitHub repository. Each ticket is an issue, and its status is a label.</div></div></div>
+            <div class="group" style="margin:0">
+              <div class="radio"><span class="dot on"></span><div><b>Create tashda/hatch-tickets</b> <span class="badge" style="margin:0 0 0 6px">Recommended</span><div class="muted small">Private. Hatch adds its labels. Later projects share it, so numbers stay unique.</div></div></div>
+              <div class="radio"><span class="dot"></span><div style="flex:1;display:flex;justify-content:space-between;align-items:center"><span><b>Use an existing private repository</b></span><span class="popup">tashda/echo-tickets</span></div></div>
+            </div>
+            <div class="example">
+              <div class="label">What it will look like on GitHub</div>
+              <div class="issue"><span class="muted">#151</span><span>Toast spacing feels cramped</span><span class="chip">type:proposal</span><span class="chip">status:your-call</span><span class="chip">project:echo</span></div>
+              <div class="issue"><span class="muted">#152</span><span>Crash when a connection times out</span><span class="chip">type:bug</span><span class="chip">status:building</span><span class="chip">project:echo</span></div>
+            </div>
+          </div>
+          <div class="footer"><button class="btn" data-go="1">Back</button><span><button class="btn">Cancel</button> <button class="btn primary" data-go="3">Continue</button></span></div>
+        </div>
+        <!-- 3 App code -->
+        <div class="pane" data-p="3">
+          <div class="pane-body">
+            <div class="pane-head"><div class="icon i-code">{}</div><div><h3>The app's code</h3><div class="muted">The repository agents change, and your clone of it on this Mac.</div></div></div>
+            <div class="group" style="margin:0">
+              <div class="row"><span>Repository</span><span class="popup">tashda/echo</span></div>
+              <div class="row"><span>On this Mac</span><span><span class="check">✓</span> ~/Development/echo <button class="btn" style="margin-left:6px">Change…</button></span></div>
+            </div>
+            <p class="muted small" style="margin:8px 2px 0">Found by looking for a clone whose origin is <code>tashda/echo</code>. With no clone, this row offers <b>Clone to ~/Development/echo</b> instead. You never choose between GitHub and a folder: Hatch needs both.</p>
+            <div class="example">
+              <div class="label">What happens on this Mac</div>
+              <div style="font: 12px ui-monospace, Menlo, monospace; line-height:1.7">
+                ~/Development/echo <span class="muted">← your clone, Hatch never edits it</span><br>
+                ~/Library/…/Hatch/worktrees/echo-151 <span class="muted">← Agent on #151, branch ticket/151-toast-spacing</span><br>
+                ~/Library/…/Hatch/worktrees/echo-152 <span class="muted">← Agent on #152</span>
+              </div>
+            </div>
+          </div>
+          <div class="footer"><button class="btn" data-go="2">Back</button><span><button class="btn">Cancel</button> <button class="btn primary" data-go="4">Continue</button></span></div>
+        </div>
+        <!-- 4 Design -->
+        <div class="pane" data-p="4">
+          <div class="pane-body">
+            <div class="pane-head"><div class="icon i-design">◐</div><div><h3>Design system <span class="muted" style="font-weight:400">optional</span></h3><div class="muted">Where the app's colors, type and components are defined.</div></div></div>
+            <div class="group" style="margin:0">
+              <div class="radio"><span class="dot on"></span><div style="flex:1;display:flex;justify-content:space-between;align-items:center"><span><b>A separate repository</b></span><span class="popup">tashda/echo-design-system</span></div></div>
+              <div class="radio"><span class="dot"></span><div><b>It lives inside the app</b><div class="muted small">Proposals then build against the app's own package.</div></div></div>
+              <div class="radio"><span class="dot"></span><div><b>No design system</b><div class="muted small">Proposals use plain SwiftUI.</div></div></div>
+            </div>
+            <div class="example">
+              <div class="label">Why it matters</div>
+              <p class="muted" style="margin:0 0 6px">A Proposal shows options side by side. Built with your design system, they use your real colors and type, so what you choose is what ships.</p>
+              <div class="swatches"><span style="background:#0a84ff"></span><span style="background:#1d1d1f"></span><span style="background:#f2f2f7;box-shadow:inset 0 0 0 1px var(--line)"></span><span style="background:#ff453a"></span><span style="background:#30d158"></span><span class="muted" style="width:auto;padding-left:8px;font-size:12px">EchoDesignSystem · Typography · Toast · Sidebar…</span></div>
+            </div>
+          </div>
+          <div class="footer"><button class="btn" data-go="3">Back</button><span><button class="btn">Cancel</button> <button class="btn primary" data-go="5">Continue</button></span></div>
+        </div>
+        <!-- 5 Branches -->
+        <div class="pane" data-p="5">
+          <div class="pane-body">
+            <div class="pane-head"><div class="icon i-branch">⑂</div><div><h3>How work reaches your code</h3><div class="muted">Hatch has its own branch. Nothing reaches your base branch without CI passing.</div></div></div>
+            <div class="flow">
+              <div class="node">ticket/151-…</div>
+              <div class="arrow"><span>approved</span><span class="line"></span><span>&nbsp;</span></div>
+              <div class="node hatch">hatch</div>
+              <div class="arrow"><span>CI passes</span><span class="line"></span><span id="mode-label">pull request</span></div>
+              <div class="node base">dev</div>
+            </div>
+            <div class="group" style="margin:14px 0 0">
+              <div class="row"><span>Base branch</span><span class="popup">dev</span></div>
+              <div class="row"><span>Hatch's branch</span><span class="muted">hatch <span class="small">· created from dev</span></span></div>
+            </div>
+            <div class="group-h" style="margin-left:0">When <code>hatch</code> passes CI</div>
+            <div class="group" style="margin:0" id="modes">
+              <div class="radio" data-m="pull request"><span class="dot on"></span><div><b>Hatch opens a pull request, you merge it</b> <span class="badge" style="margin:0 0 0 6px">Recommended</span><div class="muted small">You see one tidy PR per batch on GitHub. It works with branch protection on dev.</div></div></div>
+              <div class="radio" data-m="automatic"><span class="dot"></span><div><b>Hatch merges automatically</b><div class="muted small">Fastest. Good once you trust the CI.</div></div></div>
+              <div class="radio" data-m="you merge"><span class="dot"></span><div><b>Leave it on hatch</b><div class="muted small">You merge hatch into dev yourself, whenever you like.</div></div></div>
+            </div>
+          </div>
+          <div class="footer"><button class="btn" data-go="4">Back</button><span><button class="btn">Cancel</button> <button class="btn primary" data-go="6">Continue</button></span></div>
+        </div>
+        <!-- 6 Review -->
+        <div class="pane" data-p="6">
+          <div class="pane-body">
+            <div class="pane-head"><div class="icon" style="background:#ff9f0a">E</div><div><h3>Ready to add Echo</h3><div class="muted">Hatch does these things when you click Add.</div></div></div>
+            <div class="group" style="margin:0">
+              <div class="row"><span><span class="badge amber" style="margin:0 8px 0 0">Creates</span>tashda/hatch-tickets, private, with labels</span><span class="muted small">Tickets</span></div>
+              <div class="row"><span><span class="badge green" style="margin:0 8px 0 0">Uses</span>tashda/echo at ~/Development/echo</span><span class="muted small">App code</span></div>
+              <div class="row"><span><span class="badge green" style="margin:0 8px 0 0">Uses</span>tashda/echo-design-system</span><span class="muted small">Design system</span></div>
+              <div class="row"><span><span class="badge amber" style="margin:0 8px 0 0">Creates</span>branch hatch from dev, opens PRs into dev</span><span class="muted small">Branches</span></div>
+              <div class="row"><span><span class="badge amber" style="margin:0 8px 0 0">Writes</span>.hatch/project.json in the app (committed by you)</span><span class="muted small">Config</span></div>
+            </div>
+            <details style="margin-top:12px"><summary class="muted">Advanced</summary>
+              <div class="group" style="margin:8px 0 0">
+                <div class="row"><span>Key <span class="info">i</span></span><span class="inline-field">echo</span></div>
+                <div class="row"><span>Agents at once</span><span class="popup">3</span></div>
+              </div>
+            </details>
+          </div>
+          <div class="footer"><button class="btn" data-go="5">Back</button><span><button class="btn">Cancel</button> <button class="btn primary">Add Echo</button></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2>B · One page of cards (suggested for Project settings)</h2>
+  <p class="lead">The same parts on one page. Each card says what the part is, shows its value, and changes inline. The ⓘ opens the same explanation and example the assistant shows.</p>
+  <div class="sheet" style="margin-top:16px;max-width:620px">
+    <div class="sheet-title">Echo</div>
+    <div style="height:10px"></div>
+    <div class="card"><div class="card-head"><div class="icon i-tickets">#</div><div class="grow"><b>Tickets</b> <span class="info">i</span><div class="sub">Issues in a private repository</div></div><span class="popup">tashda/hatch-tickets</span></div></div>
+    <div class="card"><div class="card-head"><div class="icon i-code">{}</div><div class="grow"><b>App code</b> <span class="info">i</span><div class="sub">~/Development/echo · on dev</div></div><span class="popup">tashda/echo</span></div></div>
+    <div class="card"><div class="card-head"><div class="icon i-design">◐</div><div class="grow"><b>Design system</b> <span class="info">i</span><div class="sub">Proposals build against it</div></div><span class="popup">tashda/echo-design-system</span></div></div>
+    <div class="card"><div class="card-head"><div class="icon i-branch">⑂</div><div class="grow"><b>Branches</b> <span class="info">i</span><div class="sub">ticket → hatch → pull request into dev</div></div><button class="btn">Change…</button></div></div>
+    <div class="footer"><span></span><span><button class="btn">Done</button></span></div>
+  </div>
+
+  <h2>C · Start from the app repository</h2>
+  <div class="sheet" style="margin-top:16px;max-width:620px">
+    <div class="sheet-title">Add project</div>
+    <div class="group-h">Which app?</div>
+    <div class="group"><div class="row"><span>Repository</span><span class="popup">tashda/echo</span></div></div>
+    <div class="group-h">Hatch will set up</div>
+    <div class="group">
+      <div class="row"><span>Name</span><span class="val">Echo <a style="color:var(--blue);margin-left:6px">Change</a></span></div>
+      <div class="row"><span>Tickets</span><span class="val">Create tashda/hatch-tickets <a style="color:var(--blue);margin-left:6px">Change</a></span></div>
+      <div class="row"><span>On this Mac</span><span class="val">~/Development/echo <a style="color:var(--blue);margin-left:6px">Change</a></span></div>
+      <div class="row"><span>Design system</span><span class="val">tashda/echo-design-system <a style="color:var(--blue);margin-left:6px">Change</a></span></div>
+      <div class="row"><span>Branches</span><span class="val">hatch → PR into dev <a style="color:var(--blue);margin-left:6px">Change</a></span></div>
+    </div>
+    <div class="footer"><span></span><span><button class="btn">Cancel</button> <button class="btn primary">Add Echo</button></span></div>
+  </div>
+
+  <h2>Decisions I need from you</h2>
+  <div class="qa note" style="margin-top:12px">
+    <div class="q"><div><b>Setup flow: A, B or C?</b></div><div class="muted">Recommendation: <b>A for adding a project, B for Project settings.</b> The assistant explains each part once; after that you want everything on one page.</div></div>
+    <div class="q"><div><b>Should GitHub be its own first step, or part of Settings only?</b></div><div class="muted">Recommendation: <b>a step in the assistant, and skipped when you are already connected.</b> Repositories can't be chosen without it, so it must come first.</div></div>
+    <div class="q"><div><b>Hide the Key?</b></div><div class="muted">Recommendation: <b>yes. Make it from the name and show it under Advanced.</b> It only appears in labels, and nobody knows what to type there.</div></div>
+    <div class="q"><div><b>Tickets: one shared hatch-tickets repository, or one per project?</b></div><div class="muted">Recommendation: <b>shared, created by Hatch.</b> Ticket numbers stay unique across projects (an earlier decision), and the second project needs no tickets step.</div></div>
+    <div class="q"><div><b>App folder: find it automatically and offer to clone?</b></div><div class="muted">Recommendation: <b>yes.</b> Choosing a folder in a file dialog is the step most likely to go wrong (the wrong clone, or a subfolder).</div></div>
+    <div class="q"><div><b>How hatch reaches dev</b></div><div class="muted">Recommendation: <b>Hatch opens a pull request, you merge it.</b> The earlier decision (I6) was automatic promotion. A PR keeps you in control at first and works with branch protection. Switching to automatic later is one setting.</div></div>
+  </div>
+</main>
+<script>
+  const steps = [...document.querySelectorAll('.step')];
+  const panes = [...document.querySelectorAll('.pane')];
+  function go(i) {
+    steps.forEach((s, j) => {
+      s.classList.toggle('on', j === i);
+      s.classList.toggle('done', j < i);
+      s.querySelector('.n').textContent = j < i ? '✓' : String(j + 1);
+    });
+    panes.forEach((p, j) => p.classList.toggle('on', j === i));
+  }
+  steps.forEach((s, i) => s.addEventListener('click', () => go(i)));
+  document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(+b.dataset.go)));
+  document.querySelectorAll('.group').forEach(g => {
+    const radios = [...g.querySelectorAll(':scope > .radio')];
+    radios.forEach(r => r.addEventListener('click', () => {
+      radios.forEach(x => x.querySelector('.dot').classList.toggle('on', x === r));
+      if (r.dataset.m) document.getElementById('mode-label').textContent = r.dataset.m;
+    }));
+  });
+  go(1);
+</script>
+</body>
+</html>
