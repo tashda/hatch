@@ -155,6 +155,11 @@ public extension HatchStore {
         return try attachments(ticketId: ticketId).last!
     }
 
+    /// A screenshot's file changed (marked up): its checksum follows, so a later upload sends the new image.
+    func setAttachmentSha(_ id: Int, sha: String) throws {
+        try db.execute("UPDATE attachment SET sha = ? WHERE id = ?", [.text(sha), .int(id)])
+    }
+
     func attachments(ticketId: Int) throws -> [Attachment] {
         try db.query("SELECT * FROM attachment WHERE ticket_id = ? ORDER BY at, id", [.int(ticketId)]) {
             Attachment(id: $0.int("id")!, ticketId: $0.int("ticket_id")!, path: $0.string("path")!, sha: $0.string("sha"),

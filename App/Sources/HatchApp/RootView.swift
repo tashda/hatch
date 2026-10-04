@@ -98,6 +98,12 @@ struct RootView: View {
                 MenuBarPanel()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if state.snapshotPresentation == .markup {
+                // Snapshot only: the mark-up sheet on a drawn sample screenshot, with one mark of each kind.
+                ScreenshotMarkupSheet(data: Snapshots.sampleScreenshot(), initial: [
+                    ShotMark(kind: .box, from: CGPoint(x: 0.08, y: 0.30), to: CGPoint(x: 0.55, y: 0.52)),
+                    ShotMark(kind: .arrow, from: CGPoint(x: 0.80, y: 0.80), to: CGPoint(x: 0.58, y: 0.50)),
+                    ShotMark(kind: .note("Focus jumps here after Run"), from: CGPoint(x: 0.78, y: 0.86), to: CGPoint(x: 0.78, y: 0.86))]) { _ in }
             } else if state.snapshotPresentation == .addProject {
                 ProjectSetupAssistant(store: state.store, demoStep: ProjectSetupModel.Step(rawValue: state.snapshotSetupStep))
                     .id(state.snapshotSetupStep)
@@ -121,6 +127,7 @@ struct RootView: View {
         case .addProject: "Add project"
         case .repositorySelector: "Choose repositories"
         case .agentCard: "Agent"
+        case .markup: "Mark up"
         case .menuBar: "Menu bar"
         case nil: state.route.title
         }

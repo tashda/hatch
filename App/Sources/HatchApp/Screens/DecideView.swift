@@ -359,6 +359,15 @@ private struct DecideCard: View {
         .padding(.vertical, 12)
         .onAppear(perform: load)
         .onReceive(NotificationCenter.default.publisher(for: .hxDecideKey)) { key($0.object as? String ?? "") }
+        // A screenshot pasted while deciding goes on this card's ticket, for the agent to see (decision E3).
+        .pastesScreenshots { images in
+            let id = item.ticket.id, state = state
+            state.perform("Could not add the screenshot") {
+                for image in images { try TicketScreenshots.save(image.data, name: image.name, ticketId: id, state: state) }
+            }
+            session.noteOpen = true
+            if !session.note.contains("screenshot") { session.note += (session.note.isEmpty ? "" : " ") + "See the screenshot." }
+        }
         .autoReload(every: 3) { checkStillWaiting() }
     }
 

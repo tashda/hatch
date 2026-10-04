@@ -175,6 +175,19 @@ enum Snapshots {
         return AppState(store: store, paths: paths)
     }
 
+    /// A made-up screenshot for the mark-up snapshot: a window with a toolbar and a few rows.
+    @MainActor static func sampleScreenshot() -> Data {
+        let view = VStack(alignment: .leading, spacing: 10) {
+            HStack { Text("Query 1").font(.headline); Spacer(); Text("Run").padding(.horizontal, 10).padding(.vertical, 4).background(.blue.opacity(0.2), in: Capsule()) }
+            RoundedRectangle(cornerRadius: 6).fill(.gray.opacity(0.15)).frame(height: 90).overlay(Text("SELECT * FROM servers").font(.body.monospaced()))
+            ForEach(0..<4) { i in HStack { Text("row \(i + 1)"); Spacer(); Text("ok").foregroundStyle(.secondary) }.padding(.horizontal, 6) }
+        }
+        .padding(18).frame(width: 640, height: 400).background(.white)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        return renderer.nsImage.flatMap(ScreenshotClipboard.pngData) ?? Data()
+    }
+
     /// A snapshot run shares preferences with the real app, so its window must not save its frame: otherwise the app
     /// the owner runs next opens where the snapshot window was. Saved window state is ignored in `HatchApp.init`.
     @MainActor private static func keepWindowStateOut() {
@@ -311,6 +324,14 @@ enum Snapshots {
             NSApp.appearance = NSAppearance(named: appearance)
             if let route = routes[name] {
                 state.route = route
+            } else if name == "markup" {
+                state.snapshotPresentation = .markup
+                // The saved image too, to check that the marks land in the file at full size.
+                let marks = [ShotMark(kind: .box, from: CGPoint(x: 0.08, y: 0.30), to: CGPoint(x: 0.55, y: 0.52)),
+                             ShotMark(kind: .note("Focus jumps here"), from: CGPoint(x: 0.78, y: 0.86), to: CGPoint(x: 0.78, y: 0.86))]
+                if let png = ScreenshotMarkupSheet.flatten(sampleScreenshot(), marks: marks) {
+                    try? png.write(to: folder.appendingPathComponent("markup-export.png"))
+                }
             } else if name == "decide" || name == "decide-components" {
                 state.decideSession = AppState.DecideRequest(area: name == "decide" ? nil : "Components")
             } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count)) {

@@ -13,6 +13,9 @@ struct AttachmentThumb: View {
         return state.paths.root.appendingPathComponent(attachment.path)
     }
 
+    @State private var markingUp = false
+    @State private var hovering = false
+
     var body: some View {
         Button {
             NSWorkspace.shared.open(url)
@@ -21,6 +24,26 @@ struct AttachmentThumb: View {
         }
         .buttonStyle(.plain)
         .help(attachment.caption ?? attachment.path)
+        .overlay(alignment: .bottomTrailing) {
+            // Mark up an attached screenshot afterwards (decision E3); the marks replace the file.
+            if hovering, NSImage(contentsOf: url) != nil {
+                Button { markingUp = true } label: { Image(systemName: "pencil.tip.crop.circle") }
+                    .buttonStyle(.bordered).controlSize(.small).padding(4)
+                    .help("Mark up: box, arrow or note")
+            }
+        }
+        .onHover { hovering = $0 }
+        .contextMenu {
+            Button("Mark Up…") { markingUp = true }
+            Button("Open") { NSWorkspace.shared.open(url) }
+        }
+        .sheet(isPresented: $markingUp) {
+            if let data = try? Data(contentsOf: url) {
+                ScreenshotMarkupSheet(data: data) { png in
+                    state.perform("Could not save the marked-up screenshot") { try TicketScreenshots.replace(attachment, with: png, state: state) }
+                }
+            }
+        }
     }
 
     @ViewBuilder private var thumbnail: some View {

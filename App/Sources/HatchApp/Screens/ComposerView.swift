@@ -36,6 +36,8 @@ struct ComposerView: View {
     @State private var area = ""
     @State private var themeId: Int?
     @State private var shots: [PendingShot] = []
+    /// The screenshot open in the mark-up sheet.
+    @State private var markingUp: PendingShot?
     @State private var links: [PendingLink] = []
     @State private var linkRef = ""
     @State private var linkKind: LinkKind = .related
@@ -88,6 +90,13 @@ struct ComposerView: View {
         .onChange(of: specs.map(\.code)) { _, _ in publishCheck() }
         .onChange(of: hasInput) { _, _ in publishCheck() }
         .onDisappear { state.hatchCheck = nil }
+        // ⌘V with a screenshot on the clipboard, wherever the cursor is in the form (decision E3).
+        .pastesScreenshots { images in shots += images.map { PendingShot(name: $0.name, data: $0.data) } }
+        .sheet(item: $markingUp) { shot in
+            ScreenshotMarkupSheet(data: shot.data) { png in
+                if let i = shots.firstIndex(where: { $0.id == shot.id }) { shots[i] = PendingShot(name: shot.name, data: png) }
+            }
+        }
         .onChange(of: title) { _, _ in scheduleHints() }
         .onChange(of: bodyText) { _, _ in scheduleHints() }
         .onChange(of: projectId) { _, _ in projectChanged() }
@@ -294,7 +303,7 @@ struct ComposerView: View {
             HStack(spacing: 8) {
                 Image(systemName: "photo.on.rectangle")
                     .foregroundStyle(.secondary)
-                Text("Drop or paste screenshots")
+                Text("Drop, paste (⌘V) or capture screenshots; click one to mark it up")
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Choose…") { chooseFiles() }
@@ -312,7 +321,7 @@ struct ComposerView: View {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
                         ForEach(shots) { shot in
-                            ShotThumb(shot: shot) { remove(shot) }
+                            ShotThumb(shot: shot, onMarkUp: { markingUp = shot }) { remove(shot) }
                         }
                     }
                 }
@@ -392,20 +401,8 @@ struct ComposerView: View {
     }
 
     private func pasteFromClipboard() {
-        let board = NSPasteboard.general
-        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
-        if let urls = board.readObjects(forClasses: [NSURL.self], options: options) as? [URL], !urls.isEmpty {
-            var added = false
-            for url in urls where Self.isImage(url) {
-                if let data = try? Data(contentsOf: url) {
-                    shots.append(PendingShot(name: url.lastPathComponent, data: data))
-                    added = true
-                }
-            }
-            if added { return }
-        }
-        if let image = NSImage(pasteboard: board), let png = Self.pngData(image) {
-            shots.append(PendingShot(name: "pasted.png", data: png))
+        if let images = ScreenshotClipboard.images() {
+            shots += images.map { PendingShot(name: $0.name, data: $0.data) }
         } else {
             state.errorMessage = "The clipboard has no image."
         }
@@ -643,16 +640,21 @@ struct ComposerView: View {
 
 struct ShotThumb: View {
     let shot: PendingShot
+    var onMarkUp: () -> Void = {}
     let onRemove: () -> Void
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             if let image = NSImage(data: shot.data) {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 84, height: 84)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                Button(action: onMarkUp) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 84, height: 84)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .help("Mark up: box, arrow or note")
             } else {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(Color.secondary.opacity(0.15))

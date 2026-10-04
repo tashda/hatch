@@ -46,6 +46,7 @@
 		7A496CF5D64909DB27AAB72F /* IrisReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50AA3B651A6F720EEC6333D3 /* IrisReviewView.swift */; };
 		7A50BDABD12739C54CB65EB3 /* Snapshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AFC7402DEC44D748849719B /* Snapshots.swift */; };
 		845B8067A5DF3BDA8F049849 /* AttachmentThumb.swift in Sources */ = {isa = PBXBuildFile; fileRef = A08FF820CF142B03A9888E3C /* AttachmentThumb.swift */; };
+		1705AA1B630A314A187D2B63 /* Screenshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33467206E68F205A69FFB029 /* Screenshots.swift */; };
 		84A2978BE629BB03F04857DA /* SpecsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB25DA45E606087C9EB4A2FF /* SpecsView.swift */; };
 		882ED89A6591D4D3164F1A24 /* DecisionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FEE3B6C1BACD094A37DE7F3 /* DecisionsView.swift */; };
 		2555C85F3FE5E0A74E2BF9A1 /* DecideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB49B53D60802E5519C3B85A /* DecideView.swift */; };
@@ -127,6 +128,7 @@
 		870C6888D33DD0120ECB7462 /* BoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardView.swift; sourceTree = "<group>"; };
 		9C578A59293D31A5F7BDA813 /* TicketDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketDetailView.swift; sourceTree = "<group>"; };
 		A08FF820CF142B03A9888E3C /* AttachmentThumb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentThumb.swift; sourceTree = "<group>"; };
+		33467206E68F205A69FFB029 /* Screenshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screenshots.swift; sourceTree = "<group>"; };
 		AA4B12D3FF0406D70FFCBC45 /* TicketOptionsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketOptionsTab.swift; sourceTree = "<group>"; };
 		AC8D6FDD0676BA5D121563D7 /* EventText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventText.swift; sourceTree = "<group>"; };
 		B08CBB6E28A0112DD7F8C511 /* Adapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Adapters.swift; sourceTree = "<group>"; };
@@ -224,6 +226,7 @@
 			children = (
 				548F8F5CD99070F671D33F73 /* AnswerCards.swift */,
 				A08FF820CF142B03A9888E3C /* AttachmentThumb.swift */,
+				33467206E68F205A69FFB029 /* Screenshots.swift */,
 				F4B2D75F35E1444F13624804 /* DesignSystem.swift */,
 				AC8D6FDD0676BA5D121563D7 /* EventText.swift */,
 				DF82D71D692C33CB9A7DC077 /* Format.swift */,
@@ -482,6 +485,7 @@
 				A1B2C3D4E5F60718293A4B5C /* IrisPanel.swift in Sources */,
 				B1B2C3D4E5F60718293A4B5C /* PanelResizer.swift in Sources */,
 				845B8067A5DF3BDA8F049849 /* AttachmentThumb.swift in Sources */,
+				1705AA1B630A314A187D2B63 /* Screenshots.swift in Sources */,
 				FB3275F17A1D0DDE28ABE554 /* BoardView.swift in Sources */,
 				4758C9539D1D11962F52C426 /* CommandPalette.swift in Sources */,
 				9C234007EC5BBBE8C6AD6B4F /* ComposerView.swift in Sources */,

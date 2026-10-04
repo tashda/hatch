@@ -91,6 +91,13 @@ struct TicketDetailView: View {
         .sheet(isPresented: $sendingBack) {
             if let ticket, let target = sendBackTarget(ticket) { SendBackSheet(ticket: ticket, target: target) }
         }
+        // ⌘V with a screenshot anywhere on the ticket, also while writing in the Thread, attaches it (decision E3).
+        .pastesScreenshots { images in
+            let id = ticketId
+            _ = state.perform("Could not add the screenshot") {
+                for image in images { try TicketScreenshots.save(image.data, name: image.name, ticketId: id, state: state) }
+            }
+        }
         .sheet(isPresented: $sendingPlanBack) {
             if let plan = pendingPlan { PlanSendBackSheet(plan: plan) }
         }
