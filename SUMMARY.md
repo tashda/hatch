@@ -33,7 +33,7 @@ All under `EchoLab/` in the Echo repo. A native macOS 26 SwiftUI app, one SwiftP
 
 **Name:** Hatch. (Considered and dropped: Labs, Bench, Fathom, many others.) CLI: `hatch`. Vetting agent: **Iris** (the owner's choice; I had recommended Tally).
 
-**One universal macOS app** (SwiftUI, macOS 26), with projects. A project links repositories (with roles: App, Design system, Specimens, Tickets), branches, build and test commands, an area index and docs for agents. Echo is the first project. Hatch contains **no project code**.
+**One universal macOS app** (SwiftUI, macOS 26), with projects. A project links repositories (with roles: App, Components, Notebook, Tickets), branches, build and test commands and an area index. Its **notebook** repository holds decisions, the Spec, agent rules and Proposal options as plain files, so the project can be picked up with any agent without Hatch (decisions PS9 to PS16). Echo is the first project. Hatch contains **no project code**.
 
 **Tickets are GitHub Issues in a private repo** (`hatch-tickets`), mirrored into **SQLite** (FTS5 search, proper indexes). Type, status and project are labels (`type:proposal`, `status:your-call`, `project:echo`). Ticket number is the GitHub issue number (`#151`). Screenshots are committed to `attachments/<ticket>/` in the tickets repo. **The app does the bookkeeping in code:** a status change updates SQLite and GitHub together and records the sync in `sync_log` (queue, retry with backoff, banner when it fails). Agents never edit state or labels; they call `hatch`.
 
@@ -146,9 +146,9 @@ Agents screen: runs, claims, queue, token use per run, per ticket and per day. D
 
 ### 3.11 Projects, Specs, sync (L, M, N)
 
-- **Project setup** in a settings screen that writes `.hatch/project.json` into the app repo (readable by any agent).
+- **Project setup** in a setup assistant; settings live in the notebook's `project.json` (decision PS13; the app repository gets no Hatch files).
 - **Area index**: an agent drafts it (area to files and Spec IDs), the owner reviews; Re-scan available. It is the biggest token saving per ticket.
-- **Specs**: Markdown in the project repo (`.hatch/spec/*.md`) indexed into SQLite FTS; **plus a per-project Spec app** launched by Hatch showing each element as a live specimen (the Echo Labs Specs section the owner loves), with a "blueprint" action that has an agent scaffold the Spec app for a new project from its area index. A ticket cannot reach Done until its Spec text and Spec app pages are updated or marked unchanged (checked in code).
+- **Specs**: Markdown in the notebook (`spec/*.md`, decision PS13) indexed into SQLite FTS; **plus a per-project Spec app** launched by Hatch showing each element as a live specimen (the Echo Labs Specs section the owner loves), with a "blueprint" action that has an agent scaffold the Spec app for a new project from its area index. A ticket cannot reach Done until its Spec text and Spec app pages are updated or marked unchanged (checked in code).
 - **Import** existing Echo Labs content: decided rounds become Done tickets and Decisions; open rounds become Proposals.
 - **Sync rules:** Hatch owns status, GitHub owns text (edits to title, body, comments are accepted; a hand-edited status label is flagged, not obeyed). Offline: queue and retry. Search: SQLite FTS over tickets, comments, Specs, decisions (instant, offline).
 - **Specs, Decisions, Log screens:** Specs by area with IDs and linked tickets; Decisions are read-only frozen results linked to tickets, picks and Spec items changed; Log shows every Hatch action with its GitHub sync result, filter failed, retry from the row.
@@ -169,8 +169,8 @@ Each command validates the move, writes SQLite and GitHub, records the sync, and
 |---|---|
 | `hatch` | The app, the `hatch` CLI, StageKit, core. **Needs to be created by the owner** (see below). |
 | `hatch-tickets` (private) | Issues and `attachments/` |
-| `echo-specimens` | Echo-today views and one folder per round |
-| `echo-design-system` | EchoDesignSystem extracted from Echo, tagged |
+| `echo-notebook` | Decisions, Spec, agent rules, NOW.md and `specimens/` (Echo today and one folder per round); replaces `echo-specimens` (PS9) |
+| `echo-design-system` | Components: EchoDesignSystem extracted from Echo, tagged (renamed Components, PS11) |
 | Echo (`tashda/echo`) | The app. Changes later: a `hatch` trigger in `ci-light.yml`, a DEBUG "Preview" banner, EchoDesignSystem moves out |
 
 ## 7. Where the owner chose differently from my recommendation

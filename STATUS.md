@@ -1,6 +1,19 @@
 # Hatch: build status
 
-Updated 2026-10-03 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
+Updated 2026-10-04 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
+
+## Local verification (macOS, 2026-10-04): project setup and the notebook
+
+Decisions PS1 to PS16 (DECISIONS.md section R). All compiled; `swift test` passes in every bundle; checked visually in snapshots with sample data.
+
+- **Setup assistant** replaces the Add project sheet: GitHub, Project (repository first, name and key suggested), Tickets (shared, a default), App code (clone found or cloned), Components, Notebook, Branches (pull request by default), Agents (defaults or custom; build command suggested from the clone), Review. First run shows a welcome page and a native "Set up a project" toolbar button.
+- **Notebook**: created or reused, cloned next to the app, first files written (README, AGENTS, WORKFLOW, NOW, rules, spec, decisions, specimens, project.json without this Mac's folders), the app's own AGENTS.md imported as its rules, committed and pushed. Nothing is written into the app repository. Rules are placed in the app clone and every agent worktree as AGENTS.md plus CLAUDE.md (`@AGENTS.md`), excluded via `.git/info/exclude`; a committed AGENTS.md or a hand-written file is left alone. Agents get a notebook workspace for Prepare, Build and Fix; the merge plan includes it.
+- **SQLite as the working record** (migration 2): decisions keep kind, title, area, options, choice, recommendation, reason and what they replace, with an FTS index; `file_path` is the export queue. Question options (one recommended, with a reason) in `question_option`; `notebook_state` holds NOW.md's hash and the last push or error.
+- **Notebook export** (app, at most every few seconds after a change; `hatch notebook export`): imports decision files the database lacks, writes missing decision files (ADR shape), keeps the kind in step, rewrites the decision index and NOW.md (only when changed), one commit, pushes what is ahead. The Spec is indexed from the notebook's `spec/`. No model call.
+- **Fewer tokens**: briefs and Iris get the three most related decisions from FTS (title and one line of why), the area's rule file only when it exists, and the notebook rules only when the app commits its own AGENTS.md. Agents offer Question options with `hatch options`; the owner chooses in the ticket's banner, which records an architecture decision.
+- **Decisions page**: kinds, FTS search, why, options, the notebook path; the kind can be changed.
+- **Other**: debug builds keep the GitHub token in UserDefaults (no Keychain prompts; release builds use the Keychain) and are signed with team JQU2HR44D8; the app uses only the account connected in Hatch (no `gh` or `GITHUB_TOKEN` fallback); the toolbar never draws its hard background; snapshot runs use the live window and never save window state.
+- **Not verified**: a real Add against GitHub (needs the Hatch installation to see the repositories and the Contents, Pull requests, Checks and Commit statuses permissions); whether a repository Hatch creates joins a "selected repositories" installation; pushes with the app's token; the Question decision sheet with a real ticket. The Spec-before-Done check across the app and notebook branches is decided (PS13) but not built.
 
 ## Local verification (macOS, 2026-10-03)
 
