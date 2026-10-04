@@ -94,6 +94,18 @@ final class DecideRunTests: XCTestCase {
         XCTAssertTrue(run.due(now: start.addingTimeInterval(20)).isEmpty, "each piece runs once")
     }
 
+    func testMarksKeepOnePlacePerDecisionAndSayWhatHappened() {
+        var run = DecideRun(items: [item(1), item(2), item(3)])
+        run.decide(.chose(agreed: true), startsAgent: true, label: "one") {}
+        run.decide(.later, startsAgent: false, label: "two") {}
+        let marks = run.marks
+        XCTAssertEqual(marks.map(\.id), ["t1", "t2", "t3"], "Later does not add a pill at the end")
+        XCTAssertEqual(marks.map(\.mark), [.handled(startsAgent: true), .later, .current])
+        run.decide(.chose(agreed: false), startsAgent: false, label: "three") {}
+        XCTAssertEqual(run.marks.map(\.mark), [.handled(startsAgent: true), .current, .handled(startsAgent: false)],
+                       "the decision left for later is current again in its own place")
+    }
+
     func testLaterMovesTheCardToTheEndAndClosingRunsEverything() {
         var run = DecideRun(items: [item(1), item(2, .judge)])
         var done = 0

@@ -11,7 +11,6 @@ struct RootView: View {
         // Snapshot runs use the same window as the live app, so what they show is what you see.
         liveShell
         .commandPaletteOverlay()
-        .decideOverlay()
         .sheet(isPresented: $state.showAddProject) { ProjectSetupAssistant(store: state.store) }
         .alert("Something went wrong", isPresented: Binding(get: { state.errorMessage != nil }, set: { if !$0 { state.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
@@ -37,7 +36,11 @@ struct RootView: View {
                 }
                 liveDetail
             }
+            // Decide covers the page and the sidebar, not the footer, so agents and sync stay in sight.
+            .decideOverlay()
+            // Opaque, so nothing from the page under Decide shows through the footer strip.
             WindowFooter()
+                .background(Color(nsColor: .underPageBackgroundColor))
         }
         .background(Color(nsColor: .underPageBackgroundColor))
         .animation(.snappy(duration: 0.25), value: state.showSidebar)

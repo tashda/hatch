@@ -59,6 +59,9 @@ struct IrisReviewView: View {
     @Environment(\.ticketOpener) private var opener
     let ticketId: Int
     var showIdleMessage: Bool = false
+    /// In Decide the questions read as a conversation and the filing sits under the title, so the header and the
+    /// filing row are left out here.
+    var inDecide: Bool = false
 
     @State private var ticket: Ticket?
     @State private var suggestion: VettingSuggestion?
@@ -106,7 +109,7 @@ struct IrisReviewView: View {
             checking(ticket)
         } else {
             if hasAnything {
-                header
+                if !inDecide { header }
                 if duplicatePending { duplicateCard }
                 if let newType = typePending(ticket) { typeCard(ticket, newType) }
                 if openQuestionCount > 0 { AnswerCardsView(ticketId: ticketId) }
@@ -116,7 +119,7 @@ struct IrisReviewView: View {
                 idle(ticket)
             }
             // What she set, with a Change menu on each field (WF-T1).
-            FiledByIrisCard(ticketId: ticketId)
+            if !inDecide { FiledByIrisTokens(ticketId: ticketId) }
         }
     }
 

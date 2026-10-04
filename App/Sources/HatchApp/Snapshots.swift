@@ -117,6 +117,17 @@ enum Snapshots {
         try! store.addNote(proposal.id, kind: .note, author: "owner", body: "The quieter spacing is close. Keep the close action aligned.")
         try! store.addNote(proposal.id, kind: .agent, author: "Mina", body: "Revision 2 keeps the label to two lines and brings the action back to the baseline.")
         _ = try! store.ask(question.id, text: "Should restored tabs keep their previous split position?", suggestions: ["Yes, when both tabs still exist", "No, use the default split"], by: "Iris")
+        // Decide with two questions from Iris, one shown at a time.
+        let bubbles = try! store.createTicket(projectId: p.id, type: .proposal, title: "Design recommendations for Decide, starting with the bubbles",
+                                              area: "Notices", ghNumber: 172, status: .needsAnswers)
+        try! store.record(bubbles.id, actor: "Iris", kind: "filed", payload: ["fields": .object([:])])
+        _ = try! store.ask(bubbles.id, text: "What about the \"Iris asks\" bubbles feels wrong to you?", suggestions: ["Too heavy or boxed in compared with the rest of Decide", "Chat-bubble shape does not match the cards and pills", "Colour or text size is off", "Position within the decision card"], by: "Iris", actor: .hatch)
+        _ = try! store.ask(bubbles.id, text: "Should the bubbles follow the existing components, or may they introduce a new style?", suggestions: ["Stay within the existing components", "Add a variant just for the bubbles", "Change the shared component everywhere"], by: "Iris", actor: .hatch)
+        // Decide's conversation (the redesign canvas): Iris filed a Proposal and its agent asks one long question.
+        let notice = try! store.createTicket(projectId: p.id, type: .proposal, title: "Iris flags hardcoded design values at launch and offers a design-token ticket",
+                                             area: "Notices", ghNumber: 171, status: .needsAnswers)
+        try! store.record(notice.id, actor: "Iris", kind: "filed", payload: ["fields": .object([:])])
+        _ = try! store.ask(notice.id, text: "I can't prepare #171 yet. My only workspace is the notebook. It has no app checkout, so I can't read the real launch notice view that the first specimen has to be drawn from. It also has no manifest example, so I don't know the manifest format. Can you give me a workspace on this ticket's branch, or point me to the manifest schema? My recommendation: give me the app workspace. I'd then draw Echo today from the real notice code and propose three launch notices. A guess made without the real code would cost you a specimen that doesn't match Echo.", by: "Agent on #171", actor: .hatch)
         try! store.upsertSpecItems(projectId: p.id, items: [
             ("NOTIF-1.2", "Notifications", "Toast actions remain visible at compact and regular text sizes.", "notifications.md"),
             ("NOTIF-1.3", "Notifications", "A toast does not cover the primary window action.", "notifications.md"),
@@ -346,8 +357,8 @@ enum Snapshots {
                 if let png = ScreenshotMarkupSheet.flatten(sampleScreenshot(), marks: marks) {
                     try? png.write(to: folder.appendingPathComponent("markup-export.png"))
                 }
-            } else if name == "decide" || name == "decide-components" {
-                state.decideSession = AppState.DecideRequest(area: name == "decide" ? nil : "Components")
+            } else if name == "decide" || name == "decide-components" || name == "decide-iris" {
+                state.decideSession = AppState.DecideRequest(area: ["decide-components": "Components", "decide-iris": "Notices"][name])
             } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count)) {
                 state.snapshotSetupStep = n - 1
                 state.snapshotPresentation = .addProject

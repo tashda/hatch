@@ -51,6 +51,7 @@
 		84A2978BE629BB03F04857DA /* SpecsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB25DA45E606087C9EB4A2FF /* SpecsView.swift */; };
 		882ED89A6591D4D3164F1A24 /* DecisionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FEE3B6C1BACD094A37DE7F3 /* DecisionsView.swift */; };
 		2555C85F3FE5E0A74E2BF9A1 /* DecideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB49B53D60802E5519C3B85A /* DecideView.swift */; };
+		D1A7B0C2E3F4051627384950 /* DecideLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A7B0C2E3F4051627384951 /* DecideLab.swift */; };
 		1B33E3A296D309563040C343 /* ComponentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1819DD7B53E496800C1840B /* ComponentsView.swift */; };
 		8BCD76F3B3CD8125CB4A5083 /* DeskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CD8172654E3B05A33D62F8C /* DeskView.swift */; };
 		8FC3CCAF743A468C8189774C /* HatchGit in Frameworks */ = {isa = PBXBuildFile; productRef = 8FF33B9BC62D51D62F87A33A /* HatchGit */; };
@@ -110,6 +111,7 @@
 		2C294CBEE8C4487CA95C0002 /* GitHubDeviceFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubDeviceFlow.swift; sourceTree = "<group>"; };
 		4FEE3B6C1BACD094A37DE7F3 /* DecisionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionsView.swift; sourceTree = "<group>"; };
 		CB49B53D60802E5519C3B85A /* DecideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecideView.swift; sourceTree = "<group>"; };
+		D1A7B0C2E3F4051627384951 /* DecideLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecideLab.swift; sourceTree = "<group>"; };
 		D1819DD7B53E496800C1840B /* ComponentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComponentsView.swift; sourceTree = "<group>"; };
 		501F8478F0F8743977F822BD /* TicketOverviewTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketOverviewTab.swift; sourceTree = "<group>"; };
 		50AA3B651A6F720EEC6333D3 /* IrisReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IrisReviewView.swift; sourceTree = "<group>"; };
@@ -324,6 +326,7 @@
 				46443AE485036DD464BF0D3E /* CommandPalette.swift */,
 				66AE2852326652BBEF994532 /* ComposerView.swift */,
 				4FEE3B6C1BACD094A37DE7F3 /* DecisionsView.swift */,
+				D1A7B0C2E3F4051627384951 /* DecideLab.swift */,
 				CB49B53D60802E5519C3B85A /* DecideView.swift */,
 				D1819DD7B53E496800C1840B /* ComponentsView.swift */,
 				7668E92AE7A7176EA2988F23 /* DeskBriefPane.swift */,
@@ -380,6 +383,7 @@
 				DACE2ECB39737447C680FC80 /* Resources */,
 				C5FE190495FB7C3D3DE5526F /* Frameworks */,
 				21D9D3252F2BB8C76DA5615C /* Build the hatch command */,
+				5A7E0C1D3B2F4A6E8D9C1B0A /* Build the Stage app */,
 			);
 			buildRules = (
 			);
@@ -467,6 +471,27 @@
 			shellScript = "# Builds the hatch command line tool and puts it in Hatch.app, signed like the app, so agents and the\n# Install in PATH button always use the hatch that matches this app.\nset -e\nCONFIG=$( [ \"$CONFIGURATION\" = \"Release\" ] && echo release || echo debug )\ncd \"$SRCROOT\"\nenv -u SDKROOT -u TOOLCHAINS xcrun --sdk macosx swift build -c \"$CONFIG\" --product hatch\nDEST=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers\"\nmkdir -p \"$DEST\" \"$DERIVED_FILE_DIR\"\n# Only a changed tool is copied and signed again, so an unchanged app keeps a valid signature.\nif ! cmp -s \".build/$CONFIG/hatch\" \"$DERIVED_FILE_DIR/hatch.last\" 2>/dev/null; then\n  cp -f \".build/$CONFIG/hatch\" \"$DERIVED_FILE_DIR/hatch.last\"\n  cp -f \".build/$CONFIG/hatch\" \"$DEST/hatch\"\n  if [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --options runtime --timestamp=none --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" \"$DEST/hatch\"\n  fi\nfi\n";
 			showEnvVarsInLog = 0;
 		};
+		5A7E0C1D3B2F4A6E8D9C1B0A /* Build the Stage app */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build the Stage app";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/Stage.app",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Builds Stage.app (the Stage with the toast round, its own name and icon in the Dock) and puts it in Hatch.app, so one\n# download holds both. Only a changed Stage is copied and signed again.\nset -e\nCONFIG=$( [ \"$CONFIGURATION\" = \"Release\" ] && echo release || echo debug )\nBUILT=\"$DERIVED_FILE_DIR/stage-app\"\nSIGN=\"\"\n[ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ] && SIGN=\"--sign $EXPANDED_CODE_SIGN_IDENTITY\"\n\"$SRCROOT/tools/build-stage.sh\" --dest \"$BUILT\" --config \"$CONFIG\" $SIGN\nDEST=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers\"\nmkdir -p \"$DEST\"\nif ! cmp -s \"$BUILT/.stage.last\" \"$DERIVED_FILE_DIR/stage.copied\" 2>/dev/null || [ ! -d \"$DEST/Stage.app\" ]; then\n  rm -rf \"$DEST/Stage.app\"\n  cp -R \"$BUILT/Stage.app\" \"$DEST/Stage.app\"\n  cp -f \"$BUILT/.stage.last\" \"$DERIVED_FILE_DIR/stage.copied\"\nfi\n";
+			showEnvVarsInLog = 0;
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -502,6 +527,7 @@
 				9C234007EC5BBBE8C6AD6B4F /* ComposerView.swift in Sources */,
 				882ED89A6591D4D3164F1A24 /* DecisionsView.swift in Sources */,
 				2555C85F3FE5E0A74E2BF9A1 /* DecideView.swift in Sources */,
+				D1A7B0C2E3F4051627384950 /* DecideLab.swift in Sources */,
 				1B33E3A296D309563040C343 /* ComponentsView.swift in Sources */,
 				20501283E561101BF2529D53 /* DesignSystem.swift in Sources */,
 				04C3DDE92D35161138052438 /* DeskBriefPane.swift in Sources */,

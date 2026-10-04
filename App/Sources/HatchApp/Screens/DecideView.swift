@@ -43,6 +43,8 @@ final class DecideSession: ObservableObject {
     @Published var noteOpen = false
     @Published var note = ""
     @Published var highlight: String?
+    /// True while the owner types an answer of their own, so the card's keys (1–4, N, Space) do not fire.
+    @Published var typing = false
     private var timer: Timer?
 
     init(store: HatchStore, projectId: Int?, area: String?) {
@@ -145,6 +147,7 @@ struct DecideSessionView: View {
     @StateObject private var session: DecideSession
     @FocusState private var focused: Bool
     @FocusState private var noteFocused: Bool
+    @State private var showShortcuts = false
     let request: AppState.DecideRequest
 
     init(request: AppState.DecideRequest, store: HatchStore, projectId: Int?) {
@@ -162,15 +165,19 @@ struct DecideSessionView: View {
                         .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 16)),
                                                 removal: .opacity.combined(with: .offset(x: -60))))
                 } else {
-                    summary
+                    summary.frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 24)
             .animation(.snappy(duration: 0.28), value: session.index)
-            .overlay(alignment: .bottom) { toast.padding(.bottom, 18) }
-            keyHints.padding(.bottom, 12)
+            .overlay(alignment: .bottom) { toast.padding(.bottom, session.current == nil ? 18 : 82) }
         }
+        // One grey panel with the decision on a white card in it (DR8); the window footer stays visible under it.
+        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.separator.opacity(0.3)))
+        .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+        .padding(.init(top: 6, leading: 8, bottom: 0, trailing: 8))
         .background(Color(nsColor: .underPageBackgroundColor))
         .focusable()
         .focused($focused)
@@ -186,16 +193,16 @@ struct DecideSessionView: View {
         HStack(spacing: 14) {
             Label(title, systemImage: "checklist").font(.headline)
             Spacer()
-            HStack(spacing: 4) {
-                ForEach(Array(session.items.enumerated()), id: \.offset) { i, item in
-                    Capsule().fill(pillStyle(i, item)).frame(width: 22, height: 5)
-                        .overlay(Capsule().strokeBorder(.secondary, lineWidth: session.outcome(item.id) == .later && i >= session.index ? 1 : 0))
-                }
-            }
+            progressPills
             Spacer()
             Text(session.current == nil ? "All clear" : "\(session.remaining) left · about \(session.minutesLeft) min")
                 .font(.callout).foregroundStyle(.secondary).monospacedDigit()
-            Button("Done") { close(to: nil) }.buttonStyle(.glass).keyboardShortcut(.cancelAction)
+            Button { showShortcuts.toggle() } label: { Image(systemName: "questionmark") }
+                .buttonStyle(.glass).buttonBorderShape(.capsule)
+                .help("Keyboard shortcuts (?)")
+                .accessibilityLabel("Keyboard shortcuts")
+                .popover(isPresented: $showShortcuts, arrowEdge: .bottom) { shortcuts }
+            Button("Done") { close(to: nil) }.buttonStyle(.glass).buttonBorderShape(.capsule).keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 20).padding(.vertical, 12)
     }
@@ -206,10 +213,36 @@ struct DecideSessionView: View {
         return project.map { "\(base) · \($0)" } ?? base
     }
 
-    private func pillStyle(_ i: Int, _ item: PendingDecision) -> Color {
-        if i == session.index { return Theme.you }
-        if i < session.index { return session.outcome(item.id) == .later ? .clear : .secondary }
-        return Color.secondary.opacity(0.25)
+    /// One pill per decision in its first place (Later does not add one at the end), coloured by whose turn it is
+    /// now (DESIGN.md rule 6): amber on screen, teal when an agent goes on, green when it is done, an outline when it
+    /// was left for later, faint when not reached.
+    private var progressPills: some View {
+        let numbers = Dictionary(session.items.map { ($0.id, $0.ticket.displayNumber) }, uniquingKeysWith: { a, _ in a })
+        return HStack(spacing: 4) {
+            ForEach(session.run.marks, id: \.id) { m in
+                pill(m.mark).help("\(numbers[m.id] ?? "") · \(Self.words(m.mark))")
+                    .accessibilityLabel("\(numbers[m.id] ?? ""), \(Self.words(m.mark))")
+            }
+        }
+        .animation(.snappy(duration: 0.3), value: session.index)
+    }
+
+    @ViewBuilder private func pill(_ mark: DecideRun.Mark) -> some View {
+        switch mark {
+        case .current: Capsule().fill(Theme.you).frame(width: 28, height: 6)
+        case .waiting: Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 16, height: 6)
+        case .later: Capsule().strokeBorder(Theme.paused, lineWidth: 1.2).frame(width: 16, height: 6)
+        case .handled(let startsAgent): Capsule().fill(startsAgent ? Theme.agent : Theme.finished).frame(width: 16, height: 6)
+        }
+    }
+
+    static func words(_ mark: DecideRun.Mark) -> String {
+        switch mark {
+        case .current: "on screen"
+        case .waiting: "not reached yet"
+        case .later: "left for later"
+        case .handled(let startsAgent): startsAgent ? "decided, an agent goes on" : "decided, done"
+        }
     }
 
     @ViewBuilder private var toast: some View {
@@ -230,19 +263,42 @@ struct DecideSessionView: View {
         }
     }
 
-    private var keyHints: some View {
-        HStack(spacing: 16) {
-            hint("↵", "accept the recommendation"); hint("1–4  ← →", "choose"); hint("N", "note"); hint("R", "refine")
-            hint("Space", "later"); hint("Z", "undo"); hint("esc", "done")
+    /// The keys, in a popover from the ? button rather than always on screen.
+    private var shortcuts: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Keyboard shortcuts").font(.headline)
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 7) {
+                hint("↵", "Answer, or the main action")
+                hint("1–4", "Select an answer")
+                hint("↑ ↓", "Move the selection")
+                hint("N", "Write a note")
+                hint("R", "Send back to refine")
+                hint("Space", "Later")
+                hint("Z", "Undo")
+                hint("?", "Show these shortcuts")
+                hint("esc", "Done")
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                legend(.current); legend(.handled(startsAgent: true)); legend(.handled(startsAgent: false)); legend(.later); legend(.waiting)
+            }
         }
-        .font(.caption).foregroundStyle(.secondary)
+        .padding(16)
+    }
+
+    private func legend(_ mark: DecideRun.Mark) -> some View {
+        HStack(spacing: 10) {
+            pill(mark).frame(width: 28, alignment: .center)
+            Text(Self.words(mark).capitalizedFirst).font(.callout)
+        }
     }
 
     private func hint(_ key: String, _ label: String) -> some View {
-        HStack(spacing: 4) {
-            Text(key).font(.caption.monospaced()).padding(.horizontal, 5).padding(.vertical, 1)
+        GridRow {
+            Text(key).font(.callout.monospaced()).padding(.horizontal, 6).padding(.vertical, 1)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-            Text(label)
+                .gridColumnAlignment(.trailing)
+            Text(label).font(.callout)
         }
     }
 
@@ -265,7 +321,7 @@ struct DecideSessionView: View {
             }
             if streak > 1 { Text("Cleared everything \(streak) days in a row.").font(.callout).foregroundStyle(.secondary) }
             Button("Back to the Desk") { close(to: .desk) }
-                .buttonStyle(.glassProminent).controlSize(.large).keyboardShortcut(.defaultAction)
+                .buttonStyle(.glassProminent).buttonBorderShape(.capsule).controlSize(.large).keyboardShortcut(.defaultAction)
         }
         .onAppear { if clearedAll && !session.items.isEmpty { DecideStreak.cleared(state.store) } }
     }
@@ -283,12 +339,18 @@ struct DecideSessionView: View {
     // MARK: Keys and leaving
 
     private func handle(_ press: KeyPress) -> KeyPress.Result {
-        if noteFocused { return .ignored }
+        if noteFocused || session.typing {
+            if press.key == .return && session.typing { NotificationCenter.default.post(name: .hxDecideKey, object: "accept"); return .handled }
+            return .ignored
+        }
         if press.characters.lowercased() == "z" { session.undo(); return .handled }
+        if press.characters == "?" { showShortcuts.toggle(); return .handled }
         guard session.current != nil else { return .ignored }
         switch press.key {
         case .return: NotificationCenter.default.post(name: .hxDecideKey, object: "accept"); return .handled
         case .leftArrow: NotificationCenter.default.post(name: .hxDecideKey, object: "left"); return .handled
+        case .upArrow: NotificationCenter.default.post(name: .hxDecideKey, object: "up"); return .handled
+        case .downArrow: NotificationCenter.default.post(name: .hxDecideKey, object: "down"); return .handled
         case .rightArrow: NotificationCenter.default.post(name: .hxDecideKey, object: "right"); return .handled
         case .space: NotificationCenter.default.post(name: .hxDecideKey, object: "later"); return .handled
         default: break
@@ -321,16 +383,10 @@ extension Notification.Name {
 
 // MARK: - One card
 
-/// A choice on a card: what it is called, what it gains and costs, and what happens when it is picked.
-private struct DecideChoice: Identifiable {
-    let id: String
-    let title: String
-    var detail: String? = nil
-    var gain: String? = nil
-    var cost: String? = nil
-    var swatch: Color? = nil
-}
-
+/// One decision, laid out as picked in the Decide Lab (decision DR8): the white card a third of the way down the grey
+/// panel, 820 wide with airy spacing; the kind as a coloured eyebrow, the title large, the token row; the asker's whole
+/// message in a bubble; the answers as a list. Selecting an answer does nothing; the action bar pinned to the bottom
+/// (Later and Note, then the one prominent button) does it, and ↵ is that button.
 private struct DecideCard: View {
     @EnvironmentObject var state: AppState
     let item: PendingDecision
@@ -338,27 +394,45 @@ private struct DecideCard: View {
     var noteFocused: FocusState<Bool>.Binding
     let leave: (Route) -> Void
 
-    @State private var choices: [DecideChoice] = []
-    @State private var recommended: String?
-    @State private var why = ""
+    @State private var choices: [AnswerOption] = []
     @State private var body_ = ""
     @State private var info = ProposalInfo()
     @State private var openQuestions: [Question] = []
+    /// How many questions were open when the card came up, for "2 of 2" after the first is answered.
+    @State private var totalQuestions = 0
     @State private var stillWaiting = true
+    @State private var selected: String?
+    @State private var own = ""
+    @FocusState private var ownFocused: Bool
+
+    /// The airy spacing from the Lab: every gap 1.4 times the regular one.
+    private static let air: CGFloat = 1.4
+    private static let width: CGFloat = 820
 
     var body: some View {
-        // The card is as tall as its content; only a card taller than the window scrolls.
-        ViewThatFits(in: .vertical) {
-            content
-            ScrollView { content }.scrollBounceBehavior(.basedOnSize)
+        VStack(spacing: 0) {
+            GeometryReader { geo in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // A third of the way down, not floating in the middle and not pressed to the top.
+                        Spacer().frame(height: max(20, geo.size.height * 0.12))
+                        content
+                            .frame(maxWidth: Self.width, alignment: .leading)
+                            .padding(24)
+                            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+                            .shadow(color: .black.opacity(0.10), radius: 18, y: 8)
+                            .padding(.horizontal, 32).padding(.bottom, 40)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+            actionBar
         }
-        .frame(maxWidth: 700)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.12), radius: 18, y: 8)
-        .padding(.vertical, 12)
         .onAppear(perform: load)
         .onReceive(NotificationCenter.default.publisher(for: .hxDecideKey)) { key($0.object as? String ?? "") }
+        .onChange(of: ownFocused) { session.typing = ownFocused }
         // A screenshot pasted while deciding goes on this card's ticket, for the agent to see (decision E3).
         .pastesScreenshots { images in
             let id = item.ticket.id, state = state
@@ -372,145 +446,148 @@ private struct DecideCard: View {
     }
 
     private var content: some View {
-            VStack(alignment: .leading, spacing: 14) {
-                header
-                middle
-                if let recommended, !why.isEmpty {
-                    Text("\(Text("★ Recommended: \(choices.first { $0.id == recommended }?.title ?? recommended). ").fontWeight(.semibold))\(why)")
-                        .font(.callout)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-                }
-                if session.noteOpen {
-                    TextField(refineAllowed ? "Note for the agent. Return sends it back to refine." : "Note on the ticket. Return saves it.",
-                              text: $session.note, axis: .vertical)
-                        .textFieldStyle(.roundedBorder).lineLimit(2...4)
-                        .focused(noteFocused)
-                        .onSubmit { refineAllowed ? refine() : saveNote() }
-                        .onExitCommand { session.noteOpen = false; noteFocused.wrappedValue = false }
-                }
-                actions
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            middle.padding(.top, (26 * Self.air).rounded())
+            if session.noteOpen {
+                TextField(refineAllowed ? "Note for the agent. Return sends it back to refine." : "Note on the ticket. Return saves it.",
+                          text: $session.note, axis: .vertical)
+                    .textFieldStyle(.roundedBorder).lineLimit(2...4)
+                    .focused(noteFocused)
+                    .onSubmit { refineAllowed ? refine() : saveNote() }
+                    .onExitCommand { session.noteOpen = false; noteFocused.wrappedValue = false }
+                    .padding(.top, (14 * Self.air).rounded())
             }
-            .padding(22)
+        }
     }
 
     // MARK: Header and middle
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Label("Your turn", systemImage: "circle.fill").labelStyle(.titleAndIcon)
-                    .font(.caption.weight(.semibold)).foregroundStyle(Theme.you).imageScale(.small)
-                Text("\(item.ticket.displayNumber) · \(item.ticket.type.displayName)").font(.caption).foregroundStyle(.secondary)
-                Text(kindLabel).font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                    .padding(.horizontal, 7).padding(.vertical, 1).background(.quaternary, in: Capsule())
+        VStack(alignment: .leading, spacing: (6 * Self.air).rounded()) {
+            HStack(alignment: .firstTextBaseline) {
+                // The kind in the colour of "your turn" (DESIGN.md rule 6), in small capitals.
+                Text(eyebrow.uppercased()).font(.caption.weight(.bold)).tracking(0.8).foregroundStyle(Theme.you)
                 Spacer()
-                Button("Open") { leave(.ticket(item.ticket.id)) }.buttonStyle(.borderless).font(.caption)
+                Button { leave(.ticket(item.ticket.id)) } label: { Label("Open \(item.ticket.displayNumber)", systemImage: "arrow.up.right").labelStyle(TrailingIconLabelStyle()) }
+                    .buttonStyle(.link).font(.caption)
             }
-            Text(item.ticket.title).font(.title2.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
-            Text(ask).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(item.ticket.title).font(.largeTitle.weight(.bold)).fixedSize(horizontal: false, vertical: true)
+            FiledByIrisTokens(ticketId: item.ticket.id)
         }
     }
 
-    private var kindLabel: String {
+    private var eyebrow: String {
+        let kind: String
         switch item.kind {
-        case .pick: choices.count == 2 ? "This or that" : "Pick one"
-        case .plan: "Approve a plan"
-        case .iris: "Iris asks"
-        case .answer: "An answer"
-        case .submit: "A draft"
-        case .judge: "Needs a sitting"
-        case .verify: "Try it"
+        case .pick: kind = choices.count == 2 ? "This or that" : "Pick one"
+        case .plan: kind = "Approve a plan"
+        case .iris: kind = currentQuestion.map { "\($0.askedBy) asks" } ?? "Iris checked this"
+        case .answer: kind = "An answer"
+        case .submit: kind = "A draft"
+        case .judge: kind = "Needs a sitting"
+        case .verify: kind = "Try it"
         }
+        guard item.kind == .iris, totalQuestions > 1, !openQuestions.isEmpty else { return kind }
+        return "\(kind) · \(totalQuestions - openQuestions.count + 1) of \(totalQuestions)"
     }
 
-    private var ask: String {
-        switch item.kind {
-        case .pick: item.ticket.status == .draft ? "Hatch prepared these options. Choosing one records a decision." : "The agent offers these options. Choosing one records a decision."
-        case .plan: "The agent's plan waits for you: \(item.plan?.reason ?? "")."
-        case .iris: "Iris checked this ticket and needs you before an agent starts."
-        case .answer: "The agent answered in words. Close the Question if the answer works for you."
-        case .submit: "Submit it and Iris checks it for what is missing. A draft does nothing while it waits."
-        case .judge: item.ticket.type == .proposal ? "Judge the options in the Stage, or accept the recommendation." : "Open it to choose a variant."
-        case .verify: "The work is built. Try it in a Preview before it merges."
-        }
-    }
+    private var currentQuestion: Question? { item.kind == .iris ? openQuestions.first : nil }
 
     @ViewBuilder private var middle: some View {
+        let answersGap = (14 * Self.air).rounded()
         switch item.kind {
-        case .pick, .plan:
-            if item.kind == .plan, let files = item.plan?.files {
-                Text(files.prefix(12).joined(separator: "\n") + (files.count > 12 ? "\n+ \(files.count - 12) more" : ""))
-                    .font(.caption.monospaced()).foregroundStyle(.secondary)
-                    .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
-            }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: choices.count > 2 ? 180 : 240), spacing: 10, alignment: .top)], spacing: 10) {
-                ForEach(Array(choices.enumerated()), id: \.element.id) { i, c in choiceTile(c, number: i + 1) }
-            }
         case .iris:
-            IrisReviewView(ticketId: item.ticket.id)
-        case .answer, .submit:
-            if !body_.isEmpty {
-                Text(body_).textSelection(.enabled).lineLimit(14)
-                    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+            if let q = currentQuestion {
+                VStack(alignment: .leading, spacing: answersGap) {
+                    QuestionMessage(asker: q.askedBy, at: q.at, text: q.text)
+                    answerList(own: !QuestionPurpose.isActedOn(q.purpose))
+                }
+                .id(q.id)
+            } else {
+                IrisReviewView(ticketId: item.ticket.id, inDecide: true)
+            }
+        case .pick:
+            VStack(alignment: .leading, spacing: answersGap) {
+                QuestionMessage(asker: item.ticket.status == .draft ? "Hatch" : "Agent on \(item.ticket.displayNumber)",
+                                text: item.ticket.status == .draft ? "I prepared these options. Choosing one records a decision." : "These are the options. Choosing one records a decision.")
+                answerList(own: false)
+            }
+        case .plan:
+            VStack(alignment: .leading, spacing: answersGap) {
+                QuestionMessage(asker: "Agent on \(item.ticket.displayNumber)", text: "Here is my plan. Before I start, these files would change.")
+                if let files = item.plan?.files {
+                    Text(files.prefix(12).joined(separator: "\n") + (files.count > 12 ? "\n+ \(files.count - 12) more" : ""))
+                        .font(.callout.monospaced()).foregroundStyle(.secondary)
+                        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .padding(.leading, QuestionMessage.indent)
+                }
+                answerList(own: false)
+            }
+        case .answer:
+            QuestionMessage(asker: "Agent on \(item.ticket.displayNumber)", text: body_.isEmpty ? "The agent answered in words." : body_)
+        case .submit:
+            VStack(alignment: .leading, spacing: answersGap) {
+                Text("Submit it and Iris checks it for what is missing. A draft does nothing while it waits.").foregroundStyle(.secondary)
+                if !body_.isEmpty {
+                    Text(body_).textSelection(.enabled).lineLimit(14)
+                        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
             }
         case .judge:
-            if !info.recommendations.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(info.recommendations, id: \.id) { r in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(r.topicTitle).foregroundStyle(.secondary)
-                            Text(r.choiceName).fontWeight(.medium)
+            VStack(alignment: .leading, spacing: answersGap) {
+                Text(item.ticket.type == .proposal ? "Judge the options in the Stage, or accept the recommendation." : "Open it to choose a variant.")
+                    .foregroundStyle(.secondary)
+                if !info.recommendations.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(info.recommendations, id: \.id) { r in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(r.topicTitle).foregroundStyle(.secondary)
+                                Text(r.choiceName).fontWeight(.medium)
+                            }
                         }
                     }
+                    .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
             }
         case .verify:
-            EmptyView()
+            Text("The work is built. Try it in a Preview before it merges.").foregroundStyle(.secondary)
         }
     }
 
-    private func choiceTile(_ c: DecideChoice, number: Int) -> some View {
-        Button { choose(c.id) } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text("\(number)").font(.caption.monospaced()).foregroundStyle(.secondary)
-                        .padding(.horizontal, 5).background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-                    if c.id == recommended { Text("★ Recommended").font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor) }
-                    Spacer(minLength: 0)
-                }
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    if let swatch = c.swatch { RoundedRectangle(cornerRadius: 5).fill(swatch).frame(width: 18, height: 18) }
-                    Text(c.title).fontWeight(.semibold).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-                }
-                if let d = c.detail { Text(d).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.leading) }
-                if let g = c.gain { Label(g, systemImage: "plus").font(.callout).labelStyle(DecideLineStyle()) }
-                if let k = c.cost { Label(k, systemImage: "minus").font(.callout).foregroundStyle(.secondary).labelStyle(DecideLineStyle()) }
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor, lineWidth: session.highlight == c.id ? 2 : 0))
-            .contentShape(RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
+    private func answerList(own allowsOwn: Bool) -> some View {
+        AnswerList(options: choices, selection: Binding(get: { selection }, set: { selected = $0 }),
+                   own: allowsOwn ? $own : nil, ownFocus: $ownFocused)
+            .padding(.leading, QuestionMessage.indent)
     }
 
-    // MARK: Actions
+    // MARK: Choices and the action bar
 
-    private var primaryTitle: String {
+    /// What is selected: the owner's pick, else the recommendation, else the first answer.
+    private var selection: String {
+        selected ?? choices.first(where: \.recommended)?.id ?? choices.first?.id ?? "own"
+    }
+
+    private var selectableIds: [String] {
+        var ids = choices.map(\.id)
+        if let q = currentQuestion, !QuestionPurpose.isActedOn(q.purpose) { ids.append("own") }
+        return ids
+    }
+
+    private var mainTitle: String {
         switch item.kind {
-        case .pick, .plan: "Accept recommendation"
-        case .iris: openQuestions.contains { !$0.suggestions.isEmpty } ? "Accept Iris's suggested answers" : (stillWaiting ? "Next" : "Done, next")
-        case .answer: "Close as answered"
-        case .submit: "Submit"
-        case .judge: item.ticket.type == .proposal && !info.recommendations.isEmpty ? "Accept the recommendation" : "Open it"
-        case .verify: "Open Previews"
+        case .iris:
+            if currentQuestion != nil { return openQuestions.count > 1 ? "Answer, next question" : "Answer" }
+            return stillWaiting ? "Next" : "Done, next"
+        case .pick: return "Choose"
+        case .plan: return selection == "back" ? "Send back" : "Approve"
+        case .answer: return "Close as answered"
+        case .submit: return "Submit"
+        case .judge: return item.ticket.type == .proposal && !info.recommendations.isEmpty ? "Accept the recommendation" : "Open it"
+        case .verify: return "Open Previews"
         }
     }
 
@@ -518,11 +595,12 @@ private struct DecideCard: View {
         item.kind == .plan || (item.kind == .judge && item.ticket.type != .question)
     }
 
+    /// What the main button does, for its tooltip (the hint line is hidden, DR8).
     private var startsText: String {
         switch item.kind {
         case .pick: "Records a decision"
         case .plan: "Approving lets the agent go ahead"
-        case .iris: "Answers go to Iris; the ticket goes on"
+        case .iris: "Answers go to \(currentQuestion?.askedBy ?? "Iris"); the ticket goes on"
         case .answer: "Closes the Question"
         case .submit: "Iris checks it (a model call)"
         case .judge: item.ticket.type == .proposal ? "Accepting starts the build" : "Opens the ticket"
@@ -530,35 +608,50 @@ private struct DecideCard: View {
         }
     }
 
-    private var actions: some View {
-        HStack(spacing: 8) {
-            Button { accept() } label: { Label(primaryTitle, systemImage: "return") }
-                .buttonStyle(.glassProminent)
-            if item.kind == .judge && item.ticket.type == .proposal {
-                Button { StageLauncher.shared.open(ticket: item.ticket, state: state) } label: { Label("Open the Stage", systemImage: "rectangle.on.rectangle") }
-                    .buttonStyle(.glass)
+    private var mainDisabled: Bool {
+        selection == "own" && own.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (item.kind == .iris)
+    }
+
+    /// Pinned to the bottom of the panel, lined up with the card: Later and Note, then the one prominent button.
+    private var actionBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 8) {
+                Button("Later") { later() }.buttonStyle(.glass).help("Leave it for later; it comes back at the end (Space)")
+                Button("Note") { toggleNote() }.buttonStyle(.glass).help("A note on the ticket (N)")
+                if refineAllowed {
+                    Button("Refine") { session.noteOpen ? refine() : toggleNote() }.buttonStyle(.glass).help("Send back to refine with a note (R)")
+                }
+                if item.kind == .judge && item.ticket.type == .proposal {
+                    Button("Open the Stage") { StageLauncher.shared.open(ticket: item.ticket, state: state) }.buttonStyle(.glass)
+                }
+                Spacer(minLength: 8)
+                Button(mainTitle) { accept() }
+                    .buttonStyle(.glassProminent)
+                    .disabled(mainDisabled)
+                    .help("\(startsText) (Return)")
             }
-            Button { toggleNote() } label: { Label("Note", systemImage: "square.and.pencil") }.buttonStyle(.glass).help("Note (N)")
-            if refineAllowed {
-                Button { session.noteOpen ? refine() : toggleNote() } label: { Label("Refine", systemImage: "arrow.uturn.backward") }
-                    .buttonStyle(.glass).help("Send back to refine (R)")
-            }
-            Button { later() } label: { Label("Later", systemImage: "arrow.turn.down.right") }.buttonStyle(.glass).help("Later (Space)")
-            Spacer(minLength: 8)
-            Text(startsText).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .padding(.horizontal, 32 + 24)
+            .frame(maxWidth: Self.width + 64 + 48)
+            .frame(height: 64)
+            .frame(maxWidth: .infinity)
         }
     }
 
     private func key(_ k: String) {
         switch k {
-        case "accept": if let h = session.highlight { choose(h) } else { accept() }
-        case "left", "right":
-            guard !choices.isEmpty else { return }
-            let ids = choices.map(\.id)
-            let at = ids.firstIndex(of: session.highlight ?? recommended ?? ids[0]) ?? 0
-            session.highlight = ids[(at + (k == "right" ? 1 : ids.count - 1)) % ids.count]
+        case "accept": if !mainDisabled { accept() }
+        case "up", "down", "left", "right":
+            let ids = selectableIds
+            guard !ids.isEmpty else { return }
+            let at = ids.firstIndex(of: selection) ?? 0
+            let step = (k == "down" || k == "right") ? 1 : ids.count - 1
+            selected = ids[(at + step) % ids.count]
+            ownFocused = selected == "own"
         case "1", "2", "3", "4":
-            if let n = Int(k), n <= choices.count { choose(choices[n - 1].id) }
+            if let n = Int(k), n <= choices.count { selected = choices[n - 1].id }
         case "n": toggleNote()
         case "r": if refineAllowed { session.noteOpen ? refine() : toggleNote() }
         case "later": later()
@@ -575,22 +668,43 @@ private struct DecideCard: View {
         session.decide(DecideOutcome(kind: .later, startsAgent: false), label: "\(item.ticket.displayNumber) left for later. It comes back at the end.") {}
     }
 
+    /// Answers the question on screen. The last open one goes through the undo window and the session moves on; an
+    /// earlier one is saved now, and the next question takes its place on the card.
+    private func answerQuestion(_ q: Question, _ text: String, agreed: Bool) {
+        let store = state.store, id = item.ticket.id
+        if openQuestions.count <= 1 {
+            commit(agreed: agreed, startsAgent: true, label: "\(item.ticket.displayNumber) · answered") {
+                _ = try store.answer(questionId: q.id, text: text)
+            }
+        } else {
+            _ = state.perform("Could not save the answer") { try store.answer(questionId: q.id, text: text) }
+            try? store.record(id, actor: "owner", kind: "decided", payload: ["kind": "iris", "agreed": .bool(agreed), "in": "decide"])
+            openQuestions = (try? store.questions(ticketId: id, openOnly: true)) ?? []
+            selected = nil; own = ""
+            choices = openQuestions.first.map(AnswerOption.replies(for:)) ?? []
+            state.refresh()
+        }
+    }
+
     private func accept() {
         switch item.kind {
-        case .pick, .plan:
-            if let r = recommended { choose(r) }
         case .iris:
-            let pairs = openQuestions.compactMap { q in q.suggestions.first.map { (q.id, $0) } }
-            if pairs.isEmpty {
-                session.decide(DecideOutcome(kind: stillWaiting ? .later : .chose(agreed: true), startsAgent: !stillWaiting),
-                               label: "\(item.ticket.displayNumber) · \(stillWaiting ? "left for later" : "done")") {}
+            if let q = currentQuestion {
+                if selection == "own" {
+                    let text = own.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { ownFocused = true; return }
+                    answerQuestion(q, text, agreed: false)
+                } else if let o = choices.first(where: { $0.id == selection }) {
+                    answerQuestion(q, o.answer, agreed: o.recommended)
+                } else {
+                    selected = "own"; ownFocused = true
+                }
                 return
             }
-            let store = state.store, id = item.ticket.id
-            commit(agreed: true, startsAgent: true, label: "\(item.ticket.displayNumber) · answered with Iris's suggestions") {
-                for (qid, text) in pairs { _ = try store.answer(questionId: qid, text: text) }
-                try store.record(id, actor: "owner", kind: "decide", payload: ["kind": "iris", "agreed": true])
-            }
+            session.decide(DecideOutcome(kind: stillWaiting ? .later : .chose(agreed: true), startsAgent: !stillWaiting),
+                           label: "\(item.ticket.displayNumber) · \(stillWaiting ? "left for later" : "done")") {}
+        case .pick, .plan:
+            choose(selection)
         case .answer:
             let store = state.store, id = item.ticket.id
             commit(agreed: true, startsAgent: false, label: "\(item.ticket.displayNumber) · closed as answered") {
@@ -619,7 +733,7 @@ private struct DecideCard: View {
 
     private func choose(_ key: String) {
         guard let c = choices.first(where: { $0.id == key }) else { return }
-        let agreed = key == recommended
+        let agreed = c.recommended
         let store = state.store, ticket = item.ticket
         let note = session.note.trimmingCharacters(in: .whitespacesAndNewlines)
         switch item.kind {
@@ -630,6 +744,7 @@ private struct DecideCard: View {
             }
         case .plan:
             guard let plan = item.plan else { return }
+            if key == "back" && note.isEmpty { session.noteOpen = true; noteFocused.wrappedValue = true; return }
             commit(agreed: agreed, startsAgent: key == "approve", label: "\(ticket.displayNumber) · \(key == "approve" ? "plan approved" : "plan sent back")") {
                 _ = try store.decidePlanReview(id: plan.id, approve: key == "approve", note: note.isEmpty ? nil : note)
             }
@@ -683,15 +798,18 @@ private struct DecideCard: View {
         switch item.kind {
         case .pick:
             let options = (try? store.questionOptions(ticketId: t.id)) ?? []
-            choices = options.map { DecideChoice(id: $0.key, title: $0.title, detail: $0.detail, gain: $0.gain, cost: $0.cost) }
-            recommended = options.first(where: \.recommended)?.key
-            why = options.first(where: \.recommended)?.why ?? ""
+            choices = options.map { o in
+                let detail = [o.detail, o.why].compactMap { $0 }.map { ".!?".contains($0.last ?? ".") ? $0 : $0 + "." }.joined(separator: " ")
+                return AnswerOption(id: o.key, title: o.title, detail: detail.isEmpty ? nil : detail, gain: o.gain, cost: o.cost, recommended: o.recommended, answer: o.key)
+            }
         case .plan:
-            choices = [DecideChoice(id: "approve", title: "Approve the plan", detail: "The agent goes ahead with these files"),
-                       DecideChoice(id: "back", title: "Send it back", detail: "Say what to change in a note")]
-            (recommended, why) = planRecommendation()
+            let (rec, why) = planRecommendation()
+            choices = [AnswerOption(id: "approve", title: "Approve the plan", detail: rec == "approve" ? why : "The agent goes ahead with these files.", recommended: rec == "approve", answer: "approve"),
+                       AnswerOption(id: "back", title: "Send it back", detail: rec == "back" ? why : "Say what to change in a note.", recommended: rec == "back", answer: "back")]
         case .iris:
             openQuestions = (try? store.questions(ticketId: t.id, openOnly: true)) ?? []
+            totalQuestions = openQuestions.count
+            choices = openQuestions.first.map(AnswerOption.replies(for:)) ?? []
         case .answer:
             body_ = ((try? store.notes(ticketId: t.id)) ?? []).last { $0.kind == .agent }?.body ?? ""
         case .submit:
@@ -719,16 +837,11 @@ private struct DecideCard: View {
         guard item.kind == .iris else { return }
         let now = (try? state.store.ticket(id: item.ticket.id))?.status
         stillWaiting = now == .needsAnswers
-        openQuestions = (try? state.store.questions(ticketId: item.ticket.id, openOnly: true)) ?? []
-    }
-}
-
-/// A gain or cost line: a small plus or minus, then the text.
-private struct DecideLineStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            configuration.icon.font(.caption2.weight(.bold)).foregroundStyle(.secondary).frame(width: 10)
-            configuration.title
+        let open = (try? state.store.questions(ticketId: item.ticket.id, openOnly: true)) ?? []
+        if open.map(\.id) != openQuestions.map(\.id) {
+            openQuestions = open
+            choices = open.first.map(AnswerOption.replies(for:)) ?? []
+            selected = nil
         }
     }
 }
@@ -775,7 +888,7 @@ struct DecideIrisCard: View {
             Text(kinds + " · about \(minutes) min" + (new > 0 && new < items.count ? " · \(new) new since you last decided" : ""))
                 .font(.callout).foregroundStyle(.secondary)
             Button { state.openDecide() } label: { Label("Decide", systemImage: "play.fill") }
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.glassProminent).buttonBorderShape(.capsule)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -51,6 +51,12 @@ struct HatchApp: App {
         .windowToolbarStyle(.unified)
         .defaultSize(width: 900, height: 760)
 
+        // Decide Lab: pick how each part of a Decide card looks, on the real queue and on hard cases.
+        Window("Decide Lab", id: "decide-lab") {
+            DecideLabView().environmentObject(state)
+        }
+        .defaultSize(width: 1400, height: 900)
+
         Window("Keyboard Shortcuts", id: "shortcuts") {
             ShortcutCheatSheet().environmentObject(state)
         }
@@ -111,6 +117,7 @@ struct HatchCommands: Commands {
         }
         CommandMenu("Go") {
             Button("Go to…") { state.openPalette(.places) }.shortcut("go.places", keys)
+            Button("Decide Lab") { openWindow(id: "decide-lab") }
             Divider()
             ForEach(Route.pages, id: \.self) { route in
                 if let id = route.shortcutId {

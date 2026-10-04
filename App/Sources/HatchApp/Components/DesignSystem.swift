@@ -13,6 +13,10 @@ enum HX {
         let sum = key.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
         return palette[sum % palette.count]
     }
+
+    /// A message from Iris or an agent: the system's grey message bubble, so a question reads as someone talking to you.
+    static let bubble = Theme.dynamic(light: 0xE9E9EB, dark: 0x2C2C2E)
+    static let bubbleRadius: CGFloat = 18
 }
 
 extension Status {
