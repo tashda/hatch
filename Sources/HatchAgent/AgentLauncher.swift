@@ -29,6 +29,15 @@ public struct AgentRunInfo: Identifiable, Equatable, Sendable {
     public var tokensIn: Int
     public var tokensOut: Int
     public var logPath: String
+
+    public init(ticketId: Int, ticketNumber: String, ticketTitle: String, runId: Int, agent: String, role: AgentRole, providerName: String,
+                model: String?, repo: String?, branch: String?, workspace: String, startedAt: Date, attempt: Int, step: String,
+                tokensIn: Int, tokensOut: Int, logPath: String) {
+        self.ticketId = ticketId; self.ticketNumber = ticketNumber; self.ticketTitle = ticketTitle; self.runId = runId; self.agent = agent
+        self.role = role; self.providerName = providerName; self.model = model; self.repo = repo; self.branch = branch
+        self.workspace = workspace; self.startedAt = startedAt; self.attempt = attempt; self.step = step
+        self.tokensIn = tokensIn; self.tokensOut = tokensOut; self.logPath = logPath
+    }
 }
 
 /// Turns Claude Code's stream-json lines into steps and token counts. Pure, so it is tested without a program.
@@ -131,6 +140,8 @@ public final class AgentLauncher: @unchecked Sendable {
     var config: Configuration
     let onChange: @Sendable () -> Void
     private let lock = NSLock()
+    /// One tick at a time, so the timer and a change cannot both take the same ticket.
+    private let tickLock = NSLock()
     private var processes: [Int: Process] = [:]
     private var runs: [Int: AgentRunInfo] = [:]
     private var stopping: Set<Int> = []
@@ -155,7 +166,8 @@ public final class AgentLauncher: @unchecked Sendable {
 
     /// Starts agents for waiting work while slots are free. Called on a timer and after changes.
     public func tick() {
-        guard !isPaused else { return }
+        guard !isPaused, tickLock.try() else { return }
+        defer { tickLock.unlock() }
         let busy = lock.withLock { Set(runs.keys) }
         for task in (try? store.agentWork()) ?? [] where task.kind != .vet && !busy.contains(task.ticket.id) {
             guard (try? store.takeSlotAvailable(kind: task.kind, projectId: task.ticket.projectId)) == true else { break }
@@ -354,7 +366,7 @@ public final class AgentLauncher: @unchecked Sendable {
     }
 
     /// The last lines the program wrote, as plain text, for the ticket's thread.
-    static func tail(of path: String, lines: Int = 12) -> String {
+    public static func tail(of path: String, lines: Int = 12) -> String {
         guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return "" }
         let readable = text.split(separator: "\n").suffix(60).compactMap { line -> String? in
             let s = String(line)

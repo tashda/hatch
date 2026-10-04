@@ -17,6 +17,7 @@ struct AgentSettingsPage: View {
     @State private var tests: [String: Result<ProbeResult, ProbeFailure>] = [:]
     @State private var details: AgentProvider?
     @State private var taskSheet: AgentRole?
+    @State private var hatchCommandVersion = 0
     /// Each task's last check, kept between launches so a task is checked when it changes and once a day.
     @State private var checks: [String: TaskCheck] = [:]
     @State private var adding = false
@@ -89,6 +90,11 @@ struct AgentSettingsPage: View {
 
     private func codingSection() -> some View {
         Section {
+            Toggle("Start agents by themselves", isOn: Binding(get: { !state.agentsPaused }, set: { state.setAgentsPaused(!$0) }))
+            LabeledContent("hatch command") {
+                Text(hatchCommand.map(hxAbbreviated) ?? "Not found").foregroundStyle(hatchCommand == nil ? Theme.critical : .secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
             Picker("Agents at once", selection: $maxAgents) {
                 ForEach(Self.agentCounts, id: \.self) { n in
                     Text(n == 3 ? "3 · Recommended" : "\(n)").tag(n)
@@ -101,7 +107,11 @@ struct AgentSettingsPage: View {
         } header: {
             Text("Coding agents")
         } footer: {
-            Text("Each agent works on one ticket in its own copy of the code. More at once finishes sooner and uses your plan faster.")
+            HStack(alignment: .top) {
+                Text("When a ticket is ready and a slot is free, Hatch starts its agent in the ticket's own copy of the code. Agents call the hatch command to plan, ask and hand in.")
+                Spacer(minLength: 16)
+                Button("Choose hatch Command…", action: chooseHatchCommand)
+            }
         }
     }
 
@@ -120,6 +130,20 @@ struct AgentSettingsPage: View {
                 Button("Add Provider…") { adding = true }
             }
         }
+    }
+
+    private var hatchCommand: String? { _ = hatchCommandVersion; return AppState.hatchCommand(store: state.store) }
+
+    private func chooseHatchCommand() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.message = "Choose the hatch program, for example .build/debug/hatch in the hatch folder."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard FileManager.default.isExecutableFile(atPath: url.path) else { state.errorMessage = "\(url.lastPathComponent) is not a program."; return }
+        state.hxSaveSetting(AppState.hatchCommandSetting, url.path)
+        hatchCommandVersion += 1
+        state.tickLauncher()
     }
 
     /// What uses a provider, in plain words: the tasks that run on it, their own or through the default.
@@ -366,17 +390,18 @@ private struct ModelMenu: View {
                 Divider()
             }
             ForEach(providers) { p in
-                Section(p.enabled ? p.name : "\(p.name) (off)") {
+                let notYet = programsOnly && p.kind != .claudeCode
+                Section(notYet ? "\(p.name) (not yet for coding)" : p.enabled ? p.name : "\(p.name) (off)") {
                     let listed = p.models.filter { !$0.isAlias && $0.featured }
                     if listed.isEmpty || p.defaultModel == nil && p.kind.isProgram {
-                        Text(modelName(nil, in: p)).tag("p:\(p.id)|")
+                        Text(modelName(nil, in: p)).tag("p:\(p.id)|").selectionDisabled(notYet)
                     }
-                    ForEach(listed.prefix(Self.shownPerProvider)) { m in Text(title(m, p)).tag("p:\(p.id)|\(m.id)") }
+                    ForEach(listed.prefix(Self.shownPerProvider)) { m in Text(title(m, p)).tag("p:\(p.id)|\(m.id)").selectionDisabled(notYet) }
                     // A chosen model the short list does not show stays visible, so the picker can show it.
                     if let o = own, o.providerId == p.id, let m = o.model, !listed.prefix(Self.shownPerProvider).contains(where: { $0.id == m }) {
                         Text(modelName(m, in: p)).tag("p:\(p.id)|\(m)")
                     }
-                    Text("More Models…").tag("more:\(p.id)")
+                    Text("More Models…").tag("more:\(p.id)").selectionDisabled(notYet)
                 }
             }
             if allowOff {

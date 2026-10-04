@@ -87,6 +87,11 @@ struct RootView: View {
                 SettingsView()
             } else if state.snapshotPresentation == .palette {
                 CommandPalette()
+            } else if state.snapshotPresentation == .agentCard {
+                // Snapshot only: the footer's agent card with a sample agent, since a hover popover is not captured.
+                AgentCard(run: Snapshots.sampleRun) {}
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if state.snapshotPresentation == .addProject {
                 ProjectSetupAssistant(store: state.store, demoStep: ProjectSetupModel.Step(rawValue: state.snapshotSetupStep))
                     .id(state.snapshotSetupStep)
@@ -109,6 +114,7 @@ struct RootView: View {
         case .palette: "Search"
         case .addProject: "Add project"
         case .repositorySelector: "Choose repositories"
+        case .agentCard: "Agent"
         case nil: state.route.title
         }
     }

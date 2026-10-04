@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import AppKit
 import HatchCore
 import HatchAgent
 
@@ -92,5 +93,65 @@ enum HXAskAdapter {
             if text.isEmpty { throw AgentRunnerError.badOutput("\(agent.provider.name) returned an empty answer.") }
             return Answer(text: text, tokensIn: out.tokensIn, tokensOut: out.tokensOut, author: agent.provider.name, label: agent.label)
         }.value
+    }
+}
+
+
+// MARK: The launcher in the app
+
+extension AppState {
+    /// Where the `hatch` command is: chosen in Settings, else found on PATH or in the usual install places.
+    static let hatchCommandSetting = "hatch_command"
+
+    nonisolated static func hatchCommand(store: HatchStore) -> String? {
+        if let chosen = (try? store.setting(hatchCommandSetting)) ?? nil, FileManager.default.isExecutableFile(atPath: chosen) { return chosen }
+        if let found = AgentProcess.locate("hatch") { return found }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return ["\(home)/.local/bin/hatch", "/usr/local/bin/hatch", "/opt/homebrew/bin/hatch"].first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    /// Starts the launcher and checks for waiting work every few seconds and after changes.
+    func startLauncher() {
+        guard launcher == nil, Snapshots.folder == nil, !Snapshots.demoMode else { return }
+        let store = store
+        let l = AgentLauncher(store: store,
+                              configuration: .init(home: paths.root, hatchPath: Self.hatchCommand(store: store), context: agentContext),
+                              settings: { AgentSettings.load(from: store, detect: false) },
+                              onChange: { [weak self] in Task { @MainActor in self?.agentRunsChanged() } })
+        launcher = l
+        agentsPaused = l.isPaused
+        launchTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickLauncher() }
+        }
+        tickLauncher()
+    }
+
+    /// One look for waiting work, off the main thread (it makes workspaces).
+    func tickLauncher() {
+        guard let l = launcher else { return }
+        l.update(.init(home: paths.root, hatchPath: Self.hatchCommand(store: store), context: agentContext))
+        DispatchQueue.global(qos: .utility).async { l.tick() }
+    }
+
+    func agentRunsChanged() {
+        let now = launcher?.running ?? []
+        let ended = now.count != agentRuns.count
+        agentRuns = now
+        // A run starting or ending moves a ticket; a step inside a run does not.
+        if ended { refresh() }
+    }
+
+    func stopAgent(ticketId: Int) { launcher?.stop(ticketId) }
+
+    func setAgentsPaused(_ paused: Bool) {
+        perform("Pause agents") { try launcher?.setPaused(paused) ?? store.setSetting(AgentLauncher.pausedSetting, paused ? "1" : "0") }
+        agentsPaused = paused
+        if !paused { tickLauncher() }
+    }
+
+    /// Opens Terminal in an agent's workspace, so the owner can take over.
+    func openInTerminal(_ path: String) {
+        guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
+        NSWorkspace.shared.open([URL(fileURLWithPath: path)], withApplicationAt: terminal, configuration: NSWorkspace.OpenConfiguration())
     }
 }

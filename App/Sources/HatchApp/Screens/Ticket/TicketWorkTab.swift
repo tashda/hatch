@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import HatchCore
+import HatchAgent
 
 /// Work: who is working, the build steps, the workspaces and branches, and the files claimed (decisions I1, I5, K3).
 struct TicketWorkTab: View {
@@ -21,7 +22,15 @@ struct TicketWorkTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                agentRow
+                if let run = state.agentRuns.first(where: { $0.ticketId == ticket.id }) {
+                    LiveAgentSection(run: run)
+                } else {
+                    agentRow
+                    if let problem = state.launcher?.problem(ticketId: ticket.id) {
+                        Label("The agent could not start: \(problem)", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.critical).font(.callout)
+                    }
+                }
                 if !blockers.isEmpty { blockerCard }
                 if showsBuildSteps { buildSection }
                 workspaceSection
@@ -211,5 +220,62 @@ struct TicketWorkTab: View {
         repos = (try? store.repos(projectId: ticket.projectId)) ?? []
         claims = (try? store.claims(ticketId: id)) ?? []
         blockers = (try? store.openBlockers(ticketId: id)) ?? []
+    }
+}
+
+
+/// The agent Hatch started for this ticket, live: what it is doing, its log, and Stop or take over in Terminal.
+private struct LiveAgentSection: View {
+    @EnvironmentObject var state: AppState
+    let run: AgentRunInfo
+    @State private var lines: [String] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(run.agent) · \(run.role.taskTitle)").fontWeight(.semibold)
+                    Text(run.step).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer()
+                Button("Terminal", systemImage: "terminal") { state.openInTerminal(run.workspace) }
+                    .buttonStyle(.glass).help("Open Terminal in the agent's workspace to take over")
+                Button("Stop", systemImage: "stop.fill") { state.stopAgent(ticketId: run.ticketId) }
+                    .buttonStyle(.glass).tint(Theme.critical)
+                    .help("Stop the agent; the ticket waits until you resume it")
+            }
+            HStack(spacing: 18) {
+                Label([run.model, run.providerName].compactMap { $0 }.joined(separator: " · "), systemImage: "cpu")
+                Label(run.branch ?? "–", systemImage: "arrow.triangle.branch")
+                Label("\(hxTokens(run.tokensIn)) in · \(hxTokens(run.tokensOut)) out", systemImage: "gauge.with.dots.needle.33percent")
+                if run.attempt > 1 { Label("Second try", systemImage: "arrow.clockwise") }
+            }
+            .font(.callout).foregroundStyle(.secondary)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(Array(lines.enumerated()), id: \.offset) { i, line in
+                            Text(line).font(.callout.monospaced()).textSelection(.enabled).id(i)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                }
+                .frame(height: 220)
+                .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                .onChange(of: lines.count) { _, n in if n > 0 { proxy.scrollTo(n - 1, anchor: .bottom) } }
+            }
+        }
+        .padding(12)
+        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+        .autoReload(every: 2) {
+            let path = run.logPath
+            Task {
+                let text = await Task.detached { AgentLauncher.tail(of: path, lines: 60) }.value
+                let next = text.split(separator: "\n").map(String.init)
+                if next != lines { lines = next }
+            }
+        }
     }
 }

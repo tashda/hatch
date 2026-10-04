@@ -142,7 +142,7 @@ struct AgentsView: View {
                         Text(t.title).lineLimit(1)
                     }
                     .buttonStyle(.link)
-                    HXChip(text: current?.step ?? t.status.displayName, turn: .agent)
+                    HXChip(text: state.agentRuns.first { $0.ticketId == t.id }?.step ?? current?.step ?? t.status.displayName, turn: .agent)
                     Spacer()
                     runClock(current?.startedAt ?? t.updatedAt)
                 }
@@ -270,6 +270,8 @@ struct AgentsView: View {
     // MARK: Actions (I5)
 
     private func stop(_ t: Ticket) {
+        // An agent Hatch started is stopped through the launcher, which ends its program and records the run.
+        if state.agentRuns.contains(where: { $0.ticketId == t.id }) { state.stopAgent(ticketId: t.id); return }
         let runs = openRuns.filter { $0.ticketId == t.id }
         state.perform("Stop agent") {
             for r in runs { try state.store.endRun(r.id, tokensIn: r.tokensIn, tokensOut: r.tokensOut, outcome: "stopped") }
@@ -278,6 +280,7 @@ struct AgentsView: View {
     }
 
     private func takeOver(_ t: Ticket) {
+        if let live = state.agentRuns.first(where: { $0.ticketId == t.id }) { state.openInTerminal(live.workspace); return }
         let spaces = (try? state.store.workspaces(ticketId: t.id)) ?? []
         guard let first = spaces.first else {
             state.errorMessage = "\(t.displayNumber) has no workspace yet."

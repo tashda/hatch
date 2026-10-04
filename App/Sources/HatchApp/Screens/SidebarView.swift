@@ -136,22 +136,21 @@ struct WindowFooter: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Button { state.navigate(to: .agents) } label: {
-                HStack(spacing: 7) {
-                    ForEach(0..<max(slots.max, 1), id: \.self) { i in
-                        let running = i < slots.used
-                        Circle()
-                            .fill(running
-                                  ? AnyShapeStyle(LinearGradient(colors: [Theme.agent.opacity(0.75), Theme.agent], startPoint: .top, endPoint: .bottom))
-                                  : AnyShapeStyle(Color.secondary.opacity(0.08)))
-                            .overlay(Circle().strokeBorder(running ? Theme.agent.opacity(0.35) : Color.secondary.opacity(0.4), lineWidth: running ? 3 : 1))
-                            .shadow(color: running ? Theme.agent.opacity(0.45) : .clear, radius: 3)
-                            .frame(width: 11, height: 11)
-                    }
+            HStack(spacing: 4) {
+                // The launcher's agents first, then agents started by hand, then free slots.
+                let runs = state.agentRuns
+                ForEach(0..<max(slots.max, runs.count, 1), id: \.self) { i in
+                    AgentSlotCircle(run: i < runs.count ? runs[i] : nil, busy: i < max(slots.used, runs.count))
                 }
+                Button { state.setAgentsPaused(!state.agentsPaused) } label: {
+                    Image(systemName: state.agentsPaused ? "play.fill" : "pause.fill").font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(state.agentsPaused ? Theme.you : .secondary)
+                        .frame(width: 18, height: 18).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(state.agentsPaused ? "Agents are paused. Start agents again" : "Pause agents: no new agent starts; running ones finish")
+                .accessibilityLabel(state.agentsPaused ? "Resume agents" : "Pause agents")
             }
-            .buttonStyle(.plain)
-            .help(slots.used == 0 ? "No agents running. Open Agents" : "\(slots.used) of \(slots.max) agents running. Open Agents")
             Spacer()
             Button { state.navigate(to: .log) } label: {
                 HStack(spacing: 6) {

@@ -3,13 +3,14 @@ import HatchCore
 import HatchSync
 import HatchAPI
 import HatchGit
+import HatchAgent
 import HatchImport
 
 /// The one object every screen reads. It wraps the store (the only place state changes, decision S3), re-publishes after every
 /// change, and holds navigation and panel state. Screens never write SQL; they call store methods inside `perform`.
 @MainActor
 final class AppState: ObservableObject {
-    enum SnapshotPresentation { case settings, palette, addProject, repositorySelector }
+    enum SnapshotPresentation { case settings, palette, addProject, repositorySelector, agentCard }
 
     let store: HatchStore
     let paths: AppPaths
@@ -53,6 +54,11 @@ final class AppState: ObservableObject {
     @Published var syncSummary = SyncSummary()
     /// Set when writing or pushing a notebook failed; the footer shows it until the next export works.
     @Published var notebookProblem: String?
+    /// Agents the launcher is running now, for the footer, the ticket and the Agents page.
+    @Published var agentRuns: [AgentRunInfo] = []
+    @Published var agentsPaused = false
+    var launcher: AgentLauncher?
+    var launchTimer: Timer?
     private var exportingNotebooks = false
     /// Snapshot harness only: selects each ticket subview without changing the normal navigation model.
     @Published var snapshotTicketTab: TicketTab?
@@ -91,6 +97,7 @@ final class AppState: ObservableObject {
     func startServices() {
         NotificationCenterBridge.shared.start(state: self)
         startSync()
+        startLauncher()
         guard stageServer == nil else { return }
         let server = StageServer(store: store, paths: HatchPaths(home: paths.root))
         server.events = { [weak self] _ in
@@ -201,6 +208,7 @@ final class AppState: ObservableObject {
 
     func stopServices() {
         syncTimer?.invalidate(); syncTimer = nil
+        launchTimer?.invalidate(); launchTimer = nil
         stageServer?.stop()
         stageServer = nil
     }

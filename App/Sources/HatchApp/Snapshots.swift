@@ -282,6 +282,8 @@ enum Snapshots {
             NSApp.appearance = NSAppearance(named: appearance)
             if let route = routes[name] {
                 state.route = route
+            } else if name == "agent-card" {
+                state.snapshotPresentation = .agentCard
             } else if name.hasPrefix("settings") {
                 state.snapshotPresentation = .settings
                 if name == "settings-agents" { state.settingsPage = .agents }
@@ -293,5 +295,13 @@ enum Snapshots {
             try? await Task.sleep(nanoseconds: 900_000_000)
             if let window = NSApp.windows.first(where: { $0.isVisible }) { save(window, name: name, mode: mode, into: folder) }
         }
+    }
+
+    /// A running agent for the agent-card snapshot.
+    static var sampleRun: AgentRunInfo {
+        AgentRunInfo(ticketId: 1, ticketNumber: "#151", ticketTitle: "Toast spacing and corner radius", runId: 1, agent: "Agent on #151",
+                     role: .build, providerName: "Claude Code", model: "Sonnet 5.5", repo: "tashda/echo", branch: "ticket/151-toast-spacing",
+                     workspace: "/tmp", startedAt: Date().addingTimeInterval(-754), attempt: 1, step: "Editing ToastView.swift",
+                     tokensIn: 184_200, tokensOut: 12_900, logPath: "/tmp/none")
     }
 }
