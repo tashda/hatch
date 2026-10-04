@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import HatchCore
+import HatchAgent
 
 /// `Hatch --snapshots <folder>` opens the window on made-up data, saves a PNG of each main screen in light and dark, and quits.
 /// CI uses it so the screens can be looked at without a person running the app. It never touches the real database.
@@ -56,6 +57,11 @@ enum Snapshots {
         ], docs: ["README.md", "Design/CONTRIBUTING.md"], maxAgents: 3, integrationBranch: "hatch")
         config.promotion = .pullRequest
         let p = try! store.upsertProject(key: "acme", name: "Acme", config: config)
+        // Agents settings with a model list, as after the first fetch, so Settings › Agents shows its real rows.
+        var agents = AgentSettings.initial(detect: false)
+        agents.providers[0].models = ModelCatalog.claudeAliases
+        agents.providers[0].modelsFetchedAt = Date()
+        try? agents.save(to: store)
         try! store.setSetting(hxDefaultTicketsSetting, "acme/hatch-tickets")
         let rows: [(TicketType, Status, String, String)] = [
             (.proposal, .yourCall, "Toast spacing and corner radius", "Notifications"),
@@ -146,9 +152,21 @@ enum Snapshots {
         }
     }
 
+    /// `--only <name>`: draw one screen in light and dark and quit, for a quick look at a single page.
+    static var only: String? {
+        let a = CommandLine.arguments
+        guard let i = a.firstIndex(of: "--only"), i + 1 < a.count else { return nil }
+        return a[i + 1]
+    }
+
     @MainActor static func run(state: AppState, into folder: URL) async {
         keepWindowStateOut()
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        if let only {
+            await runOne(only, state: state, into: folder)
+            NSApp.terminate(nil)
+            return
+        }
         let first = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Toast spacing and corner radius" })?.id
         var routes: [(String, Route, TicketTab?)] = [("desk", .desk, nil), ("tickets", .tickets, nil), ("board", .board, nil),
                                                       ("previews", .previews, nil), ("specs", .specs, nil), ("decisions", .decisions, nil),
@@ -213,6 +231,12 @@ enum Snapshots {
             if let window = NSApp.windows.first(where: { $0.isVisible }) {
                 save(window, name: "settings", mode: mode, into: folder)
             }
+            state.settingsPage = .agents
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            if let window = NSApp.windows.first(where: { $0.isVisible }) {
+                save(window, name: "settings-agents", mode: mode, into: folder)
+            }
+            state.settingsPage = .workspace
             state.snapshotPresentation = nil
             try? await Task.sleep(nanoseconds: 250_000_000)
 
@@ -245,5 +269,25 @@ enum Snapshots {
         }
         restoreDemoPreferences()
         NSApp.terminate(nil)
+    }
+
+    /// One screen in both appearances. Names match the full run's files: a route (desk, health, project…), "settings"
+    /// or "settings-agents".
+    @MainActor private static func runOne(_ name: String, state: AppState, into folder: URL) async {
+        let routes: [String: Route] = ["desk": .desk, "tickets": .tickets, "board": .board, "previews": .previews, "specs": .specs,
+                                       "decisions": .decisions, "agents": .agents, "health": .health, "log": .log, "project": .projects,
+                                       "new-ticket": .newTicket]
+        if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
+        for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+            NSApp.appearance = NSAppearance(named: appearance)
+            if let route = routes[name] {
+                state.route = route
+            } else if name.hasPrefix("settings") {
+                state.snapshotPresentation = .settings
+                if name == "settings-agents" { state.settingsPage = .agents }
+            }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            if let window = NSApp.windows.first(where: { $0.isVisible }) { save(window, name: name, mode: mode, into: folder) }
+        }
     }
 }
