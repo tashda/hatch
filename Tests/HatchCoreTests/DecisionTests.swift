@@ -108,3 +108,55 @@ final class RecentEventsTests: XCTestCase {
         XCTAssertEqual(recent.first?.event.kind, "status")
     }
 }
+
+final class RunRecordTests: XCTestCase {
+    func testRunsRecordProviderModelTaskAndCache() throws {
+        let store = try HatchStore.inMemory()
+        let p = try store.upsertProject(key: "echo", name: "Echo")
+        let t = try store.createTicket(projectId: p.id, type: .tweak, title: "Toast", area: "Notifications", ghNumber: 151)
+        let id = try store.startRun(ticketId: t.id, agent: "Agent on #151", step: "Build", provider: "Claude Code", model: "claude-sonnet-5-5", role: "build")
+        try store.endRun(id, tokensIn: 1200, tokensOut: 300, outcome: "ok", cacheTokens: 9000)
+        _ = try store.startRun(ticketId: nil, agent: "ask", step: nil)
+        let runs = try store.runRecords(since: Date().addingTimeInterval(-60))
+        XCTAssertEqual(runs.count, 2)
+        let r = try XCTUnwrap(runs.first)
+        XCTAssertEqual(r.provider, "Claude Code")
+        XCTAssertEqual(r.role, "build")
+        XCTAssertEqual(r.cacheTokens, 9000)
+        XCTAssertEqual(r.tokens, 1500)
+        XCTAssertEqual(r.area, "Notifications")
+        XCTAssertEqual(r.ticketNumber, "#151")
+        XCTAssertNil(runs[1].provider, "a run without a provider is still listed")
+    }
+}
+
+final class UsageTests: XCTestCase {
+    func run(_ provider: String?, _ model: String?, _ role: String?, agent: String = "a", _ tokens: Int, daysAgo: Int = 0) -> RunRecord {
+        RunRecord(id: 0, ticketId: nil, ticketNumber: nil, ticketTitle: nil, ticketType: nil, area: nil, projectId: nil, agent: agent,
+                  provider: provider, model: model, role: role, tokensIn: tokens, tokensOut: 0, cacheTokens: 10,
+                  startedAt: Date().addingTimeInterval(Double(-daysAgo) * 86_400), endedAt: nil, outcome: nil)
+    }
+
+    func testSumsPerDayTaskAndModel() {
+        let runs = [run("Claude Code", "opus", "build", 1000), run("Claude Code", "haiku", nil, agent: "Iris", 50),
+                    run("Codex", "gpt", "build", 300, daysAgo: 1), run(nil, nil, nil, agent: "ask", 20)]
+        let all = UsageSummary(runs: runs)
+        XCTAssertEqual(all.total, 1370)
+        XCTAssertEqual(all.cache, 40)
+        XCTAssertEqual(all.byTask.first?.key, "build")
+        XCTAssertEqual(all.byTask.first?.tokens, 1300)
+        XCTAssertEqual(Set(all.byTask.map(\.key)), ["build", "iris", "ask"], "old runs are told apart by their agent")
+        XCTAssertEqual(Set(all.days.map(\.key)), ["Claude Code", "Codex", UsageSummary.unknownProvider])
+        let claude = UsageSummary(runs: runs, provider: "Claude Code")
+        XCTAssertEqual(claude.total, 1050)
+        XCTAssertEqual(Set(claude.days.map(\.key)), ["opus", "haiku"], "one provider's chart is split by model")
+    }
+
+    func testLimits() {
+        let l = UsageLimits(warnAbove: 1000, pauseAbove: 5000)
+        XCTAssertEqual(l.level(today: 999), .fine)
+        XCTAssertEqual(l.level(today: 1000), .warn)
+        XCTAssertEqual(l.level(today: 6000), .pause)
+        XCTAssertEqual(UsageLimits().level(today: .max), .fine, "zero is off")
+    }
+}

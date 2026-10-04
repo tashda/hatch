@@ -70,6 +70,8 @@ final class AppState: ObservableObject {
     var dockBadgeShown = true
     /// Tickets waiting for the owner, counted once per change for the Dock badge and the menu bar item.
     @Published private(set) var waitingCount = 0
+    /// Today's tokens against the daily limits on Settings › Usage; above the pause limit no new work starts.
+    @Published var usageLevel: UsageLimits.Level = .fine
     var launcher: AgentLauncher?
     var launchTimer: Timer?
     /// The daily backup and clean-up (Settings › Storage): when it last ran, and whether it is running now.

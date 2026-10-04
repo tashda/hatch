@@ -275,7 +275,19 @@ extension AppState {
         if s.failed > 0 || s.message != nil || notebookProblem != nil { return .problem }
         if syncing || exportingNotebooks || s.pending > 0 { return .busy }
         if s.lastOK == nil && projects.contains(where: { !($0.config?.ticketsRepo ?? "").isEmpty }) { return .attention }
+        if usageLevel != .fine { return .attention }
         return .calm
+    }
+
+    /// The status in words; orange from the daily token limits says which one.
+    var saveTitle: String {
+        let level = saveLevel
+        guard level == .attention else { return level.title }
+        switch usageLevel {
+        case .pause: return "Agents paused for today"
+        case .warn: return "Many tokens used today"
+        case .fine: return level.title
+        }
     }
 }
 
@@ -319,6 +331,10 @@ struct FooterStatusGlyph: View {
                             tint: (try? state.store.notebookStatus(projectId: p.id).error) ?? nil == nil ? .secondary : Theme.critical)
                 }
                 CardRow(label: "Decisions", value: decisionsLine)
+                if state.usageLevel != .fine {
+                    CardRow(label: "Usage", value: state.usageLevel == .pause ? "Above the pause limit; nothing new starts today" : "Above the daily warning",
+                            tint: .orange)
+                }
                 if let ci { CardRow(label: "CI on \(state.hxProject?.config?.integrationBranch ?? "hatch")", value: ci,
                                     tint: ci.hasPrefix("failing") ? Theme.critical : .secondary) }
             }
@@ -326,7 +342,7 @@ struct FooterStatusGlyph: View {
         }
     }
 
-    private var title: String { level.title }
+    private var title: String { state.saveTitle }
 
     private var githubLine: String {
         let s = state.syncSummary

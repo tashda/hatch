@@ -16,8 +16,14 @@ public struct VettingService {
     /// Provider and model, such as "Claude Code · haiku", recorded with the run so the Agents screen shows what ran.
     public var label: String?
 
-    public init(store: HatchStore, runner: AgentRunner, options: AgentOptions = AgentOptions(), label: String? = nil) {
+    /// The provider and model behind `runner`, recorded with each run for Usage and Reports.
+    public var provider: String?
+    public var model: String?
+
+    public init(store: HatchStore, runner: AgentRunner, options: AgentOptions = AgentOptions(), label: String? = nil,
+                provider: String? = nil, model: String? = nil) {
         self.store = store; self.runner = runner; self.options = options; self.label = label
+        self.provider = provider; self.model = model
     }
 
     @discardableResult
@@ -27,7 +33,8 @@ public struct VettingService {
             throw StoreError.invalid("\(t.displayNumber) is \(t.status.displayName); only a Checking ticket is vetted.")
         }
         let request = try VettingRequest.build(store: store, ticketId: ticketId)
-        let runId = try store.startRun(ticketId: ticketId, agent: IrisApplier.name, step: label.map { "vet with \($0)" } ?? "vet")
+        let runId = try store.startRun(ticketId: ticketId, agent: IrisApplier.name, step: label.map { "vet with \($0)" } ?? "vet",
+                                       provider: provider, model: model, role: AgentRole.iris.rawValue)
 
         let output: AgentOutput
         do { output = try runner.run(prompt: IrisPrompt.make(request), options: options) }

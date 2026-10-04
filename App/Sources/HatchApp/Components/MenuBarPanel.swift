@@ -89,7 +89,7 @@ struct MenuBarPanel: View {
             Spacer(minLength: 8)
             HStack(spacing: 5) {
                 SaveLevelGlyph(level: state.saveLevel)
-                Text(state.saveLevel.title)
+                Text(state.saveTitle)
             }
             .font(.caption)
             .foregroundStyle(state.saveLevel == .problem ? Theme.critical : .secondary)
