@@ -89,6 +89,7 @@ struct ComposerView: View {
         .onChange(of: title) { _, _ in scheduleHints() }
         .onChange(of: bodyText) { _, _ in scheduleHints() }
         .onChange(of: projectId) { _, _ in projectChanged() }
+        .onChange(of: state.composerTitle) { _, _ in takeTitle() }
     }
 
     private func publishCheck() {
@@ -489,10 +490,18 @@ struct ComposerView: View {
     // MARK: Hints (free, local)
 
     private func setUp() {
+        takeTitle()
         if projectId == nil {
             projectId = state.projectFilterId ?? state.projects.first?.id
         }
         loadThemes()
+    }
+
+    /// A title handed over by the palette (⌘Return), taken once.
+    private func takeTitle() {
+        guard let handed = state.composerTitle else { return }
+        title = handed
+        state.composerTitle = nil
     }
 
     private func projectChanged() {

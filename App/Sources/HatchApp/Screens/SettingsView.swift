@@ -61,7 +61,7 @@ struct SettingsView: View {
     }
 }
 
-enum SettingsPage: Hashable {
+enum SettingsPage: Hashable, CaseIterable {
     case workspace, agents, github, apps
     var title: String {
         switch self {

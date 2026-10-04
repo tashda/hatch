@@ -10,7 +10,7 @@ struct RootView: View {
     var body: some View {
         // Snapshot runs use the same window as the live app, so what they show is what you see.
         liveShell
-        .sheet(isPresented: $state.showPalette) { CommandPalette() }
+        .commandPaletteOverlay()
         .sheet(isPresented: $state.showAddProject) { ProjectSetupAssistant(store: state.store) }
         .alert("Something went wrong", isPresented: Binding(get: { state.errorMessage != nil }, set: { if !$0 { state.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}

@@ -36,7 +36,8 @@ struct HatchApp: App {
     }
 }
 
-/// Menu commands and shortcuts from the design: New ticket (cmd-N), Search (cmd-K), Ask (opt-cmd-A).
+/// Menu commands and shortcuts from the design: New ticket (cmd-N), Search (cmd-K), Ask (opt-cmd-A). The palette's
+/// scopes each have their own: Tickets cmd-K, Actions shift-cmd-K, Go to cmd-O, Spec and decisions shift-cmd-O.
 struct HatchCommands: Commands {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var state: AppState
@@ -50,7 +51,9 @@ struct HatchCommands: Commands {
             Button("New Ticket") { state.navigate(to: .newTicket) }.keyboardShortcut("n")
         }
         CommandGroup(after: .textEditing) {
-            Button("Search") { state.showPalette = true }.keyboardShortcut("k")
+            Button("Search Tickets") { state.openPalette(.tickets) }.keyboardShortcut("k")
+            Button("Actions…") { state.openPalette(.actions) }.keyboardShortcut("k", modifiers: [.shift, .command])
+            Button("Search Spec and Decisions") { state.openPalette(.reference) }.keyboardShortcut("o", modifiers: [.shift, .command])
             Button("Sync with GitHub") { state.syncNow() }.keyboardShortcut("r", modifiers: [.shift, .command])
             Button("Iris") { state.showAskPanel.toggle() }.keyboardShortcut("a", modifiers: [.option, .command])
         }
@@ -65,6 +68,8 @@ struct HatchCommands: Commands {
                 .keyboardShortcut("i", modifiers: [.control, .command])
         }
         CommandMenu("Go") {
+            Button("Go to…") { state.openPalette(.places) }.keyboardShortcut("o")
+            Divider()
             Button("Desk") { state.navigate(to: .desk) }.keyboardShortcut("1")
             Button("Tickets") { state.navigate(to: .tickets) }.keyboardShortcut("2")
             Button("Board") { state.navigate(to: .board) }.keyboardShortcut("3")

@@ -15,6 +15,8 @@ final class AppState: ObservableObject {
     private var syncTimer: Timer?
     private var syncing = false
     private var syncDebounce: DispatchWorkItem?
+    private var notebookDirty: Set<Int> = []
+    private var notebookDebounce: DispatchWorkItem?
 
     @Published var route: Route = .desk
     @Published private(set) var backStack: [Route] = []
@@ -33,11 +35,19 @@ final class AppState: ObservableObject {
     @Published var showAskPanel = UserDefaults.standard.bool(forKey: "hatch.showAskPanel") {
         didSet { UserDefaults.standard.set(showAskPanel, forKey: "hatch.showAskPanel") }
     }
-    @Published var showPalette = false
+    /// Closing resets the scope, so ⌘K and the toolbar's Search always open on Tickets.
+    @Published var showPalette = false {
+        didSet { if !showPalette { paletteScope = .tickets } }
+    }
+    @Published var paletteScope: PaletteScope = .tickets
     @Published var showAddProject = false
     /// The Settings page to show when the Settings window opens next (or now, if it is open).
     @Published var settingsPage: SettingsPage?
     @Published var searchText = ""
+    /// A title for New ticket to start with (⌘Return in the palette); the composer takes it once.
+    @Published var composerTitle: String?
+    /// Tickets opened most recently, newest first, for the palette's Recent group.
+    @Published private(set) var recentTicketIds: [Int] = UserDefaults.standard.array(forKey: "hatch.recentTickets") as? [Int] ?? []
     @Published var syncSummary = SyncSummary()
     /// Snapshot harness only: selects each ticket subview without changing the normal navigation model.
     @Published var snapshotTicketTab: TicketTab?
@@ -140,6 +150,17 @@ final class AppState: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
     }
 
+    /// Notebook writes are batched: one commit and push a few seconds after the last change.
+    private func scheduleNotebookExport() {
+        notebookDebounce?.cancel()
+        let work = DispatchWorkItem { [weak self] in Task { @MainActor in self?.exportNotebooks() } }
+        notebookDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
+    }
+
+    /// Filled in with the notebook export (decisions, NOW.md, push).
+    func exportNotebooks() {}
+
     func stopServices() {
         syncTimer?.invalidate(); syncTimer = nil
         stageServer?.stop()
@@ -180,6 +201,12 @@ final class AppState: ObservableObject {
     /// Tickets waiting for the owner, for the Dock badge and the sidebar (decision B6).
     var yourTurnCount: Int { ((try? store.countByTurn(projectId: projectFilterId)) ?? [:])[.you] ?? 0 }
 
+    /// Called after anything is written to a project's notebook clone: Hatch commits and pushes it in the background.
+    func notebookChanged(projectId: Int) {
+        notebookDirty.insert(projectId)
+        scheduleNotebookExport()
+    }
+
     // MARK: Changing things
 
     /// Runs a store change, refreshes every view, and turns an error into a message the owner can read.
@@ -215,10 +242,23 @@ final class AppState: ObservableObject {
 
     /// Every page change goes through here, so Back and Forward always return to where you were.
     func navigate(to destination: Route) {
+        if case .ticket(let id) = destination { noteRecent(id) }
         guard destination != route else { return }
         backStack.append(route)
         forwardStack.removeAll()
         route = destination
+    }
+
+    /// Opens the palette on a scope; the same shortcut again closes it, as Spotlight does.
+    func openPalette(_ scope: PaletteScope = .tickets) {
+        if showPalette && paletteScope == scope { showPalette = false; return }
+        paletteScope = scope
+        showPalette = true
+    }
+
+    private func noteRecent(_ id: Int) {
+        recentTicketIds = Array(([id] + recentTicketIds.filter { $0 != id }).prefix(12))
+        UserDefaults.standard.set(recentTicketIds, forKey: "hatch.recentTickets")
     }
 
     var canGoBack: Bool { !backStack.isEmpty }
