@@ -223,13 +223,14 @@ final class SwiftCorpus {
 
     /// Where a view is used, as one context: the place most of its uses agree on (the first use breaks a tie), with the
     /// styles of a use in that place. Nil when nothing uses it or it is already being resolved (a view inside itself).
-    func context(ofView name: String, depth: Int) -> SwiftStructure.Context? {
-        if let known = memo[name] { return known }
+    func context(ofView name: String, depth: Int, element: String? = nil) -> SwiftStructure.Context? {
+        let key = name + "|" + (element ?? "")
+        if let known = memo[key] { return known }
         guard depth < 8, !resolving.contains(name) else { return nil }
         // Used nowhere as a view: shown by a window, a scene or AppKit (`NSHostingView(rootView:)`), so its content is a page.
         guard let sites = viewUses[name], !sites.isEmpty else {
             let root = SwiftStructure.Context(place: "page", view: name, chains: [], preview: false, trail: ["root view"], source: .page)
-            memo[name] = root
+            memo[key] = root
             return root
         }
         resolving.insert(name)
@@ -241,14 +242,14 @@ final class SwiftCorpus {
                 found.append(("page", SwiftStructure.Context(place: "page", view: name, chains: [], preview: false, trail: ["hosted as rootView"], source: .page), site.modifiers))
                 continue
             }
-            let ctx = f.structure.context(of: site.at, scope: f.scope, depth: depth + 1, names: true, corpus: self)
+            let ctx = f.structure.context(of: site.at, scope: f.scope, depth: depth + 1, names: true, corpus: self, element: element)
             if ctx.preview || ctx.hidden { continue }
             found.append((ctx.place, ctx, site.modifiers))
         }
         // Used only in previews or hidden places: a root after all.
         guard let first = found.first else {
             let root = SwiftStructure.Context(place: "page", view: name, chains: [], preview: false, trail: ["root view"], source: .page)
-            memo[name] = root
+            memo[key] = root
             return root
         }
         // Count only the strongest kind of evidence: structure where any use has it, else names, else Page.
@@ -265,7 +266,7 @@ final class SwiftCorpus {
         out.source = best == nil ? .page : chosen.ctx.source
         out.chains = [chosen.modifiers] + chosen.ctx.chains
         out.trail = ["used in \(found.count) place\(found.count == 1 ? "" : "s")"] + chosen.ctx.trail.prefix(4)
-        memo[name] = out
+        memo[key] = out
         return out
     }
 }
@@ -1035,7 +1036,7 @@ struct SwiftStructure {
         // (`actionBar` in a `DecideCard`); the first level applies names after all structure has been tried.
         let view = scope.views.filter { $0.open < i && i < $0.close }.max { $0.open < $1.open }
         var ctx = Context(place: nil, view: view?.name, chains: [], preview: view?.name.hasSuffix("_Previews") ?? false)
-        var inStack = false, collecting = true, customRow = false, inSection = false
+        var inStack = false, collecting = true, customRow = false, inSection = false, softCard = false, sealed = false
         let levels = enclosingBraces(of: i).reversed().filter { !scope.declarations.contains($0) }.map { (brace: $0, owner: owner(ofBrace: $0)) }
         for (k, level) in levels.enumerated() {
             guard let o = level.owner else { continue }
@@ -1127,10 +1128,16 @@ struct SwiftStructure {
                 if named == "listRow" && Self.words(name).last != "list" { customRow = true } else { ctx.set(named, .structure) }
             default: break
             }
-            // A container drawn as glass floats; one with a rounded background is a card.
+            // A container drawn as glass floats; one with a rounded background is a card, but only when nothing larger
+            // (a popover, an inspector, a settings group) names the place.
             if ctx.place == nil {
                 if after.modifiers.contains(where: { $0.name == "glassEffect" }) { ctx.set("floating", .structure) }
-                else if after.modifiers.contains(where: Self.isRoundedBackground) { ctx.set("card", .structure) }
+                else if after.modifiers.contains(where: Self.isRoundedBackground) { softCard = true }
+            }
+            // Content of a sheet, a window or a navigation destination starts a new screen: what is around the
+            // presenting code says nothing about it.
+            if ctx.place == "page", (o.dotted && ["sheet", "fullScreenCover"].contains(o.name)) || (!o.dotted && ["WindowGroup", "Window", "UtilityWindow", "DocumentGroup", "NavigationLink"].contains(o.name)) {
+                sealed = true
             }
             // Menu and alert items are drawn by the system: the styles after a Menu or an alert's view are its own, not theirs.
             if ctx.place == "contextMenu" || ctx.place == "alert" {
@@ -1140,6 +1147,7 @@ struct SwiftStructure {
         }
         if ctx.place != nil, ctx.source == .page, ctx.place != "page" { ctx.source = .structure }
 
+        if sealed { return ctx }
         let member = scope.members.filter({ $0.open < i && i < $0.close && $0.name != "body" }).max(by: { $0.open < $1.open })
         if let member, ctx.place == nil || ctx.source == .page {
             ctx.trail.append("helper \(member.name)")
@@ -1147,7 +1155,7 @@ struct SwiftStructure {
                 // The styles come from the call site that gives the place, or else from the first one.
                 var first: [[Modifier]]?
                 for site in callSites(of: member.name, outside: member, in: scope).prefix(4) {
-                    let at = context(of: site.start, scope: scope, depth: depth + 1, names: false, corpus: corpus)
+                    let at = context(of: site.start, scope: scope, depth: depth + 1, names: false, corpus: corpus, element: element)
                     if at.preview || at.hidden { continue }
                     ctx.trail.append("called in: " + at.trail.prefix(4).joined(separator: " < "))
                     if let place = at.place, at.source.rawValue > ctx.source.rawValue || ctx.place == nil {
@@ -1160,10 +1168,13 @@ struct SwiftStructure {
                 if let first { ctx.chains += first }
             }
         }
-        guard names else { return ctx }
+        guard names else {
+            if softCard, ctx.place == nil || ctx.source == .page { ctx.set("card", .name); ctx.trail.append("rounded background") }
+            return ctx
+        }
 
         // Where other files use this view: structure there beats any name here.
-        let used = view.flatMap { corpus?.context(ofView: $0.name, depth: depth) }
+        let used = view.flatMap { corpus?.context(ofView: $0.name, depth: depth, element: element) }
         if let used, let place = used.place, used.source == .structure, ctx.place == nil || ctx.source != .structure {
             ctx.set(place, .structure); ctx.trail += used.trail
             ctx.importance = ctx.importance ?? used.importance
@@ -1178,6 +1189,7 @@ struct SwiftStructure {
         if ctx.place == nil || ctx.source == .page, let name = view?.name, let named = Self.place(forView: name, inStack: inStack && !inSection) {
             ctx.set(named, .name); ctx.trail.append("named \(name)")
         }
+        if softCard, ctx.place == nil || ctx.source == .page { ctx.set("card", .name); ctx.trail.append("rounded background") }
         if ctx.place == nil, let used, let place = used.place { ctx.set(place, used.source); ctx.trail += used.trail }
         if collecting, let used { ctx.chains += used.chains }
 
@@ -1287,7 +1299,7 @@ struct SwiftStructure {
         if has("popover", "popup") || pair("menu", "bar") { return "popover" }
         if has("alert") { return "alert" }
         if has("card") || pair("group", "box") { return "card" }
-        if has("settings", "setup", "preferences", "properties", "property", "options", "form") { return "form" }
+        if has("settings", "setup", "preferences", "options", "form") { return "form" }
         if has("inspector", "panel", "pane") { return "inspector" }
         // `actionRow` is the actions under a title; `filterRow` or `headerRow` are strips, not list rows.
         if pair("action", "row") || pair("actions", "row") { return inStack && has("sheet", "dialog") ? "sheetFooter" : "actionRow" }
