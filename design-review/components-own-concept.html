@@ -153,6 +153,40 @@
   .mac .btn.pri { background: var(--w-accent); color: #fff; box-shadow: none; }
   .mac .lnk { color: var(--w-accent); }
   .mac code { background: var(--w-fill); color: var(--w-text); }
+  [hidden] { display: none !important; }
+  .mac { position: relative; } .mac .main { position: relative; }
+  /* The decision in the inspector */
+  .mac .insp .q1 { font-size: 15px; font-weight: 600; line-height: 1.3; }
+  .mac .insp .card { background: var(--w-row); border-radius: 8px; box-shadow: 0 0 0 .5px var(--w-sep); overflow: hidden; }
+  .mac .insp .card .li { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 10px; }
+  .mac .insp .card .li + .li { border-top: .5px solid var(--w-sep); }
+  .mac .insp .card .li img { height: 18px; width: auto; mix-blend-mode: multiply; } .mac.dark .insp .card .li img { mix-blend-mode: lighten; }
+  .mac .insp .card .li .nm { margin-left: auto; color: var(--w-sec); font-size: 12px; }
+  .mac .insp ol { margin: 0; padding-left: 18px; } .mac .insp ol li { margin: 0 0 4px; }
+  .mac .insp .acts.col { flex-direction: column; align-items: stretch; } .mac .insp .acts.col .btn { text-align: center; padding: 5px 12px; }
+  .mac .insp .or { margin-top: 10px; font-size: 12.5px; }
+  /* Context menu */
+  .mac .cm { position: absolute; z-index: 4; width: 230px; padding: 5px; border-radius: 9px; background: var(--w-row);
+             box-shadow: 0 0 0 .5px var(--w-sep), 0 12px 32px rgba(0,0,0,.22); }
+  .mac .cm div { display: flex; justify-content: space-between; align-items: center; height: 24px; padding: 0 8px; border-radius: 5px; }
+  .mac .cm div.on { background: var(--w-accent); color: #fff; }
+  .mac .cm hr { border: 0; border-top: .5px solid var(--w-sep); margin: 4px 6px; }
+  .mac .cm .k { color: var(--w-ter); font-size: 11px; } .mac .cm div.on .k { color: #fff; }
+  /* Sheet */
+  .mac .dim { position: absolute; inset: 0; background: rgba(0,0,0,.18); z-index: 5; }
+  .mac .sheet { position: absolute; z-index: 6; left: 50%; top: 0; transform: translateX(-50%); width: 400px; padding: 20px; border-radius: 0 0 14px 14px;
+                background: var(--w-row); box-shadow: 0 0 0 .5px var(--w-sep), 0 18px 40px rgba(0,0,0,.25); }
+  .mac .sheet h5 { margin: 0 0 4px; font-size: 14px; }
+  .mac .sheet p { margin: 0 0 14px; color: var(--w-sec); font-size: 12.5px; }
+  .mac .sheet .f { display: grid; grid-template-columns: 90px 1fr; gap: 10px; align-items: center; margin: 0 0 10px; }
+  .mac .sheet .f label { text-align: right; color: var(--w-sec); }
+  .mac .sheet .in { border-radius: 6px; padding: 3px 8px; background: var(--w-bg); box-shadow: inset 0 0 0 .5px var(--w-sep); }
+  .mac .sheet .in.focus { box-shadow: 0 0 0 3px var(--w-accent-soft), inset 0 0 0 1px var(--w-accent); }
+  .mac .sheet .bb { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  /* Undo line */
+  .mac .undo { display: flex; align-items: center; gap: 10px; margin: 6px 4px 0; padding: 8px 12px; border-radius: 8px; background: var(--w-row);
+               box-shadow: 0 0 0 .5px var(--w-sep); font-size: 12.5px; }
+  .mac .undo .lnk { margin-left: auto; }
   .caption { color: var(--secondary); font-size: 13px; margin: 2px 0 0; max-width: 860px; }
   .legend-anno { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 22px; margin: 14px 0 0; font-size: 13px; }
   .legend-anno div { display: flex; gap: 8px; } .legend-anno b { color: var(--blue); min-width: 16px; }
@@ -259,7 +293,7 @@
   <h2>The page</h2>
   <p class="prose">Each component Hatch proposes in its own box, with today's views that would become it; select a component or a view and the inspector shows its details and the decisions for it. Your real views, and the real screens they sit on. Switch the selection and the appearance.</p>
   <div class="mockbar">
-    <div class="seg" id="mstate"><button class="on" data-s="group">A component selected</button><button data-s="view">A view selected</button><button data-s="notchip">Not a chip selected</button><button data-s="agreed">After you agree</button></div>
+    <div class="seg" id="mstate"><button class="on" data-s="group">1 · Deciding a component</button><button data-s="view">2 · A view's details</button><button data-s="menu">3 · Right-click a view</button><button data-s="newcomp">4 · New component</button><button data-s="moved">5 · After the move</button><button data-s="agreed">6 · After deciding</button></div>
     <div class="seg" id="mtheme"><button class="on" data-m="light">Light</button><button data-m="dark">Dark</button></div>
   </div>
   <div class="mockwrap">
@@ -271,20 +305,24 @@
       <div class="si">Buttons<span class="ct">11</span></div>
       <div class="si">Menus<span class="ct">2</span></div>
       <div class="sh">Your Own Components</div>
-      <div class="si on">Chips<span class="ct">4</span></div>
+      <div class="si on">Chips<span class="ct" data-state="group view menu newcomp agreed">4</span><span class="ct" data-state="moved">3</span></div>
       <div class="si">Cards<span class="ct">17</span></div>
       <div class="si">Rows<span class="ct">15</span></div>
       <div class="si">Headers<span class="ct">4</span></div>
+      <div class="si" data-state="moved">Footer status<span class="ct">1</span></div>
       <div class="si">Not Sure Yet<span class="ct">45</span></div>
     </div>
 
     <div class="main">
-      <div class="top"><span class="title">Chips</span><span class="sub">Hatch proposes 2 components for these 4 views</span>
-        <span class="prog" data-state="group view notchip">0 of 3 decided</span><span class="prog" data-state="agreed">1 of 3 decided</span></div>
+      <div class="top"><span class="title">Chips</span>
+        <span class="sub" data-state="group view menu newcomp agreed">4 views · Hatch suggests 2 components</span><span class="sub" data-state="moved">3 views · Hatch suggests 2 components</span>
+        <span class="prog" data-state="group view menu newcomp">3 to decide</span><span class="prog" data-state="moved">2 to decide</span><span class="prog" data-state="agreed">2 to decide</span></div>
 
       <div class="grp" data-sel="group agreed">
-        <div class="gh"><div><div class="gt">Status chip</div><div class="gd">Proposed component · a state, coloured by whose turn it is or by a failure</div></div>
-          <span class="gs todo" data-state="group view notchip">To decide</span><span class="gs done" data-state="agreed">✓ Agreed</span></div>
+        <div class="gh"><div><div class="gt">Status chip</div>
+          <div class="gd" data-state="group view menu newcomp moved">Hatch thinks these 2 views are one thing: a state, coloured by whose turn it is</div>
+          <div class="gd" data-state="agreed">One component. Ticket #212 makes the two views one in the code.</div></div>
+          <span class="gs todo" data-state="group view menu newcomp moved">To decide</span><span class="gs done" data-state="agreed">✓ Decided</span></div>
         <div class="tbl">
           <div class="tr" data-sel="view"><div class="pic"><img class="pl" data-n="HXChip" alt=""></div>
             <div><div class="n">HXChip</div><div class="w">A ticket's or run's state</div></div><div class="r"><div>7 uses</div><div class="w">4 screens</div></div></div>
@@ -294,7 +332,7 @@
       </div>
 
       <div class="grp">
-        <div class="gh"><div><div class="gt">Tag</div><div class="gd">Proposed component · a neutral label: a project, an area, a role</div></div>
+        <div class="gh"><div><div class="gt">Tag</div><div class="gd">Hatch thinks this is a component of its own: a neutral label</div></div>
           <span class="gs todo">To decide</span></div>
         <div class="tbl">
           <div class="tr"><div class="pic"><img class="pl" data-n="PlainChip" alt=""></div>
@@ -302,27 +340,53 @@
         </div>
       </div>
 
-      <div class="grp" data-sel="notchip">
-        <div class="gh"><div><div class="gt">Not a chip</div><div class="gd">Looks like a chip, does another job · Hatch suggests a change</div></div>
+      <div class="grp" data-state="group view menu newcomp agreed" style="position:relative">
+        <div class="gh"><div><div class="gt">Not a chip?</div><div class="gd">Hatch isn't sure: it looks like a chip but does another job</div></div>
           <span class="gs todo">To decide</span></div>
         <div class="tbl">
-          <div class="tr"><div class="pic fade"><img class="pl" data-n="HXIssueSample" alt="" style="height:19px"></div>
+          <div class="tr" data-sel="menu newcomp"><div class="pic fade"><img class="pl" data-n="HXIssueSample" alt="" style="height:19px"></div>
             <div><div class="n">HXIssueSample</div><div class="w">A sample issue in setup</div></div><div class="r"><div>2 uses</div><div class="w">1 screen</div></div></div>
         </div>
+        <div class="cm" data-state="menu" style="left:300px;top:66px">
+          <div style="background:var(--w-fill)">Move To<span class="k">›</span></div>
+          <div>Not a Component</div>
+          <hr>
+          <div>Open ProjectSetup.swift:1166</div>
+        </div>
+        <div class="cm" data-state="menu" style="left:526px;top:66px;width:200px">
+          <div>Status chip</div>
+          <div>Tag</div>
+          <hr>
+          <div class="on">New Component…</div>
+        </div>
       </div>
-      <div class="foot">All 4 views drawn by the app.</div>
+      <div class="undo" data-state="moved"><span>HXIssueSample is now <b>Footer status</b>, listed on its own.</span><a class="lnk">Undo</a></div>
+      <div class="foot" data-state="group view menu newcomp agreed">All 4 views drawn by the app.</div>
+    </div>
+    <div class="dim" data-state="newcomp"></div>
+    <div class="sheet" data-state="newcomp">
+      <h5>New Component</h5>
+      <p>HXIssueSample leaves Chips and becomes a component of its own, listed in the sidebar under Your Own Components. Nothing in your app changes.</p>
+      <div class="f"><label>Name</label><div class="in focus">Footer status</div></div>
+      <div class="f"><label>Moves</label><div style="color:var(--w-sec)">HXIssueSample · 2 uses</div></div>
+      <div class="bb"><button class="btn">Cancel</button><button class="btn pri">Create</button></div>
     </div>
 
     <div class="insp">
-      <!-- A group -->
+      <!-- A component to decide -->
       <div data-state="group">
-        <div class="it">Status chip</div>
-        <div class="is">Proposed component · 2 views · 12 uses</div>
-        <div class="ih">HOW THEY COMPARE</div>
-        <div class="ip">Drawn the same: caption text, medium weight, one padding, a capsule. Only the colour differs, and the colour is the state.</div>
-        <div class="ih">FROM SWIFTUI</div>
-        <div class="ip sec">No chip. The closest is a badge on a list row.</div>
-        <div class="acts"><button class="btn pri">Agree</button><button class="btn">Redesign…</button></div>
+        <div class="q1">Make HXChip and HXProblemChip one Status chip?</div>
+        <div class="ih">TODAY · 2 VIEWS</div>
+        <div class="card"><div class="li"><img src="components-own-concept/HXChip-light.png" alt=""><span class="nm">HXChip</span></div>
+          <div class="li"><img src="components-own-concept/HXProblemChip-light.png" alt=""><span class="nm">HXProblemChip</span></div></div>
+        <div class="ih">AFTER · 1 COMPONENT</div>
+        <div class="card"><div class="li" style="flex-direction:column;align-items:flex-start;gap:6px;padding:8px 10px"><span style="font-weight:500">Status chip</span>
+          <span style="display:flex;flex-wrap:wrap;gap:6px"><img src="components-own-concept/HXChip-light.png" alt=""><img src="components-own-concept/HXProblemChip-light.png" alt=""></span></div></div>
+        <div class="ip sec" style="margin-top:6px">The look doesn't change: both are drawn the same today. Only the colour differs, and the colour is the state.</div>
+        <div class="ih">WHAT HAPPENS</div>
+        <ol class="ip"><li>Agents use Status chip for any state from now on.</li><li>Hatch files a ticket: the two views become one, and their 12 uses move to it. You review it in Decide.</li><li>Your app doesn't change until that ticket is done.</li></ol>
+        <div class="acts col"><button class="btn pri">Make One Status Chip</button><button class="btn">Keep Them Apart</button></div>
+        <div class="or"><a class="lnk">Ask for a redesign instead…</a></div>
       </div>
       <!-- A view -->
       <div data-state="view">
@@ -337,20 +401,26 @@
         <div class="shot"><img class="pl" data-n="use-log" data-ext="webp" alt=""><span class="hl" style="left:67.6%;top:44%;width:15.4%;height:19%"></span></div>
         <div class="acts"><a class="lnk">Open Adapters.swift:31</a></div>
       </div>
-      <!-- Not a chip -->
-      <div data-state="notchip">
-        <div class="it">Not a chip</div>
-        <div class="is">1 view</div>
+      <!-- The view right-clicked, and the sheet: the view's details stay -->
+      <div data-state="menu newcomp">
+        <div class="it">HXIssueSample</div>
+        <div class="pics"><div class="lt"><img src="components-own-concept/HXIssueSample-light.png" alt=""></div></div>
         <div class="ih">WHAT HATCH SAW</div>
-        <div class="ip">HXIssueSample draws a sample GitHub issue. Its labels are capsules drawn by hand inside it, which is why it looked like a chip.</div>
-        <div class="ih">SUGGESTION</div>
-        <div class="ip">Its labels could use Tag instead of drawing their own.</div>
-        <div class="acts"><button class="btn">Use Tag for Its Labels</button></div>
+        <div class="ip">A sample GitHub issue row in project setup. Its labels are capsules drawn by hand inside it, which is why it looked like a chip.</div>
+        <div class="ih">USED ON</div>
+        <div class="ul"><div>Project setup<span>2</span></div></div>
+      </div>
+      <!-- After the move: nothing selected -->
+      <div data-state="moved">
+        <div class="it">Chips</div>
+        <div class="is">3 views · 2 to decide</div>
+        <div class="ih">NEXT</div>
+        <div class="ip sec">Select Status chip or Tag to decide it.</div>
       </div>
       <!-- Agreed -->
       <div data-state="agreed">
         <div class="it">Status chip</div>
-        <div class="is">Component · 2 views · 12 uses · agreed</div>
+        <div class="is">Decided · 2 views today · 12 uses</div>
         <div class="ih">IN THE CODE</div>
         <div class="ip">Ticket #212 makes the two views one, <code style="font-size:11px">StatusChip(state:)</code>; Hatch checks the result.</div>
         <div class="ih">FOR AGENTS</div>
