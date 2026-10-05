@@ -25,6 +25,7 @@
 		421D632B0243EED9E2C59F19 /* AppState+Notifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0CFDAD1AD73457B63235D3 /* AppState+Notifications.swift */; };
 		AEF9082ECDFF44FDB3E85268 /* AppState+Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71617872CD744FB39971D7F9 /* AppState+Preferences.swift */; };
 		D4919CDA766042B5B3A21F27 /* MenuBarPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D421010C42D47958B571432 /* MenuBarPanel.swift */; };
+		2937B0D9DD5A42E788B58BFD /* MenuBarMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E68AA80E50641CAB51CAF16 /* MenuBarMenu.swift */; };
 		424B48E9EB6C77DFD5CFCC00 /* VettingBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = E69B44A5B5D1CAEE74C70CFF /* VettingBridge.swift */; };
 		EB3B807235F2498FA3F4B4A1 /* AgentProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E0BD2633E245D2B1E8B464 /* AgentProviders.swift */; };
 		4358486F0788BD721883D3E8 /* HatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 617F034C123D732B1CF03882 /* HatchApp.swift */; };
@@ -53,6 +54,7 @@
 		882ED89A6591D4D3164F1A24 /* DecisionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FEE3B6C1BACD094A37DE7F3 /* DecisionsView.swift */; };
 		2555C85F3FE5E0A74E2BF9A1 /* DecideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB49B53D60802E5519C3B85A /* DecideView.swift */; };
 		D1A7B0C2E3F4051627384950 /* DecideLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A7B0C2E3F4051627384951 /* DecideLab.swift */; };
+		7CA90E3696C34E97BE0AB336 /* MenuBarLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F162D6E7CD423793BE1E2C /* MenuBarLab.swift */; };
 		1B33E3A296D309563040C343 /* ComponentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1819DD7B53E496800C1840B /* ComponentsView.swift */; };
 		8BCD76F3B3CD8125CB4A5083 /* DeskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CD8172654E3B05A33D62F8C /* DeskView.swift */; };
 		8FC3CCAF743A468C8189774C /* HatchGit in Frameworks */ = {isa = PBXBuildFile; productRef = 8FF33B9BC62D51D62F87A33A /* HatchGit */; };
@@ -99,6 +101,7 @@
 		0B0CFDAD1AD73457B63235D3 /* AppState+Notifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppState+Notifications.swift"; sourceTree = "<group>"; };
 		71617872CD744FB39971D7F9 /* AppState+Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppState+Preferences.swift"; sourceTree = "<group>"; };
 		7D421010C42D47958B571432 /* MenuBarPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarPanel.swift; sourceTree = "<group>"; };
+		4E68AA80E50641CAB51CAF16 /* MenuBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarMenu.swift; sourceTree = "<group>"; };
 		0FCFDFE8E9481E42646D752A /* SketchBoard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SketchBoard.swift; sourceTree = "<group>"; };
 		168F59BA94540A6EA616F0CB /* StageLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageLauncher.swift; sourceTree = "<group>"; };
 		198272DA0A12BD567C54E381 /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
@@ -113,6 +116,7 @@
 		4FEE3B6C1BACD094A37DE7F3 /* DecisionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecisionsView.swift; sourceTree = "<group>"; };
 		CB49B53D60802E5519C3B85A /* DecideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecideView.swift; sourceTree = "<group>"; };
 		D1A7B0C2E3F4051627384951 /* DecideLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecideLab.swift; sourceTree = "<group>"; };
+		47F162D6E7CD423793BE1E2C /* MenuBarLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLab.swift; sourceTree = "<group>"; };
 		D1819DD7B53E496800C1840B /* ComponentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComponentsView.swift; sourceTree = "<group>"; };
 		501F8478F0F8743977F822BD /* TicketOverviewTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketOverviewTab.swift; sourceTree = "<group>"; };
 		50AA3B651A6F720EEC6333D3 /* IrisReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IrisReviewView.swift; sourceTree = "<group>"; };
@@ -246,6 +250,7 @@
 				BA53B185D376C44F5D5D861E /* AgentCard.swift */,
 				7EDA6B0996874D06724BF18F /* FooterParts.swift */,
 				7D421010C42D47958B571432 /* MenuBarPanel.swift */,
+				4E68AA80E50641CAB51CAF16 /* MenuBarMenu.swift */,
 				2C294CBEE8C4487CA95C0002 /* GitHubDeviceFlow.swift */,
 				C55062C4CDC76CEA05F19695 /* ProblemChip.swift */,
 				F0CD09DBC6396867DD8D2F66 /* ProposalInfo.swift */,
@@ -329,6 +334,7 @@
 				66AE2852326652BBEF994532 /* ComposerView.swift */,
 				4FEE3B6C1BACD094A37DE7F3 /* DecisionsView.swift */,
 				D1A7B0C2E3F4051627384951 /* DecideLab.swift */,
+				47F162D6E7CD423793BE1E2C /* MenuBarLab.swift */,
 				CB49B53D60802E5519C3B85A /* DecideView.swift */,
 				D1819DD7B53E496800C1840B /* ComponentsView.swift */,
 				7668E92AE7A7176EA2988F23 /* DeskBriefPane.swift */,
@@ -518,6 +524,7 @@
 				421D632B0243EED9E2C59F19 /* AppState+Notifications.swift in Sources */,
 				AEF9082ECDFF44FDB3E85268 /* AppState+Preferences.swift in Sources */,
 				D4919CDA766042B5B3A21F27 /* MenuBarPanel.swift in Sources */,
+				2937B0D9DD5A42E788B58BFD /* MenuBarMenu.swift in Sources */,
 				B521BFEB27A4CBFFFFD4E248 /* AppState.swift in Sources */,
 				3CF2407446C3D2E48FBB5059 /* AskPanel.swift in Sources */,
 				89B529C5AF394926839F67B6 /* AgentSettingsPage.swift in Sources */,
@@ -531,6 +538,7 @@
 				882ED89A6591D4D3164F1A24 /* DecisionsView.swift in Sources */,
 				2555C85F3FE5E0A74E2BF9A1 /* DecideView.swift in Sources */,
 				D1A7B0C2E3F4051627384950 /* DecideLab.swift in Sources */,
+				7CA90E3696C34E97BE0AB336 /* MenuBarLab.swift in Sources */,
 				1B33E3A296D309563040C343 /* ComponentsView.swift in Sources */,
 				20501283E561101BF2529D53 /* DesignSystem.swift in Sources */,
 				04C3DDE92D35161138052438 /* DeskBriefPane.swift in Sources */,

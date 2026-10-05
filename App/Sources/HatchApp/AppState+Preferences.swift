@@ -13,6 +13,7 @@ enum Preference {
     static let lastProject = "last_project"         // a project key; empty for All projects
     static let dockBadge = "dock_badge"             // "waiting" (decisions waiting) or "off"
     static let menuBar = "menu_bar"                 // on by default
+    static let menuBarScope = "menu_bar_scope"      // "all" (default) or "selected": which projects the menu bar counts
     static let confirmDrop = "confirm_drop"         // on by default
     static let newTicketType = "new_ticket_type"    // empty asks; otherwise a TicketType raw value
 
@@ -87,6 +88,7 @@ extension AppState {
         switch key {
         case Preference.appearance: applyAppearance()
         case Preference.menuBar: showMenuBarItem = flag(Preference.menuBar)
+        case Preference.menuBarScope: refreshMenuBarQueue()
         case Preference.dockBadge:
             dockBadgeShown = value != "off"
             refreshDecisionCount()

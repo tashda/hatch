@@ -1453,7 +1453,7 @@ Page: https://claude.ai/artifact/WLEm158ifiUuQdPNuGjxzs (source `design-review/d
 | WF-T7 | Iris's model | Haiku first, a stronger model only when unsure about the path. Owner's note: the "unsure" model is chosen in Settings, Agents | Cost; measure on real prompts | |
 | WF-Q1 | How Iris asks | Up to 3 at a time, her guess picked, at most two rounds | Few, quick questions | E4 (5, one round) |
 | WF-Q2 | After you answer | Iris checks again with the answers, then files | An answer can change what the ticket is | |
-| WF-Q3 | Where you answer | Decide, the notification, the menu bar, the ticket | Keeps agents moving | |
+| WF-Q3 | Where you answer | Decide, the notification, the ticket (the menu bar dropped by MB2) | Keeps agents moving | |
 | WF-R1 | Types | Five: Question, Proposal (any change with options, visual or written), Bug, Tweak, Theme. Sketch folds into Proposal's web draft; existing Sketches open as Proposal drafts | Type is a label once Iris files; path decides what happens | A1, G1 to G4 |
 | WF-R2 | Type change during work | Hatch may change it when the work shows it (Bug → Proposal, Tweak → Proposal, Question → Theme), logged, owner told | Keeps history on one ticket | E9 (before work only) |
 | WF-P1 | Queue order | Urgent first, then priority, then age; nothing running is stopped | A crash should not wait; stopping wastes tokens | |
@@ -1484,7 +1484,7 @@ Page: https://claude.ai/artifact/WLEm158ifiUuQdPNuGjxzs (source `design-review/d
 | WF-L3 | Done | When in dev with green CI; a CI failure sends it to Fixing once, then asks | Done means in dev and passing | |
 | WF-A1 | How often Hatch stops | Only for the "needs you" list on the page (Iris cannot guess, conflicts, real choices, large plans, stuck agents, things to see, what Hatch cannot fix) | That is where a stop adds a decision | |
 | WF-A2 | Follow-ups from agents | `hatch suggest`, filed by Iris like a prompt, linked to where it came from | Notes get lost | |
-| WF-A3 | Digest | Daily, on the Desk and in the menu bar | Trust needs a place to look | |
+| WF-A3 | Digest | Daily, on the Desk (the menu bar dropped by MB2) | Trust needs a place to look | |
 | WF-A4 | Issues opened on GitHub | Filed by Iris like a prompt | Same path from anywhere | |
 | WF-T8 | Design work against components and decisions (owner's addition, 2026-10-04) | For visual and design work Iris also checks the app's components (colours, type, sizes, views and styles from the components catalog) and the earlier design decisions. A conflict, such as a change to a shared component or a value that differs from a component, or one that contradicts a recorded design decision, becomes one of her questions with suggested answers (for example: change the component everywhere, add a variant here, or keep it), handled like any other clarification | A design change that silently forks a component or undoes a decision is the drift the components and the notebook exist to stop | |
 
@@ -1598,3 +1598,19 @@ The owner found the Components page buggy and behind: it listed whatever sat in 
 | CP3 | Changing a component | Change… on a role, rule or foundation opens a sheet (what should change, everywhere or only in a place or area); it files a Proposal linked to the role; the agent offers two to four looks as recipes; the owner judges them in the Stage (in place and in the live window) or in Decide; accepting makes the role's draft; applying starts the next baseline version and drafts the code and migration tickets. Small rule changes and agreeing a provisional role stay one click. | Changes to the look go through judging, like any visual change, and start where the owner looks at the components. |
 | CP4 | Overview | How the app looks, by place: one card per place with its roles drawn, the state line (baseline, agreed, provisional, in redesign, questions, coverage, settings pending) and the shell with Open Live Window. | Places answer "how does the app look" directly. |
 | CP5 | The old list | The folder-based component list stops being the main content; the old scan moves to Health, folded. A components folder that is the app itself is refused by the scanner and offered for repair on the page. | The design system file is the source of truth (DS2); the old list misled. |
+
+## AF. The menu bar as a real menu (answered 2026-10-05 on the menu bar review page, ids MB1 to MB7)
+
+The owner found the menu bar panel crowded, buggy and needlessly complex (`design-review/menu-bar-concepts.html`: the count shown twice, questions cut off mid-sentence with nine answer pills, an empty Agents block, an old activity line, Settings cut off, no Quit). Of four styles they picked A, a real menu, and set every content row.
+
+| Id | Question | Choice | Reason |
+|---|---|---|---|
+| MB1 | Form | A real menu instead of the window panel: `MenuBarMenu`, an `NSStatusItem` with an `NSMenu` built each time it opens. AppKit, because a SwiftUI menu item takes a symbol or a second line but not both, and the menu needs second lines, count badges and section headers. | Looks and behaves like every other menu; no glass or height bugs of its own. |
+| MB2 | Contents | Decide with the count as a badge and the kinds as a second line ("3 questions · 9 to verify"); agents only while they work (ticket, task, step, a running time), Paused when paused; a problem only when the footer would turn red, with Retry; New Ticket; Pause Agents only while agents run, Resume Agents when paused; Open Hatch; Settings; Quit Hatch (⌘Q, last). Left out: answering questions, agent capacity, the save status when all is well, the latest activity, the header. | The menu answers three things while Hatch is in the background: does anything wait, is anything running, is anything broken. |
+| MB3 | Ellipses | No item ends in "…", Decide included. | Owner's call for this menu. |
+| MB4 | Which projects | All projects by default; Settings › General › Menu bar counts: All projects or The selected project. | The project picked in the main window cannot be seen from the menu bar. |
+| MB5 | The icon | The egg alone: whole when nothing waits, cracked when a decision does; no number. The crack follows the menu's own count. | Calm all day; the menu has the number. |
+| MB6 | Symbols | Follow macOS: on macOS 27 AppKit decides whether menu images show (`preferredImageVisibility` automatic) and usually hides them. The lab can force them on every item or only on status items. | NF3. |
+| MB7 | Still to choose | Go › Menu Bar Lab switches the real menu bar item between versions of the symbols, the Decide item, the agent rows and the problem rows, on your data or on samples (busy, quiet, paused, sync problem), with Copy for Claude; the old panel stays selectable there until the choice is made, then `MenuBarPanel` is deleted. | Choose in the real menu bar, not in a mockup. |
+
+Effect on earlier decisions: WF-Q3 no longer answers in the menu bar (Decide, the notification and the ticket remain). WF-A3's digest is on the Desk only.

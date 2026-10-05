@@ -75,6 +75,8 @@ final class AppState: ObservableObject {
     var dockBadgeShown = true
     /// Tickets waiting for the owner, counted once per change for the Dock badge and the menu bar item.
     @Published private(set) var waitingCount = 0
+    /// What the menu bar's Decide item shows, counted for all projects or the selected one (Settings › General).
+    @Published var menuBarQueue = MenuBarQueue()
     /// Today's tokens against the daily limits on Settings › Usage; above the pause limit no new work starts.
     @Published var usageLevel: UsageLimits.Level = .fine
     var launcher: AgentLauncher?
@@ -430,6 +432,7 @@ final class AppState: ObservableObject {
         let n = store.pendingDecisionCount(projectId: projectFilterId)
         if n != decisionCount { decisionCount = n }
         NSApp?.dockTile.badgeLabel = dockBadgeShown && n > 0 ? String(n) : nil
+        refreshMenuBarQueue()
     }
 
     /// Opens a Decide session over everything waiting, or only one area's decisions.

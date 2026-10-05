@@ -1,0 +1,645 @@
+<title>Hatch Menu Bar Concepts</title>
+<style>
+/* Layout: one reading column; each style option hangs from a fake macOS 27 menu bar over a wallpaper, so it is judged where it lives. */
+:root {
+  --page: #eceef2; --sheet: #ffffff; --ink: #1d1d1f; --ink2: #6e6e73; --ink3: #a1a1a6; --line: #dcdde2;
+  --accent: #0a66d8; --accent-ink: #ffffff; --accent-soft: #e5effc;
+  --you: #b4540a; --you-soft: #fbeadb; --agent: #0b6e80; --agent-soft: #dcf0f3; --bad: #b3261e; --bad-soft: #fbe4e2; --good: #248a3d;
+  --menu: rgba(246,246,249,.80); --menu-edge: rgba(255,255,255,.75); --menu-line: rgba(0,0,0,.09);
+  --hover: rgba(0,0,0,.055); --fill: rgba(0,0,0,.05); --fill2: rgba(0,0,0,.08);
+  --wall-a: #9fb6d6; --wall-b: #d9c3d8; --wall-c: #f1dcc4; --bar: rgba(255,255,255,.42); --bar-ink: #1d1d1f;
+  --shadow: 0 22px 60px rgba(20,24,40,.22), 0 0 0 .5px rgba(0,0,0,.12);
+  --mark: #e0453a;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #141518; --sheet: #1e1f23; --ink: #f2f2f4; --ink2: #a3a3aa; --ink3: #6d6d74; --line: #34353b;
+  --accent: #3d8bff; --accent-ink: #ffffff; --accent-soft: #1b3150;
+  --you: #f0a25e; --you-soft: #3a2614; --agent: #4fc3d4; --agent-soft: #133338; --bad: #ff8a80; --bad-soft: #3c1b19; --good: #4cc46a;
+  --menu: rgba(36,36,40,.76); --menu-edge: rgba(255,255,255,.13); --menu-line: rgba(255,255,255,.1);
+  --hover: rgba(255,255,255,.08); --fill: rgba(255,255,255,.07); --fill2: rgba(255,255,255,.11);
+  --wall-a: #1f2a44; --wall-b: #3a2440; --wall-c: #4a3322; --bar: rgba(0,0,0,.28); --bar-ink: #f2f2f4;
+  --shadow: 0 22px 60px rgba(0,0,0,.55), 0 0 0 .5px rgba(255,255,255,.1);
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --page: #141518; --sheet: #1e1f23; --ink: #f2f2f4; --ink2: #a3a3aa; --ink3: #6d6d74; --line: #34353b;
+  --accent: #3d8bff; --accent-ink: #ffffff; --accent-soft: #1b3150;
+  --you: #f0a25e; --you-soft: #3a2614; --agent: #4fc3d4; --agent-soft: #133338; --bad: #ff8a80; --bad-soft: #3c1b19; --good: #4cc46a;
+  --menu: rgba(36,36,40,.76); --menu-edge: rgba(255,255,255,.13); --menu-line: rgba(255,255,255,.1);
+  --hover: rgba(255,255,255,.08); --fill: rgba(255,255,255,.07); --fill2: rgba(255,255,255,.11);
+  --wall-a: #1f2a44; --wall-b: #3a2440; --wall-c: #4a3322; --bar: rgba(0,0,0,.28); --bar-ink: #f2f2f4;
+  --shadow: 0 22px 60px rgba(0,0,0,.55), 0 0 0 .5px rgba(255,255,255,.1);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--ink); font: 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 44px 96px; }
+h1 { font: 700 32px/1.15 var(--font-display); letter-spacing: -.02em; margin: 0 0 10px; text-wrap: balance; }
+h2 { font: 650 22px/1.25 var(--font-display); letter-spacing: -.01em; margin: 0 0 6px; text-wrap: balance; }
+h3 { font: 600 15px/1.3 var(--font); margin: 0; }
+p { margin: 0; }
+.lead { color: var(--ink2); font-size: 15.5px; max-width: 68ch; }
+.sec { margin-top: 64px; display: grid; gap: 18px; }
+.sec-head { display: grid; gap: 4px; }
+.sec-head p { color: var(--ink2); max-width: 70ch; }
+.eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink3); }
+code { font: 12.5px var(--mono); background: var(--fill); padding: 1px 5px; border-radius: 5px; }
+kbd { font: 12px var(--font); color: var(--ink2); }
+
+/* Today */
+.today { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 28px; align-items: start; }
+.shot { position: relative; border-radius: 14px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); background: var(--sheet); }
+.shot img { display: block; width: 100%; height: auto; }
+.pin { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: var(--mark); color: #fff;
+  font: 700 12px/22px var(--font); text-align: center; box-shadow: 0 0 0 2px #fff, 0 2px 6px rgba(0,0,0,.3); }
+.issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.issues li { display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 12px; align-items: start; }
+.issues .n { width: 22px; height: 22px; border-radius: 50%; background: var(--mark); color: #fff; font: 700 12px/22px var(--font); text-align: center; margin-top: 1px; }
+.issues b { font-weight: 600; }
+.issues span.d { color: var(--ink2); }
+
+/* What to show */
+.table-wrap { overflow-x: auto; background: var(--sheet); border: 1px solid var(--line); border-radius: 14px; }
+table { width: 100%; border-collapse: collapse; min-width: 720px; }
+th, td { text-align: left; padding: 11px 16px; vertical-align: top; border-top: 1px solid var(--line); }
+thead th { border-top: 0; font-size: 12px; font-weight: 600; color: var(--ink2); background: var(--fill); }
+td.item { font-weight: 600; width: 24%; }
+td.today-col { color: var(--ink2); width: 24%; }
+td.why { color: var(--ink2); }
+.verdict { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+.verdict select { font: inherit; font-weight: 600; color: var(--ink); background: var(--fill); border: 1px solid var(--line); border-radius: 7px; padding: 3px 6px; }
+.chg { display: inline-block; margin-top: 4px; font-size: 12px; color: var(--you); }
+
+/* State switcher */
+.switch { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; padding-block: 10px; background: var(--page);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.seg { display: inline-flex; background: var(--fill2); border-radius: 9px; padding: 2px; }
+.seg button { font: 500 13px var(--font); color: var(--ink); background: transparent; border: 0; border-radius: 7px; padding: 5px 13px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--sheet); box-shadow: 0 1px 3px rgba(0,0,0,.15), 0 0 0 .5px rgba(0,0,0,.06); }
+.seg button:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch .hint { color: var(--ink2); font-size: 13px; }
+
+/* Option cards */
+.opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.opt { background: var(--sheet); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+.opt.rec { border: 2px solid var(--accent); }
+.stage { position: relative; min-height: 560px; overflow: hidden;
+  background:
+    radial-gradient(60% 55% at 15% 20%, var(--wall-a), transparent 70%),
+    radial-gradient(55% 60% at 85% 35%, var(--wall-b), transparent 70%),
+    radial-gradient(70% 60% at 50% 100%, var(--wall-c), transparent 70%), var(--wall-a); }
+.stage::after { content: ""; position: absolute; left: 6%; top: 46%; width: 54%; height: 46%; border-radius: 12px;
+  background: var(--sheet); opacity: .55; box-shadow: 0 10px 30px rgba(0,0,0,.15); }
+.mbar { position: relative; z-index: 2; height: 28px; display: flex; justify-content: flex-end; align-items: center; gap: 14px; padding-inline: 12px;
+  background: var(--bar); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); color: var(--bar-ink); font-size: 13px; font-weight: 500; }
+.mbar .on { background: rgba(127,127,127,.28); border-radius: 6px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 5px; }
+.mbar svg { display: block; }
+.hang { position: relative; z-index: 3; display: flex; justify-content: flex-end; padding: 6px 14px 24px; }
+.opt-body { padding: 18px 20px 20px; display: grid; gap: 10px; flex: 1; align-content: start; }
+.opt-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.letter { font: 700 13px var(--font); color: var(--ink3); }
+.badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--accent); color: var(--accent-ink); }
+.opt-body p { color: var(--ink2); }
+.pc { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; font-size: 13px; }
+.pc ul { margin: 4px 0 0; padding-left: 16px; color: var(--ink2); }
+.pc li { margin-bottom: 3px; }
+.pc h4 { margin: 0; font-size: 12px; font-weight: 600; color: var(--ink); }
+.impl { font-size: 12.5px; color: var(--ink2); }
+.pick { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-weight: 600; cursor: pointer; }
+.pick input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+/* ---- Mockup primitives: macOS 27 menus and panels ---- */
+.menu { width: 300px; max-width: 100%; color: var(--ink); background: var(--menu); border-radius: 16px; box-shadow: var(--shadow), inset 0 0 0 .5px var(--menu-edge);
+  backdrop-filter: blur(40px) saturate(1.6); -webkit-backdrop-filter: blur(40px) saturate(1.6); font-size: 13px; line-height: 1.35; padding: 5px; }
+.menu .sep { height: 1px; background: var(--menu-line); margin: 5px 10px; }
+.menu .grow { flex: 1; min-width: 0; }
+.menu .t { font-weight: 500; }
+.menu .s { color: var(--ink2); font-size: 11.5px; }
+.ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.k { color: var(--ink3); font-size: 12.5px; flex: none; }
+
+/* A: native menu */
+.mi { display: flex; align-items: center; gap: 8px; padding: 4px 9px; border-radius: 8px; min-height: 24px; cursor: default; }
+.mi .ic { color: var(--ink2); }
+.mi:hover:not(.dis) { background: var(--accent); color: var(--accent-ink); }
+.mi:hover:not(.dis) .ic, .mi:hover:not(.dis) .s, .mi:hover:not(.dis) .k { color: var(--accent-ink); }
+.mi:hover:not(.dis) .nbadge { background: rgba(255,255,255,.25); color: var(--accent-ink); }
+.mi.dis { color: var(--ink3); }
+.mi.dis .ic, .mi.dis .s { color: var(--ink3); }
+.mi.bad .ic { color: var(--bad); }
+.mi.ag .ic { color: var(--agent); }
+.mi .stack { display: grid; flex: 1; min-width: 0; }
+.mh { font-size: 11.5px; font-weight: 600; color: var(--ink2); padding: 6px 9px 2px; }
+.nbadge { font-size: 11.5px; font-weight: 600; background: var(--fill2); color: var(--ink2); border-radius: 9px; padding: 0 7px; line-height: 18px; flex: none; }
+
+/* Panels (B, C, D) */
+.panel { padding: 6px; }
+.row { display: flex; align-items: center; gap: 9px; padding: 5px 9px; border-radius: 8px; cursor: default; }
+.row:hover { background: var(--hover); }
+.row .ic { color: var(--ink2); }
+.btn { font: 500 13px var(--font); border: 0; border-radius: 999px; padding: 6px 16px; cursor: pointer; color: var(--ink); background: var(--fill2);
+  box-shadow: inset 0 0 0 .5px var(--menu-edge); }
+.btn.prom { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.lg { padding: 8px 18px; font-size: 13.5px; }
+.btn.sm { padding: 3px 11px; font-size: 12px; }
+.btn.wide { width: 100%; }
+.problem { display: flex; align-items: center; gap: 10px; margin: 2px 2px 6px; padding: 9px 10px; border-radius: 10px; background: var(--bad-soft); }
+.problem .ic { color: var(--bad); }
+.problem .t { color: var(--bad); }
+
+/* B */
+.b-decide { padding: 10px 10px 12px; display: grid; gap: 12px; }
+.b-line { display: flex; align-items: center; gap: 12px; }
+.b-count { font: 650 30px/1 var(--font-display); color: var(--you); font-variant-numeric: tabular-nums; min-width: 34px; }
+.b-quiet { display: flex; align-items: center; gap: 10px; padding: 12px 10px; }
+.b-quiet .ic { color: var(--good); width: 20px; height: 20px; }
+.lbl { font-size: 11.5px; font-weight: 600; color: var(--ink2); padding: 4px 9px 3px; }
+.tile-ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; flex: none; color: #fff;
+  background: linear-gradient(var(--agent), var(--agent)); }
+.tile-ic .ic { color: #fff; width: 14px; height: 14px; stroke-width: 1.7; }
+.tm { color: var(--ink3); font-size: 11.5px; font-variant-numeric: tabular-nums; flex: none; }
+
+/* C */
+.c-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; }
+.c-head .t { font-weight: 650; }
+.nav { display: inline-flex; gap: 2px; }
+.nav span { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: var(--ink2); }
+.nav span:hover { background: var(--hover); }
+.c-who { display: flex; align-items: center; gap: 6px; padding: 0 8px 6px; color: var(--ink2); font-size: 12px; }
+.c-who .ic { color: var(--ink); width: 15px; height: 15px; }
+.bubble { margin: 0 6px 10px; padding: 9px 11px; background: var(--fill2); border-radius: 12px; font-size: 13px; }
+.alist { margin: 0 6px; background: var(--sheet); border-radius: 10px; box-shadow: 0 0 0 .5px var(--menu-line); overflow: hidden; }
+.arow { display: flex; gap: 8px; align-items: flex-start; padding: 7px 10px; border-top: .5px solid var(--menu-line); font-size: 12.5px; }
+.arow:first-child { border-top: 0; }
+.arow .num { color: var(--ink3); font-variant-numeric: tabular-nums; width: 10px; flex: none; }
+.arow.sel { background: var(--accent-soft); }
+.arow .chk { color: var(--accent); margin-left: auto; flex: none; }
+.recb { font-size: 10.5px; font-weight: 600; color: var(--accent-ink); background: var(--accent); border-radius: 5px; padding: 0 5px; line-height: 16px; flex: none; margin-top: 1px; }
+.c-bar { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 6px 4px; }
+.c-foot { display: flex; align-items: center; gap: 4px; padding: 2px 4px 0; }
+.c-foot .row { flex: 1; min-width: 0; }
+.ibtn { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--ink2); flex: none; }
+.ibtn:hover { background: var(--hover); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--agent); flex: none; }
+.dot.grey { background: var(--ink3); }
+.empty { padding: 26px 12px 22px; text-align: center; display: grid; gap: 4px; justify-items: center; }
+.empty .ic { width: 26px; height: 26px; color: var(--good); }
+
+/* D */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 2px 2px 6px; }
+.tile { background: var(--fill); border-radius: 13px; padding: 10px 11px; display: grid; gap: 7px; cursor: default; }
+.tile:hover { background: var(--fill2); }
+.circ { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 650 14px var(--font); background: var(--fill2); color: var(--ink2); }
+.tile.you .circ { background: var(--you); color: #fff; }
+.tile.agent .circ { background: var(--agent); color: #fff; }
+.circ .ic { width: 15px; height: 15px; }
+.tile .s { line-height: 1.25; }
+.wide-tile { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+.wide-tile.bad { background: var(--bad-soft); }
+.wide-tile.bad .ic, .wide-tile.bad .t { color: var(--bad); }
+
+/* Icon options */
+.icons { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.icon-card { background: var(--sheet); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: grid; }
+.icon-card.rec { border: 2px solid var(--accent); }
+.icon-demo { display: grid; gap: 1px; background: var(--line); }
+.icon-demo .mbar { justify-content: center; height: 34px; }
+.icon-demo .cap { font-size: 11px; color: var(--ink3); font-weight: 500; }
+.icon-card .opt-body { gap: 8px; }
+
+/* Picks */
+.picks { background: var(--sheet); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: grid; gap: 14px; }
+.picks pre { margin: 0; white-space: pre-wrap; font: 12.5px/1.55 var(--mono); background: var(--fill); padding: 14px; border-radius: 10px; color: var(--ink); }
+.picks .acts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.picks .ok { color: var(--good); font-size: 13px; font-weight: 600; }
+.rec-box { background: var(--accent-soft); border-radius: 14px; padding: 18px 20px; display: grid; gap: 8px; }
+.rec-box p { color: var(--ink); max-width: 76ch; }
+
+@media (max-width: 900px) {
+  .today { grid-template-columns: minmax(0,1fr); }
+  .shot { max-width: 360px; }
+  .opts { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 480px) {
+  .wrap { padding-inline: 16px; }
+  h1 { font-size: 26px; }
+  .pc { grid-template-columns: minmax(0,1fr); }
+  .hang { padding-inline: 8px; justify-content: center; }
+  .mbar .clock { display: none; }
+  .stage { min-height: 520px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:6px">
+    <div class="eyebrow">Hatch · design review · 5 October 2026</div>
+    <h1>The menu bar panel</h1>
+    <p class="lead">What is off in today's panel, what it should show, four ways to style it, and the icon. Switch the state above the styles to see each one busy, quiet, paused and with a sync problem. Pick what you like at the bottom and copy it for Claude.</p>
+  </header>
+
+  <!-- 1. Today -->
+  <section class="sec" id="today">
+    <div class="sec-head">
+      <div class="eyebrow">1 · Today</div>
+      <h2>Nine things that make it feel crowded</h2>
+      <p>The panel mixes four looks (caption headings, a bordered button, wrapping pills and menu rows), and most of the space goes to answering questions that are cut off before you can read them.</p>
+    </div>
+    <div class="today">
+      <div class="shot">
+        <img src="menu-bar-today.jpg" alt="Screenshot of today's Hatch menu bar panel with 13 waiting tickets and three questions from Iris" width="844" height="1348">
+        <span class="pin" style="left:62%;top:20%">1</span>
+        <span class="pin" style="left:20%;top:8.8%">2</span>
+        <span class="pin" style="left:88%;top:13.9%">3</span>
+        <span class="pin" style="left:13%;top:23.9%">4</span>
+        <span class="pin" style="left:13%;top:60%">5</span>
+        <span class="pin" style="left:82%;top:42.6%">6</span>
+        <span class="pin" style="left:93%;top:45.7%">7</span>
+        <span class="pin" style="left:13%;top:76.9%">8</span>
+        <span class="pin" style="left:13%;top:94.4%">9</span>
+      </div>
+      <ol class="issues">
+        <li><span class="n">1</span><div><b>A dark smear over the top third.</b> <span class="d">The panel's glass shows the window behind it through the header and Agents rows. System menus use a denser material, so this reads as a rendering bug. The likely cause is plain content on the clear window glass; I have not confirmed it in code.</span></div></li>
+        <li><span class="n">2</span><div><b>The header repeats what you just clicked.</b> <span class="d">The egg and "Hatch" are the menu bar item itself. "Everything is saved" is news only when it is not true.</span></div></li>
+        <li><span class="n">3</span><div><b>Three lines to say nothing runs.</b> <span class="d">A heading, "0 of 3" and a sentence for an empty state.</span></div></li>
+        <li><span class="n">4</span><div><b>The count twice.</b> <span class="d">"13" in a circle and "13 tickets wait for you" next to it, then a small bordered Open Desk button that goes to the Desk, not to Decide.</span></div></li>
+        <li><span class="n">5</span><div><b>One ticket, two entries.</b> <span class="d">#15 shows up as two separate questions with the same header.</span></div></li>
+        <li><span class="n">6</span><div><b>Questions cut mid-sentence.</b> <span class="d">"What about the "Iris asks" bubbles feels wrong to…" and then you are asked to answer it with one click. Decide shows the whole message for this reason.</span></div></li>
+        <li><span class="n">7</span><div><b>Nine answer pills in wrapping rows.</b> <span class="d">The orange first pill looks already chosen rather than recommended, and one stray click sends an answer with no undo.</span></div></li>
+        <li><span class="n">8</span><div><b>An old activity line.</b> <span class="d">"#1 moved to To verify, 7h" is history with nothing to do about it.</span></div></li>
+        <li><span class="n">9</span><div><b>Settings… is cut off.</b> <span class="d">The panel grows with the questions until it runs out of room. There is also no Quit item, which every menu bar app needs.</span></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 2. What to show -->
+  <section class="sec" id="content">
+    <div class="sec-head">
+      <div class="eyebrow">2 · Contents</div>
+      <h2>What the panel should show</h2>
+      <p>The panel answers three questions while Hatch is in the background: does anything wait for me, is anything running, and is anything broken. Everything else is a way back into the app. Each row has my recommendation set; change any of them and it goes into your picks.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Item</th><th>Today</th><th>Proposal</th><th>Why</th></tr></thead>
+        <tbody id="content-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 3. Styles -->
+  <section class="sec" id="styles">
+    <div class="sec-head">
+      <div class="eyebrow">3 · Style</div>
+      <h2>Four ways to style it</h2>
+      <p>Same data in each. A and B follow the recommended contents. C keeps answering in the panel but fixes how. D borrows Control Center's tiles. Hover the rows to see how they highlight.</p>
+    </div>
+    <div class="switch" role="group" aria-label="Panel state">
+      <div class="seg" id="state-seg">
+        <button type="button" data-state="busy" aria-pressed="true">Busy</button>
+        <button type="button" data-state="quiet" aria-pressed="false">Quiet</button>
+        <button type="button" data-state="paused" aria-pressed="false">Paused</button>
+        <button type="button" data-state="problem" aria-pressed="false">Sync problem</button>
+      </div>
+      <span class="hint" id="state-hint"></span>
+    </div>
+    <div class="opts">
+      <article class="opt" data-opt="A">
+        <div class="stage"><div class="mbar-slot"></div><div class="hang" id="mock-A"></div></div>
+        <div class="opt-body">
+          <div class="opt-title"><span class="letter">A</span><h3>A real menu</h3></div>
+          <p>A system menu instead of a window. Decide… carries the count as a badge and the kinds as a subtitle; running agents are items under an Agents header.</p>
+          <div class="pc">
+            <div><h4>Good</h4><ul><li>Looks exactly like every other menu, in every macOS setting</li><li>Keyboard and VoiceOver for free</li><li>No glass or height bugs possible</li></ul></div>
+            <div><h4>Less good</h4><ul><li>Plain: no big count, no progress</li><li>Elapsed time only updates while the menu is open</li></ul></div>
+          </div>
+          <p class="impl"><code>.menuBarExtraStyle(.menu)</code>, <code>Button</code> rows with <code>.badge</code>, <code>Section("Agents")</code>, subtitles via a two-line label.</p>
+          <label class="pick"><input type="radio" name="style" value="A" id="pick-style-A"> Pick A</label>
+        </div>
+      </article>
+
+      <article class="opt rec" data-opt="B">
+        <div class="stage"><div class="mbar-slot"></div><div class="hang" id="mock-B"></div></div>
+        <div class="opt-body">
+          <div class="opt-title"><span class="letter">B</span><h3>A calm status panel</h3><span class="badge">Recommended</span></div>
+          <p>One block for what waits, with one prominent Decide button. Agents appear only while they work. A problem appears only when there is one. The rest are menu rows.</p>
+          <div class="pc">
+            <div><h4>Good</h4><ul><li>The count is the first thing you see, in your colour</li><li>One prominent action, as DESIGN.md asks</li><li>Short when quiet, never taller than about 420 pt</li></ul></div>
+            <div><h4>Less good</h4><ul><li>Answering moves to Decide and notifications</li><li>Still a window, so it needs a solid material</li></ul></div>
+          </div>
+          <p class="impl"><code>.menuBarExtraStyle(.window)</code> with a denser background than the clear glass, <code>.glassProminent</code> Decide button, rows in the existing <code>MenuBarRowStyle</code>.</p>
+          <label class="pick"><input type="radio" name="style" value="B" id="pick-style-B" checked> Pick B</label>
+        </div>
+      </article>
+
+      <article class="opt" data-opt="C">
+        <div class="stage"><div class="mbar-slot"></div><div class="hang" id="mock-C"></div></div>
+        <div class="opt-body">
+          <div class="opt-title"><span class="letter">C</span><h3>One decision at a time</h3></div>
+          <p>A small Decide: the top question with its whole message, the answers as Decide's list, Later and Answer. Agents and actions shrink to one footer line.</p>
+          <div class="pc">
+            <div><h4>Good</h4><ul><li>Answer without opening Hatch</li><li>Same answer list as Decide, so nothing new to learn</li><li>Selecting does nothing until you press Answer</li></ul></div>
+            <div><h4>Less good</h4><ul><li>The heaviest option; a design question deserves the big view</li><li>Height changes with each question</li></ul></div>
+          </div>
+          <p class="impl">Reuses <code>QuestionMessage</code> and <code>AnswerList</code> inside the window panel, with a fixed height and its own scroll.</p>
+          <label class="pick"><input type="radio" name="style" value="C" id="pick-style-C"> Pick C</label>
+        </div>
+      </article>
+
+      <article class="opt" data-opt="D">
+        <div class="stage"><div class="mbar-slot"></div><div class="hang" id="mock-D"></div></div>
+        <div class="opt-body">
+          <div class="opt-title"><span class="letter">D</span><h3>Control Center tiles</h3></div>
+          <p>Two tiles: Decide with the count, Agents with how many work (click it to pause). A wide tile for problems, the agents in short rows, then the actions.</p>
+          <div class="pc">
+            <div><h4>Good</h4><ul><li>Feels at home next to Control Center in macOS 27</li><li>Pausing agents is one click on a tile</li></ul></div>
+            <div><h4>Less good</h4><ul><li>Tiles take room even when idle</li><li>A tile that toggles and one that opens look the same</li></ul></div>
+          </div>
+          <p class="impl">Window panel, tiles as filled rounded rectangles (no glass on glass), <code>Button</code> rows below.</p>
+          <label class="pick"><input type="radio" name="style" value="D" id="pick-style-D"> Pick D</label>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- 4. Icon -->
+  <section class="sec" id="icon">
+    <div class="sec-head">
+      <div class="eyebrow">4 · In the menu bar</div>
+      <h2>The icon</h2>
+      <p>Another change in progress replaces the arch with an egg that cracks when something waits. The open question is whether the count should sit next to it.</p>
+    </div>
+    <div class="icons">
+      <div class="icon-card rec">
+        <div class="icon-demo" id="icon-1"></div>
+        <div class="opt-body">
+          <div class="opt-title"><h3>Crack only</h3><span class="badge">Recommended</span></div>
+          <p>Whole egg when nothing waits, cracked when something does. Calm, and the panel has the number.</p>
+          <label class="pick"><input type="radio" name="icon" value="Crack only" id="pick-icon-1" checked> Pick this</label>
+        </div>
+      </div>
+      <div class="icon-card">
+        <div class="icon-demo" id="icon-2"></div>
+        <div class="opt-body">
+          <div class="opt-title"><h3>Crack and count</h3></div>
+          <p>The number beside the cracked egg, like Mail's Dock badge. Precise, but it changes width and pulls the eye all day.</p>
+          <label class="pick"><input type="radio" name="icon" value="Crack and count" id="pick-icon-2"> Pick this</label>
+        </div>
+      </div>
+      <div class="icon-card">
+        <div class="icon-demo" id="icon-3"></div>
+        <div class="opt-body">
+          <div class="opt-title"><h3>Count when 5 or more</h3></div>
+          <p>Crack for a few, the number once the pile grows, so it nags only when it matters.</p>
+          <label class="pick"><input type="radio" name="icon" value="Crack, count from 5" id="pick-icon-3"> Pick this</label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Picks -->
+  <section class="sec" id="picks">
+    <div class="rec-box">
+      <div class="eyebrow">Recommendation</div>
+      <p><b>B, the calm status panel, with the crack-only icon.</b> It keeps the one thing the menu bar is for (what waits and a fast way to Decide) and drops what made today's panel crowded: inline answering, the empty Agents block, the activity line and the always-on save status. Answering stays one click away in Decide and in the notification.</p>
+      <p>Next, as with the Decide Lab, I can build A and B (or whichever you pick) as switchable native variants behind a Menu Bar Lab, so you judge them with real data in the real menu bar before we commit.</p>
+    </div>
+    <div class="picks">
+      <div class="sec-head"><div class="eyebrow">5 · Your picks</div><h2>Copy for Claude</h2></div>
+      <pre id="summary"></pre>
+      <div class="acts">
+        <button type="button" class="btn prom lg" id="copy">Copy for Claude</button>
+        <span class="ok" id="copied" hidden>Copied</span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const P = {
+    tray: '<path d="M2.5 9.5h3l1 1.8h3l1-1.8h3"/><path d="M2.5 9.5 4 3.5h8l1.5 6v3.5h-11z"/>',
+    pencil: '<path d="M9.5 3H3.5v9.5H13V6.5"/><path d="M7 9.2l.4-2L12.3 2.3a1 1 0 0 1 1.4 1.4L8.9 8.6z"/>',
+    pause: '<circle cx="8" cy="8" r="6"/><path d="M6.5 5.8v4.4M9.5 5.8v4.4"/>',
+    play: '<circle cx="8" cy="8" r="6"/><path d="M6.8 5.6 10.6 8l-3.8 2.4z"/>',
+    win: '<rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 6h12"/>',
+    gear: '<circle cx="8" cy="8" r="2.1"/><path d="M8 1.8v1.7M8 12.5v1.7M1.8 8h1.7M12.5 8h1.7M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M3.6 12.4l1.2-1.2M11.2 4.8l1.2-1.2"/>',
+    power: '<path d="M8 2.2v5.3"/><path d="M4.6 4.4a5 5 0 1 0 6.8 0"/>',
+    check: '<circle cx="8" cy="8" r="6.2"/><path d="m5.3 8.2 1.8 1.8 3.6-3.8"/>',
+    warn: '<path d="M8 2.3 14 13H2z"/><path d="M8 6.5v3"/><path d="M8 11.3v.1"/>',
+    hammer: '<path d="M3 13.2 8.6 7.6"/><path d="M7.2 4.3 9.6 2l4.3 4.3-2.4 2.3z"/>',
+    eye: '<path d="M1.8 8S4 3.8 8 3.8 14.2 8 14.2 8 12 12.2 8 12.2 1.8 8 1.8 8z"/><circle cx="8" cy="8" r="1.9"/>',
+    left: '<path d="M10 3.5 5.5 8l4.5 4.5"/>',
+    right: '<path d="m6 3.5 4.5 4.5L6 12.5"/>',
+    iris: '<circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.6"/>',
+    tick: '<path d="m3.5 8.3 3 3 6-6.4"/>',
+    retry: '<path d="M12.8 6.2A5 5 0 1 0 13 9.5"/><path d="M13 3v3.4H9.6"/>'
+  };
+  const ic = (n, extra) => '<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"' + (extra || '') + '>' + P[n] + '</svg>';
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // The egg from MenuBarLabel.glyph, same path; the crack is cut out with a mask so the bar shows through.
+  let eggId = 0;
+  function egg(cracked, size) {
+    const id = 'egg' + (eggId++); size = size || 16;
+    const eggPath = 'M9 1.2C12.6 1.2 15.2 6.4 15.2 10.6C15.2 14.3 12.5 16.8 9 16.8C5.5 16.8 2.8 14.3 2.8 10.6C2.8 6.4 5.4 1.2 9 1.2Z';
+    const crack = '<polyline points="1,9.8 5.2,7.4 7.8,10.6 10.2,7.2 12.6,10.2 17,8" fill="none" stroke="#000" stroke-width="1.5" stroke-linejoin="miter"/>';
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 18 18" aria-hidden="true">' +
+      (cracked ? '<mask id="' + id + '"><rect width="18" height="18" fill="#fff"/>' + crack + '</mask>' : '') +
+      '<path d="' + eggPath + '" fill="currentColor"' + (cracked ? ' mask="url(#' + id + ')"' : '') + '/></svg>';
+  }
+  const wifi = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6.2a8.5 8.5 0 0 1 12 0"/><path d="M4.3 8.6a5.2 5.2 0 0 1 7.4 0"/><circle cx="8" cy="11.6" r="1" fill="currentColor" stroke="none"/></svg>';
+  function menubar(cracked, extra, open) {
+    return '<div class="mbar">' + wifi + '<span class="' + (open ? 'on' : '') + '" style="display:inline-flex;align-items:center;gap:5px">' + egg(cracked) + (extra || '') + '</span><span class="clock">Mon 5 Oct  09:41</span></div>';
+  }
+
+  const AGENTS = [
+    { n: '#21', title: 'Stop the late "Filed by Iris" line from making the view jump', task: 'Build', step: 'Running tests', t: '4:12', sym: 'hammer' },
+    { n: '#18', title: 'Give Quick Capture a better default shortcut', task: 'Review', step: 'Reading the diff', t: '1:03', sym: 'eye' }
+  ];
+  const STATES = {
+    busy: { hint: '13 waiting, two agents working', waiting: 13, kinds: '3 questions · 9 to verify · 1 proposal', oldest: '2h', agents: AGENTS, paused: false, problem: null },
+    quiet: { hint: 'Nothing waits, nothing runs', waiting: 0, kinds: '', oldest: '', agents: [], paused: false, problem: null },
+    paused: { hint: 'Agents paused, 4 waiting', waiting: 4, kinds: '2 questions · 2 to verify', oldest: '35m', agents: [], paused: true, problem: null },
+    problem: { hint: 'GitHub sync failed, one agent working', waiting: 2, kinds: '2 to verify', oldest: '10m', agents: [AGENTS[0]], paused: false,
+      problem: { title: 'GitHub sync failed', detail: '3 changes wait to sync' } }
+  };
+  const Q = {
+    who: 'Iris', n: '#15', ago: '12m',
+    text: 'What about the "Iris asks" bubbles feels wrong to you? I can see four likely causes. Pick the closest and I will file it on #15.',
+    answers: ['Too heavy or boxed in compared with the rest of Decide', 'Chat-bubble shape does not match the cards and pills', 'Colour or text size is off', 'Position within the decision card']
+  };
+  const waitWord = n => n === 1 ? 'decision waits for you' : 'decisions wait for you';
+
+  // A: native menu
+  function mi(o) {
+    return '<div class="mi' + (o.dis ? ' dis' : '') + (o.cls ? ' ' + o.cls : '') + '">' + (o.icon ? ic(o.icon) : '<span style="width:16px;flex:none"></span>') +
+      '<div class="stack"><span class="ell">' + esc(o.title) + '</span>' + (o.sub ? '<span class="s ell">' + esc(o.sub) + '</span>' : '') + '</div>' +
+      (o.badge ? '<span class="nbadge">' + o.badge + '</span>' : '') + (o.key ? '<span class="k">' + o.key + '</span>' : '') + '</div>';
+  }
+  const sep = '<div class="sep"></div>';
+  function optA(s) {
+    let h = '<div class="menu" role="img" aria-label="Option A mockup">';
+    if (s.problem) h += mi({ icon: 'warn', cls: 'bad', title: s.problem.title, sub: s.problem.detail + ' · click to retry' }) + sep;
+    h += mi({ icon: 'tray', title: 'Decide…', sub: s.waiting ? s.kinds : 'Nothing waits for you', badge: s.waiting || null, dis: !s.waiting });
+    if (s.agents.length || s.paused) {
+      h += sep + '<div class="mh">Agents</div>';
+      if (s.paused) h += mi({ icon: 'pause', title: 'Paused', sub: 'Agents wait until you resume them', dis: true });
+      s.agents.forEach(a => { h += mi({ icon: a.sym, cls: 'ag', title: a.n + '  ' + a.title, sub: a.task + ' · ' + a.step + ' · ' + a.t }); });
+    }
+    h += sep + mi({ icon: 'pencil', title: 'New Ticket…', key: '⌃⌥H' }) + mi({ icon: s.paused ? 'play' : 'pause', title: s.paused ? 'Resume Agents' : 'Pause Agents' });
+    h += sep + mi({ icon: 'win', title: 'Open Hatch' }) + mi({ icon: 'gear', title: 'Settings…', key: '⌘,' });
+    h += sep + mi({ title: 'Quit Hatch', key: '⌘Q' });
+    return h + '</div>';
+  }
+
+  // Shared panel bits
+  function problemRow(s) {
+    return s.problem ? '<div class="problem">' + ic('warn') + '<div class="grow"><div class="t">' + esc(s.problem.title) + '</div><div class="s">' + esc(s.problem.detail) + '</div></div><button type="button" class="btn sm" tabindex="-1">Retry</button></div>' : '';
+  }
+  function agentRow(a) {
+    return '<div class="row"><span class="tile-ic">' + ic(a.sym) + '</span><div class="grow"><div class="t ell"><span style="color:var(--ink2)">' + a.n + '</span> ' + esc(a.title) + '</div><div class="s ell">' + a.task + ' · ' + esc(a.step) + '</div></div><span class="tm">' + a.t + '</span></div>';
+  }
+  function actionRows(s, opts) {
+    let h = '<div class="row">' + ic('pencil') + '<span class="grow">New Ticket…</span><span class="k">⌃⌥H</span></div>';
+    if (opts.pause && !s.paused && s.agents.length) h += '<div class="row">' + ic('pause') + '<span class="grow">Pause Agents</span></div>';
+    h += '<div class="row">' + ic('win') + '<span class="grow">Open Hatch</span></div>';
+    h += '<div class="row">' + ic('gear') + '<span class="grow">Settings…</span><span class="k">⌘,</span></div>';
+    h += sep + '<div class="row">' + ic('power') + '<span class="grow">Quit Hatch</span><span class="k">⌘Q</span></div>';
+    return h;
+  }
+
+  // B: calm panel
+  function optB(s) {
+    let h = '<div class="menu panel" role="img" aria-label="Option B mockup">' + problemRow(s);
+    if (s.waiting) {
+      h += '<div class="b-decide"><div class="b-line"><span class="b-count">' + s.waiting + '</span><div class="grow"><div class="t">' + waitWord(s.waiting) +
+        '</div><div class="s">' + esc(s.kinds) + ' · oldest ' + s.oldest + '</div></div></div><button type="button" class="btn prom lg wide" tabindex="-1">Decide</button></div>';
+    } else {
+      h += '<div class="b-quiet">' + ic('check') + '<div><div class="t">Nothing waits for you</div><div class="s">Iris and the agents will ask here.</div></div></div>';
+    }
+    if (s.agents.length) { h += sep + '<div class="lbl">Working</div>'; s.agents.forEach(a => { h += agentRow(a); }); }
+    if (s.paused) h += sep + '<div class="row">' + ic('pause') + '<div class="grow"><div class="t">Agents are paused</div></div><button type="button" class="btn sm" tabindex="-1">Resume</button></div>';
+    h += sep + actionRows(s, { pause: true });
+    return h + '</div>';
+  }
+
+  // C: one decision at a time
+  function optC(s) {
+    let h = '<div class="menu panel" role="img" aria-label="Option C mockup">' + problemRow(s);
+    if (s.waiting) {
+      h += '<div class="c-head"><span class="t">Decide</span><span class="grow"></span><span class="s">1 of ' + s.waiting + '</span><span class="nav"><span>' + ic('left') + '</span><span>' + ic('right') + '</span></span></div>';
+      h += '<div class="c-who">' + ic('iris') + '<span><b style="color:var(--ink);font-weight:600">' + Q.who + '</b> · ' + Q.n + ' · ' + Q.ago + '</span></div>';
+      h += '<div class="bubble">' + esc(Q.text) + '</div><div class="alist">';
+      Q.answers.forEach((a, i) => {
+        h += '<div class="arow' + (i === 0 ? ' sel' : '') + '"><span class="num">' + (i + 1) + '</span><span class="grow">' + esc(a) + '</span>' +
+          (i === 0 ? '<span class="recb">Recommended</span><span class="chk">' + ic('tick') + '</span>' : '') + '</div>';
+      });
+      h += '<div class="arow"><span class="num"></span><span class="grow" style="color:var(--ink2)">Something else…</span></div></div>';
+      h += '<div class="c-bar"><button type="button" class="btn" tabindex="-1">Later</button><button type="button" class="btn prom" tabindex="-1">Answer</button></div>';
+    } else {
+      h += '<div class="empty">' + ic('check') + '<div class="t">Nothing waits for you</div><div class="s">Iris and the agents will ask here.</div></div>';
+    }
+    let foot;
+    if (s.paused) foot = '<div class="row"><span class="dot grey"></span><span class="grow s" style="font-size:12.5px">Agents paused</span><button type="button" class="btn sm" tabindex="-1">Resume</button></div>';
+    else if (s.agents.length) foot = '<div class="row"><span class="dot"></span><span class="grow ell" style="font-size:12.5px">' + s.agents.length + (s.agents.length === 1 ? ' agent working' : ' agents working') + '</span>' + ic('right') + '</div>';
+    else foot = '<div class="row"><span class="dot grey"></span><span class="grow s" style="font-size:12.5px">No agents running</span></div>';
+    h += sep + '<div class="c-foot">' + foot + '<span class="ibtn" title="New Ticket">' + ic('pencil') + '</span><span class="ibtn" title="Open Hatch">' + ic('win') + '</span><span class="ibtn" title="Settings">' + ic('gear') + '</span></div>';
+    return h + '</div>';
+  }
+
+  // D: tiles
+  function optD(s) {
+    let h = '<div class="menu panel" role="img" aria-label="Option D mockup"><div class="tiles">';
+    h += '<div class="tile' + (s.waiting ? ' you' : '') + '"><span class="circ">' + (s.waiting ? s.waiting : ic('check')) + '</span><div><div class="t">' + (s.waiting ? 'Decide' : 'All clear') + '</div><div class="s">' + (s.waiting ? 'oldest ' + s.oldest : 'Nothing waits') + '</div></div></div>';
+    const n = s.agents.length;
+    h += '<div class="tile' + (n && !s.paused ? ' agent' : '') + '"><span class="circ">' + (s.paused ? ic('pause') : n ? n : ic('pause')) + '</span><div><div class="t">Agents</div><div class="s">' + (s.paused ? 'Paused · click to resume' : n ? n + ' working · click to pause' : 'Idle') + '</div></div></div>';
+    if (s.problem) h += '<div class="tile wide-tile bad">' + ic('warn') + '<div class="grow"><div class="t">' + esc(s.problem.title) + '</div><div class="s">' + esc(s.problem.detail) + '</div></div>' + ic('retry') + '</div>';
+    h += '</div>';
+    if (n) s.agents.forEach(a => { h += '<div class="row"><span class="dot"></span><span class="grow ell">' + esc(a.title) + '</span><span class="tm">' + a.t + '</span></div>'; });
+    h += (n ? sep : '') + actionRows(s, { pause: false });
+    return h + '</div>';
+  }
+
+  const RENDER = { A: optA, B: optB, C: optC, D: optD };
+  let current = 'busy';
+  function render() {
+    const s = STATES[current];
+    document.getElementById('state-hint').textContent = s.hint;
+    document.querySelectorAll('.opt').forEach(card => {
+      const k = card.dataset.opt;
+      card.querySelector('.mbar-slot').innerHTML = menubar(s.waiting > 0, '', true);
+      document.getElementById('mock-' + k).innerHTML = RENDER[k](s);
+    });
+  }
+  document.querySelectorAll('#state-seg button').forEach(b => b.addEventListener('click', () => {
+    current = b.dataset.state;
+    document.querySelectorAll('#state-seg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    render();
+  }));
+
+  // Icon demos: quiet, 3 waiting, 13 waiting
+  const cap = t => '<span class="cap">' + t + '</span>';
+  function iconDemo(el, mode) {
+    const cases = [[0, 'Nothing waits'], [3, '3 waiting'], [13, '13 waiting']];
+    el.innerHTML = cases.map(([n, label]) => {
+      let extra = '';
+      if (n && (mode === 2 || (mode === 3 && n >= 5))) extra = '<span style="font-variant-numeric:tabular-nums">' + n + '</span>';
+      return '<div class="mbar">' + egg(n > 0) + extra + cap(label) + '</div>';
+    }).join('');
+  }
+  iconDemo(document.getElementById('icon-1'), 1);
+  iconDemo(document.getElementById('icon-2'), 2);
+  iconDemo(document.getElementById('icon-3'), 3);
+
+  // Contents table with a choice per row
+  const ROWS = [
+    { id: 'decide', item: 'What waits for you', today: 'A count in a circle, the same count as a sentence, Open Desk', opts: ['Count, kinds and one Decide button', 'Count only, the row opens Decide', 'Hide'], rec: 0, why: 'The reason the panel exists. Decide is where waiting things get done; the Desk is a list.' },
+    { id: 'answer', item: 'Answering questions here', today: 'Up to three questions, cut off, with wrapping answer pills', opts: ['Hide (answer in Decide or the notification)', 'One at a time, whole text, Answer button', 'Keep as today'], rec: 0, why: 'A question needs its whole message and the recommendation\'s reason. The notification already answers short ones.', change: 'Changes WF-Q3 (where you answer): drops the menu bar' },
+    { id: 'agents', item: 'Running agents', today: 'Always a block, even when empty, with "0 of 3"', opts: ['Only while they work: ticket, step, time', 'One summary line ("2 agents working")', 'Always, with the empty state'], rec: 0, why: 'Watching agents is the second reason to open the panel. Nothing to show means no block.' },
+    { id: 'capacity', item: 'Agent capacity ("0 of 3")', today: 'Always shown', opts: ['Hide', 'Show only when full'], rec: 0, why: 'Useful in Settings, not at a glance.' },
+    { id: 'status', item: 'Save and sync status', today: '"Everything is saved" in the header', opts: ['Only when something is wrong, with Retry', 'Always'], rec: 0, why: 'Good news every time trains you to skip the line that matters when it turns red.' },
+    { id: 'activity', item: 'Latest activity', today: '"#1 moved to To verify, 7h"', opts: ['Hide', 'A daily digest line ("Today: 2 merged, 4 filed")', 'Keep as today'], rec: 0, why: 'History with nothing to act on. The digest lives on the Desk.', change: 'Hiding the digest line changes WF-A3 (digest on the Desk and in the menu bar)' },
+    { id: 'header', item: 'Header (egg, "Hatch")', today: 'Always', opts: ['Hide', 'Keep'], rec: 0, why: 'The menu bar item already says which app this is.' },
+    { id: 'actions', item: 'New Ticket, Pause or Resume Agents, Open Hatch, Settings', today: 'Menu rows at the bottom', opts: ['Keep as menu rows (Pause only while agents run)', 'Icon buttons in a footer'], rec: 0, why: 'Recognisable as menu items, with shortcuts on the right as menus show them.' },
+    { id: 'quit', item: 'Quit Hatch', today: 'Missing', opts: ['Add, last, ⌘Q', 'Leave out'], rec: 0, why: 'Every menu bar app has one; with the Dock icon hidden it is the only way out.' },
+    { id: 'scope', item: 'Which projects it counts', today: 'The project picked in the main window', opts: ['All projects', 'The project picked in the main window'], rec: 0, why: 'From the menu bar you cannot see which project is picked, so a count for one project looks wrong.' }
+  ];
+  const tbody = document.getElementById('content-rows');
+  tbody.innerHTML = ROWS.map(r => '<tr><td class="item">' + esc(r.item) + '</td><td class="today-col">' + esc(r.today) + '</td><td><label class="verdict"><select id="row-' + r.id + '" aria-label="' + esc(r.item) + '">' +
+    r.opts.map((o, i) => '<option value="' + i + '"' + (i === r.rec ? ' selected' : '') + '>' + esc(o) + (i === r.rec ? ' (recommended)' : '') + '</option>').join('') +
+    '</select></label>' + (r.change ? '<div class="chg">' + esc(r.change) + '</div>' : '') + '</td><td class="why">' + esc(r.why) + '</td></tr>').join('');
+
+  // Summary for Claude
+  const STYLE_NAMES = { A: 'A, a real menu', B: 'B, a calm status panel', C: 'C, one decision at a time', D: 'D, Control Center tiles' };
+  function summary() {
+    const style = (document.querySelector('input[name="style"]:checked') || {}).value || 'B';
+    const icon = (document.querySelector('input[name="icon"]:checked') || {}).value || 'Crack only';
+    let t = 'Menu bar panel (design-review/menu-bar-concepts.html)\n';
+    t += 'Style: ' + STYLE_NAMES[style] + (style === 'B' ? ' (recommended)' : '') + '\n';
+    t += 'Icon: ' + icon + '\nContents:\n';
+    ROWS.forEach(r => {
+      const i = Number(document.getElementById('row-' + r.id).value);
+      t += '- ' + r.item + ': ' + r.opts[i] + (i === r.rec ? '' : '  [changed from recommendation]') + '\n';
+    });
+    t += 'Next: build the picked style as switchable native variants (Menu Bar Lab) before replacing MenuBarPanel.swift.';
+    return t;
+  }
+  const out = document.getElementById('summary');
+  const refresh = () => { out.textContent = summary(); document.getElementById('copied').hidden = true; };
+  document.addEventListener('change', e => { if (e.target.matches('input[name], select')) refresh(); });
+  document.getElementById('copy').addEventListener('click', () => {
+    const text = summary();
+    const done = () => { document.getElementById('copied').hidden = false; };
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents(out); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); };
+    try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
+  });
+
+  render();
+  refresh();
+})();
+</script>

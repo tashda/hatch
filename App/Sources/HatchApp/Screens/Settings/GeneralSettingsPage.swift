@@ -29,8 +29,16 @@ struct GeneralSettingsPage: View {
                 }
                 Toggle(isOn: state.flagBinding(Preference.menuBar)) {
                     Text("Show in the menu bar")
-                    Text("Agents and status, like the footer")
+                    Text("What waits for you, running agents and problems")
                 }
+                Picker(selection: state.preferenceBinding(Preference.menuBarScope, default: "all")) {
+                    Text("All projects").tag("all")
+                    Text("The selected project").tag("selected")
+                } label: {
+                    Text("Menu bar counts")
+                    Text("The project picked in the main window is not visible from the menu bar")
+                }
+                .disabled(!state.showMenuBarItem)
             } header: {
                 Text("Dock and menu bar")
             }

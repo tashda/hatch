@@ -3,7 +3,8 @@ import HatchCore
 
 @main
 struct HatchApp: App {
-    @StateObject private var state = (Snapshots.folder == nil && !Snapshots.demoMode) ? AppState.live() : Snapshots.demoState()
+    @StateObject private var state = HatchApp.makeState()
+    @StateObject private var menuBarLook = MenuBarLook.shared
 
     init() {
         // Snapshot and demo runs share the app's preferences and saved windows. They neither restore nor save window
@@ -13,11 +14,20 @@ struct HatchApp: App {
         }
     }
 
+    /// The app's state, and the menu bar item that reads it; the item is added on the next turn of the run loop, once
+    /// the app has finished launching.
+    @MainActor private static func makeState() -> AppState {
+        let state = (Snapshots.folder == nil && !Snapshots.demoMode) ? AppState.live() : Snapshots.demoState()
+        DispatchQueue.main.async { MenuBarMenu.shared.start(state: state) }
+        return state
+    }
+
     var body: some Scene {
         WindowGroup(id: AppState.mainWindowId) {
             RootView()
                 .environmentObject(state)
                 .background(WindowTag(identifier: HatchWindows.mainIdentifier))
+                .background(MenuBarInstaller())
                 .focusedSceneValue(\.windowNavigation, WindowNavigation(
                     canGoBack: state.canGoBack, canGoForward: state.canGoForward,
                     goBack: { state.goBack() }, goForward: { state.goForward() }))
@@ -57,6 +67,11 @@ struct HatchApp: App {
         }
         .defaultSize(width: 1400, height: 900)
 
+        Window("Menu Bar Lab", id: "menu-bar-lab") {
+            MenuBarLabView().environmentObject(state)
+        }
+        .defaultSize(width: 520, height: 680)
+
         Window("Keyboard Shortcuts", id: "shortcuts") {
             ShortcutCheatSheet().environmentObject(state)
         }
@@ -68,15 +83,24 @@ struct HatchApp: App {
         }
         .defaultSize(width: 1040, height: 720)
 
-        // Settings › General › Show in the menu bar (on by default): agents and status while Hatch is in the background.
-        // Removing the item from the menu bar by hand switches the setting off.
-        MenuBarExtra(isInserted: Binding(get: { state.showMenuBarItem },
-                                         set: { if $0 != state.showMenuBarItem { state.setFlag(Preference.menuBar, $0) } })) {
+        // Settings › General › Show in the menu bar (on by default): what waits, running agents and problems while Hatch
+        // is in the background. The menu is AppKit's (`MenuBarMenu`, added at launch by `makeState`); the old panel below
+        // stays selectable in the Menu Bar Lab until the menu replaces it. Removing either by hand switches the setting off.
+        MenuBarExtra(isInserted: menuBarPanelInserted) {
             MenuBarPanel().environmentObject(state)
         } label: {
             MenuBarLabel(waiting: state.waitingCount > 0)
         }
         .menuBarExtraStyle(.window)
+    }
+
+    /// The panel is inserted only when the lab picks it. Switching to the menu removes it, which must not count as the
+    /// owner removing it, so only a panel that is showing can turn the setting off.
+    private var menuBarPanelInserted: Binding<Bool> {
+        Binding(get: { state.showMenuBarItem && menuBarLook.form == .panel },
+                set: { inserted in
+                    if !inserted, state.showMenuBarItem, menuBarLook.form == .panel { state.setFlag(Preference.menuBar, false) }
+                })
     }
 }
 
@@ -118,6 +142,7 @@ struct HatchCommands: Commands {
         CommandMenu("Go") {
             Button("Go to…") { state.openPalette(.places) }.shortcut("go.places", keys)
             Button("Decide Lab") { openWindow(id: "decide-lab") }
+            Button("Menu Bar Lab") { openWindow(id: "menu-bar-lab") }
             Divider()
             ForEach(Route.pages, id: \.self) { route in
                 if let id = route.shortcutId {
