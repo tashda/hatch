@@ -46,6 +46,9 @@ public struct ComponentAdvice: Equatable, Sendable {
 }
 
 public enum ComponentNative {
+    /// "an alert", "a sheet".
+    static func article(_ word: String) -> String { ("aeiou".contains(word.first ?? "x") ? "an " : "a ") + word }
+
     /// When the references below were last read, and the macOS SDK they describe.
     public static let checkedOn = "2026-10-05"
     public static let checkedSDK = "27.0"
@@ -149,7 +152,7 @@ public extension ComponentSystem {
                 let prominentOnly = place == "toolbar" && r.importance != .main && recipe["style"].map { $0.hasSuffix("Prominent") } == true
                 if !look.isEmpty || prominentOnly {
                     out.append(ComponentAdvice(kind: .systemPlace, role: r.id,
-                                               message: "\(r.id) styles a \(ComponentPlace.title(place).lowercased()): \(rule.why)", source: rule.source))
+                                               message: "\(r.id) styles \(ComponentNative.article(ComponentPlace.title(place).lowercased())): \(rule.why)", source: rule.source))
                 }
             }
             // 3. Liquid Glass belongs to controls and navigation, not content.

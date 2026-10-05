@@ -423,7 +423,7 @@ struct RoleView: View {
             }
             let comparing = model.isPreviewing(role) || role.draft != nil
             if !comparing {
-                Text("Choose a look on the right to see it here beside today's.").font(.callout).foregroundStyle(.secondary)
+                Text("Choose a look in the inspector; it is drawn here beside today's, in every place.").font(.callout).foregroundStyle(.secondary)
             } else if model.isPreviewing(role) && !model.isChanged(role) {
                 // Said in words, so two identical columns don't look like a broken preview.
                 Label(model.preview?.follow == true
@@ -432,13 +432,16 @@ struct RoleView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
             Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 20) {
-                if comparing {
-                    GridRow {
-                        Text("").gridColumnAlignment(.leading)
-                        ThenNowLabel(now: false, title: "Today", detail: "as the app looks now")
-                        Text("")
+                // Always two columns, so the page keeps its shape when a look is tried and no tile is page-wide.
+                GridRow {
+                    Text("").gridColumnAlignment(.leading)
+                    ThenNowLabel(now: false, title: "Today", detail: "as the app looks now")
+                    Text("")
+                    if comparing {
                         ThenNowLabel(now: true, title: model.isPreviewing(role) ? "Preview" : "Draft",
                                      detail: model.isPreviewing(role) ? model.preview?.label ?? "" : "saved, not applied yet")
+                    } else {
+                        ThenNowLabel(now: true, title: "Preview", detail: "choose a look").opacity(0.5)
                     }
                 }
                 ForEach(role.places, id: \.self) { id in
@@ -461,10 +464,19 @@ struct RoleView: View {
                         .frame(width: 140, alignment: .leading).help(place.summary)
                         .onHover { if $0 { hoveredPlace = id } }
                         // The same tiles as the element's page, window and all, without their headings.
-                        ThenNow(now: false, comparing: comparing) {
+                        ThenNow(now: false, comparing: true) {
                             Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, today: true, header: false) }
                         }
                         .onHover { if $0 { hoveredPlace = id } }
+                        if !comparing {
+                            Image(systemName: "arrow.right").font(.title3.weight(.semibold)).foregroundStyle(.quaternary)
+                                .frame(maxHeight: .infinity)
+                            // Where the preview will be: quiet, the same size as today's tile.
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4])).foregroundStyle(.tertiary)
+                                .overlay { if id == role.places.first { Text("A look you choose is drawn here").font(.callout).foregroundStyle(.tertiary) } }
+                                .frame(minWidth: 0, idealWidth: 380, maxWidth: .infinity, minHeight: PlaceFrame.tileHeight, maxHeight: .infinity)
+                        }
                         if comparing {
                             Image(systemName: "arrow.right").font(.title3.weight(.semibold)).foregroundStyle(.tertiary)
                                 .frame(maxHeight: .infinity)
@@ -595,18 +607,17 @@ struct DecideList: View {
                     Text("Used on " + screens.prefix(4).map(\.screen).joined(separator: ", ") + (screens.count > 4 ? " and \(screens.count - 4) more screens" : ""))
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(Array(q.options.enumerated()), id: \.offset) { i, o in
-                            Button {
-                                model.open(role.id)
-                                model.tryLook(RoleInspectorPreview.make(role, q, i))
-                            } label: { option(role, q, i, o) }
-                            .buttonStyle(.plain)
-                        }
+                // The options wrap within the card: nothing on this page scrolls sideways.
+                FlowRow(spacing: 10, top: true) {
+                    ForEach(Array(q.options.enumerated()), id: \.offset) { i, o in
+                        Button {
+                            model.open(role.id)
+                            model.tryLook(RoleInspectorPreview.make(role, q, i))
+                        } label: { option(role, q, i, o) }
+                        .buttonStyle(.plain)
                     }
-                    .padding(2)
                 }
+                .padding(2)
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
