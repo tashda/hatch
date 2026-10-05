@@ -530,6 +530,7 @@ struct QuestionDecisionSheet: View {
             // A Question Hatch prepared is still a draft; it takes its path on the way (decision CO11).
             if prepared { _ = try state.store.decidePreparedQuestion(ticketId: id, choice: choice, reason: why, kind: kind) }
             else { _ = try state.store.decideQuestion(ticketId: id, choice: choice, reason: why, kind: kind) }
+            try state.applyComponentDecision(ticket: ticket, choice: choice)
             return true
         }
         if done == true {

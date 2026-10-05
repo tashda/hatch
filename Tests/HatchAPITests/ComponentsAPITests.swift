@@ -61,6 +61,34 @@ final class ComponentsAPITests: APITestCase {
         XCTAssertTrue(commits.last!.contains("(draft "), commits.last!)
     }
 
+    /// Open questions are prepared Questions in Decide; answering one anywhere keeps both in step (DC9).
+    func testQuestionsAreInDecide() throws {
+        var system = try ComponentSystem.load(notebook: notebook.path)!
+        system.questions.append(ComponentQuestion(id: "look.button.secondary", kind: .look, role: "button.secondary", title: "Other action",
+                                                  options: [.init(title: "glass", recipe: ["style": "glass"], count: 4, effect: "x"),
+                                                            .init(title: "Follow macOS", follow: true, effect: "y")], reason: "most used"))
+        try system.write(notebook: notebook.path)
+        XCTAssertEqual(try store.syncComponentQuestions(projectId: projectId, system: system).added, 2)
+        XCTAssertEqual(try store.syncComponentQuestions(projectId: projectId, system: system).added, 0, "once per question")
+        let pending = try store.pendingDecisions(projectId: projectId).filter { $0.ticket.area == ComponentsSetup.area }
+        XCTAssertEqual(pending.map(\.kind), [.pick, .pick])
+        let options = try store.questionOptions(ticketId: pending[0].ticket.id)
+        XCTAssertTrue(options.allSatisfy { $0.gain != nil && $0.cost != nil })
+
+        // Answered in the Designer: its ticket leaves Decide.
+        _ = try StageClient(paths: paths).changeComponents(project: "echo", action: "answer", body: ["question": "look.button.inRow", "option": 0])
+        let left = try store.pendingDecisions(projectId: projectId).filter { $0.ticket.area == ComponentsSetup.area }
+        XCTAssertEqual(left.count, 1)
+
+        // Answered in Decide: the system takes the answer.
+        let ticket = left[0].ticket
+        _ = try store.decidePreparedQuestion(ticketId: ticket.id, choice: "1", reason: nil)
+        system = try ComponentSystem.load(notebook: notebook.path)!
+        XCTAssertTrue(try system.applyDecided(ticketBody: ticket.body, choice: "1", decision: ticket.displayNumber))
+        XCTAssertTrue(system.role("button.secondary")!.followsMacOS)
+        XCTAssertFalse(try system.applyDecided(ticketBody: ticket.body, choice: "1", decision: nil), "already answered")
+    }
+
     func testRefusesWhatWouldBreakTheSystem() throws {
         let client = StageClient(paths: paths)
         XCTAssertThrowsError(try client.changeComponents(project: "echo", action: "look", body: ["role": "button.toolbar", "recipe": ["style": "huge"]]))

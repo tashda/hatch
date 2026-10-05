@@ -479,3 +479,79 @@ public extension ComponentsSetup {
         return drafts
     }
 }
+
+// MARK: - Questions in Decide
+
+public extension ComponentsSetup {
+    /// The line that ties a prepared Question ticket to its design system question.
+    static func questionMarker(_ id: String) -> String { "Design system question: `\(id)`" }
+
+    /// The design system question a ticket stands for, from its marker.
+    static func componentQuestionId(inBody body: String) -> String? {
+        guard let r = body.range(of: "Design system question: `") else { return nil }
+        let rest = body[r.upperBound...]
+        return rest.firstIndex(of: "`").map { String(rest[..<$0]) }
+    }
+
+    /// A design system question as a prepared Question ticket, answered in Decide like any other (DC9): its options
+    /// with the recommendation, and what each gains and costs (DC5).
+    static func questionDraft(_ q: ComponentQuestion, system: ComponentSystem) -> Draft {
+        let total = q.options.reduce(0) { $0 + $1.count }
+        let options = q.options.enumerated().map { i, o -> QuestionOption in
+            let gain: String, cost: String
+            if o.follow == true { gain = "macOS decides, now and in later versions."; cost = "Hand styling there is flagged." }
+            else if o.recipe == nil { gain = "Nothing changes now."; cost = "Stays a guess until a ticket needs it." }
+            else { gain = "\(o.count) of \(total) already look like this."; cost = "\(total - o.count) move to it when their screens are touched." }
+            return QuestionOption(key: String(i), title: o.title, detail: o.recipe == nil ? o.effect : (o.examples.isEmpty ? nil : "e.g. " + o.examples.joined(separator: ", ")),
+                                  recommended: i == q.recommended, why: i == q.recommended ? q.reason : nil, gain: gain, cost: cost)
+        }
+        let body = """
+            \(q.reason)
+
+            Answering here changes \(system.name)'s design system (`\(ComponentSystem.notebookPath)` in the notebook). The Components Designer draws every option in its places.
+
+            \(questionMarker(q.id))
+
+            """
+        var d = Draft(type: .question, title: q.title, body: body, options: options)
+        d.area = area
+        return d
+    }
+}
+
+public extension HatchStore {
+    /// Keeps Decide in step with the design system: a prepared Question for each open question without one, and drops
+    /// the ones whose question was answered elsewhere (the Designer, the CLI). Returns what changed.
+    @discardableResult
+    func syncComponentQuestions(projectId: Int, system: ComponentSystem) throws -> (added: Int, dropped: Int) {
+        var filter = TicketFilter(); filter.projectId = projectId; filter.area = ComponentsSetup.area
+        let existing = try tickets(filter).filter { $0.type == .question }
+        var byQuestion: [String: Ticket] = [:]
+        for t in existing { if let id = ComponentsSetup.componentQuestionId(inBody: t.body) { byQuestion[id] = t } }
+        let open = Set(system.questions.map(\.id))
+        var added = 0, dropped = 0
+        for q in system.questions where byQuestion[q.id] == nil {
+            let d = ComponentsSetup.questionDraft(q, system: system)
+            let t = try createTicket(projectId: projectId, type: .question, title: d.title, body: d.body, area: d.area)
+            try setQuestionOptions(ticketId: t.id, d.options)
+            added += 1
+        }
+        for (id, t) in byQuestion where !open.contains(id) && t.status == .draft {
+            try move(t.id, to: .dropped, actor: .hatch, reason: "answered in the Components Designer")
+            dropped += 1
+        }
+        return (added, dropped)
+    }
+}
+
+public extension ComponentSystem {
+    /// Applies a choice made in Decide on a prepared Question ticket (its option key is the option's index).
+    /// Returns false when the ticket is not a design system question, or the question is already answered.
+    @discardableResult
+    mutating func applyDecided(ticketBody: String, choice: String, decision: String?) throws -> Bool {
+        guard let id = ComponentsSetup.componentQuestionId(inBody: ticketBody), questions.contains(where: { $0.id == id }),
+              let index = Int(choice) else { return false }
+        try answer(id, option: index, decision: decision)
+        return true
+    }
+}

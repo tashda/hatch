@@ -494,6 +494,8 @@ public final class StageServer: @unchecked Sendable {
             throw APIError(status: 422, code: "invalid", message: e.description)
         }
         try system.write(notebook: folder)
+        // Decide stays in step: questions answered here leave it, new ones arrive (DC9).
+        if let project = try store.project(key: key) { try? store.syncComponentQuestions(projectId: project.id, system: system) }
         // "Make it a setting" (NF5) drafts the ticket for the app setting, in the project the system belongs to.
         if let draft = settingDraft, let project = try store.project(key: key) {
             let t = try store.createTicket(projectId: project.id, type: draft.type, title: draft.title, body: draft.body, area: draft.area)

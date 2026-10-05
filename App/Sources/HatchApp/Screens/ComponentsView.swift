@@ -207,7 +207,8 @@ struct ComponentsView: View {
             }.value
             switch result {
             case .success(let system):
-                message = "Started: \(system.roles.count) roles" + (system.questions.isEmpty ? "." : ", \(system.questions.count) to decide in the Designer.")
+                state.syncComponentQuestions(project: project, system: system)
+                message = "Started: \(system.roles.count) roles" + (system.questions.isEmpty ? "." : ", \(system.questions.count) to decide in the Designer or in Decide.")
             case .failure(let error):
                 message = "Could not start the design system: \(error)"
             }
@@ -520,6 +521,7 @@ struct ComponentsView: View {
         guard self.project?.id == project.id else { return }
         loaded = result
         loading = false
+        if let system = result.system, !Snapshots.demoMode { state.syncComponentQuestions(project: project, system: system) }
     }
 
     private func use(_ project: Project, _ components: ComponentsConfig) {
@@ -690,6 +692,23 @@ extension AppState {
     /// Adds draft tickets for the components (decision CO3): a leading Theme is the parent of the rest. Drafts,
     /// so nothing starts until the owner reads and submits them. Returns how many were added.
     @discardableResult
+    /// A prepared design system Question answered in Decide or on its page: the answer goes into the system in the
+    /// notebook and is committed there (Hatch is the only writer, DS2).
+    func applyComponentDecision(ticket: Ticket, choice: String) throws {
+        guard ticket.area == ComponentsSetup.area, ComponentsSetup.componentQuestionId(inBody: ticket.body) != nil,
+              let project = try store.project(id: ticket.projectId), let notebook = project.config?.repo(.notebook)?.localPath,
+              var system = try ComponentSystem.load(notebook: notebook) else { return }
+        guard try system.applyDecided(ticketBody: ticket.body, choice: choice, decision: ticket.displayNumber) else { return }
+        try system.write(notebook: notebook)
+        _ = try NotebookWriter.commit("Components: \(ticket.title) (decided in \(ticket.displayNumber))", in: notebook)
+    }
+
+    /// Brings Decide in step with the design system's open questions.
+    func syncComponentQuestions(project: Project, system: ComponentSystem) {
+        guard let changed = try? store.syncComponentQuestions(projectId: project.id, system: system), changed.added + changed.dropped > 0 else { return }
+        refresh()
+    }
+
     func addComponentTickets(projectId: Int, drafts: [ComponentsSetup.Draft]) -> Int? {
         perform("Add components tickets") {
             var parent: Int?

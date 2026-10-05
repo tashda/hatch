@@ -741,6 +741,8 @@ private struct DecideCard: View {
             commit(agreed: agreed, startsAgent: false, label: "\(ticket.displayNumber) · \(c.title)") {
                 if ticket.status == .draft { _ = try store.decidePreparedQuestion(ticketId: ticket.id, choice: key, reason: note.isEmpty ? nil : note) }
                 else { _ = try store.decideQuestion(ticketId: ticket.id, choice: key, reason: note.isEmpty ? nil : note) }
+                // A design system question changes the system too (DC9, DS4).
+                try state.applyComponentDecision(ticket: ticket, choice: key)
             }
         case .plan:
             guard let plan = item.plan else { return }
