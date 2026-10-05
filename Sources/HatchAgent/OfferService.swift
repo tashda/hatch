@@ -88,6 +88,28 @@ public struct OfferService {
         return .offered(ticket: moved, revision: revising ? t.revision + 1 : 1, warnings: issues)
     }
 
+    /// A change to the design system (decision CP3): two to four looks for one role as recipes, checked against the
+    /// catalog and the system. The looks become options on the Proposal, so Decide can answer it; the caller puts the
+    /// matching question on the system (Hatch writes the notebook).
+    public func offer(ticketId: Int, change: ComponentChangeOffer, system: ComponentSystem) throws -> OfferResult {
+        let t = try offerable(ticketId, types: [.proposal])
+        guard let role = ComponentsSetup.changedRole(inBody: t.body) else {
+            throw StoreError.invalid("\(t.displayNumber) is not a design system change; offer a manifest instead.")
+        }
+        let issues = change.problems(role: role, system: system).map { GateIssue.error($0.code, $0.message, $0.fix) }
+        if issues.hasErrors { return try reject(t, issues) }
+        let revising = t.status == .revising
+        let revision = revising ? t.revision + 1 : 1
+        let json = String(decoding: try JSONEncoder().encode(change), as: UTF8.self)
+        let moved = try store.db.transaction { () -> Ticket in
+            if revising { try store.recordRevision(ticketId: ticketId, summary: change.summary, added: change.looks.map { "Look: \($0.id) · \($0.title)" }) }
+            try store.saveProposal(ticketId: ticketId, manifestJSON: json)
+            try store.setQuestionOptions(ticketId: ticketId, change.decideOptions)
+            return try finish(t, summary: change.summary, revision: revision, warnings: 0)
+        }
+        return .offered(ticket: moved, revision: revision, warnings: [])
+    }
+
     /// A Question: the answer is a note in the thread, and the ticket goes to the owner.
     public func offerAnswer(ticketId: Int, answer: String) throws -> OfferResult {
         let t = try offerable(ticketId, types: [.question])

@@ -285,6 +285,23 @@ public enum BriefBuilder {
         case .vet:
             return ["Compare the ticket with the other tickets and the Spec. Iris does this through `hatch`; you only read the result.",
                     "The owner decides every suggestion (rewrite, type change, duplicate)."]
+        case .prepare where ComponentsSetup.changedRole(inBody: t.body) != nil, .revise where ComponentsSetup.changedRole(inBody: t.body) != nil:
+            // A design system change (CP3): looks as recipes, no Stage round, no code.
+            return [
+                "Offer 2 to 4 looks for the role as recipes, as the ticket says. Use only the settings and values it lists; Hatch checks every recipe and draws the looks in place for the owner.",
+                "Read where the role is used (`hatch components check` lists the app's controls by role) so the looks suit those places. Do not change the app's code.",
+                "Recommend ONE look, the one you would ship, and say why and what the others cost. Give each look one line of gain and one of cost.",
+            ] + (kind == .revise ? ["Keep the earlier looks and add new ones; the owner's notes refer to them."] : []) + common
+                + ["Hand it in with `hatch offer \(t.displayNumber) --components looks.json`. Never move the status yourself."]
+        case .build where ComponentsSetup.changedRole(inBody: t.body) != nil:
+            let role = ComponentsSetup.changedRole(inBody: t.body) ?? ""
+            return [
+                "Work only in your own worktree on branch `\(branchName(t))`. Push only that branch.",
+                "The owner chose a new look for `\(role)`; Hatch has made it the role's look in the design system. Run `hatch components generate --out <your app workspace>/\(config?.components?.path ?? "<components folder>")` so the role code has it, and build.",
+                "Then move the controls that should use the role: `hatch components check` lists those styled by hand. Replace their style modifiers with the role. Never write the look by hand.",
+                "Declare the files with `hatch plan` before you edit. Run only the tests mapped to the areas you touch.",
+                "When done run `hatch ready`. Hatch checks the roles in your diff.",
+            ] + common
         case .prepare:
             switch t.type {
             case .sketch:
@@ -345,7 +362,7 @@ public enum BriefBuilder {
         case nil, .vet?: return ["(nothing for you to run)"]
         case .prepare?, .revise?:
             let file: String
-            switch t.type { case .sketch: file = "sketch.json"; case .question: file = "--answer \"...\""; default: file = "manifest.json" }
+            switch t.type { case .sketch: file = "sketch.json"; case .question: file = "--answer \"...\""; default: file = ComponentsSetup.changedRole(inBody: t.body) != nil ? "--components looks.json" : "manifest.json" }
             return ["hatch offer \(n) \(file)     # when ready; Hatch checks it and moves the ticket",
                     "hatch ask \(n) \"...\" --suggest \"your recommendation\" --suggest \"another answer\"     # only if you are blocked",
                     "hatch note \(n) \"...\"    # context for the owner"]

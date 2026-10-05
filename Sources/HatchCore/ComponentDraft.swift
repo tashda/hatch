@@ -17,6 +17,8 @@ public struct ComponentQuestion: Codable, Equatable, Sendable, Identifiable {
         case missingRole
         /// A provisional role used without change on a few tickets: make it agreed (DS8).
         case confirm
+        /// The looks an agent offered for a change the owner asked for (CP3); answering accepts or drops the Proposal.
+        case change
     }
 
     public struct Option: Codable, Equatable, Sendable {
@@ -49,6 +51,10 @@ public struct ComponentQuestion: Codable, Equatable, Sendable, Identifiable {
     /// The recommended option (rule 3: one recommendation and its reason).
     public var recommended: Int
     public var reason: String
+    /// For a change (CP3): the Proposal's ticket id, and the place or area the change is limited to (a variant there).
+    public var ticket: Int?
+    public var place: String?
+    public var area: String?
 
     public init(id: String, kind: Kind, role: String?, title: String, options: [Option], recommended: Int = 0, reason: String) {
         self.id = id; self.kind = kind; self.role = role; self.title = title; self.options = options
@@ -304,7 +310,19 @@ public extension ComponentSystem {
         guard let q = questions.first(where: { $0.id == questionId }) else { throw ComponentAnswerError.noQuestion(questionId) }
         guard q.options.indices.contains(option) else { throw ComponentAnswerError.noOption(option + 1) }
         let chosen = q.options[option]
-        if let roleId = q.role, chosen.follow == true {
+        if q.kind == .change, let roleId = q.role {
+            // A change: the chosen look becomes the role's draft, or a variant where the change is limited to.
+            if let recipe = chosen.recipe {
+                if let scope = q.place ?? q.area {
+                    let id = q.place ?? "area-" + HatchStore.slug(scope)
+                    try addVariant(to: roleId, id: id, use: q.place != nil ? "In \(ComponentPlace.title(scope).lowercased()): \(q.title)" : "In the \(scope) area: \(q.title)",
+                                   recipe: recipe, places: q.place.map { [$0] })
+                } else {
+                    try setLook(roleId, recipe: recipe)
+                }
+                if let i = roles.firstIndex(where: { $0.id == roleId }) { roles[i].decision = decision ?? roles[i].decision }
+            }
+        } else if let roleId = q.role, chosen.follow == true {
             try followMacOS(role: roleId, decision: decision)
         } else if let roleId = q.role, let recipe = chosen.recipe {
             guard let ri = roles.firstIndex(where: { $0.id == roleId }) else { throw ComponentAnswerError.noRole(roleId) }
@@ -558,7 +576,8 @@ public extension HatchStore {
         for t in existing { if let id = ComponentsSetup.componentQuestionId(inBody: t.body) { byQuestion[id] = t } }
         let open = Set(system.questions.map(\.id))
         var added = 0, dropped = 0
-        for q in system.questions where byQuestion[q.id] == nil {
+        // A change's looks are answered on its Proposal (CP3), not on a Question of their own.
+        for q in system.questions where byQuestion[q.id] == nil && q.kind != .change {
             let d = ComponentsSetup.questionDraft(q, system: system)
             let t = try createTicket(projectId: projectId, type: .question, title: d.title, body: d.body, area: d.area)
             try setQuestionOptions(ticketId: t.id, d.options)
@@ -576,8 +595,9 @@ public extension ComponentSystem {
     /// Applies a choice made in Decide on a prepared Question ticket (its option key is the option's index).
     /// Returns false when the ticket is not a design system question, or the question is already answered.
     @discardableResult
-    mutating func applyDecided(ticketBody: String, choice: String, decision: String?) throws -> Bool {
-        guard let id = ComponentsSetup.componentQuestionId(inBody: ticketBody), questions.contains(where: { $0.id == id }),
+    mutating func applyDecided(ticketBody: String, choice: String, decision: String?, ticketId: Int? = nil) throws -> Bool {
+        let change = ticketId.map { ComponentsSetup.changeQuestionId(ticketId: $0) }
+        guard let id = ComponentsSetup.componentQuestionId(inBody: ticketBody) ?? change, questions.contains(where: { $0.id == id }),
               let index = Int(choice) else { return false }
         try answer(id, option: index, decision: decision)
         return true

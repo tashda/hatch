@@ -71,6 +71,8 @@ public extension HatchStore {
                 kind = t.type == .theme ? nil : (prepared ? .pick : .submit)
             case .yourCall:
                 if t.type == .question { kind = (try questionOptions(ticketId: t.id)).isEmpty ? .answer : .pick }
+                // A design system change carries its looks as options (CP3): a pick, not a sitting in the Stage.
+                else if t.type == .proposal, ComponentsSetup.changedRole(inBody: t.body) != nil, !(try questionOptions(ticketId: t.id)).isEmpty { kind = .pick }
                 else { kind = .judge }
             default: kind = nil
             }

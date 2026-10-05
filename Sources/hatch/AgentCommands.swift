@@ -79,6 +79,7 @@ enum AgentCommands {
         let agent = c.args.option("agent") ?? "Agent on \(t.displayNumber)"
         let task = try c.store.take(t.id, agent: agent)
         var spaces: [String] = [], notes: [String] = []
+        if let applied = ComponentChangeBuild.applyOnTake(store: c.store, ticket: t, kind: task.kind) { notes.append(applied) }
         if !AgentWorkspaces.roles(for: task.kind).isEmpty && !c.args.flag("no-workspace") {
             // The same workspaces the launcher makes, so a hand-started agent works exactly like one Hatch started.
             let made = try AgentWorkspaces.make(store: c.store, task: task)
@@ -92,18 +93,38 @@ enum AgentCommands {
         c.out.emit(["ticket": .string(t.displayNumber), "task": .string(task.kind.rawValue), "workspaces": .array(spaces.map { .string($0) }), "brief": .string(brief)], text: text)
     }
 
-    // hatch offer #151 manifest.json | --sketch sketch.json | --answer "text"
+    /// The design system for a ticket's project: --notebook, or the project's notebook on this Mac.
+    static func componentsSystem(_ c: Context, ticket t: Ticket) throws -> (ComponentSystem, String) {
+        let own = try c.store.project(id: t.projectId)?.config?.repo(.notebook)?.localPath
+        let folder = c.args.option("notebook").map { ($0 as NSString).expandingTildeInPath } ?? own
+        guard let notebook = folder, let system = try ComponentSystem.load(notebook: notebook) else {
+            throw CLIError("No design system for \(t.displayNumber)'s project on this Mac.")
+        }
+        return (system, notebook)
+    }
+
+    // hatch offer #151 manifest.json | --sketch sketch.json | --components looks.json | --answer "text"
     static func offer(_ c: Context) throws {
         let t = try c.ticket(c.args.pos(1))
         let service = OfferService(store: c.store, agent: t.takenBy ?? "agent")
         let result: OfferResult
         if let answer = c.args.option("answer") { result = try service.offerAnswer(ticketId: t.id, answer: answer) }
-        else if let sketch = c.args.option("sketch") {
+        else if let file = c.args.option("components") {
+            // A design system change (CP3): looks as recipes; the question goes on the system in the notebook.
+            var (system, notebook) = try componentsSystem(c, ticket: t)
+            let change = try ComponentChangeOffer.parse(data: Data(contentsOf: URL(fileURLWithPath: file)))
+            result = try service.offer(ticketId: t.id, change: change, system: system)
+            if result.isOffered, let roleId = ComponentsSetup.changedRole(inBody: t.body), let role = system.role(roleId) {
+                let scope = ComponentsSetup.changeScope(inBody: t.body)
+                system.addChange(change.question(role: role, ticketId: t.id, ticketTitle: t.title, place: scope.place, area: scope.area))
+                try CoreCommands.save(system, notebook: notebook, message: "Components: looks offered for \(roleId) (\(t.displayNumber))")
+            }
+        } else if let sketch = c.args.option("sketch") {
             let data = try Data(contentsOf: URL(fileURLWithPath: sketch))
             let manifest = try JSONDecoder().decode(SketchManifest.self, from: data)
             result = try service.offer(ticketId: t.id, sketch: manifest, baseDirectory: URL(fileURLWithPath: sketch).deletingLastPathComponent())
         } else {
-            guard let file = c.args.pos(2) else { throw CLIError("Usage: hatch offer #151 manifest.json   |   --sketch sketch.json   |   --answer \"text\"") }
+            guard let file = c.args.pos(2) else { throw CLIError("Usage: hatch offer #151 manifest.json   |   --sketch sketch.json   |   --components looks.json   |   --answer \"text\"") }
             result = try service.offer(ticketId: t.id, json: try String(contentsOfFile: file, encoding: .utf8))
         }
         switch result {

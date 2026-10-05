@@ -198,6 +198,7 @@ public final class AgentLauncher: @unchecked Sendable {
 
         let agent = "Agent on \(t.displayNumber)"
         let task = try store.take(ticketId, agent: agent)
+        ComponentChangeBuild.applyOnTake(store: store, ticket: t, kind: task.kind)
         do {
             let plan = try Self.plan(store: store, task: task, role: role, provider: resolved.provider, model: resolved.model,
                                      effort: resolved.effort, thinking: resolved.thinking, agent: agent, hatch: hatch, config: cfg)

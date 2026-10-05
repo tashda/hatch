@@ -412,7 +412,7 @@ public final class StageServer: @unchecked Sendable {
         return (system, folder)
     }
 
-    /// answer {question, option} · agree {role?} · look {role, recipe} · apply {role?} · discard {role} · variant {role, id, use, recipe}
+    /// answer {question, option} · change {role, what, place?, area?} · agree {role?} · look {role, recipe} · apply {role?} · discard {role} · variant {role, id, use, recipe}
     private func changeComponents(_ key: String, _ action: String, _ body: Body) throws -> (JSONValue, StageEvent?) {
         var (system, folder) = try componentSystem(key)
         func recipe() throws -> [String: String] {
@@ -433,6 +433,20 @@ public final class StageServer: @unchecked Sendable {
                     settingDraft = try system.makeConfigurable(role, alternatives: q?.options.compactMap { $0.recipe.map(ComponentRole.summary) } ?? [])
                 }
                 message = "Components: \(q?.title ?? id) — \(q.flatMap { $0.options.indices.contains(option) ? $0.options[option].title : nil } ?? "")"
+                // A change's looks (CP3): the choice accepts the Proposal, or drops it to keep today's look.
+                if q?.kind == .change, let ticketId = q?.ticket {
+                    _ = try? store.decideComponentChange(ticketId: ticketId, choice: String(option), reason: nil)
+                }
+            case "change":
+                // Change… on a role (CP3): a Proposal for an agent to offer looks.
+                let id = try body.string("role", max: 120)
+                guard let role = system.role(id), let project = try store.project(key: key) else {
+                    throw APIError(status: 404, code: "not_found", message: "No role \(id).")
+                }
+                let draft = ComponentsSetup.changeDraft(role: role, what: try body.string("what", max: 2000), place: try body.optionalString("place", max: 60),
+                                                        area: try body.optionalString("area", max: 120), system: system)
+                let t = try store.fileComponentChange(projectId: project.id, draft)
+                message = "Components: \(t.displayNumber) asks for a new look for \(id)"
             case "agree":
                 let role = try body.optionalString("role", max: 120)
                 try system.agree(role, decision: decision)
