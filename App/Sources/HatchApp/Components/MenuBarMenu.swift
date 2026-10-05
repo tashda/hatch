@@ -15,7 +15,8 @@ extension AppState {
 
     /// The menu bar's own count, so it can cover all projects while the Dock badge follows the main window.
     func refreshMenuBarCount() {
-        let n = store.pendingDecisionCount(projectId: menuBarCountsSelectedOnly ? projectFilterId : nil)
+        let scope = menuBarCountsSelectedOnly ? projectFilterId : nil
+        let n = store.pendingDecisionCount(projectId: scope) + store.toVerifyCount(projectId: scope)
         if n != menuBarDecisionCount { menuBarDecisionCount = n }
     }
 }

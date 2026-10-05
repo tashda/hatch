@@ -51,7 +51,7 @@ struct SidebarView: View {
                 deskRow
                 SidebarRow(route: .tickets).tag(Route.tickets)
                 SidebarRow(route: .board).tag(Route.board)
-                SidebarRow(route: .previews).tag(Route.previews)
+                previewsRow
             }
             if !views.isEmpty {
                 Section("Views") {
@@ -105,6 +105,22 @@ struct SidebarView: View {
         if counts.pending != state.syncSummary.pending || counts.failed != state.syncSummary.failed {
             state.refreshSyncSummary()
         }
+    }
+
+    private var previewsRow: some View {
+        HStack {
+            Label(Route.previews.title, systemImage: Route.previews.symbol)
+            Spacer()
+            if state.toVerifyCount > 0 {
+                Text("\(state.toVerifyCount)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.you)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 1)
+                    .background(Theme.youBackground, in: Capsule())
+            }
+        }
+        .tag(Route.previews)
     }
 
     private var deskRow: some View {

@@ -45,6 +45,23 @@ final class DecideTests: XCTestCase {
         XCTAssertTrue(try store.pendingDecisions(projectId: project.id).isEmpty)
     }
 
+    func testDroppingATicketWithdrawsItsWaitingPlan() throws {
+        let bug = try store.createTicket(projectId: project.id, type: .bug, title: "Toolbar flickers")
+        try store.requestPlanReview(ticketId: bug.id, files: ["A.swift"], reason: "a Bug")
+        XCTAssertEqual(try store.pendingPlanReviews(projectId: project.id).count, 1)
+        _ = try store.move(bug.id, to: .dropped, actor: .owner, reason: "dropped in Decide")
+        XCTAssertTrue(try store.pendingPlanReviews(projectId: project.id).isEmpty)
+        XCTAssertEqual(try store.latestPlanReview(ticketId: bug.id)?.state, .withdrawn)
+    }
+
+    func testBuiltWorkCountsInPreviewsNotInDecide() throws {
+        let t = try store.createTicket(projectId: project.id, type: .tweak, title: "Rename the label")
+        for (s, a) in [(Status.checking, Actor.owner), (.ready, .hatch), (.building, .hatch)] { try store.move(t.id, to: s, actor: a) }
+        _ = try store.move(t.id, to: .toVerify, actor: .hatch)
+        XCTAssertEqual(store.toVerifyCount(projectId: project.id), 1)
+        XCTAssertEqual(store.pendingDecisionCount(projectId: project.id), 0)
+    }
+
     func testAPlanWaitsUntilTheOwnerApprovesOrSendsItBack() throws {
         let bug = try store.createTicket(projectId: project.id, type: .bug, title: "Selection lost after sync")
         try store.requestPlanReview(ticketId: bug.id, files: ["A.swift"], reason: "a Bug")

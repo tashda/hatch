@@ -205,6 +205,7 @@ public final class HatchStore: @unchecked Sendable {
                            [.text(newStatus.rawValue), .opt(prev?.rawValue), .text(newStatus.turn.rawValue), takenBy, .date(now()), .int(id)])
             try record(id, actor: actor.rawValue, kind: "status", payload: ["from": .string(from.rawValue), "to": .string(newStatus.rawValue), "reason": reason.map { .string($0) } ?? .null])
             if from == .draft { try enqueueCreateIssue(id) } else { try enqueueLabels(id) }
+            if ![.building, .fixing, .preparing].contains(newStatus) { try withdrawPendingPlans(ticketId: id) }
             if newStatus == .done { try enqueueClose(id, reason: "completed") }
             if newStatus == .dropped { try enqueueClose(id, reason: "not_planned") }
             if from.isTerminal && !newStatus.isTerminal { try enqueue(op: "issue.reopen", ticketId: id, payload: [:]) }

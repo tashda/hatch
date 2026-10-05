@@ -92,6 +92,8 @@ final class AppState: ObservableObject {
     @Published var snapshotSetupStep = 0
     /// How many decisions wait for the owner: the one number the Desk row, the toolbar button and the Dock show (DC12).
     @Published private(set) var decisionCount = 0
+    /// Built work waiting to be tried: shown on the Previews row, and added to the Dock badge and the menu bar item.
+    @Published private(set) var toVerifyCount = 0
     /// The Decide session, when open (decisions DC1 to DC7). `area` limits it, as the Components page does (DC9).
     @Published var decideSession: DecideRequest?
     private var countTimer: Timer?
@@ -435,7 +437,9 @@ final class AppState: ObservableObject {
     func refreshDecisionCount() {
         let n = store.pendingDecisionCount(projectId: projectFilterId)
         if n != decisionCount { decisionCount = n }
-        NSApp?.dockTile.badgeLabel = dockBadgeShown && n > 0 ? String(n) : nil
+        let v = store.toVerifyCount(projectId: projectFilterId)
+        if v != toVerifyCount { toVerifyCount = v }
+        NSApp?.dockTile.badgeLabel = dockBadgeShown && n + v > 0 ? String(n + v) : nil
         refreshMenuBarCount()
     }
 

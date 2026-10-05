@@ -5,7 +5,7 @@ import Foundation
 
 /// An agent's plan over the limit (a Bug, or more files than the project allows), waiting for the owner (decision DC8, I2).
 public struct PlanReview: Identifiable, Equatable, Sendable {
-    public enum State: String, Sendable { case pending, approved, sentBack = "sent-back" }
+    public enum State: String, Sendable { case pending, approved, sentBack = "sent-back", withdrawn }
     public let id: Int
     public let ticketId: Int
     public var files: [String]
@@ -60,12 +60,11 @@ public extension HatchStore {
     /// the Stage or a Preview. A Theme is a folder, not a decision, so its drafts are left out (its children are in).
     func pendingDecisions(projectId: Int? = nil, area: String? = nil) throws -> [PendingDecision] {
         var out: [PendingDecision] = []
-        let mine = try tickets(TicketFilter(projectId: projectId, statuses: [.yourCall, .needsAnswers, .toVerify, .draft], turn: .you))
+        let mine = try tickets(TicketFilter(projectId: projectId, statuses: [.yourCall, .needsAnswers, .draft], turn: .you))
         for t in mine where area == nil || t.area == area {
             let kind: PendingDecision.Kind?
             switch t.status {
             case .needsAnswers: kind = .iris
-            case .toVerify: kind = .verify
             case .draft:
                 let prepared = t.type == .question ? !(try questionOptions(ticketId: t.id)).isEmpty : false
                 kind = t.type == .theme ? nil : (prepared ? .pick : .submit)
@@ -84,6 +83,11 @@ public extension HatchStore {
         }
         func rank(_ d: PendingDecision) -> Int { d.isQuick ? 0 : 1 }
         return out.sorted { rank($0) != rank($1) ? rank($0) < rank($1) : ($0.ticket.updatedAt, $0.id) < ($1.ticket.updatedAt, $1.id) }
+    }
+
+    /// Built work waiting to be tried: its own count on the Previews row, not part of Decide (trying a build is not a quick call).
+    func toVerifyCount(projectId: Int? = nil) -> Int {
+        (try? tickets(TicketFilter(projectId: projectId, statuses: [.toVerify], turn: .you)).filter { $0.type != .theme }.count) ?? 0
     }
 
     /// The one number the Desk row, the toolbar button and the Dock badge all show (decision DC12).
@@ -137,8 +141,15 @@ public extension HatchStore {
         try db.query("SELECT * FROM plan_review WHERE ticket_id = ? ORDER BY id DESC LIMIT 1", [.int(ticketId)], map: Self.planReview).first
     }
 
+    /// A plan waits only while its agent does. When the ticket leaves the agent's hands (stopped, parked, dropped,
+    /// handed in) the plan is withdrawn, so Decide never asks the owner about work that is no longer going on.
+    func withdrawPendingPlans(ticketId: Int) throws {
+        try db.execute("UPDATE plan_review SET state = ?, decided_at = ? WHERE ticket_id = ? AND state = 'pending'",
+                       [.text(PlanReview.State.withdrawn.rawValue), .date(now()), .int(ticketId)])
+    }
+
     func pendingPlanReviews(projectId: Int? = nil) throws -> [PlanReview] {
-        var sql = "SELECT r.* FROM plan_review r JOIN ticket t ON t.id = r.ticket_id WHERE r.state = 'pending'"
+        var sql = "SELECT r.* FROM plan_review r JOIN ticket t ON t.id = r.ticket_id WHERE r.state = 'pending' AND t.status NOT IN ('blocked','parked','dropped','done')"
         var params: [SQLValue] = []
         if let projectId { sql += " AND t.project_id = ?"; params.append(.int(projectId)) }
         return try db.query(sql + " ORDER BY r.at", params, map: Self.planReview)

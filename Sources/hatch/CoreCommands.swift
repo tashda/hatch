@@ -354,6 +354,7 @@ enum CoreCommands {
             switch review.state {
             case .approved: c.out.emit(["plan": "approved"], text: "The owner approved the plan. Go ahead." + note)
             case .sentBack: c.out.emit(["plan": "sent-back"], text: "The owner sent the plan back. Change it and run hatch plan again." + note)
+            case .withdrawn: c.out.emit(["plan": "withdrawn"], text: "The plan was withdrawn: the ticket left your hands. Stop and wait for further instructions.")
             case .pending: c.out.emit(["plan": "pending"], text: "The plan still waits for the owner. Run hatch plan \(t.displayNumber) --wait to wait for the answer.")
             }
             return
