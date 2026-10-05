@@ -9,22 +9,14 @@ import HatchAgent
 // ellipsis (owner's call). A few parts still have looks to choose from in the Menu Bar Lab (Go › Menu Bar Lab);
 // `MenuBarLook` keeps the choice. `MenuBarPanel` stays selectable there until the menu replaces it.
 
-/// What the Decide item counts.
-struct MenuBarQueue: Equatable {
-    var count = 0
-    /// "3 questions · 9 to verify"; empty when nothing waits.
-    var summary = ""
-}
-
 extension AppState {
     /// Settings › General › Menu bar counts: every project (the default), or only the one picked in the main window.
     var menuBarCountsSelectedOnly: Bool { hxSetting(Preference.menuBarScope) == "selected" }
 
     /// The menu bar's own count, so it can cover all projects while the Dock badge follows the main window.
-    func refreshMenuBarQueue() {
-        let items = (try? store.pendingDecisions(projectId: menuBarCountsSelectedOnly ? projectFilterId : nil)) ?? []
-        let next = MenuBarQueue(count: items.count, summary: PendingDecision.summary(of: items.map(\.kind)))
-        if next != menuBarQueue { menuBarQueue = next }
+    func refreshMenuBarCount() {
+        let n = store.pendingDecisionCount(projectId: menuBarCountsSelectedOnly ? projectFilterId : nil)
+        if n != menuBarDecisionCount { menuBarDecisionCount = n }
     }
 }
 
@@ -48,7 +40,6 @@ struct MenuBarSnapshot {
     }
 
     var decisions: Int
-    var summary: String
     var agents: [Agent]
     var paused: Bool
     var problem: Problem?
@@ -56,8 +47,7 @@ struct MenuBarSnapshot {
 
 extension MenuBarSnapshot {
     @MainActor init(_ state: AppState) {
-        decisions = state.menuBarQueue.count
-        summary = state.menuBarQueue.summary
+        decisions = state.menuBarDecisionCount
         paused = state.agentsPaused
         var runs = state.agentRuns
         if state.menuBarCountsSelectedOnly, let projectId = state.projectFilterId {
@@ -91,13 +81,13 @@ extension MenuBarSnapshot {
         case .live:
             return nil
         case .busy:
-            return MenuBarSnapshot(decisions: 13, summary: "3 questions · 1 plan to approve · 9 to verify", agents: [build, review], paused: false, problem: nil)
+            return MenuBarSnapshot(decisions: 13, agents: [build, review], paused: false, problem: nil)
         case .quiet:
-            return MenuBarSnapshot(decisions: 0, summary: "", agents: [], paused: false, problem: nil)
+            return MenuBarSnapshot(decisions: 0, agents: [], paused: false, problem: nil)
         case .paused:
-            return MenuBarSnapshot(decisions: 4, summary: "2 questions · 2 to verify", agents: [], paused: true, problem: nil)
+            return MenuBarSnapshot(decisions: 4, agents: [], paused: true, problem: nil)
         case .problem:
-            return MenuBarSnapshot(decisions: 2, summary: "2 to verify", agents: [build], paused: false,
+            return MenuBarSnapshot(decisions: 2, agents: [build], paused: false,
                                    problem: Problem(title: "GitHub Sync Failed", detail: "The token was refused (401). 3 changes wait to sync."))
         }
     }
@@ -140,7 +130,7 @@ final class MenuBarMenu: NSObject, NSMenuDelegate {
         self.state = state
         let changes: [AnyPublisher<Void, Never>] = [
             state.$showMenuBarItem.map { _ in }.eraseToAnyPublisher(),
-            state.$menuBarQueue.map { _ in }.eraseToAnyPublisher(),
+            state.$menuBarDecisionCount.map { _ in }.eraseToAnyPublisher(),
             state.$agentRuns.map { _ in }.eraseToAnyPublisher(),
             state.$agentsPaused.map { _ in }.eraseToAnyPublisher(),
             state.$syncSummary.map { _ in }.eraseToAnyPublisher(),
@@ -195,7 +185,7 @@ final class MenuBarMenu: NSObject, NSMenuDelegate {
 
     private func snapshot() -> MenuBarSnapshot {
         if let sample = MenuBarSnapshot.sample(look.content) { return sample }
-        guard let state else { return MenuBarSnapshot(decisions: 0, summary: "", agents: [], paused: false, problem: nil) }
+        guard let state else { return MenuBarSnapshot(decisions: 0, agents: [], paused: false, problem: nil) }
         return MenuBarSnapshot(state)
     }
 
@@ -276,18 +266,18 @@ final class MenuBarMenu: NSObject, NSMenuDelegate {
         }
         switch look.decide {
         case .badge:
-            let item = entry("Decide", "checklist", subtitle: waiting ? s.summary : "Nothing waits for you", status: true, action: decide)
+            let item = entry("Decide", "checklist", status: true, action: decide)
             if waiting { item.badge = NSMenuItemBadge(count: s.decisions) }
             item.isEnabled = waiting
             menu.addItem(item)
         case .sentence:
             let title = !waiting ? "Nothing Waits for You" : s.decisions == 1 ? "1 Decision Waits for You" : "\(s.decisions) Decisions Wait for You"
-            let item = entry(title, "checklist", subtitle: waiting ? s.summary : nil, status: true, action: decide)
+            let item = entry(title, "checklist", status: true, action: decide)
             item.isEnabled = waiting
             menu.addItem(item)
         case .header:
             menu.addItem(.sectionHeader(title: waiting ? "\(s.decisions) Waiting" : "Nothing Waits"))
-            let item = entry("Decide", "checklist", subtitle: waiting ? s.summary : nil, status: true, action: decide)
+            let item = entry("Decide", "checklist", status: true, action: decide)
             item.isEnabled = waiting
             menu.addItem(item)
         }
@@ -419,8 +409,8 @@ enum MenuBarDecideRow: String, LabChoice {
     var title: String { ["badge": "Decide with a count", "sentence": "Count in the title", "header": "Count as a heading"][rawValue]! }
     var about: String {
         switch self {
-        case .badge: "\"Decide\" with the count at the right edge and the kinds under it."
-        case .sentence: "\"13 Decisions Wait for You\" as the item, the kinds under it."
+        case .badge: "\"Decide\" with the count at the right edge."
+        case .sentence: "\"13 Decisions Wait for You\" as the item."
         case .header: "A small \"13 Waiting\" heading over a Decide item."
         }
     }

@@ -4,10 +4,10 @@ Updated 2026-10-04 after a local run on the owner's Mac with Xcode 27. "Verified
 
 ## The menu bar as a real menu (2026-10-05, decisions MB1 to MB7)
 
-- **Menu** (`Components/MenuBarMenu.swift`): an `NSStatusItem` and `NSMenu` built each time it opens, from the app or a lab sample. Problem with Retry (only when the footer would be red), Decide with a count badge and the kinds as a second line (`PendingDecision.summary(of:)`), agents with a running time that ticks while the menu is open, then the actions and Quit. Added at launch, so it does not need a window; `openWindow` comes from the main window when one appears.
+- **Menu** (`Components/MenuBarMenu.swift`): an `NSStatusItem` and `NSMenu` built each time it opens, from the app or a lab sample. Problem with Retry (only when the footer would be red), Decide with a count badge only, agents with a running time that ticks while the menu is open, then the actions and Quit. Added at launch, so it does not need a window; `openWindow` comes from the main window when one appears.
 - **Menu Bar Lab** (Go › Menu Bar Lab, `Screens/MenuBarLab.swift`): menu or old panel, symbols, the Decide item, agent rows, problem rows, samples; Show the Menu pops the same menu; Copy for Claude. Choices are kept in `UserDefaults` (`hatch.menuBarLook.*`).
 - **Settings › General**: Menu bar counts (All projects, The selected project).
-- **Verified**: `DecisionSummaryTests`; Xcode app builds of these changes alone on `8a88079` and of the whole working tree; a demo run showing the real menu with the problem and Retry, Decide with its badge and two-line kinds, the shortcuts and Quit. Found on the way: macOS 27 hides menu item images unless `preferredImageVisibility` is `.visible`, and SwiftUI menu items cannot have a symbol and a second line together.
+- **Verified**: Xcode app builds of these changes alone on `8a88079` and of the whole working tree; a demo run showing the real menu with the problem and Retry, Decide with its badge, the shortcuts and Quit. Found on the way: macOS 27 hides menu item images unless `preferredImageVisibility` is `.visible`, and SwiftUI menu items cannot have a symbol and a second line together.
 - **Not verified**: the other lab versions and samples by eye (the owner's menu bar was full, so the demo item sat behind the notch); the running time ticking; ⌘-dragging the item out turning the setting off; Show the Menu in the lab; the menu with your real data.
 
 

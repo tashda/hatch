@@ -88,7 +88,7 @@ extension AppState {
         switch key {
         case Preference.appearance: applyAppearance()
         case Preference.menuBar: showMenuBarItem = flag(Preference.menuBar)
-        case Preference.menuBarScope: refreshMenuBarQueue()
+        case Preference.menuBarScope: refreshMenuBarCount()
         case Preference.dockBadge:
             dockBadgeShown = value != "off"
             refreshDecisionCount()

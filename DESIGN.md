@@ -52,7 +52,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 | Nothing to show | Empty state with next step | `ContentUnavailableView` |
 | Work in progress | Spinner in the row, text says what | `ProgressView` |
 | Short feedback | Toast capsule | `HXToast` |
-| Status while Hatch is in the background | A real menu (MB1 to MB7): Decide with the count as a badge and the kinds as a second line; agents only while they work; a problem only when there is one, with Retry; New Ticket, Pause or Resume Agents, Open Hatch, Settings, Quit Hatch. No ellipses. The egg cracks when something waits | `MenuBarMenu` (`NSStatusItem`, `NSMenu`: `subtitle`, `NSMenuItemBadge`, `sectionHeader`) |
+| Status while Hatch is in the background | A real menu (MB1 to MB7): Decide with the count as a badge; agents only while they work; a problem only when there is one, with Retry; New Ticket, Pause or Resume Agents, Open Hatch, Settings, Quit Hatch. No ellipses. The egg cracks when something waits | `MenuBarMenu` (`NSStatusItem`, `NSMenu`: `subtitle`, `NSMenuItemBadge`, `sectionHeader`) |
 
 ## When adding something new
 
