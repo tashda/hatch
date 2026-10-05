@@ -31,7 +31,7 @@ final class SweepTests: XCTestCase {
             XCTAssertTrue(Workflow.isAllowed(type: .sweep, from: from, to: to, actor: actor), "\(from) to \(to)")
         }
         XCTAssertEqual(TicketType.sweep.displayName, "Sweep")
-        XCTAssertEqual(TicketType.theme.displayName, "Group", "a Theme only groups what a setup made")
+        XCTAssertEqual(TicketType.theme.displayName, "Goal", "what groups Sweeps and tickets is a Goal")
     }
 
     func testItemsKeepTheirStateWhenTheSurveyIsHandedInAgain() throws {

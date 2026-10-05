@@ -89,7 +89,7 @@ struct TicketOverviewTab: View {
         VStack(alignment: .leading, spacing: 10) {
             ThemeHeader(theme: ticket, done: childProgress.done, total: childProgress.total)
             if children.isEmpty {
-                Text("No tickets in this Theme yet. Pick this Theme when you create a ticket.")
+                Text("Nothing under this Goal yet. Pick this Goal when you create a ticket.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -337,7 +337,7 @@ struct TicketOverviewTab: View {
             MetaRow(label: "Type") { Text(ticket.type.displayName) }
             MetaRow(label: "Project") { Text(projectLine) }
             if let parentTheme {
-                MetaRow(label: "Theme") {
+                MetaRow(label: "Goal") {
                     Button {
                         TicketOpener.go(opener, parentTheme, state)
                     } label: {

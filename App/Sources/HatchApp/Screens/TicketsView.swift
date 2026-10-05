@@ -161,7 +161,7 @@ struct TicketsView: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .frame(width: 150)
-            Toggle("Group by Theme", isOn: $groupByTheme)
+            Toggle("Group by Goal", isOn: $groupByTheme)
                 .toggleStyle(.switch)
                 .controlSize(.small)
             Text(Format.count(tickets.count, "ticket"))
@@ -347,7 +347,7 @@ struct TicketsView: View {
     private func themeHeader(_ group: ThemeGroup) -> some View {
         HStack(spacing: 8) {
             Image(systemName: Theme.symbol(for: .theme))
-            Text(group.theme?.title ?? "No Theme")
+            Text(group.theme?.title ?? "No Goal")
                 .font(.subheadline.weight(.semibold))
             if let theme = group.theme {
                 let progress = (try? state.store.themeProgress(theme.id)) ?? (done: 0, total: 0)

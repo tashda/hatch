@@ -118,7 +118,7 @@ enum LinkText {
     static func label(kind: LinkKind, outgoing: Bool) -> String {
         switch kind {
         case .related: return "Related"
-        case .parent: return outgoing ? "Theme" : "Child"
+        case .parent: return outgoing ? "Goal" : "Child"
         case .blocks: return outgoing ? "Blocks" : "Blocked by"
         case .duplicates: return outgoing ? "Duplicates" : "Duplicated by"
         case .supersedes: return outgoing ? "Supersedes" : "Superseded by"
@@ -128,7 +128,7 @@ enum LinkText {
     static func name(_ kind: LinkKind) -> String {
         switch kind {
         case .related: return "Related"
-        case .parent: return "Parent (Theme)"
+        case .parent: return "Parent (Goal)"
         case .blocks: return "Blocks"
         case .duplicates: return "Duplicates"
         case .supersedes: return "Supersedes"

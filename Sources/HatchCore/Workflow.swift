@@ -4,8 +4,8 @@ import Foundation
 public enum TicketType: String, CaseIterable, Codable, Sendable {
     case question, sketch, proposal, tweak, bug, theme, sweep
 
-    /// A Theme only groups tickets that a setup made together (the old split too); the owner sees it as a Group (SW2).
-    public var displayName: String { self == .theme ? "Group" : rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
+    /// The type that groups tickets is still stored as `theme`; the owner sees a Goal, with Sweeps and tickets under it (SW2).
+    public var displayName: String { self == .theme ? "Goal" : rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
     public var label: String { "type:\(rawValue)" }
     /// Goes through the Proposal flow: a manifest, the Stage, accepted choices (a Sweep does, with items on top; SW4).
     public var isProposalLike: Bool { self == .proposal || self == .sweep }

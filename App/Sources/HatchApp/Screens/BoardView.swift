@@ -64,8 +64,8 @@ struct BoardView: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .frame(width: 140)
-            Picker("Theme", selection: $themeId) {
-                Text("Theme: any").tag(Int?.none)
+            Picker("Goal", selection: $themeId) {
+                Text("Goal: any").tag(Int?.none)
                 ForEach(themes) { theme in
                     Text(theme.title).tag(Optional(theme.id))
                 }
