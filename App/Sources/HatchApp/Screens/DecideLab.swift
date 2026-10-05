@@ -305,15 +305,29 @@ enum LabReturn: String, LabChoice {
 
 enum LabProgress: String, LabChoice {
     case pills, count, bar, dots, ring, time, none
-    var title: String { ["pills": "Pills", "count": "3 of 13", "bar": "Thin bar", "dots": "Dots", "ring": "Ring", "time": "Time left", "none": "None"][rawValue]! }
-    var about: String { "How far you are through the queue." }
+    var title: String { ["pills": "Pills", "count": "3 of 13", "bar": "Thin bar", "dots": "Dots", "ring": "Ring", "time": "Words only", "none": "None"][rawValue]! }
+    var about: String { "How far you are through the queue. (No minutes: the owner asked not to show how long it takes.)" }
+}
+
+enum LabQueue: String, LabChoice {
+    case hoverList, clickList, menu, drawer, pills
+    var title: String { ["hoverList": "Hover a pill for the list", "clickList": "Click a pill for the list", "menu": "Pull-down menu", "drawer": "Side drawer", "pills": "Hover the progress pills"][rawValue]! }
+    var about: String {
+        switch self {
+        case .hoverList: "“7 left” is a glass pill; resting the pointer on it opens the queue in a popover. Click a row to go there."
+        case .clickList: "The same popover, opened by clicking the pill instead of hovering."
+        case .menu: "A native pull-down menu: on screen, up next, decided, with each ticket's number and title."
+        case .drawer: "The pill slides a list in from the right edge of the panel; it stays open while you work."
+        case .pills: "No list: each progress pill shows its ticket on hover and jumps there on click; “7 left” stays plain text."
+        }
+    }
 }
 
 enum LabData: String, LabChoice {
-    case queue, long, twoQuestions, design, gains, agent, plan, short
+    case queue, all, long, twoQuestions, design, gains, agent, plan, short
     var title: String {
         ["queue": "Your queue", "long": "Long answers", "twoQuestions": "Two questions", "design": "A design to choose", "gains": "Options with gains and costs",
-         "agent": "An agent's long question", "plan": "A plan to approve", "short": "Two short answers"][rawValue]!
+         "agent": "An agent's long question", "plan": "A plan to approve", "short": "Two short answers", "all": "All hard cases (a queue of 7)"][rawValue]!
     }
     var about: String { "What the card shows: your real queue, or a hard case." }
 }
@@ -332,6 +346,7 @@ struct LabStyle: Codable, Equatable {
     var actions = LabActions.bar, mainButton = LabMainButton.glassProminent, buttonSize = LabButtonSize.large
     var secondary = LabSecondary.glass, order = LabOrder.mainRight, hint = LabHint.show, returnKey = LabReturn.none
     var progress = LabProgress.pills
+    var queue = LabQueue.hoverList
 
     init() {}
 
@@ -348,7 +363,7 @@ struct LabStyle: Codable, Equatable {
         design = v(.design, d.design); thumb = v(.thumb, d.thumb); designChoice = v(.designChoice, d.designChoice)
         actions = v(.actions, d.actions); mainButton = v(.mainButton, d.mainButton); buttonSize = v(.buttonSize, d.buttonSize)
         secondary = v(.secondary, d.secondary); order = v(.order, d.order); hint = v(.hint, d.hint); returnKey = v(.returnKey, d.returnKey)
-        progress = v(.progress, d.progress)
+        progress = v(.progress, d.progress); queue = v(.queue, d.queue)
     }
 
     static let key = "lab.decide.style"
@@ -526,6 +541,7 @@ enum LabCards {
     static func sample(_ data: LabData) -> [LabCard] {
         switch data {
         case .queue: return []
+        case .all: return [LabData.long, .twoQuestions, .design, .gains, .agent, .plan, .short].flatMap { sample($0) }
         case .long:
             return [LabCard(id: "s-long", kind: "Iris asks", statement: "Iris has a question", number: "#15", type: .proposal,
                             title: "Design recommendations for Decide, starting with the “Iris asks” bubbles", facts: longFacts, questions: [longQ1],
@@ -585,12 +601,19 @@ enum LabCards {
 /// What the preview needs besides the style: which card and question, and what is selected.
 @MainActor
 final class LabModel: ObservableObject {
-    @Published var style = LabStyle.load() { didSet { style.save() } }
+    @Published var style = LabStyle.load() {
+        didSet {
+            style.save()
+            // Choosing the drawer opens it, so the choice shows at once.
+            if style.queue != oldValue.queue { drawer = style.queue == .drawer }
+        }
+    }
     @Published var queue: [LabCard] = []
     @Published var index = 0
     @Published var question: [String: Int] = [:]
     @Published var selected: [String: String] = [:]
     @Published var own = ""
+    @Published var drawer = LabStyle.load().queue == .drawer
 
     var cards: [LabCard] { style.data == .queue ? queue : LabCards.sample(style.data) }
     var card: LabCard? { cards.isEmpty ? nil : cards[min(index, cards.count - 1)] }
@@ -673,6 +696,7 @@ struct DecideLabView: View {
                 row("Order", \.order); row("Hint", \.hint); row("Key", \.returnKey)
             }
             Section("Progress") { row("Show", \.progress) }
+            Section("What is left") { row("Show", \.queue) }
             Section("Your combination") {
                 Text(summary).font(.callout).textSelection(.enabled)
                 HStack {
@@ -723,7 +747,7 @@ struct DecideLabView: View {
             ("Recommended", s.recommended.title), ("Selected", s.indicator.title), ("Long answers", s.longAnswer.title), ("Keys", s.keys.title),
             ("Own answer", s.own.title), ("Two questions", s.multi.title), ("Design", s.design.title), ("Pictures", s.thumb.title),
             ("Choose design", s.designChoice.title), ("Actions", s.actions.title), ("Main button", s.mainButton.title), ("Button size", s.buttonSize.title),
-            ("Later and Note", s.secondary.title), ("Order", s.order.title), ("Hint", s.hint.title), ("Key", s.returnKey.title), ("Progress", s.progress.title)]
+            ("Later and Note", s.secondary.title), ("Order", s.order.title), ("Hint", s.hint.title), ("Key", s.returnKey.title), ("Progress", s.progress.title), ("What is left", s.queue.title)]
         return parts.map { "\($0.0) \($0.1)" }.joined(separator: " · ")
     }
 }
@@ -816,6 +840,16 @@ private struct LabPreview: View {
             VStack(spacing: 0) {
                 LabTopBar(card: card, model: model)
                 column(card)
+                    .overlay(alignment: .trailing) {
+                        if s.queue == .drawer && model.drawer {
+                            LabQueueList(model: model, closeOnPick: false)
+                                .frame(width: 340).frame(maxHeight: .infinity, alignment: .top)
+                                .background(.regularMaterial)
+                                .overlay(alignment: .leading) { Divider() }
+                                .transition(.move(edge: .trailing))
+                        }
+                    }
+                    .animation(.snappy(duration: 0.25), value: model.drawer)
                 if hasBottomBar { LabBottomBar(card: card, model: model) }
             }
             .overlay(alignment: .bottom) { if s.actions == .floating { LabFloatingBar(card: card, model: model).padding(.bottom, 18) } }
@@ -986,9 +1020,7 @@ private struct LabTopBar: View {
                 Spacer()
                 if s.progress != .bar { LabProgressView(model: model) }
                 Spacer()
-                if s.progress != .count && s.progress != .time && s.progress != .ring {
-                    Text("\(model.cards.count - model.index) left").font(.callout).foregroundStyle(.secondary).monospacedDigit()
-                }
+                LabQueueControl(model: model)
                 if s.actions == .toolbar { LabActionButtons(card: card, model: model, includeNote: false) }
                 Button {} label: { Image(systemName: "questionmark") }.buttonStyle(.glass).buttonBorderShape(.capsule)
                 Button("Done") {}.buttonStyle(.glass).buttonBorderShape(.capsule)
@@ -1010,7 +1042,12 @@ private struct LabProgressView: View {
         case .pills:
             HStack(spacing: 4) {
                 ForEach(0..<min(n, 16), id: \.self) { k in
-                    Capsule().fill(k == i ? Theme.you : (k < i ? Color.secondary : Color.secondary.opacity(0.25))).frame(width: k == i ? 26 : 18, height: 5)
+                    let pill = Capsule().fill(k == i ? Theme.you : (k < i ? Theme.finished : Color.secondary.opacity(0.25))).frame(width: k == i ? 26 : 18, height: 6)
+                    if model.style.queue == .pills, k < model.cards.count {
+                        LabPillHover(model: model, index: k) { pill }
+                    } else {
+                        pill
+                    }
                 }
             }
         case .count:
@@ -1029,7 +1066,7 @@ private struct LabProgressView: View {
                 Text("\(i + 1) of \(n)").font(.callout).monospacedDigit()
             }
         case .time:
-            Text("about \(max(1, n - i)) min left").font(.callout).foregroundStyle(.secondary)
+            Text("\(n - i) to go").font(.callout).foregroundStyle(.secondary)
         case .bar, .none:
             EmptyView()
         }
@@ -2004,5 +2041,155 @@ struct LabSpecimenView: View {
             .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
             .padding(12)
         }
+    }
+}
+
+// MARK: - What is left
+
+/// "7 left" as a control: per the Lab's choice a pill that opens the queue on hover or click, a pull-down menu, or a
+/// drawer; or plain text when the progress pills themselves are the way to jump.
+private struct LabQueueControl: View {
+    @ObservedObject var model: LabModel
+    @State private var open = false
+    @State private var overPill = false
+    @State private var overList = false
+
+    private var left: Int { max(0, model.cards.count - model.index) }
+
+    var body: some View {
+        switch model.style.queue {
+        case .hoverList:
+            pill
+                .onHover { overPill = $0; update() }
+                .popover(isPresented: $open, arrowEdge: .bottom) {
+                    LabQueueList(model: model, closeOnPick: true, close: { open = false }).frame(width: 380)
+                        .onHover { overList = $0; update() }
+                }
+        case .clickList:
+            Button { open.toggle() } label: { label }
+                .buttonStyle(.glass).buttonBorderShape(.capsule)
+                .popover(isPresented: $open, arrowEdge: .bottom) {
+                    LabQueueList(model: model, closeOnPick: true, close: { open = false }).frame(width: 380)
+                }
+        case .menu:
+            Menu {
+                ForEach(LabQueueList.sections(model), id: \.title) { section in
+                    Section(section.title) {
+                        ForEach(section.rows, id: \.index) { row in
+                            Button { model.index = row.index } label: { Text("\(row.card.number)  \(row.card.title)") }
+                                .disabled(row.index == model.index)
+                        }
+                    }
+                }
+            } label: { Text("\(left) left") }
+                .menuStyle(.button).buttonStyle(.glass).buttonBorderShape(.capsule).fixedSize()
+        case .drawer:
+            Button { model.drawer.toggle() } label: {
+                HStack(spacing: 5) { Text("\(left) left"); Image(systemName: "sidebar.right").imageScale(.small) }
+            }
+            .buttonStyle(.glass).buttonBorderShape(.capsule)
+            .help(model.drawer ? "Hide what is left" : "Show what is left")
+        case .pills:
+            Text("\(left) left").font(.callout).foregroundStyle(.secondary).monospacedDigit()
+        }
+    }
+
+    private var label: some View {
+        HStack(spacing: 5) { Text("\(left) left").monospacedDigit(); Image(systemName: "chevron.down").imageScale(.small).foregroundStyle(.secondary) }
+    }
+
+    private var pill: some View {
+        label
+            .font(.callout)
+            .padding(.horizontal, 12).frame(height: 28)
+            .glassEffect(.regular, in: .capsule)
+            .contentShape(Capsule())
+            .onTapGesture { open = true }
+    }
+
+    /// Opens at once on hover; closes a moment after the pointer leaves both the pill and the list, so moving onto the
+    /// list does not close it.
+    private func update() {
+        if overPill || overList { open = true; return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if !overPill && !overList { open = false } }
+    }
+}
+
+/// The queue as a list in sections: on screen, up next, decided. Each row: a dot in the pill's colour, the number, the
+/// kind and the title; clicking goes to that decision.
+private struct LabQueueList: View {
+    @ObservedObject var model: LabModel
+    var closeOnPick = true
+    var close: () -> Void = {}
+
+    struct Row { let index: Int; let card: LabCard; let color: Color }
+    struct Group { let title: String; let rows: [Row] }
+
+    @MainActor static func sections(_ model: LabModel) -> [Group] {
+        let rows = model.cards.enumerated().map { i, c in
+            Row(index: i, card: c, color: i == model.index ? Theme.you : (i < model.index ? Theme.finished : Color.secondary.opacity(0.35)))
+        }
+        return [Group(title: "On screen", rows: rows.filter { $0.index == model.index }),
+                Group(title: "Up next", rows: rows.filter { $0.index > model.index }),
+                Group(title: "Decided", rows: rows.filter { $0.index < model.index })].filter { !$0.rows.isEmpty }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(Self.sections(model), id: \.title) { section in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(section.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.bottom, 2)
+                        ForEach(section.rows, id: \.index) { row in
+                            Button {
+                                model.index = row.index
+                                if closeOnPick { close() }
+                            } label: {
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Circle().fill(row.color).frame(width: 7, height: 7).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                                    Text(row.card.number).font(.caption.monospaced()).foregroundStyle(.secondary).frame(width: 36, alignment: .leading)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(row.card.title).lineLimit(1)
+                                        Text(row.card.kind).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .background(row.index == model.index ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 7))
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .padding(10)
+        }
+        .frame(maxHeight: 440)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A progress pill that shows its ticket on hover and goes there on click.
+private struct LabPillHover<P: View>: View {
+    @ObservedObject var model: LabModel
+    let index: Int
+    @ViewBuilder let pill: () -> P
+    @State private var hovering = false
+
+    var body: some View {
+        let card = model.cards[index]
+        pill()
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+            .onTapGesture { model.index = index }
+            .popover(isPresented: $hovering, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(card.number) · \(card.kind)").font(.caption).foregroundStyle(.secondary)
+                    Text(card.title).font(.callout.weight(.medium)).lineLimit(2)
+                }
+                .padding(12).frame(width: 260, alignment: .leading)
+            }
     }
 }
