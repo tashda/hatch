@@ -15,6 +15,8 @@ public struct DesignerLaunchOptions: Equatable {
     public var appFolder: String?
     public var home: String?
     public var snapshotDirectory: URL?
+    /// With --snapshots: only the live window.
+    public var liveOnly = false
 
     public var isDesigner: Bool { project != nil || notebook != nil || demoTemplate != nil }
 
@@ -30,6 +32,7 @@ public struct DesignerLaunchOptions: Equatable {
             case "--app": o.appFolder = value(); if o.appFolder != nil { i += 1 }
             case "--home": o.home = value(); if o.home != nil { i += 1 }
             case "--snapshots": if let v = value() { o.snapshotDirectory = URL(fileURLWithPath: v, isDirectory: true); i += 1 }
+            case "--live-only": o.liveOnly = true
             default: break
             }
             i += 1
@@ -57,6 +60,7 @@ enum DesignerApp {
             let inventory = options.appFolder.map { ComponentInventoryScanner.scan(appRoot: $0) }
             let model = try DesignerModel(source: source, inventory: inventory)
             let d = DesignerDelegate(model: model, snapshotDirectory: options.snapshotDirectory)
+            d.liveOnly = options.liveOnly
             delegate = d
             let app = NSApplication.shared
             app.setActivationPolicy(.regular)
@@ -75,6 +79,22 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
     let model: DesignerModel
     let snapshotDirectory: URL?
     var window: NSWindow?
+    var liveWindow: NSWindow?
+    var liveOnly = false
+
+    /// The live window (NF2): the app's shell with the roles in it.
+    func openLiveWindow() {
+        if let liveWindow { liveWindow.makeKeyAndOrderFront(nil); return }
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 800),
+                         styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                         backing: .buffered, defer: false)
+        w.isReleasedWhenClosed = false
+        w.title = "\(model.appName) — Live"
+        w.contentView = NSHostingView(rootView: LiveWindowView(model: model, live: model.live))
+        w.center()
+        w.makeKeyAndOrderFront(nil)
+        liveWindow = w
+    }
 
     init(model: DesignerModel, snapshotDirectory: URL?) {
         self.model = model
@@ -100,6 +120,7 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
         w.center()
         w.makeKeyAndOrderFront(nil)
         window = w
+        model.openLiveWindow = { [weak self] in self?.openLiveWindow() }
         NSApp.activate(ignoringOtherApps: true)
         if snapshotDirectory != nil { Task { @MainActor in await snapshots() } }
     }
@@ -111,7 +132,7 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
         guard let dir = snapshotDirectory, let window else { return }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? await Task.sleep(nanoseconds: 800_000_000)
-        for dark in [false, true] {
+        for dark in [false, true] where !liveOnly {
             model.dark = dark
             for element in model.system.elementsUsed {
                 model.selection = .element(element)
@@ -131,10 +152,39 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                 save(window, "foundations-\(kind.rawValue)-\(dark ? "dark" : "light")", dir)
             }
         }
+        // The live window: the shell, then its sheet, alert and empty state.
+        model.dark = false
+        openLiveWindow()
+        if let live = liveWindow {
+            live.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            save(live, "live-light", dir)
+            model.live.sheet = true
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            save(live, "live-sheet", dir)
+            model.live.sheet = false
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            model.live.alert = true
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            save(live, "live-alert", dir)
+            model.live.alert = false
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            model.live.empty = true
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            save(live, "live-empty", dir)
+            model.live.empty = false
+            model.dark = true
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            save(live, "live-dark", dir)
+        }
         NSApp.terminate(nil)
     }
 
     private func save(_ window: NSWindow, _ name: String, _ dir: URL) {
+        // Capture it as the active window, as the owner sees it (inactive windows draw prominent buttons grey).
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         let url = dir.appendingPathComponent(name + ".png")
         // A real window capture draws Liquid Glass; fall back to the view's own bitmap when capture is not allowed.
         let p = Process()

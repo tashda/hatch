@@ -10,6 +10,8 @@ struct SampleContent: Equatable {
     var symbol = "checkmark"
     var disabled = false
     var longLabel = false
+    /// Give buttons their real keys (the live window's sheet and alert); off in tiles, where many would compete.
+    var liveKeys = false
 
     var shownTitle: String { longLabel ? "Save and continue to the next step" : title }
 }
@@ -145,6 +147,19 @@ private struct RecipeButton: View {
         .recipeShape(recipe["shape"])
         .recipeTint(recipe["tint"])
         .help(recipe["tooltip"] == "shortcut" ? "\(sample.shownTitle) (⌘S)" : sample.shownTitle)
+        .modifier(RecipeKey(key: sample.liveKeys ? recipe["key"] : nil))
+    }
+}
+
+/// The real default and Cancel keys: on macOS the default key is what makes a sheet's button the default button.
+private struct RecipeKey: ViewModifier {
+    let key: String?
+    func body(content: Content) -> some View {
+        switch key {
+        case "defaultAction": content.keyboardShortcut(.defaultAction)
+        case "cancelAction": content.keyboardShortcut(.cancelAction)
+        default: content
+        }
     }
 }
 

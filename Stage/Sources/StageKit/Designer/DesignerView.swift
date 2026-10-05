@@ -73,6 +73,10 @@ struct DesignerView: View {
             .help("Draw every place with a long label, disabled, dark or with large text")
         }
         ToolbarItem {
+            Button { model.openLiveWindow?() } label: { Label("Live Window", systemImage: "macwindow") }
+                .help("Open \(model.appName)'s own window shell with the roles in it, drawn by SwiftUI itself")
+        }
+        ToolbarItem {
             Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
                 .help("Show or hide the role (⌥⌘I)")
                 .keyboardShortcut("i", modifiers: [.command, .option])

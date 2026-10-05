@@ -108,6 +108,9 @@ final class DesignerModel: ObservableObject {
 
     let source: ComponentsSource
     let appName: String
+    /// The live window's state, and how to open it (the app delegate sets it).
+    let live = LiveState()
+    var openLiveWindow: (() -> Void)?
 
     init(source: ComponentsSource, inventory: ComponentInventory? = nil) throws {
         self.source = source

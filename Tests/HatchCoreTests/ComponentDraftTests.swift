@@ -344,3 +344,41 @@ final class ComponentRuleTests: XCTestCase {
         XCTAssertNil(ComponentRuleCheck.capitalizationProblem("Run \\(name) now", rule: "titleCase"), "interpolation is skipped")
     }
 }
+
+final class ComponentShellTests: XCTestCase {
+    func testShellsAreRead() {
+        let split = """
+            @main struct A: App {
+                var body: some Scene {
+                    WindowGroup { ContentView() }
+                    Settings { SettingsView() }
+                    MenuBarExtra("x") { Text("y") }.menuBarExtraStyle(.window)
+                }
+            }
+            struct ContentView: View {
+                var body: some View {
+                    NavigationSplitView {
+                        Sidebar()
+                    } detail: {
+                        NavigationStack { Detail() }
+                    }
+                    #if os(macOS)
+                    .frame(minWidth: 600)
+                    #endif
+                    .inspector(isPresented: $on) { Text("i") }
+                    .toolbar { Button("A") {} }
+                    .searchable(text: $q)
+                }
+            }
+            struct SettingsView: View { var body: some View { TabView { Text("General") } } }
+            """
+        let shell = ComponentShell.detect(files: [("App.swift", split)])
+        XCTAssertEqual(shell.navigation, .splitView)
+        XCTAssertEqual(Set(shell.scenes), ["window", "settings", "menuBarWindow"])
+        XCTAssertTrue(shell.inspector && shell.toolbar && shell.search)
+        let old = "struct C: View { var body: some View { NavigationView { List { Text(\"a\") }; Text(\"b\") } } }"
+        XCTAssertEqual(ComponentShell.detect(files: [("C.swift", old)]).navigation, .splitView, "NavigationView on macOS is a sidebar split")
+        let three = "struct C: View { var body: some View { NavigationSplitView { A() } content: { B() } detail: { D() } } }"
+        XCTAssertEqual(ComponentShell.detect(files: [("C.swift", three)]).navigation, .splitView3)
+    }
+}

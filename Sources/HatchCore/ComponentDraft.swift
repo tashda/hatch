@@ -66,11 +66,12 @@ public enum ComponentDraft {
     /// a form's buttons join Row action); only what is left gets a new role. Template roles the app does not use yet stay
     /// as provisional guesses for the first ticket that needs one.
     public static func fromApp(name: String, inventory: ComponentInventory, template: ComponentTemplate? = ComponentTemplates.glass,
-                               minimumMacOS: String = ComponentSystem.referenceMacOS) -> ComponentSystem {
+                               minimumMacOS: String = ComponentSystem.referenceMacOS, shell: ComponentShell? = nil) -> ComponentSystem {
         let reference = (template ?? ComponentTemplates.glass).system(name: name)
         var system = ComponentSystem(name: name, template: nil, foundations: reference.foundations, places: ComponentPlace.common,
                                      roles: reference.roles, minimumMacOS: minimumMacOS)
         system.rules = reference.rules.isEmpty ? ComponentRule.appleDefaults : reference.rules
+        system.shell = shell
         let placed = inventory.uses.filter { $0.place != nil && ComponentElement.named($0.element) != nil }
 
         // 1. Cells the skeleton lacks: join the same-purpose role whose places are nearest, if no role holds the cell.

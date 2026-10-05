@@ -195,9 +195,10 @@ struct ComponentsView: View {
                         system = template.system(name: project.name)
                     } else {
                         guard let app = config?.repo(.app)?.localPath else { throw StoreError.invalid("No clone of the app.") }
-                        let inv = ComponentInventoryScanner.scan(appRoot: app, excluding: [config?.components?.path].compactMap { $0 })
-                        system = ComponentDraft.fromApp(name: project.name, inventory: inv,
-                                                        minimumMacOS: ComponentInventoryScanner.minimumMacOS(appRoot: app) ?? ComponentSystem.referenceMacOS)
+                        let files = ComponentInventoryScanner.appFiles(appRoot: app, excluding: [config?.components?.path].compactMap { $0 })
+                        system = ComponentDraft.fromApp(name: project.name, inventory: ComponentInventoryScanner.inventory(files: files),
+                                                        minimumMacOS: ComponentInventoryScanner.minimumMacOS(appRoot: app) ?? ComponentSystem.referenceMacOS,
+                                                        shell: ComponentShell.detect(files: files))
                     }
                     try system.write(notebook: notebook)
                     _ = try NotebookWriter.commit("Components: start the design system" + (template.map { " from the \($0.title) template" } ?? " from the app"), in: notebook)

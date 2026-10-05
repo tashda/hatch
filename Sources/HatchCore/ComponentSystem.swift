@@ -28,6 +28,8 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
     /// What the owner still has to decide: looks to pick at setup, mismatches found later (DS4, DS7). Answered in the
     /// Components Designer or with `hatch components answer`; each answer changes the system and leaves the list.
     public var questions: [ComponentQuestion]
+    /// How the app's windows are built (NF2), for the Designer's live window. Nil for a system from a template.
+    public var shell: ComponentShell?
     /// Rules beyond roles (NF4): composition, wording, placement and usage.
     public var rules: [ComponentRule]
     /// Whole groups that follow macOS (NF3): an element in a place ("all context menus"), or an area ("Settings").
@@ -46,7 +48,7 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         self.minimumMacOS = minimumMacOS; self.follows = follows; self.rules = rules
     }
 
-    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS, follows, rules }
+    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS, follows, rules, shell }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -61,6 +63,7 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         minimumMacOS = try c.decodeIfPresent(String.self, forKey: .minimumMacOS) ?? Self.referenceMacOS
         follows = try c.decodeIfPresent([ComponentFollow].self, forKey: .follows) ?? []
         rules = try c.decodeIfPresent([ComponentRule].self, forKey: .rules) ?? []
+        shell = try c.decodeIfPresent(ComponentShell.self, forKey: .shell)
     }
 
     /// True when macOS decides this element's look here: the role follows macOS, or a scope covers the element in this

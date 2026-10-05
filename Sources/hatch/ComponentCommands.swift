@@ -5,11 +5,19 @@ import HatchGit
 // The design system's own commands (decisions DS1 to DS12): start it, answer its questions, agree to roles. The
 // system lives in the notebook (`components/system.json`) and only Hatch writes it, through these commands and the app.
 extension CoreCommands {
+    /// The components folder to leave out of an inventory: only for the project's own clone, never for a folder given by hand.
+    static func componentsExclusion(_ project: Project?, folder: String) -> [String] {
+        guard let config = project?.config, let path = config.components?.path, let app = config.repo(.app)?.localPath,
+              URL(fileURLWithPath: app).standardizedFileURL == URL(fileURLWithPath: folder).standardizedFileURL else { return [] }
+        return [path]
+    }
+
     /// hatch components start --template glass|native   or   --from-app [<app folder>] [--template glass]   [--dry-run] [--replace]
     static func componentStart(_ c: Context) throws {
         let project = try? c.project()
         let name = c.args.option("name") ?? project?.name ?? "This app"
         var system: ComponentSystem
+        var lines0: [String] = []
         if c.args.flag("from-app") || c.args.option("from-app") != nil {
             let folder = c.args.pos(2) ?? c.args.option("from-app") ?? project?.config?.repo(.app)?.localPath
             guard let folder else { throw CLIError("Give the app's folder: hatch components start --from-app <folder>.") }
@@ -17,9 +25,11 @@ extension CoreCommands {
                 guard let t = ComponentTemplates.named(id) else { throw CLIError("No template called \(id).") }
                 return t
             } ?? ComponentTemplates.glass
-            let inv = ComponentInventoryScanner.scan(appRoot: folder, excluding: [project?.config?.components?.path].compactMap { $0 })
+            let files = ComponentInventoryScanner.appFiles(appRoot: folder, excluding: componentsExclusion(project, folder: folder))
+            let inv = ComponentInventoryScanner.inventory(files: files)
             let minimum = ComponentInventoryScanner.minimumMacOS(appRoot: folder) ?? ComponentSystem.referenceMacOS
-            system = ComponentDraft.fromApp(name: name, inventory: inv, template: template, minimumMacOS: minimum)
+            system = ComponentDraft.fromApp(name: name, inventory: inv, template: template, minimumMacOS: minimum, shell: ComponentShell.detect(files: files))
+            lines0 = ["Shell: " + (system.shell?.summary ?? "")]
         } else {
             let id = c.args.option("template") ?? "glass"
             guard let t = ComponentTemplates.named(id) else {
@@ -30,7 +40,7 @@ extension CoreCommands {
         let problems = system.problems()
         guard problems.isEmpty else { throw CLIError("The draft has problems, so nothing was written:\n" + problems.map { "  - " + $0 }.joined(separator: "\n")) }
 
-        var lines = [summary(system)]
+        var lines = [summary(system)] + lines0
         for r in system.roles { lines.append("  \(r.id)  \(r.places.map { ComponentPlace.title($0) }.joined(separator: ", "))  —  \(r.lookSummary)") }
         if !system.questions.isEmpty {
             lines.append("\n\(system.questions.count) question\(system.questions.count == 1 ? "" : "s") to decide (hatch components questions):")
@@ -206,7 +216,7 @@ extension CoreCommands {
         guard let folder = c.args.pos(2).map({ ($0 as NSString).expandingTildeInPath }) ?? project?.config?.repo(.app)?.localPath else {
             throw CLIError("Give the app's folder: hatch components check <folder>.")
         }
-        var (inv, findings) = ComponentCheck.all(appRoot: folder, excluding: [project?.config?.components?.path].compactMap { $0 }, system: system,
+        var (inv, findings) = ComponentCheck.all(appRoot: folder, excluding: componentsExclusion(project, folder: folder), system: system,
                                                  areaOf: { project?.config?.area(ofFile: $0) })
         if let base = c.args.option("diff") {
             let diff = shellOutput(["git", "-C", folder, "diff", "-U0", "\(base)...HEAD", "--", "*.swift"])

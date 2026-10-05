@@ -119,7 +119,7 @@ enum CoreCommands {
     static func componentInventory(_ c: Context) throws {
         let root: String, excluding: [String]
         if let dir = c.args.pos(2) {
-            root = (dir as NSString).expandingTildeInPath; excluding = []
+            root = (dir as NSString).expandingTildeInPath; excluding = componentsExclusion(try? c.project(), folder: root)
         } else {
             let project = try c.project()
             guard let app = project.config?.repo(.app)?.localPath else {
