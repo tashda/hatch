@@ -49,8 +49,9 @@ targets:
       - name: Build the Stage app
         basedOnDependencyAnalysis: false
         script: |
-          # Builds Stage.app (the Stage with the toast round, its own name and icon in the Dock) and puts it in Hatch.app, so one
-          # download holds both. Only a changed Stage is copied and signed again.
+          # Builds Stage.app and Components Designer.app (the same Stage program with the toast round, each with its own name
+          # and icon in the Dock, decision AI3) and puts both in Hatch.app, so one download holds everything. Only a changed
+          # Stage is copied again; build-stage.sh signs each bundle.
           set -e
           CONFIG=$( [ "$CONFIGURATION" = "Release" ] && echo release || echo debug )
           BUILT="$DERIVED_FILE_DIR/stage-app"
@@ -59,9 +60,10 @@ targets:
           "$SRCROOT/tools/build-stage.sh" --dest "$BUILT" --config "$CONFIG" $SIGN
           DEST="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
           mkdir -p "$DEST"
-          if ! cmp -s "$BUILT/.stage.last" "$DERIVED_FILE_DIR/stage.copied" 2>/dev/null || [ ! -d "$DEST/Stage.app" ]; then
-            rm -rf "$DEST/Stage.app"
+          if ! cmp -s "$BUILT/.stage.last" "$DERIVED_FILE_DIR/stage.copied" 2>/dev/null || [ ! -d "$DEST/Stage.app" ] || [ ! -d "$DEST/Components Designer.app" ]; then
+            rm -rf "$DEST/Stage.app" "$DEST/Components Designer.app"
             cp -R "$BUILT/Stage.app" "$DEST/Stage.app"
+            cp -R "$BUILT/Components Designer.app" "$DEST/Components Designer.app"
             cp -f "$BUILT/.stage.last" "$DERIVED_FILE_DIR/stage.copied"
           fi
     info:

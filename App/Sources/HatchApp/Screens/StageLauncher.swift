@@ -67,7 +67,7 @@ final class StageLauncher {
             focus(pid: running.processIdentifier)
             return
         }
-        guard let executable = resolveExecutable(setting: state.hxSetting("stage_executable")) ?? bundledStage() else {
+        guard let executable = designerExecutable(stageSetting: state.hxSetting("stage_executable")) else {
             state.errorMessage = "The Components Designer comes with the Stage, which is not built. Build Hatch in Xcode, or set the Stage in Settings › Tools."
             return
         }
@@ -95,6 +95,31 @@ final class StageLauncher {
     private func bundledStage() -> URL? {
         let app = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/Stage.app")
         return Bundle(url: app)?.executableURL
+    }
+
+    /// The Designer opens as its own app, Components Designer.app, so it has its own name and icon (decision AI3). With a
+    /// Stage set in Settings › Tools, the Designer next to that Stage comes first, then that Stage itself (it still sets the
+    /// Designer's Dock icon); without one, the copies inside Hatch.app.
+    private func designerExecutable(stageSetting: String?) -> URL? {
+        if let stage = resolveExecutable(setting: stageSetting) {
+            return designerApp(besideStage: stage) ?? stage
+        }
+        let helpers = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers")
+        return executable(ofApp: helpers.appendingPathComponent("Components Designer.app")) ?? bundledStage()
+    }
+
+    /// `…/Stage.app/Contents/MacOS/Stage` → `…/Components Designer.app`'s program, when that app is there.
+    private func designerApp(besideStage executable: URL) -> URL? {
+        var folder = executable.deletingLastPathComponent()
+        if folder.lastPathComponent == "MacOS", folder.deletingLastPathComponent().lastPathComponent == "Contents" {
+            folder = folder.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        }
+        return self.executable(ofApp: folder.appendingPathComponent("Components Designer.app"))
+    }
+
+    private func executable(ofApp url: URL) -> URL? {
+        guard let exec = Bundle(url: url)?.executableURL, FileManager.default.isExecutableFile(atPath: exec.path) else { return nil }
+        return exec
     }
 
     private func resolveExecutable(setting: String?) -> URL? {

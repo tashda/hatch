@@ -46,6 +46,23 @@ public struct DesignerLaunchOptions: Equatable {
 enum DesignerApp {
     private static var delegate: DesignerDelegate?
 
+    /// The bundle `tools/build-stage.sh` builds next to Stage.app: the same program with its own name and icon (decision AI3).
+    static let bundleIdentifier = "app.hatch.ComponentsDesigner"
+
+    /// Components Designer.app started without a project (opened from Finder): one short message, then quit.
+    static func explainAndQuit() -> Never {
+        let app = NSApplication.shared
+        app.setActivationPolicy(.regular)
+        app.applicationIconImage = StageIcon.image(.designer)
+        app.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Open the Components Designer from Hatch"
+        alert.informativeText = "It works on one project's design system. In Hatch, open the project's Components page and open the Designer from there."
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+        exit(0)
+    }
+
     static func run(_ options: DesignerLaunchOptions) -> Never {
         let source: ComponentsSource
         do {
@@ -65,6 +82,8 @@ enum DesignerApp {
             delegate = d
             let app = NSApplication.shared
             app.setActivationPolicy(.regular)
+            // Its own icon even when started from a plain Stage (a Stage path set in Settings › Tools).
+            app.applicationIconImage = StageIcon.image(.designer)
             app.delegate = d
             app.run()
             exit(0)
