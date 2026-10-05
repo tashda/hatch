@@ -57,6 +57,23 @@ final class ComponentTruthTests: XCTestCase {
         XCTAssertEqual(ComponentTruth.check(captures, families: ["HXChip": "card"]), [], "a card grows with what it holds")
     }
 
+    /// The canvas against macOS (CM25): a role drawn at another size is a problem; one side only is a note; a toolbar's
+    /// sizes are not compared (its glass is drawn outside the control) and its look is compared in the canvas item's box.
+    func testTheCanvasIsMeasuredAgainstTheRealContainer() {
+        let canvas = screen([.init(name: "role:button.primary", frame: [10, 10, 80, 22]), .init(name: "role:field.search", frame: [100, 10, 120, 22])],
+                            name: "designer-canvas-form")
+        let real = screen([.init(name: "role:button.primary", frame: [400, 50, 64, 28]), .init(name: "role:toggle.setting", frame: [400, 90, 40, 20])],
+                          name: "designer-real-form")
+        let found = ComponentTruth.compareCanvas(place: "form", canvas: canvas, real: real)
+        XCTAssertEqual(found.filter(\.problem).map(\.views), [["button.primary"]])
+        XCTAssertTrue(found.first { $0.problem }!.words.contains("80×22 pt; macOS draws it 64×28 pt"), found.map(\.words).joined(separator: "; "))
+        XCTAssertEqual(Set(found.filter { !$0.problem }.flatMap(\.views)), ["field.search", "toggle.setting"])
+        var asked: CaptureRect?
+        let toolbar = ComponentTruth.compareCanvas(place: "toolbar", canvas: canvas, real: real, centered: true) { _, _, _, r in asked = r; return 0.02 }
+        XCTAssertTrue(toolbar.allSatisfy { !$0.problem }, "no size check in a toolbar")
+        XCTAssertEqual(asked, CaptureRect(x: 392, y: 53, width: 80, height: 22), "the canvas item's box, centred on the real one")
+    }
+
     func testOnlyTheTicketsViewsCount() {
         let captures = ComponentCaptures(folder: URL(fileURLWithPath: "/tmp"), screens: [screen([
             .init(name: "Tile", frame: [20, 20, 300, 200]), .init(name: "Tile", frame: [250, 20, 300, 200]),
@@ -90,4 +107,50 @@ final class ComponentTruthTests: XCTestCase {
         XCTAssertTrue(found.first?.problem == true, "a word or less is left")
     }
     #endif
+}
+
+/// Evidence before done (CM24): what `hatch ready` decides from the changed views and the screens Hatch drew.
+final class ComponentEvidenceTests: XCTestCase {
+    private func view(_ id: String, file: String = "App/Chips.swift") -> AppView {
+        AppView(id: id, file: file, line: 1, kind: .component, reason: "r", family: "chip", style: AppViewStyle(), interactive: false, uses: 1, usedIn: [], bodyLines: 3)
+    }
+    private func captures(_ marks: [CaptureFile.Mark]) -> ComponentCaptures {
+        ComponentCaptures(folder: URL(fileURLWithPath: "/tmp"), screens: [CapturedScreen(name: "desk", dark: false, picture: URL(fileURLWithPath: "/dev/null"),
+                                                                                         file: CaptureFile(scale: 2, size: [800, 600], marks: marks))])
+    }
+
+    func testTheChangedViewsAreTheOnesInChangedFiles() {
+        let model = AppViewModel(views: [view("HXChip"), view("BoardCard", file: "App/Board.swift")], proposals: [])
+        XCTAssertEqual(ComponentEvidence.changedViews(model, changedFiles: ["App/Chips.swift"]).map(\.id), ["HXChip"])
+    }
+
+    func testAnAppThatDoesNotDrawItsScreensYetGetsANoteNotAFailure() {
+        let steps = ComponentEvidence.judge(changed: [view("HXChip")], unmarked: ["HXChip"], optedIn: false, captureLog: nil, captures: nil, findings: [])
+        XCTAssertTrue(steps.allSatisfy(\.ok))
+        XCTAssertTrue(steps[0].detail.hasPrefix("note:"))
+    }
+
+    func testEveryChangedViewMustBeMarkedDrawnAndMeasured() {
+        let drawn = captures([.init(name: "HXChip", frame: [1, 1, 60, 18])])
+        let pass = ComponentEvidence.judge(changed: [view("HXChip")], unmarked: [], optedIn: true, captureLog: nil, captures: drawn, findings: [])
+        XCTAssertEqual(pass.map(\.kind), ["marks", "captures", "screens"])
+        XCTAssertTrue(pass.allSatisfy(\.ok), pass.map(\.detail).joined(separator: "; "))
+        XCTAssertTrue(pass[1].detail.contains("desk"))
+
+        let unmarked = ComponentEvidence.judge(changed: [view("NewChip")], unmarked: ["NewChip"], optedIn: true, captureLog: nil, captures: drawn, findings: [])
+        XCTAssertFalse(unmarked[0].ok)
+
+        let offScreen = ComponentEvidence.judge(changed: [view("NewChip")], unmarked: [], optedIn: true, captureLog: nil, captures: drawn, findings: [])
+        XCTAssertFalse(offScreen[1].ok, "a changed view no screen shows is not checked, so not done")
+
+        let overlap = TruthFinding(kind: .overlap, screen: "desk", dark: false, views: ["HXChip", "HXChip"], frame: .init(x: 0, y: 0, width: 5, height: 5),
+                                   words: "Two HXChip draw over each other on Desk.", problem: true)
+        let failed = ComponentEvidence.judge(changed: [view("HXChip")], unmarked: [], optedIn: true, captureLog: nil, captures: drawn, findings: [overlap])
+        XCTAssertFalse(failed[2].ok)
+        XCTAssertTrue(failed[2].detail.contains("draw over each other"))
+
+        let broken = ComponentEvidence.judge(changed: [view("HXChip")], unmarked: [], optedIn: true, captureLog: "xcodebuild failed", captures: nil, findings: [])
+        XCTAssertEqual(broken.last?.kind, "captures")
+        XCTAssertFalse(broken.last!.ok)
+    }
 }

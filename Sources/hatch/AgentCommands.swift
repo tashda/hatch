@@ -260,6 +260,12 @@ enum AgentCommands {
                 try step(kind, ok: r.ok, detail: r.ok ? "\(repo.role.rawValue) passed" : "\(repo.role.rawValue) failed:\n\(r.tail)", seconds: r.seconds)
                 if !r.ok { break }
             }
+            // Evidence before done (CM24): Hatch draws the changed views on the app's real screens and measures them.
+            if repo.role == .app, failures.isEmpty {
+                for s in try screenEvidence(t, ws: ws.path, base: repo.defaultBranch, config: cfg, project: project, manager: manager) {
+                    try step(s.kind, ok: s.ok, detail: s.detail)
+                }
+            }
         }
         // The Spec must follow the code (decision PS13): the agent names the items it changed, or says none changed,
         // and a named change must really be on the notebook's ticket branch.
@@ -287,6 +293,40 @@ enum AgentCommands {
         }
     }
 
+    /// The changed views on the app's screens, drawn in the ticket's workspace: the steps for `ready`, with the pictures
+    /// kept in Hatch's folder (`evidence/<ticket>`) and listed in the ticket's history.
+    static func screenEvidence(_ t: Ticket, ws: String, base: String, config: RepoConfig?, project: Project?, manager: WorkspaceManager) throws -> [ComponentEvidence.Step] {
+        let diff = (try? manager.git.git(["diff", "--name-only", "\(base)...HEAD", "--", "*.swift"], in: ws)) ?? ""
+        let files = Set(diff.split(separator: "\n").map(String.init))
+        guard !files.isEmpty else { return [] }
+        let excluding = [project?.config?.components?.path].compactMap { $0 }
+        let model = AppViewScanner.scan(appRoot: ws, excluding: excluding)
+        let changed = ComponentEvidence.changedViews(model, changedFiles: files)
+        guard !changed.isEmpty else { return [] }
+        let optedIn = ComponentMarks.hasFile(appRoot: ws, excluding: excluding)
+        let unmarked = Set(ComponentMarks.unmarked(changed, root: ws))
+        var captures: ComponentCaptures?, log: String?, findings: [TruthFinding] = []
+        if optedIn, let command = ComponentCaptures.command(appRoot: ws, configured: config?.captureCommand) {
+            let run = ComponentCaptures.run(command: command, appRoot: ws, notebook: project?.config?.repo(.notebook)?.localPath)
+            log = run.log
+            if let folder = run.folder {
+                let keep = HatchPaths.current().home.appendingPathComponent("evidence/\(t.displayNumber.filter(\.isNumber))", isDirectory: true)
+                try? FileManager.default.removeItem(at: keep)
+                try? FileManager.default.createDirectory(at: keep.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? FileManager.default.moveItem(at: folder, to: keep)
+                captures = ComponentCaptures.load(from: keep)
+                if let captures {
+                    findings = ComponentTruth.measure(captures, appRoot: ws, excluding: excluding, only: Set(changed.map(\.id)))
+                    let screens = Set(changed.flatMap { captures.screens(of: $0.id).map(\.name) }).sorted()
+                    try? manager.store.record(t.id, actor: "hatch", kind: "screen-evidence", payload: [
+                        "folder": .string(keep.path), "screens": .array(screens.map { .string($0) }),
+                        "findings": .array(findings.prefix(20).map { .string(($0.problem ? "problem: " : "note: ") + $0.words) })])
+                }
+            }
+        }
+        return ComponentEvidence.judge(changed: changed, unmarked: unmarked, optedIn: optedIn, captureLog: log, captures: captures, findings: findings)
+    }
+
     // hatch iris-eval [corpus.json] [--only id,id] [--limit n] [--random n --seed s] [--model m] [--min 0.9]
     // Sends the corpus of prompts to the real Iris, in a throwaway world, and scores her answers against the gold ones. It costs
     // tokens (about 6 s and a few thousand tokens a prompt on Haiku) and builds nothing. Exit 1 if Hatch broke an invariant, 2 if
@@ -307,6 +347,11 @@ enum AgentCommands {
         var iris = try AgentFactory.resolve(.iris, settings: settings, context: ctx)
         if let m = c.args.option("model") {
             iris = try AgentFactory.make(iris.provider, model: m, effort: iris.effort, thinking: iris.thinking, context: ctx, timeout: AgentRole.iris.timeout)
+        }
+        // The bench makes hundreds of calls. It is meant for a provider that is free to use (Codex today), so a Claude
+        // subscription is only spent when the owner says so.
+        if iris.provider.kind == .claudeCode, !c.args.flag("allow-claude") {
+            throw CLIError("Iris is set to \(iris.label), a Claude Code model: \(cases.count) prompts would spend your Claude usage. Choose another provider for Iris in Settings, Agents, or pass --allow-claude.")
         }
         print("Iris on \(iris.label), \(cases.count) prompts. Nothing is built.")
         let world = try IrisEvalWorld()
