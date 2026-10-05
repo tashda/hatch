@@ -1,26 +1,10 @@
 import SwiftUI
 import HatchCore
+import HatchComponentKit
 
 // "In place" (decision DS1): an element is never judged floating alone. Each place is drawn as a small mock of the
 // real thing (a toolbar, a sheet's footer, a list, a form) with the roles that hold its cells, so a button is seen as the
 // main action of a sheet or as a row action, beside its neighbours.
-
-/// Sample words for a control by importance, so a place reads like a real screen.
-enum SampleWords {
-    static func content(_ importance: ComponentRole.Importance, place: String, base: SampleContent) -> SampleContent {
-        var s = base
-        switch (importance, place) {
-        case (_, "toolbar"): s.title = "Refresh"; s.symbol = "arrow.clockwise"
-        case (.main, _): s.title = base.longLabel ? base.title : "Save"; s.symbol = "checkmark"
-        case (.quiet, "sheetFooter"), (.quiet, "alert"): s.title = "Cancel"; s.symbol = "xmark"
-        case (.quiet, _): s.title = "Show All"; s.symbol = "chevron.right"
-        case (.destructive, _): s.title = "Delete"; s.symbol = "trash"
-        case (.other, "listRow"), (.other, "card"), (.other, "inspector"), (.other, "popover"): s.title = "Open"; s.symbol = "arrow.up.forward"
-        case (.other, _): s.title = "Share"; s.symbol = "square.and.arrow.up"
-        }
-        return s
-    }
-}
 
 /// One place drawn with the element's roles in it. Tapping a control selects its role.
 struct PlaceFrame: View {

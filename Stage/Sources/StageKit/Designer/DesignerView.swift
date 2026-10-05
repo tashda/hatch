@@ -1,5 +1,6 @@
 import SwiftUI
 import HatchCore
+import HatchComponentKit
 
 // The Components Designer's window (decision DS1): the system on the left, the selected element drawn in its places in
 // the middle, the selected role on the right, and the open questions in a bar at the bottom. Native controls only.

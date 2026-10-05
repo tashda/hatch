@@ -1,30 +1,38 @@
 import SwiftUI
 import HatchCore
 
-// The recipe engine (decision DS1): any role drawn from its recipe with the real SwiftUI and AppKit controls, in every
+// The recipe engine (decisions DS1, CP1), shared by the Hatch app and the Stage: any role drawn from its recipe with the real SwiftUI and AppKit controls, in every
 // place, light and dark. Switching a setting redraws at once; nothing is generated or compiled, so it costs nothing.
 
 /// Sample content for a drawn control, so hard cases (a long label, disabled) are one switch away.
-struct SampleContent: Equatable {
-    var title = "Save"
-    var symbol = "checkmark"
-    var disabled = false
-    var longLabel = false
+@available(macOS 26.0, *)
+public struct SampleContent: Equatable {
+    public init() {}
+    public var title = "Save"
+    public var symbol = "checkmark"
+    public var disabled = false
+    public var longLabel = false
     /// Give buttons their real keys (the live window's sheet and alert); off in tiles, where many would compete.
-    var liveKeys = false
+    public var liveKeys = false
 
-    var shownTitle: String { longLabel ? "Save and continue to the next step" : title }
+    public var shownTitle: String { longLabel ? "Save and continue to the next step" : title }
 }
 
 /// One control or block drawn from a recipe.
-struct RecipeControl: View {
+@available(macOS 26.0, *)
+public struct RecipeControl: View {
     let element: String
     let recipe: [String: String]
     var system: ComponentSystem?
     var importance: ComponentRole.Importance = .other
     var sample = SampleContent()
 
-    var body: some View {
+    public init(element: String, recipe: [String: String], system: ComponentSystem? = nil, importance: ComponentRole.Importance = .other,
+                sample: SampleContent = SampleContent()) {
+        self.element = element; self.recipe = recipe; self.system = system; self.importance = importance; self.sample = sample
+    }
+
+    public var body: some View {
         content
             .disabled(sample.disabled)
     }
@@ -48,8 +56,9 @@ struct RecipeControl: View {
     }
 }
 
+@available(macOS 26.0, *)
 extension ControlSize {
-    init(recipe value: String?) {
+    public init(recipe value: String?) {
         switch value {
         case "mini": self = .mini
         case "small": self = .small
@@ -60,9 +69,10 @@ extension ControlSize {
     }
 }
 
+@available(macOS 26.0, *)
 extension View {
     /// `.tint` for a recipe's tint: critical red, accent, or a color foundation.
-    @ViewBuilder func recipeTint(_ value: String?, system: ComponentSystem? = nil) -> some View {
+    @ViewBuilder public func recipeTint(_ value: String?, system: ComponentSystem? = nil) -> some View {
         switch value {
         case "critical": self.tint(.red)
         case "accent": self.tint(.accentColor)
@@ -71,7 +81,7 @@ extension View {
         }
     }
 
-    @ViewBuilder func recipeLabelStyle(_ value: String?) -> some View {
+    @ViewBuilder public func recipeLabelStyle(_ value: String?) -> some View {
         switch value {
         case "iconOnly": self.labelStyle(.iconOnly)
         case "titleOnly": self.labelStyle(.titleOnly)
@@ -80,7 +90,7 @@ extension View {
         }
     }
 
-    @ViewBuilder func recipeButtonStyle(_ value: String?) -> some View {
+    @ViewBuilder public func recipeButtonStyle(_ value: String?) -> some View {
         switch value {
         case "bordered": self.buttonStyle(.bordered)
         case "borderedProminent": self.buttonStyle(.borderedProminent)
@@ -93,7 +103,7 @@ extension View {
         }
     }
 
-    @ViewBuilder func recipeShape(_ value: String?) -> some View {
+    @ViewBuilder public func recipeShape(_ value: String?) -> some View {
         switch value {
         case "capsule": self.buttonBorderShape(.capsule)
         case "roundedRectangle": self.buttonBorderShape(.roundedRectangle)
@@ -103,9 +113,10 @@ extension View {
     }
 }
 
-enum RecipeColor {
+@available(macOS 26.0, *)
+public enum RecipeColor {
     /// A color foundation's value, or the system color it names.
-    static func color(_ id: String, system: ComponentSystem?) -> Color {
+    public static func color(_ id: String, system: ComponentSystem?) -> Color {
         guard let f = system?.foundation(id) else { return .accentColor }
         if let light = f.light, let rgb = rgb(light) { return Color(red: rgb.0, green: rgb.1, blue: rgb.2) }
         switch f.system {
@@ -123,12 +134,13 @@ enum RecipeColor {
     }
 
     /// Points for a radius or spacing foundation (`radius.card`), or a fallback.
-    static func points(_ id: String?, system: ComponentSystem?, fallback: CGFloat) -> CGFloat {
+    public static func points(_ id: String?, system: ComponentSystem?, fallback: CGFloat) -> CGFloat {
         guard let id, let v = system?.foundation(id)?.value else { return fallback }
         return CGFloat(v)
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeButton: View {
     let recipe: [String: String]
     let importance: ComponentRole.Importance
@@ -152,6 +164,7 @@ private struct RecipeButton: View {
 }
 
 /// The real default and Cancel keys: on macOS the default key is what makes a sheet's button the default button.
+@available(macOS 26.0, *)
 private struct RecipeKey: ViewModifier {
     let key: String?
     func body(content: Content) -> some View {
@@ -163,6 +176,7 @@ private struct RecipeKey: ViewModifier {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeMenu: View {
     let recipe: [String: String]
     let sample: SampleContent
@@ -195,6 +209,7 @@ private struct RecipeMenu: View {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipePicker: View {
     let recipe: [String: String]
     @State private var choice = 0
@@ -221,6 +236,7 @@ private struct RecipePicker: View {
     }
 }
 
+@available(macOS 26.0, *)
 private struct LabelsHidden: ViewModifier {
     let hidden: Bool
     func body(content: Content) -> some View {
@@ -228,6 +244,7 @@ private struct LabelsHidden: ViewModifier {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeToggle: View {
     let recipe: [String: String]
     let title: String
@@ -248,6 +265,7 @@ private struct RecipeToggle: View {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeField: View {
     let recipe: [String: String]
     @State private var text = ""
@@ -267,6 +285,7 @@ private struct RecipeField: View {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeSwitcher: View {
     let recipe: [String: String]
     @State private var section = 0
@@ -309,6 +328,7 @@ private struct RecipeSwitcher: View {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeRow: View {
     let recipe: [String: String]
 
@@ -332,6 +352,7 @@ private struct RecipeRow: View {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeCard: View {
     let recipe: [String: String]
     let system: ComponentSystem?
@@ -378,6 +399,7 @@ private struct RecipeCard: View {
     }
 }
 
+@available(macOS 26.0, *)
 private struct GlassIf<S: Shape>: ViewModifier {
     let on: Bool
     let shape: S
@@ -386,6 +408,7 @@ private struct GlassIf<S: Shape>: ViewModifier {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeSheet: View {
     let recipe: [String: String]
 
@@ -404,6 +427,7 @@ private struct RecipeSheet: View {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeBadge: View {
     let recipe: [String: String]
 
@@ -422,6 +446,7 @@ private struct RecipeBadge: View {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeToast: View {
     let recipe: [String: String]
 
@@ -440,6 +465,7 @@ private struct RecipeToast: View {
     }
 }
 
+@available(macOS 26.0, *)
 private struct RecipeEmptyState: View {
     let recipe: [String: String]
 
@@ -458,3 +484,22 @@ private struct RecipeEmptyState: View {
         .frame(width: 280, height: 190)
     }
 }
+
+/// Sample words for a control by importance, so a place reads like a real screen.
+@available(macOS 26.0, *)
+public enum SampleWords {
+    public static func content(_ importance: ComponentRole.Importance, place: String, base: SampleContent) -> SampleContent {
+        var s = base
+        switch (importance, place) {
+        case (_, "toolbar"): s.title = "Refresh"; s.symbol = "arrow.clockwise"
+        case (.main, _): s.title = base.longLabel ? base.title : "Save"; s.symbol = "checkmark"
+        case (.quiet, "sheetFooter"), (.quiet, "alert"): s.title = "Cancel"; s.symbol = "xmark"
+        case (.quiet, _): s.title = "Show All"; s.symbol = "chevron.right"
+        case (.destructive, _): s.title = "Delete"; s.symbol = "trash"
+        case (.other, "listRow"), (.other, "card"), (.other, "inspector"), (.other, "popover"): s.title = "Open"; s.symbol = "arrow.up.forward"
+        case (.other, _): s.title = "Share"; s.symbol = "square.and.arrow.up"
+        }
+        return s
+    }
+}
+

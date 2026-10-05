@@ -27,6 +27,8 @@ targets:
       - package: hatch
         product: HatchAPI
       - package: hatch
+        product: HatchComponentKit
+      - package: hatch
         product: HatchImport
     postCompileScripts:
       - name: Build the hatch command

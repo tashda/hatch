@@ -17,6 +17,7 @@
 		2B96722CF3E2A8E409EEE225 /* TicketOptionsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA4B12D3FF0406D70FFCBC45 /* TicketOptionsTab.swift */; };
 		33B2E39998A1C0165DEDA212 /* ProblemChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = C55062C4CDC76CEA05F19695 /* ProblemChip.swift */; };
 		3A7F7AAD6C3FFCD4D90C8816 /* HatchAPI in Frameworks */ = {isa = PBXBuildFile; productRef = FD91901583E35055B8089D5A /* HatchAPI */; };
+		C0FFEE00C0FFEE00C0FFEE01 /* HatchComponentKit in Frameworks */ = {isa = PBXBuildFile; productRef = C0FFEE00C0FFEE00C0FFEE02 /* HatchComponentKit */; };
 		3CF2407446C3D2E48FBB5059 /* AskPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9CAAC677BE273CA35AC7A4 /* AskPanel.swift */; };
 		89B529C5AF394926839F67B6 /* AgentSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97F1DB34FA0A479C85A0A1BE /* AgentSettingsPage.swift */; };
 		A1B2C3D4E5F60718293A4B5C /* IrisPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* IrisPanel.swift */; };
@@ -184,6 +185,7 @@
 				53D4579D6537437B4BEB40CC /* HatchSync in Frameworks */,
 				A0F0827D24963348E078DE4E /* HatchAgent in Frameworks */,
 				3A7F7AAD6C3FFCD4D90C8816 /* HatchAPI in Frameworks */,
+				C0FFEE00C0FFEE00C0FFEE01 /* HatchComponentKit in Frameworks */,
 				50A40563AC907E5A85C54B8A /* HatchImport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -396,6 +398,7 @@
 				C92A8B1F523538756CBE6D69 /* HatchSync */,
 				11AEA8595446D5328A51DCD6 /* HatchAgent */,
 				FD91901583E35055B8089D5A /* HatchAPI */,
+				C0FFEE00C0FFEE00C0FFEE02 /* HatchComponentKit */,
 				A8AC6D4F29E4A35CEFA8405E /* HatchImport */,
 			);
 			productName = Hatch;
@@ -806,6 +809,10 @@
 		FD91901583E35055B8089D5A /* HatchAPI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = HatchAPI;
+		};
+		C0FFEE00C0FFEE00C0FFEE02 /* HatchComponentKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HatchComponentKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

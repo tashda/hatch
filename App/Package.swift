@@ -17,6 +17,7 @@ let package = Package(
                 .product(name: "HatchAgent", package: "hatch"),
                 .product(name: "HatchAPI", package: "hatch"),
                 .product(name: "HatchImport", package: "hatch"),
+                .product(name: "HatchComponentKit", package: "hatch"),
             ],
             path: "Sources/HatchApp"
         ),

@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import HatchCore
+import HatchComponentKit
 
 /// How the Components Designer was asked to open (decision DS1: a mode of the Stage app).
 ///

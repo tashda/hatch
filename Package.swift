@@ -1,6 +1,7 @@
 // swift-tools-version: 6.0
 // Hatch core: everything that is not user interface. Builds on macOS and Linux.
-// The SwiftUI app and the Stage live in separate packages (HatchApp/, HatchStage/) and only build on macOS.
+// The SwiftUI app and the Stage live in separate packages (HatchApp/, HatchStage/) and only build on macOS; the shared
+// component renderer (HatchComponentKit) is added below on macOS only.
 import PackageDescription
 
 let package = Package(
@@ -33,3 +34,9 @@ let package = Package(
     ],
     swiftLanguageModes: [.v5]
 )
+
+// The recipe engine (decision CP1): SwiftUI, so macOS only; the app and the Stage draw roles with it.
+#if os(macOS)
+package.products.append(.library(name: "HatchComponentKit", targets: ["HatchComponentKit"]))
+package.targets.append(.target(name: "HatchComponentKit", dependencies: ["HatchCore"]))
+#endif

@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import HatchCore
+import HatchComponentKit
 import HatchAPI
 
 // The Components Designer (decision DS1): one place to judge and decide the design system. It reads the system from

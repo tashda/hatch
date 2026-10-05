@@ -37,6 +37,7 @@ targets.append(
             // The package identity of a path dependency is its folder name (lowercased), here "hatch" (the repo tashda/hatch).
             .product(name: "HatchAPI", package: "hatch"),
             .product(name: "HatchCore", package: "hatch"),
+            .product(name: "HatchComponentKit", package: "hatch"),
         ]
     )
 )

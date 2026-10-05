@@ -1,5 +1,6 @@
 import SwiftUI
 import HatchCore
+import HatchComponentKit
 
 // The live window (decision NF2): the app's own shell (split view, stack or tabs; toolbar, inspector, search), opened
 // for real, with the roles in their places. Sidebars, toolbars, glass, sheets, alerts, menus and popovers are SwiftUI's
