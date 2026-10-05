@@ -55,6 +55,10 @@ extension CoreCommands {
             }
             try save(system, notebook: notebook, message: "Components: start the design system" + (system.template.map { " from the \($0) template" } ?? " from the app"))
             lines.append("\nWritten to the notebook: \(ComponentSystem.notebookPath) and \(ComponentSystem.readmePath).")
+            // Decide asks the new questions and drops the old ones now, not when the app next opens Components.
+            if let p = project, let changed = try? c.store.syncComponentQuestions(projectId: p.id, system: system) {
+                lines.append("Decide: \(changed.added) questions added, \(changed.dropped) dropped, \(changed.updated) updated.")
+            }
         }
         c.out.emit(["roles": .int(system.roles.count), "questions": .int(system.questions.count), "written": .bool(!c.args.flag("dry-run"))],
                    text: lines.joined(separator: "\n"))

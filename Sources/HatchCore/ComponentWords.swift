@@ -191,9 +191,22 @@ public enum ComponentWords {
 
     /// The question for a role whose looks compete: "How should main action buttons look?"
     public static func lookQuestion(_ role: ComponentRole) -> String {
-        let title = role.title.lowercased()
+        var title = role.title.lowercased()
         guard let element = ComponentElement.named(role.element) else { return "How should \(title) look?" }
-        let noun = title.contains(element.title.lowercased()) ? title + "s" : "\(title) \(element.plural.lowercased())"
-        return "How should \(noun) look?"
+        // "Menu button in a row" → "menu buttons in rows": the plural goes on the noun, before where it sits.
+        var qualifier = ""
+        for (one, many) in [(" in a row", " in rows"), (" in the toolbar", " in the toolbar"), (" in a menu", " in menus"), (", floating", " that float")]
+        where title.hasSuffix(one) {
+            title.removeLast(one.count); qualifier = many; break
+        }
+        let nouns: Set<String> = ["button", "toggle", "picker", "menu", "field", "form", "table", "card", "badge", "slider", "stepper", "gauge",
+                                  "row", "editor", "switcher", "sheet", "toast", "state", "group", "layout"]
+        let last = title.split(separator: " ").last.map(String.init) ?? ""
+        let noun: String
+        if last.hasSuffix("s") && nouns.contains(String(last.dropLast())) { noun = title }  // "radio buttons"
+        else if last == "progress" { noun = title + " indicators" }
+        else if nouns.contains(last) { noun = title + "s" }
+        else { noun = "\(title) \(element.plural.lowercased())" }
+        return "How should \(noun)\(qualifier) look?"
     }
 }

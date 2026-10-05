@@ -17,6 +17,15 @@ final class ComponentWordsTests: XCTestCase {
         let system = ComponentTemplates.glass.system(name: "Acme")
         XCTAssertEqual(ComponentWords.lookQuestion(system.role("button.secondary")!), "How should other action buttons look?")
         XCTAssertEqual(ComponentWords.lookQuestion(system.role("button.sheetDefault")!), "How should default buttons look?")
+        // Read on Hatch's own roles: the plural on the noun, and before where it sits.
+        func ask(_ element: String, _ title: String) -> String {
+            ComponentWords.lookQuestion(ComponentRole("\(element).x", title, use: "", places: ["page"], importance: .other))
+        }
+        XCTAssertEqual(ask("progress", "Progress"), "How should progress indicators look?")
+        XCTAssertEqual(ask("form", "Settings form"), "How should settings forms look?")
+        XCTAssertEqual(ask("picker", "Segmented picker in a row"), "How should segmented pickers in rows look?")
+        XCTAssertEqual(ask("picker", "Radio buttons"), "How should radio buttons look?")
+        XCTAssertEqual(ask("button", "Other action, floating"), "How should other action buttons that float look?")
     }
 
     /// Found in use: a Decide answer the system refused closed its ticket anyway; the question, still open, comes back.
