@@ -510,7 +510,8 @@ private struct DecideCard: View {
         case .pick:
             VStack(alignment: .leading, spacing: answersGap) {
                 QuestionMessage(asker: item.ticket.status == .draft ? "Hatch" : "Agent on \(item.ticket.displayNumber)",
-                                text: item.ticket.status == .draft ? "I prepared these options. Choosing one records a decision." : "These are the options. Choosing one records a decision.")
+                                text: item.ticket.type == .proposal ? "These are the looks for \(ComponentsSetup.changedRole(inBody: item.ticket.body) ?? "the role"). The Designer draws them in their places. Choosing one accepts the Proposal."
+                                    : item.ticket.status == .draft ? "I prepared these options. Choosing one records a decision." : "These are the options. Choosing one records a decision.")
                 answerList(own: false)
             }
         case .plan:
@@ -624,6 +625,10 @@ private struct DecideCard: View {
                 }
                 if item.kind == .judge && item.ticket.type == .proposal {
                     Button("Open the Stage") { StageLauncher.shared.open(ticket: item.ticket, state: state) }.buttonStyle(.glass)
+                }
+                if item.kind == .pick && item.ticket.type == .proposal, let project = state.project(id: item.ticket.projectId) {
+                    Button("Open the Designer") { StageLauncher.shared.openDesigner(project: project, state: state) }.buttonStyle(.glass)
+                        .help("See the looks in their places and in a live window")
                 }
                 Spacer(minLength: 8)
                 Button(mainTitle) { accept() }
@@ -739,7 +744,8 @@ private struct DecideCard: View {
         switch item.kind {
         case .pick:
             commit(agreed: agreed, startsAgent: false, label: "\(ticket.displayNumber) · \(c.title)") {
-                if ticket.status == .draft { _ = try store.decidePreparedQuestion(ticketId: ticket.id, choice: key, reason: note.isEmpty ? nil : note) }
+                if ticket.type == .proposal { _ = try store.decideComponentChange(ticketId: ticket.id, choice: key, reason: note.isEmpty ? nil : note) }
+                else if ticket.status == .draft { _ = try store.decidePreparedQuestion(ticketId: ticket.id, choice: key, reason: note.isEmpty ? nil : note) }
                 else { _ = try store.decideQuestion(ticketId: ticket.id, choice: key, reason: note.isEmpty ? nil : note) }
                 // A design system question changes the system too (DC9, DS4).
                 try state.applyComponentDecision(ticket: ticket, choice: key)

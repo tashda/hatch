@@ -49,6 +49,11 @@ public struct ComponentFinding: Equatable, Sendable {
     /// page default is right far less often, so such findings are shown as unsure and never pressed on an agent.
     public var certain: Bool = true
 
+    public init(kind: Kind, element: String, place: String?, role: String?, file: String, line: Int, look: String, message: String, certain: Bool = true) {
+        self.kind = kind; self.element = element; self.place = place; self.role = role; self.file = file; self.line = line
+        self.look = look; self.message = message; self.certain = certain
+    }
+
     public var location: String { "\(file):\(line)" }
 }
 

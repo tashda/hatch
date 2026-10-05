@@ -171,6 +171,8 @@ final class DesignerModel: ObservableObject {
     func unfollow(_ scope: ComponentFollow) { run("unfollow", ["scope": .string(scope.id)]) }
     /// "Make it a setting" (NF5) for a role or a rule; Hatch drafts the ticket.
     func makeSetting(_ id: String) { run("setting", ["id": .string(id)]) }
+    /// Change… (CP3): Hatch files a Proposal for the role; the looks come back as a question.
+    func change(_ role: ComponentRole, what: String) { run("change", ["role": .string(role.id), "what": .string(what)]) }
     func setRule(_ kind: String, _ value: String) { run("rule", ["kind": .string(kind), "value": .string(value)]) }
     func addNote(_ text: String) { run("rule", ["kind": "note", "text": .string(text)]) }
     func removeRule(_ id: String) { run("removeRule", ["id": .string(id)]) }

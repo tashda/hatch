@@ -56,6 +56,8 @@
 		D1A7B0C2E3F4051627384950 /* DecideLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A7B0C2E3F4051627384951 /* DecideLab.swift */; };
 		7CA90E3696C34E97BE0AB336 /* MenuBarLab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F162D6E7CD423793BE1E2C /* MenuBarLab.swift */; };
 		1B33E3A296D309563040C343 /* ComponentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1819DD7B53E496800C1840B /* ComponentsView.swift */; };
+		CCE9DF277B69F22AC0A006BC /* ComponentsHealth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 036381D2E494EB41ABBA160F /* ComponentsHealth.swift */; };
+		DDC7DE5621AF917019F12F37 /* ComponentsHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = B93938F34E250446159E76CA /* ComponentsHub.swift */; };
 		8BCD76F3B3CD8125CB4A5083 /* DeskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CD8172654E3B05A33D62F8C /* DeskView.swift */; };
 		8FC3CCAF743A468C8189774C /* HatchGit in Frameworks */ = {isa = PBXBuildFile; productRef = 8FF33B9BC62D51D62F87A33A /* HatchGit */; };
 		9C234007EC5BBBE8C6AD6B4F /* ComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66AE2852326652BBEF994532 /* ComposerView.swift */; };
@@ -118,6 +120,8 @@
 		D1A7B0C2E3F4051627384951 /* DecideLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecideLab.swift; sourceTree = "<group>"; };
 		47F162D6E7CD423793BE1E2C /* MenuBarLab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLab.swift; sourceTree = "<group>"; };
 		D1819DD7B53E496800C1840B /* ComponentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComponentsView.swift; sourceTree = "<group>"; };
+		036381D2E494EB41ABBA160F /* ComponentsHealth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComponentsHealth.swift; sourceTree = "<group>"; };
+		B93938F34E250446159E76CA /* ComponentsHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComponentsHub.swift; sourceTree = "<group>"; };
 		501F8478F0F8743977F822BD /* TicketOverviewTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TicketOverviewTab.swift; sourceTree = "<group>"; };
 		50AA3B651A6F720EEC6333D3 /* IrisReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IrisReviewView.swift; sourceTree = "<group>"; };
 		548F8F5CD99070F671D33F73 /* AnswerCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnswerCards.swift; sourceTree = "<group>"; };
@@ -337,6 +341,8 @@
 				47F162D6E7CD423793BE1E2C /* MenuBarLab.swift */,
 				CB49B53D60802E5519C3B85A /* DecideView.swift */,
 				D1819DD7B53E496800C1840B /* ComponentsView.swift */,
+				036381D2E494EB41ABBA160F /* ComponentsHealth.swift */,
+				B93938F34E250446159E76CA /* ComponentsHub.swift */,
 				7668E92AE7A7176EA2988F23 /* DeskBriefPane.swift */,
 				5CD8172654E3B05A33D62F8C /* DeskView.swift */,
 				50AA3B651A6F720EEC6333D3 /* IrisReviewView.swift */,
@@ -540,6 +546,8 @@
 				D1A7B0C2E3F4051627384950 /* DecideLab.swift in Sources */,
 				7CA90E3696C34E97BE0AB336 /* MenuBarLab.swift in Sources */,
 				1B33E3A296D309563040C343 /* ComponentsView.swift in Sources */,
+				CCE9DF277B69F22AC0A006BC /* ComponentsHealth.swift in Sources */,
+				DDC7DE5621AF917019F12F37 /* ComponentsHub.swift in Sources */,
 				20501283E561101BF2529D53 /* DesignSystem.swift in Sources */,
 				04C3DDE92D35161138052438 /* DeskBriefPane.swift in Sources */,
 				8BCD76F3B3CD8125CB4A5083 /* DeskView.swift in Sources */,

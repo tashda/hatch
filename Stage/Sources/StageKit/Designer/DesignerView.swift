@@ -331,6 +331,8 @@ struct FoundationsView: View {
 
 struct RoleInspector: View {
     @ObservedObject var model: DesignerModel
+    @State private var changing = false
+    @State private var what = ""
 
     var body: some View {
         if let role = model.role, let element = ComponentElement.named(role.element) {
@@ -417,6 +419,25 @@ struct RoleInspector: View {
     /// One prominent action, the rest quiet.
     @ViewBuilder private func actions(_ role: ComponentRole) -> some View {
         HStack {
+            // A new look goes through a Proposal (CP3): an agent offers looks, they come back here as a question.
+            if !model.source.isLocal {
+                Button("Change…") { changing = true }.buttonStyle(.glass)
+                    .help("Ask for a new look: an agent offers two to four, drawn here in place")
+                    .popover(isPresented: $changing) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("What should change?").font(.headline)
+                            TextField("For example: calmer, without glass", text: $what, axis: .vertical).lineLimit(2...5).frame(width: 300)
+                            HStack {
+                                Spacer()
+                                Button("File the Proposal") { model.change(role, what: what); what = ""; changing = false }
+                                    .buttonStyle(.borderedProminent)
+                                    .keyboardShortcut(.defaultAction)
+                                    .disabled(what.trimmingCharacters(in: .whitespaces).isEmpty)
+                            }
+                        }
+                        .padding(14)
+                    }
+            }
             if !role.followsMacOS {
                 Button("Follow macOS") { model.follow(role) }.buttonStyle(.glass)
                     .help("No look of its own: macOS decides, now and in later versions")

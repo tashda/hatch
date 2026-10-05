@@ -2,21 +2,25 @@ import SwiftUI
 import AppKit
 import HatchCore
 import HatchGit
+import HatchComponentKit
 
-/// Components (decisions CO1 to CO8): the selected project's named colors, type, sizes and shared views, read from the
-/// app's code on this Mac, and the values still typed straight into views. Hatch draws the tokens itself; views are
-/// listed by name, since Hatch never compiles project code (they are drawn live in a Proposal's Stage).
+/// Components (decisions AE, CP1 to CP5): the hub for the project's design system. How the app looks, place by place,
+/// drawn with the real controls (Overview); every role (Roles, a table with an inspector); the rules and the named
+/// values; and how much of the code follows them (Health). Changing a role starts here, with Change…, and goes through a
+/// Proposal (CP3). Hatch never builds the project's code: it draws the roles with its own renderer (HatchComponentKit).
 struct ComponentsView: View {
     @EnvironmentObject var state: AppState
     @State private var loaded: Loaded?
     @State private var loading = false
-    @State private var section: Section = .all
+    @State private var section: Section = .overview
     @State private var filter = ""
     @State private var message: String?
+    @State private var selectedRole: String?
+    @State private var sheet: ComponentsSheet?
 
-    enum Section: Hashable { case all, colors, type, sizes, views }
+    enum Section: Hashable { case overview, roles, rules, foundations, health }
 
-    /// What one read of the app's clone found.
+    /// What one read of the notebook and the app's clone found.
     struct Loaded {
         var projectId: Int
         var components: ComponentsConfig?
@@ -30,7 +34,11 @@ struct ComponentsView: View {
         var notebook: String?
         /// How much of the app already follows it.
         var coverage: (usingRole: Int, matching: Int, total: Int)?
-        var findings = 0
+        var findings: [ComponentFinding] = []
+        /// How many controls in the app use or fall under each role.
+        var usesByRole: [String: Int] = [:]
+        /// The components setting points at the app itself (CP5): offered for repair.
+        var componentsIsApp = false
     }
 
     /// The selected project, or the only one when "All projects" is selected and there is just one.
@@ -51,135 +59,268 @@ struct ComponentsView: View {
         }
         .environment(\.hxCardOnGray, true)
         .task(id: project?.id) { await load() }
+        .inspector(isPresented: inspectorShown) { inspector.inspectorColumnWidth(min: 300, ideal: 340, max: 440) }
+        .sheet(item: $sheet) { s in sheetView(s) }
     }
 
     // MARK: Header
 
+    private var system: ComponentSystem? { loaded?.projectId == project?.id ? loaded?.system : nil }
+
+    /// One row when the window is wide; the dock drops to a second row when it is not (the inspector takes room).
     private func header(_ project: Project) -> some View {
-        HStack(spacing: 12) {
-            HXHeader(title: "Components", subtitle: subtitle(project))
-            Spacer()
-            if loaded?.catalog.map({ !$0.isEmpty }) == true {
-                HXDock(items: [.init(id: .all, title: "All"), .init(id: .colors, title: "Colors", count: loaded?.catalog?.colors.count),
-                               .init(id: .type, title: "Type", count: loaded?.catalog?.fonts.count),
-                               .init(id: .sizes, title: "Sizes", count: loaded?.catalog?.sizes.count),
-                               .init(id: .views, title: "Views", count: loaded?.catalog?.views.count)],
-                       selection: $section)
-                TextField("Filter", text: $filter).textFieldStyle(.roundedBorder).frame(width: 160)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                HXHeader(title: "Components", subtitle: subtitle(project)).fixedSize()
+                Spacer(minLength: 8)
+                dock
+                Spacer(minLength: 8)
+                actions(project)
             }
-            Button { Task { await load() } } label: { Label("Rescan", systemImage: "arrow.clockwise") }
-                .buttonStyle(.glass)
-                .disabled(loading)
-                .help("Read the app's code again")
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    HXHeader(title: "Components", subtitle: subtitle(project)).fixedSize()
+                    Spacer(minLength: 8)
+                    actions(project)
+                }
+                dock
+            }
         }
         .padding(16)
         .floatingCard()
     }
 
+    @ViewBuilder private var dock: some View {
+        if let system {
+            HXDock(items: [.init(id: .overview, title: "Overview"),
+                           .init(id: .roles, title: "Roles", count: system.roles.count),
+                           .init(id: .rules, title: "Rules", count: system.rules.count),
+                           .init(id: .foundations, title: "Foundations", count: system.foundations.count),
+                           .init(id: .health, title: "Health", count: loaded.map { $0.findings.count })],
+                   selection: $section)
+        }
+    }
+
+    @ViewBuilder private func actions(_ project: Project) -> some View {
+        HStack(spacing: 8) {
+            if let system {
+                if section == .roles || section == .foundations {
+                    TextField("Filter", text: $filter).textFieldStyle(.roundedBorder).frame(width: 140)
+                }
+                Button { StageLauncher.shared.openDesigner(project: project, state: state) } label: {
+                    Label("Open Designer", systemImage: "paintbrush.pointed")
+                }
+                .buttonStyle(.glassProminent)
+                .controlSize(.large)
+                .fixedSize()
+                .help("Judge and decide the roles with the real controls, in their places")
+                moreMenu(project, system)
+            } else {
+                Button { Task { await load() } } label: { Label("Rescan", systemImage: "arrow.clockwise") }
+                    .buttonStyle(.glass)
+                    .disabled(loading)
+                    .help("Read the notebook and the app's code again")
+            }
+        }
+    }
+
     private func subtitle(_ project: Project) -> String {
-        guard let label = project.config?.componentsLabel else { return "Named colors, type, sizes and shared views for \(project.name)." }
-        if let product = project.config?.components?.product { return "\(label), import \(product)" }
-        if project.config?.components != nil { return "\(label), a folder in the app (not a package yet)" }
-        return label
+        guard let system else { return "\(project.name)'s design system: which control to use in which place." }
+        return "Baseline v\(system.version) · macOS \(system.minimumMacOS) and later"
+    }
+
+    /// Rare actions (LK11): the live window, a rescan, the code and the design document Hatch makes, Apple's pages.
+    private func moreMenu(_ project: Project, _ system: ComponentSystem) -> some View {
+        Menu {
+            Button { StageLauncher.shared.openDesigner(project: project, state: state) } label: { Label("Open Live Window", systemImage: "macwindow") }
+            Button { Task { await load() } } label: { Label("Rescan the App", systemImage: "arrow.clockwise") }
+            Divider()
+            Button { sheet = .code } label: { Label("Generated Code…", systemImage: "chevron.left.forwardslash.chevron.right") }
+            Button { sheet = .designDocument } label: { Label("Design Document…", systemImage: "doc.text") }
+            Button { sheet = .sources } label: { Label("Apple Sources…", systemImage: "book") }
+            if system.counts.provisional > 0 {
+                Divider()
+                Button { edit("agree every provisional role") { try $0.agree() } } label: { Label("Agree Every Provisional Role", systemImage: "checkmark.seal") }
+            }
+        } label: {
+            Label("More", systemImage: "ellipsis")
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.glass)
+        .controlSize(.large)
+        .fixedSize()
+        .help("More")
     }
 
     // MARK: Content
 
     @ViewBuilder private func content(_ project: Project) -> some View {
-        if let loaded, loaded.projectId == project.id {
+        if let loaded, loaded.projectId == project.id, section == .roles, let system = loaded.system {
+            // A table scrolls by itself, so the Roles section is not in the page's scroll view.
+            VStack(alignment: .leading, spacing: 6) {
+                if let message { Text(message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
+                ComponentsRolesTable(system: system, usesByRole: loaded.usesByRole, filter: filter, selection: $selectedRole)
+            }
+            .padding(8)
+            .floatingCard()
+        } else if let loaded, loaded.projectId == project.id {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    if let message { Text(message).font(.callout).foregroundStyle(.secondary).padding(.horizontal, 4) }
-                    systemCard(project, loaded)
-                    if !loaded.hasClone {
-                        noClone
-                    } else if loaded.label == nil {
-                        setupCard(project, loaded)
-                    } else if !loaded.folderExists {
-                        notMadeYet(project, loaded)
-                    } else if let catalog = loaded.catalog {
-                        if catalog.isEmpty { emptyCatalog(loaded) } else { sections(catalog) }
+                    if let message {
+                        Text(message).font(.callout).foregroundStyle(.secondary).padding(.horizontal, 4).textSelection(.enabled)
                     }
-                    if loaded.label != nil { decisionsCard(project) }
-                    if loaded.hasClone, let scan = loaded.scan, loaded.label != nil {
-                        otherSetsCard(project, loaded, scan)
-                        typedCard(project, loaded, scan)
+                    if loaded.componentsIsApp { repairCard(project, loaded) }
+                    if let system = loaded.system {
+                        section(project, loaded, system)
+                    } else {
+                        ComponentsStartCard(project: project, loaded: loaded, start: { startSystem(project, template: $0) })
+                        ComponentsOldScan(project: project, loaded: loaded, message: $message, reload: { Task { await load() } })
                     }
                 }
                 .padding(3)
-                .frame(maxWidth: 980, alignment: .leading)
+                .frame(maxWidth: 1040, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
             .scrollClipDisabled()
         } else {
             VStack(spacing: 8) {
                 ProgressView()
-                Text("Reading \(project.name)'s code…").foregroundStyle(.secondary)
+                Text("Reading \(project.name)'s design system…").foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .floatingCard()
         }
     }
 
-    // MARK: Design system
+    @ViewBuilder private func section(_ project: Project, _ loaded: Loaded, _ system: ComponentSystem) -> some View {
+        switch section {
+        case .overview:
+            ComponentsOverview(project: project, loaded: loaded, system: system, select: show(role:), edit: edit,
+                               addTickets: { addSystemTickets(project, system, loaded) })
+        case .roles:
+            EmptyView()
+        case .rules:
+            ComponentsRulesView(system: system, findings: loaded.findings, edit: edit, makeSetting: makeSetting)
+        case .foundations:
+            ComponentsFoundationsView(system: system, filter: filter)
+        case .health:
+            ComponentsHealthView(project: project, loaded: loaded, system: system, select: show(role:),
+                                 addTickets: { addSystemTickets(project, system, loaded) })
+            ComponentsOldScan(project: project, loaded: loaded, message: $message, reload: { Task { await load() } })
+        }
+    }
 
-    /// The design system (DS1 to DS12): where it stands and the way into the Components Designer, or how to start one.
-    @ViewBuilder private func systemCard(_ project: Project, _ loaded: Loaded) -> some View {
+    /// A components setting that names the app's own package (CP5): Hatch reads the app's controls by itself, so the
+    /// setting only misleads. One click clears it.
+    private func repairCard(_ project: Project, _ loaded: Loaded) -> some View {
         HXCard {
-            VStack(alignment: .leading, spacing: 10) {
-                if let system = loaded.system {
-                    HStack(alignment: .firstTextBaseline) {
-                        Label("Design system", systemImage: "square.grid.3x3.square").font(.headline)
-                        Spacer()
-                        Button { StageLauncher.shared.openDesigner(project: project, state: state) } label: {
-                            Label("Open Designer", systemImage: "paintbrush.pointed")
-                        }
-                        .buttonStyle(.glassProminent)
-                        .help("Judge and decide the roles with the real controls, in their places")
-                    }
-                    let c = system.counts
-                    Text("Baseline v\(system.version), macOS \(system.minimumMacOS) and later. \(system.roles.count) roles: \(c.agreed) agreed, \(c.provisional) provisional"
-                         + (c.inRedesign > 0 ? ", \(c.inRedesign) in redesign" : "") + ".")
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red).font(.title3)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("The components folder is the app itself").font(.headline)
+                    Text("\(loaded.label ?? "The folder") holds \(project.name)'s own code, not a set of shared components. Hatch reads the app's controls on its own, so this setting only misleads it. Clearing it changes nothing in the code.")
                         .foregroundStyle(.secondary)
-                    if !system.questions.isEmpty {
-                        Label("\(system.questions.count) to decide in the Designer", systemImage: "questionmark.circle").foregroundStyle(.orange)
-                    }
-                    if let cov = loaded.coverage, cov.total > 0 {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ProgressView(value: Double(cov.usingRole), total: Double(cov.total))
-                            Text("\(cov.usingRole) of \(cov.total) controls use a role; \(cov.matching) more already have their role's look. \(loaded.findings) to look at (hatch components check).")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    if let components = loaded.components ?? Optional(ComponentsConfig.suggested(appName: project.name)) {
-                        Button { addSystemTickets(project, system, components, loaded) } label: { Label("Add Tickets to Put It in Place", systemImage: "plus") }
-                            .buttonStyle(.glass)
-                            .help("Draft tickets: generate the role code, then move the screens onto the roles")
-                    }
-                } else if loaded.notebook == nil {
-                    Label("Design system", systemImage: "square.grid.3x3.square").font(.headline)
-                    Text("The design system lives in the project's notebook, which is not on this Mac yet.").foregroundStyle(.secondary)
-                } else {
-                    Label("No design system yet", systemImage: "square.grid.3x3.square").font(.headline)
-                    Text("Roles say which control to use in which place: the main action of a sheet, an action in a row, a toolbar item. "
-                         + "Hatch starts them from \(project.name)'s own most-used looks, or from a template, and asks where looks compete.")
-                        .foregroundStyle(.secondary)
-                    HStack {
-                        if loaded.hasClone {
-                            Button { startSystem(project, template: nil) } label: { Label("Start from the App", systemImage: "wand.and.stars") }
-                                .buttonStyle(.glassProminent)
-                                .help("Read the app's controls and propose a role for each kind, the most-used look first")
-                        }
-                        Menu {
-                            ForEach(ComponentTemplates.all) { t in
-                                Button(t.title) { startSystem(project, template: t) }
-                            }
-                        } label: { Label("Start from a Template", systemImage: "square.on.square") }
-                            .menuStyle(.button).menuIndicator(.hidden).buttonStyle(.glass).fixedSize()
-                    }
                 }
+                Spacer(minLength: 8)
+                Button("Clear the Setting") { clearComponentsSetting(project) }
+                    .buttonStyle(.bordered).controlSize(.small)
             }
         }
+    }
+
+    // MARK: Inspector
+
+    private var inspectorShown: Binding<Bool> {
+        Binding(get: { section == .roles && selectedRole != nil && system?.role(selectedRole ?? "") != nil },
+                set: { if !$0 { selectedRole = nil } })
+    }
+
+    @ViewBuilder private var inspector: some View {
+        if let system, let id = selectedRole, let role = system.role(id), let project {
+            ComponentRoleInspector(role: role, system: system, uses: loaded?.usesByRole[id] ?? 0,
+                                   findings: loaded?.findings.filter { $0.role == id } ?? [],
+                                   edit: edit, change: { sheet = .change(id) }, makeSetting: makeSetting,
+                                   openDesigner: { StageLauncher.shared.openDesigner(project: project, state: state) })
+        } else {
+            Text("Select a role").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func show(role id: String) {
+        section = .roles
+        selectedRole = id
+    }
+
+    // MARK: Sheets
+
+    @ViewBuilder private func sheetView(_ s: ComponentsSheet) -> some View {
+        if let project, let system {
+            switch s {
+            case .change(let id):
+                if let role = system.role(id) {
+                    ComponentChangeSheet(role: role, system: system, areas: project.config?.areas.map(\.name) ?? []) { what, place, area in
+                        fileChange(project, system, role: role, what: what, place: place, area: area)
+                    }
+                }
+            case .code:
+                ComponentCodeSheet(title: "Generated code",
+                                   detail: "What `hatch components generate` writes into \(loaded?.label ?? "the components folder"). An agent writes it on a ticket; Hatch never edits the app's code.",
+                                   files: ComponentCodegen.files(system, product: project.config?.components?.product),
+                                   addTitle: "Add a Ticket to Generate It") {
+                    let config = project.config?.components ?? ComponentsConfig.suggested(appName: project.name)
+                    let drafts = ComponentsSetup.systemDrafts(system, config: config, coverage: nil)
+                    if let count = state.addComponentTickets(projectId: project.id, drafts: Array(drafts.prefix(2))) {
+                        message = "Added \(count) draft tickets. Submit \"Generate the role code\" from the Desk."
+                    }
+                }
+            case .designDocument:
+                ComponentCodeSheet(title: "Design document",
+                                   detail: "The section Hatch keeps between its markers in the app's DESIGN.md (`hatch components design-md`). Text outside the markers is never touched.",
+                                   files: ["DESIGN.md": system.designDocument(updating: "")], addTitle: nil, add: nil)
+            case .sources:
+                ComponentSourcesSheet(system: system)
+            }
+        }
+    }
+
+    // MARK: Changing the system
+
+    /// One change to the system: written into the notebook and committed there (Hatch is the only writer, DS2), then
+    /// Decide is brought in step. A change that would leave the system with problems is refused with them.
+    private func edit(_ label: String, _ change: (inout ComponentSystem) throws -> Void) {
+        guard let project, let notebook = loaded?.notebook, var system = loaded?.system else { return }
+        do {
+            try change(&system)
+            let problems = system.problems()
+            guard problems.isEmpty else { message = "Not changed: " + problems.joined(separator: " "); return }
+            if !Snapshots.demoMode {
+                try system.write(notebook: notebook)
+                _ = try NotebookWriter.commit("Components: \(label)", in: notebook)
+                state.notebookChanged(projectId: project.id)
+                state.syncComponentQuestions(project: project, system: system)
+            }
+            loaded?.system = system
+            message = nil
+        } catch {
+            message = "Could not \(label): \(error)"
+        }
+    }
+
+    /// "Make it a setting" (NF5): the role or rule is marked, and a draft ticket builds the app setting.
+    private func makeSetting(_ id: String) {
+        guard let project else { return }
+        var draft: ComponentsSetup.Draft?
+        edit("make \(id) a setting") { draft = try $0.makeConfigurable(id) }
+        guard let draft, !Snapshots.demoMode, let count = state.addComponentTickets(projectId: project.id, drafts: [draft]) else { return }
+        message = "Added \(count) draft ticket for the setting. Read and submit it from the Desk."
+    }
+
+    /// Change… (CP3): a Proposal an agent answers with looks; it skips Iris, since Hatch wrote it.
+    private func fileChange(_ project: Project, _ system: ComponentSystem, role: ComponentRole, what: String, place: String?, area: String?) {
+        let draft = ComponentsSetup.changeDraft(role: role, what: what, place: place, area: area, system: system)
+        guard let t = state.perform("File the change", { try state.store.fileComponentChange(projectId: project.id, draft) }) else { return }
+        message = "Filed \(t.displayNumber). An agent offers two to four looks; you choose in Decide or in the Designer."
     }
 
     /// Writes a new system into the notebook and commits it there (Hatch is the only writer, DS2).
@@ -207,6 +348,7 @@ struct ComponentsView: View {
             }.value
             switch result {
             case .success(let system):
+                state.notebookChanged(projectId: project.id)
                 state.syncComponentQuestions(project: project, system: system)
                 message = "Started: \(system.roles.count) roles" + (system.questions.isEmpty ? "." : ", \(system.questions.count) to decide in the Designer or in Decide.")
             case .failure(let error):
@@ -216,288 +358,37 @@ struct ComponentsView: View {
         }
     }
 
-    private func addSystemTickets(_ project: Project, _ system: ComponentSystem, _ components: ComponentsConfig, _ loaded: Loaded) {
-        let drafts = ComponentsSetup.systemDrafts(system, config: components, coverage: loaded.coverage)
+    private func addSystemTickets(_ project: Project, _ system: ComponentSystem, _ loaded: Loaded) {
+        let config = loaded.components ?? ComponentsConfig.suggested(appName: project.name)
+        let drafts = ComponentsSetup.systemDrafts(system, config: config, coverage: loaded.coverage)
         guard let count = state.addComponentTickets(projectId: project.id, drafts: drafts) else { return }
         message = "Added \(count) draft tickets. Submit \"Generate the role code\" first."
     }
 
-    private var noClone: some View {
-        HXCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("No clone of the app on this Mac", systemImage: "folder.badge.questionmark").font(.headline)
-                Text("Hatch reads the components from the app's code. Choose its folder in Project settings.").foregroundStyle(.secondary)
-                Button("Project Settings") { state.navigate(to: .projects) }.buttonStyle(.glass)
-            }
-        }
+    private func clearComponentsSetting(_ project: Project) {
+        guard var config = project.config else { return }
+        config.components = nil
+        guard state.saveProject(key: project.key, name: project.name, config: config, label: "Clear the components setting") != nil else { return }
+        message = "Cleared. Hatch reads \(project.name)'s controls from the app itself."
+        Task { await load() }
     }
 
-    /// No components yet: use one Hatch found, or start them with draft tickets.
-    private func setupCard(_ project: Project, _ loaded: Loaded) -> some View {
-        let candidates = loaded.scan?.candidates ?? []
-        let start = ComponentsConfig.suggested(appName: project.name)
-        return HXCard {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("No components yet").font(.headline)
-                    Text("Named colors, type, sizes and shared views that every screen uses. With them, a Proposal shows \(project.name)'s real look, and agents reuse them instead of copying values from other views.")
-                        .foregroundStyle(.secondary)
-                }
-                if !candidates.isEmpty {
-                    Text("Found in the code").font(.subheadline.weight(.semibold))
-                    ForEach(Array(candidates.prefix(4).enumerated()), id: \.element.path) { index, c in
-                        HStack(spacing: 10) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(c.path).font(.callout.monospaced())
-                                Text(c.summary + (c.isPackage ? "" : " · a folder in the app, not a package")).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if index == 0 {
-                                Button("Use These") { use(project, c.config) }.buttonStyle(.glassProminent)
-                            } else {
-                                Button("Use") { use(project, c.config) }.buttonStyle(.bordered).controlSize(.small)
-                            }
-                        }
-                    }
-                    Divider()
-                }
-                HStack(alignment: .top, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Start them in \(Text(start.path).font(.callout.monospaced()))")
-                        Text(startDetail(loaded.scan)).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if candidates.isEmpty {
-                        Button("Start Components") { begin(project, start, scan: loaded.scan) }.buttonStyle(.glassProminent)
-                    } else {
-                        Button("Start") { begin(project, start, scan: loaded.scan) }.buttonStyle(.bordered).controlSize(.small)
-                    }
-                }
-            }
-        }
-    }
-
-    private func startDetail(_ scan: ComponentsScan?) -> String {
-        guard let scan else { return "Hatch adds a draft ticket for an agent to make a small local package." }
-        guard let typed = scan.typedSummary, !scan.isSmall else {
-            return "Adds one draft ticket: an agent makes a small local package with Apple's defaults given names. You submit it from the Desk."
-        }
-        return "The app types \(typed) into views. Adds draft tickets: one starts the package, then one per kind moves the values over. You submit them from the Desk."
-    }
-
-    private func notMadeYet(_ project: Project, _ loaded: Loaded) -> some View {
-        let ticket = ((try? state.store.tickets(TicketFilter(projectId: project.id))) ?? [])
-            .first { $0.title == ComponentsSetup.startTitle && $0.status != .done && $0.status != .dropped }
-        return HXCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("\(loaded.label ?? "") is not made yet", systemImage: "hammer").font(.headline)
-                Text(ticket == nil ? "The folder is not in the app's clone. Pull the latest code, or choose another folder in Project settings."
-                                   : "\(ticket!.displayNumber) \(ticket!.title) makes it. It is \(ticket!.status.displayName).")
-                    .foregroundStyle(.secondary)
-                HStack {
-                    if let ticket { Button("Open \(ticket.displayNumber)") { state.open(ticket) }.buttonStyle(.glass) }
-                    Button("Project Settings") { state.navigate(to: .projects) }.buttonStyle(.glass)
-                }
-            }
-        }
-    }
-
-    private func emptyCatalog(_ loaded: Loaded) -> some View {
-        HXCard {
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Nothing in \(loaded.label ?? "the components") yet", systemImage: "tray").font(.headline)
-                Text("Hatch looks for `static let` colors, fonts and sizes, public views and styles, and color sets in asset catalogs.")
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    // MARK: Sections
-
-    private func matches(_ name: String) -> Bool {
-        let f = filter.trimmingCharacters(in: .whitespaces)
-        return f.isEmpty || name.localizedCaseInsensitiveContains(f)
-    }
-
-    @ViewBuilder private func sections(_ c: ComponentCatalog) -> some View {
-        let colors = c.colors.filter { matches($0.name) }, fonts = c.fonts.filter { matches($0.name) }
-        let sizes = c.sizes.filter { matches($0.name) }, views = c.views.filter { matches($0.name) }
-        if (section == .all || section == .colors) && !colors.isEmpty { colorsCard(colors) }
-        if (section == .all || section == .type) && !fonts.isEmpty { typeCard(fonts) }
-        if (section == .all || section == .sizes) && !sizes.isEmpty { sizesCard(sizes) }
-        if (section == .all || section == .views) && !views.isEmpty { viewsCard(views) }
-    }
-
-    private func sectionTitle(_ title: String, _ count: Int) -> some View {
-        HStack(spacing: 6) {
-            Text(title).font(.headline)
-            Text("\(count)").font(.callout).monospacedDigit().foregroundStyle(.secondary)
-        }
-    }
-
-    private func colorsCard(_ colors: [ColorToken]) -> some View {
-        HXCard {
-            VStack(alignment: .leading, spacing: 10) {
-                sectionTitle("Colors", colors.count)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {
-                    ForEach(colors, id: \.name) { ComponentSwatch(token: $0) }
-                }
-            }
-        }
-    }
-
-    private func typeCard(_ fonts: [FontToken]) -> some View {
-        HXCard {
-            VStack(alignment: .leading, spacing: 10) {
-                sectionTitle("Type", fonts.count)
-                ForEach(fonts, id: \.name) { f in
-                    HStack(alignment: .firstTextBaseline, spacing: 14) {
-                        Text("The quick brown fox").font(ComponentRender.font(f)).lineLimit(1)
-                        Spacer(minLength: 12)
-                        VStack(alignment: .trailing, spacing: 1) {
-                            Text(f.name).font(.caption.monospaced()).textSelection(.enabled)
-                            Text(f.summary).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    .help(f.file)
-                }
-            }
-        }
-    }
-
-    private func sizesCard(_ sizes: [SizeToken]) -> some View {
-        let largest = max(1, sizes.map(\.value).max() ?? 1)
-        return HXCard {
-            VStack(alignment: .leading, spacing: 8) {
-                sectionTitle("Sizes", sizes.count)
-                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
-                    ForEach(sizes, id: \.name) { s in
-                        GridRow {
-                            Text(s.name).font(.caption.monospaced()).textSelection(.enabled)
-                            Text(ComponentRender.number(s.value)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                                .gridColumnAlignment(.trailing)
-                            Capsule().fill(.quaternary)
-                                .frame(width: max(2, 220 * CGFloat(min(s.value, largest) / largest)), height: 6)
-                        }
-                        .help(s.file)
-                    }
-                }
-            }
-        }
-    }
-
-    private func viewsCard(_ views: [ViewEntry]) -> some View {
-        HXCard {
-            VStack(alignment: .leading, spacing: 8) {
-                sectionTitle("Views and styles", views.count)
-                Text("Listed by name. Hatch never builds the app's code; a Proposal's Stage draws them live.")
-                    .font(.caption).foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 14, alignment: .top)], alignment: .leading, spacing: 6) {
-                    ForEach(views, id: \.name) { v in
-                        HStack(spacing: 6) {
-                            Image(systemName: v.kind == .view ? "square.on.square" : v.kind == .style ? "paintbrush" : "wand.and.rays")
-                                .foregroundStyle(.secondary).frame(width: 16)
-                            Text(v.name).font(.callout.monospaced()).lineLimit(1).textSelection(.enabled)
-                            Spacer(minLength: 0)
-                        }
-                        .help("\(v.kind.rawValue.capitalized) in \(v.file)")
-                    }
-                }
-            }
-        }
-    }
-
-    /// Decisions about the components that wait for the owner, and a Decide session with only those (DC9).
-    @ViewBuilder private func decisionsCard(_ project: Project) -> some View {
-        let waiting = (try? state.store.pendingDecisions(projectId: project.id, area: ComponentsSetup.area)) ?? []
-        if !waiting.isEmpty {
-            HXCard {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(waiting.count) decision\(waiting.count == 1 ? "" : "s") about components wait for you").font(.headline)
-                        Text(waiting.prefix(3).map(\.ticket.title).joined(separator: " · ")).font(.callout).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer()
-                    Button { state.openDecide(area: ComponentsSetup.area) } label: { Label("Decide", systemImage: "checklist") }
-                        .buttonStyle(.glassProminent)
-                }
-            }
-        }
-    }
-
-    /// Other sets of components in the app besides the one in use (CO9, CO13): a rescan offers the tickets, never
-    /// opens them by itself.
-    @ViewBuilder private func otherSetsCard(_ project: Project, _ loaded: Loaded, _ scan: ComponentsScan) -> some View {
-        let path = loaded.components?.path
-        let others = scan.candidates.filter { $0.path != path }
-        let chosen = scan.candidates.first { $0.path == path }
-        let open = Set(((try? state.store.tickets(TicketFilter(projectId: project.id))) ?? [])
-            .filter { $0.status != .done && $0.status != .dropped }.map(\.title))
-        if let chosen, !others.isEmpty {
-            let clashes = ComponentConflicts.clashes(chosen: chosen, others: others)
-            let merges = others.map { ComponentsSetup.mergeDraft(into: chosen, from: $0) }.filter { !open.contains($0.title) }
-            let question = ComponentsSetup.clashQuestion(clashes, chosen: chosen, usage: [:]).flatMap { open.contains($0.title) ? nil : $0 }
-            if !merges.isEmpty || question != nil {
-                HXCard {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Other components in the app").font(.headline)
-                        ForEach(others, id: \.path) { o in
-                            Text("\(Text(o.path).font(.callout.monospaced())) · \(o.summary)").font(.callout).foregroundStyle(.secondary)
-                        }
-                        Text(clashes.isEmpty ? "Merging them into \(chosen.path) keeps one place for every color, font and size."
-                                             : "\(clashes.count) name\(clashes.count == 1 ? " has" : "s have") two values. Hatch adds a Question for you to choose, then a ticket to merge.")
-                            .foregroundStyle(.secondary)
-                        Button("Add Tickets") { addConflictTickets(project, chosen: chosen, others: others, clashes: clashes, merges: merges, question: question != nil) }
-                            .buttonStyle(.bordered).controlSize(.small)
-                    }
-                }
-            }
-        }
-    }
-
-    private func addConflictTickets(_ project: Project, chosen: ComponentsCandidate, others: [ComponentsCandidate], clashes: [NameClash],
-                                    merges: [ComponentsSetup.Draft], question: Bool) {
-        let app = project.config?.repo(.app)?.localPath
-        Task {
-            let usage = await Task.detached { app.map { ComponentConflicts.usage(of: clashes.map(\.name), appRoot: $0) } ?? [:] }.value
-            let q = question ? ComponentsSetup.clashQuestion(clashes, chosen: chosen, usage: usage) : nil
-            guard let count = state.addComponentTickets(projectId: project.id, drafts: [q].compactMap { $0 } + merges) else { return }
-            message = "Added \(count) draft ticket\(count == 1 ? "" : "s")" + (q != nil ? ". The Question waits in Decide." : ". Read and submit them from the Desk.")
-        }
-    }
-
-    /// How many values views still type in, where, and a way to move them.
-    private func typedCard(_ project: Project, _ loaded: Loaded, _ scan: ComponentsScan) -> some View {
-        HXCard {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Typed into views").font(.headline)
-                if let summary = scan.typedSummary {
-                    Text("\(summary) are written straight into views instead of taken from the components. Agents get a note about new ones on every ready; the rest move when a ticket touches them, or all at once with the tickets below.")
-                        .foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(scan.typedFiles, id: \.path) { f in
-                            HStack(spacing: 8) {
-                                Text("\(f.count)").font(.caption).monospacedDigit().foregroundStyle(.secondary).frame(width: 30, alignment: .trailing)
-                                Text(f.path).font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)
-                            }
-                        }
-                    }
-                    if let components = loaded.components, loaded.folderExists {
-                        Button("Add Tickets to Move Them") { addMoves(project, components, scan) }
-                            .buttonStyle(.bordered).controlSize(.small)
-                    }
-                } else {
-                    Text("None. Every view takes its colors, type and sizes from the components.").foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    // MARK: Actions
+    // MARK: Loading
 
     private func load() async {
         guard let project else { return }
-        if Snapshots.demoMode { loaded = Self.demo(project); return }
+        if Snapshots.demoMode {
+            loaded = Self.demo(project)
+            // HATCH_COMPONENTS_SECTION=roles draws one section in a snapshot run, with a role selected.
+            switch ProcessInfo.processInfo.environment["HATCH_COMPONENTS_SECTION"] {
+            case "roles"?: section = .roles; selectedRole = "button.primary"
+            case "rules"?: section = .rules
+            case "foundations"?: section = .foundations
+            case "health"?: section = .health
+            default: break
+            }
+            return
+        }
         loading = true
         let config = project.config
         let result = await Task.detached { () -> Loaded in
@@ -507,98 +398,82 @@ struct ComponentsView: View {
             if let app { l.scan = ComponentsScanner.scan(appRoot: app, excluding: config?.components?.path) }
             if let folder = config?.componentsFolder, FileManager.default.fileExists(atPath: folder) {
                 l.folderExists = true
-                l.catalog = ComponentsScanner.catalog(at: folder, isPackage: config?.components.map { $0.product != nil } ?? true)
+                l.componentsIsApp = ComponentsScanner.isAppItself(folder: folder)
+                if !l.componentsIsApp {
+                    l.catalog = ComponentsScanner.catalog(at: folder, isPackage: config?.components.map { $0.product != nil } ?? true)
+                }
             }
             l.notebook = config?.repo(.notebook)?.localPath.flatMap { FileManager.default.fileExists(atPath: $0) ? $0 : nil }
             if let notebook = l.notebook { l.system = try? ComponentSystem.load(notebook: notebook) }
             if let system = l.system, let app {
-                let inv = ComponentInventoryScanner.scan(appRoot: app, excluding: [config?.components?.path].compactMap { $0 })
-                l.coverage = ComponentCheck.coverage(inv.uses, system: system)
-                l.findings = ComponentCheck.findings(inv.uses, system: system).count
+                // A components setting that is the app itself would hide the whole app from the check.
+                let excluded = l.componentsIsApp ? [] : [config?.components?.path].compactMap { $0 }
+                let checked = ComponentCheck.all(appRoot: app, excluding: excluded, system: system, areaOf: { config?.area(ofFile: $0) })
+                l.coverage = ComponentCheck.coverage(checked.inventory.uses, system: system)
+                l.findings = checked.findings
+                l.usesByRole = Self.usesByRole(checked.inventory.uses, system: system)
             }
             return l
         }.value
         guard self.project?.id == project.id else { return }
         loaded = result
         loading = false
-        if let system = result.system, !Snapshots.demoMode { state.syncComponentQuestions(project: project, system: system) }
+        if let system = result.system { state.syncComponentQuestions(project: project, system: system) }
     }
 
-    private func use(_ project: Project, _ components: ComponentsConfig) {
-        var config = project.config ?? ProjectConfig(name: project.name, ticketsRepo: "")
-        config.components = components
-        guard state.saveProject(key: project.key, name: project.name, config: config, label: "Use components") != nil else { return }
-        message = "\(components.path) are \(project.name)'s components now."
-        Task { await load() }
+    /// Each control counts for the role it uses, or the role its element, place and importance call for.
+    nonisolated static func usesByRole(_ uses: [ComponentInventory.Use], system: ComponentSystem) -> [String: Int] {
+        var out: [String: Int] = [:]
+        for u in uses {
+            guard let id = u.role ?? u.place.flatMap({ system.role(element: u.element, place: $0, importance: u.importance)?.id }) else { continue }
+            out[id, default: 0] += 1
+        }
+        return out
     }
 
-    private func begin(_ project: Project, _ components: ComponentsConfig, scan: ComponentsScan?) {
-        var config = project.config ?? ProjectConfig(name: project.name, ticketsRepo: "")
-        config.components = components
-        guard state.saveProject(key: project.key, name: project.name, config: config, label: "Start components") != nil,
-              let count = state.addComponentTickets(projectId: project.id,
-                                                    drafts: ComponentsSetup.drafts(appName: project.name, config: components, scan: scan,
-                                                                                   existing: scan?.candidates.map(\.path) ?? [])) else { return }
-        message = "Added \(count) draft ticket\(count == 1 ? "" : "s"). Read and submit them from the Desk."
-        Task { await load() }
-    }
-
-    private func addMoves(_ project: Project, _ components: ComponentsConfig, _ scan: ComponentsScan) {
-        guard let count = state.addComponentTickets(projectId: project.id, drafts: ComponentsSetup.moveDrafts(config: components, scan: scan, catalog: loaded?.catalog)) else { return }
-        message = "Added \(count) draft ticket\(count == 1 ? "" : "s"). Read and submit them from the Desk."
-    }
-
-    /// Sample components for snapshot runs, read with the real reader from a small made-up package.
+    /// A design system for snapshot runs: the Glass template with some roles agreed, a draft, a question and findings.
     static func demo(_ project: Project) -> Loaded {
-        var catalog = ComponentCatalog()
-        ComponentReader.read("""
-            public extension Color {
-                static let surface = Color(red: 0.97, green: 0.97, blue: 0.98)
-                static let surfaceRaised = Color(white: 1)
-                static let accent = Color(red: 0.17, green: 0.35, blue: 0.76)
-                static let accentSoft = Color(red: 0.17, green: 0.35, blue: 0.76, opacity: 0.16)
-                static let textSecondary = Color.secondary
-                static let separator = Color(nsColor: .separatorColor)
-                static let warning = Color(red: 0.70, green: 0.33, blue: 0.04)
-            }
-            public extension Font {
-                static let pageTitle = Font.system(.title2, weight: .semibold)
-                static let sectionTitle = Font.headline
-                static let rowTitle = Font.body
-                static let detail = Font.callout
-                static let badge = Font.system(size: 11, weight: .semibold, design: .rounded)
-            }
-            public enum Spacing { public static let xs: CGFloat = 4
-            }
-            public extension Spacing { static let s: CGFloat = 8; }
-            public enum Radius { public static let card: CGFloat = 10 }
-            public struct PrimaryButton: View { public var body: some View { EmptyView() } }
-            public struct Card<Content: View>: View { public var body: some View { EmptyView() } }
-            public struct StatusBadge: View { public var body: some View { EmptyView() } }
-            public struct QuietButtonStyle: ButtonStyle { }
-            public extension View { func cardBackground() -> some View { self } }
-            """, file: "Tokens.swift", requirePublic: true, into: &catalog)
-        catalog.sizes += [SizeToken(name: "Spacing.m", value: 12, file: "Tokens.swift"), SizeToken(name: "Spacing.l", value: 20, file: "Tokens.swift")]
-        let scan = ComponentsScan(candidates: [], typed: [.color: 3, .size: 41], typedFiles: [(path: "Sources/Editor/EditorToolbar.swift", count: 14),
-                                                                                       (path: "Sources/Connections/ConnectionRow.swift", count: 9)], swiftFiles: 412)
         var loaded = Loaded(projectId: project.id, components: project.config?.components, label: project.config?.componentsLabel,
-                            hasClone: true, folderExists: true, catalog: catalog, scan: scan)
-        // A design system started from the app: a few roles agreed, the rest provisional, questions open.
+                            hasClone: true, folderExists: true, catalog: nil,
+                            scan: ComponentsScan(candidates: [], typed: [.color: 3, .size: 41],
+                                                 typedFiles: [(path: "Sources/Editor/EditorToolbar.swift", count: 14),
+                                                              (path: "Sources/Connections/ConnectionRow.swift", count: 9)], swiftFiles: 412))
         var system = ComponentTemplates.glass.system(name: project.name)
+        system.version = 3
+        system.minimumMacOS = "15.0"
+        system.shell = ComponentShell(navigation: .splitView, scenes: ["window", "settings", "menuBarWindow"], inspector: true, toolbar: true, search: true)
         try? system.agree("button.primary"); try? system.agree("button.cancel"); try? system.agree("button.toolbar")
+        try? system.setLook("button.primary", recipe: ["style": "borderedProminent", "size": "large"])
         system.questions = [ComponentQuestion(id: "look.button.inRow", kind: .look, role: "button.inRow", title: "Row action: 3 looks in use",
                                               options: [.init(title: "bordered small", recipe: ["style": "bordered", "size": "small"], count: 29, effect: ""),
                                                         .init(title: "Not sure yet", effect: "")], reason: "Most used.")]
         loaded.system = system
         loaded.notebook = "/tmp/demo-notebook"
         loaded.coverage = (usingRole: 12, matching: 164, total: 412)
-        loaded.findings = 236
+        func f(_ kind: ComponentFinding.Kind, _ role: String?, _ file: String, _ line: Int, certain: Bool = true) -> ComponentFinding {
+            var x = ComponentFinding(kind: kind, element: "button", place: "listRow", role: role, file: file, line: line, look: "bordered", message: kind.title)
+            x.certain = certain
+            return x
+        }
+        loaded.findings = (0..<14).map { f(.couldUseRole, "button.inRow", "Sources/Desk/DeskRow.swift", 20 + $0) }
+            + (0..<6).map { f(.mismatch, "button.secondary", "Sources/Editor/EditorToolbar.swift", 40 + $0, certain: $0 < 3) }
+            + [f(.noRole, nil, "Sources/Settings/General.swift", 12), f(.rule, "titleCase", "Sources/Menus/Commands.swift", 33),
+               f(.rule, "ellipsis", "Sources/Menus/Commands.swift", 51)]
+        loaded.usesByRole = ["button.primary": 18, "button.cancel": 15, "button.inRow": 43, "button.toolbar": 27, "button.secondary": 31]
         return loaded
     }
 }
 
+/// The sheets the page opens.
+enum ComponentsSheet: Identifiable, Hashable {
+    case change(String), code, designDocument, sources
+    var id: String {
+        switch self { case .change(let r): "change-\(r)"; case .code: "code"; case .designDocument: "design"; case .sources: "sources" }
+    }
+}
+
 /// One color: its light value, and its dark one beside it when it has one.
-private struct ComponentSwatch: View {
+struct ComponentSwatch: View {
     let token: ColorToken
 
     var body: some View {
@@ -655,6 +530,18 @@ enum ComponentRender {
         return nil
     }
 
+    /// A color foundation's light and dark values, or the system color it names.
+    static func colors(_ f: ComponentFoundation) -> (light: Color, dark: Color?) {
+        func hex(_ s: String) -> Color? {
+            let d = s.dropFirst()
+            guard d.count >= 6, let v = UInt32(d.prefix(6), radix: 16) else { return nil }
+            let a = d.count >= 8 ? Double(UInt32(d.dropFirst(6).prefix(2), radix: 16) ?? 255) / 255 : 1
+            return Color(.sRGB, red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255, opacity: a)
+        }
+        if let light = f.light.flatMap(hex) { return (light, f.dark.flatMap(hex)) }
+        return (f.system.flatMap(systemColor) ?? .accentColor, nil)
+    }
+
     static func font(_ t: FontToken) -> Font {
         let weight = t.weight.flatMap(fontWeight)
         let design = t.design.flatMap(fontDesign)
@@ -667,6 +554,14 @@ enum ComponentRender {
             font = .system(t.style.flatMap(textStyle) ?? .body, design: design ?? .default)
             if let weight { font = font.weight(weight) }
         }
+        return font
+    }
+
+    /// A type foundation drawn in its own font.
+    static func font(_ f: ComponentFoundation) -> Font {
+        let design = f.design.flatMap(fontDesign) ?? .default
+        var font: Font = f.value.map { .system(size: $0, design: design) } ?? .system(f.system.flatMap(textStyle) ?? .body, design: design)
+        if let weight = f.weight.flatMap(fontWeight) { font = font.weight(weight) }
         return font
     }
 
@@ -689,26 +584,28 @@ enum ComponentRender {
 }
 
 extension AppState {
-    /// Adds draft tickets for the components (decision CO3): a leading Theme is the parent of the rest. Drafts,
-    /// so nothing starts until the owner reads and submits them. Returns how many were added.
-    @discardableResult
-    /// A prepared design system Question answered in Decide or on its page: the answer goes into the system in the
-    /// notebook and is committed there (Hatch is the only writer, DS2).
+    /// A prepared design system Question, or a change Proposal's look (CP3), answered in Decide or on its ticket: the
+    /// answer goes into the system in the notebook and is committed there (Hatch is the only writer, DS2).
     func applyComponentDecision(ticket: Ticket, choice: String) throws {
-        guard ticket.area == ComponentsSetup.area, ComponentsSetup.componentQuestionId(inBody: ticket.body) != nil,
+        let isChange = ticket.type == .proposal && ComponentsSetup.changedRole(inBody: ticket.body) != nil
+        guard ticket.area == ComponentsSetup.area, isChange || ComponentsSetup.componentQuestionId(inBody: ticket.body) != nil,
               let project = try store.project(id: ticket.projectId), let notebook = project.config?.repo(.notebook)?.localPath,
               var system = try ComponentSystem.load(notebook: notebook) else { return }
-        guard try system.applyDecided(ticketBody: ticket.body, choice: choice, decision: ticket.displayNumber) else { return }
+        guard try system.applyDecided(ticketBody: ticket.body, choice: choice, decision: ticket.displayNumber, ticketId: isChange ? ticket.id : nil) else { return }
         try system.write(notebook: notebook)
         _ = try NotebookWriter.commit("Components: \(ticket.title) (decided in \(ticket.displayNumber))", in: notebook)
     }
 
     /// Brings Decide in step with the design system's open questions.
     func syncComponentQuestions(project: Project, system: ComponentSystem) {
-        guard let changed = try? store.syncComponentQuestions(projectId: project.id, system: system), changed.added + changed.dropped > 0 else { return }
+        guard !Snapshots.demoMode,
+              let changed = try? store.syncComponentQuestions(projectId: project.id, system: system), changed.added + changed.dropped > 0 else { return }
         refresh()
     }
 
+    /// Adds draft tickets for the components (decision CO3): a leading Theme is the parent of the rest. Drafts,
+    /// so nothing starts until the owner reads and submits them. Returns how many were added.
+    @discardableResult
     func addComponentTickets(projectId: Int, drafts: [ComponentsSetup.Draft]) -> Int? {
         perform("Add components tickets") {
             var parent: Int?

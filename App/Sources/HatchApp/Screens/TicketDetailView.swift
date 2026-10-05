@@ -283,6 +283,10 @@ struct TicketDetailView: View {
 
     private func yourCallSpec(_ t: Ticket) -> BannerSpec {
         switch t.type {
+        case .proposal where ComponentsSetup.changedRole(inBody: t.body) != nil && !questionOptions.isEmpty:
+            // A design system change (CP3): its looks are options; the Designer draws them in place.
+            return BannerSpec(message: "Choose one of \(questionOptions.count - 1) looks for \(ComponentsSetup.changedRole(inBody: t.body) ?? "the role"), or keep today's.",
+                              primaryTitle: "Choose a Look", primary: .decideQuestion)
         case .proposal:
             let n = max(info.optionCount, 1)
             return BannerSpec(message: "Judge \(Format.count(n, "option")) against Today. Revision \(t.revision).",
@@ -528,7 +532,8 @@ struct QuestionDecisionSheet: View {
         let id = ticket.id, projectId = ticket.projectId, why = reason, kind = kind, prepared = ticket.status == .draft
         let done: Bool? = state.perform("Could not record the decision") {
             // A Question Hatch prepared is still a draft; it takes its path on the way (decision CO11).
-            if prepared { _ = try state.store.decidePreparedQuestion(ticketId: id, choice: choice, reason: why, kind: kind) }
+            if ticket.type == .proposal { _ = try state.store.decideComponentChange(ticketId: id, choice: choice, reason: why) }
+            else if prepared { _ = try state.store.decidePreparedQuestion(ticketId: id, choice: choice, reason: why, kind: kind) }
             else { _ = try state.store.decideQuestion(ticketId: id, choice: choice, reason: why, kind: kind) }
             try state.applyComponentDecision(ticket: ticket, choice: choice)
             return true
