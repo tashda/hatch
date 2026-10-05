@@ -80,6 +80,21 @@ public struct AppView: Codable, Identifiable, Hashable, Sendable {
     public var uses: Int
     public var usedIn: [String]
     public var bodyLines: Int
+    /// What it shows, read from its call sites: the texts passed to it ("Merged cleanly", "Build failed").
+    public var shows: [String] = []
+    /// The screens it is used on, with how many times: the screen a use sits in, by its plain name.
+    public var usedOn: [Screen] = []
+
+    public struct Screen: Codable, Hashable, Sendable {
+        public var name: String
+        public var count: Int
+        /// The file and line of the first use there, to open it.
+        public var file: String
+        public var line: Int
+    }
+
+    /// Its plain name: `HXProblemChip` → "Problem chip", `PlainChip` → "Plain chip".
+    public var title: String { AppViewScanner.plainName(id) }
 }
 
 /// A component of the app's own, proposed from views that draw alike: one name, a few variants.
@@ -137,22 +152,73 @@ public enum AppViewScanner {
         let names = Set(found.map(\.decl.name))
         // Uses of each view across the app, outside its own declaration.
         var uses: [String: (count: Int, files: Set<String>)] = [:]
+        var shows: [String: [String]] = [:]
+        var sites: [String: [(enclosing: [String], file: String, line: Int)]] = [:]
         for f in files {
             let s = SwiftStructure(f.text)
+            let here = found.filter { $0.file == f.path }
             for u in s.typeUses(names) {
-                let own = found.contains { $0.file == f.path && $0.decl.name == u.name && $0.decl.open < u.at && u.at < $0.decl.close }
+                let own = here.contains { $0.decl.name == u.name && $0.decl.open < u.at && u.at < $0.decl.close }
                 if own { continue }
                 uses[u.name, default: (0, [])].count += 1
                 uses[u.name, default: (0, [])].files.insert((f.path as NSString).lastPathComponent)
+                // The first text passed to it: what this use shows.
+                let paren = s.skipSpace(u.at + u.name.utf8.count, newlines: false)
+                if paren < s.b.count, s.b[paren] == UInt8(ascii: "("), s.partner[paren] > paren,
+                   let text = firstLiteral(s.rawText(paren + 1, s.partner[paren])), !(shows[u.name]?.contains(text) ?? false) {
+                    shows[u.name, default: []].append(text)
+                }
+                // The declarations around it, outermost first: the screen it sits on is among them.
+                let around = here.filter { $0.decl.open < u.at && u.at < $0.decl.close }.sorted { $0.decl.open < $1.decl.open }.map(\.decl.name)
+                sites[u.name, default: []].append((around, f.path, s.line(of: u.at)))
             }
         }
         var views: [AppView] = []
         for (d, s, file) in found {
             let u = uses[d.name] ?? (0, [])
-            views.append(answer(d, s, file: file, names: names, uses: u.count, usedIn: u.files.sorted()))
+            var v = answer(d, s, file: file, names: names, uses: u.count, usedIn: u.files.sorted())
+            v.shows = Array((shows[d.name] ?? []).prefix(6))
+            views.append(v)
+        }
+        // Where each view is used, by screen: the outermost screen around a use, else the view it sits in.
+        let kinds = Dictionary(views.map { ($0.id, $0.kind) }, uniquingKeysWith: { a, _ in a })
+        for i in views.indices {
+            var screens: [String: AppView.Screen] = [:]
+            for site in sites[views[i].id] ?? [] {
+                guard let name = site.enclosing.first(where: { kinds[$0] == .screen }) ?? site.enclosing.last,
+                      kinds[name] != .sample else { continue }
+                screens[name, default: .init(name: plainName(name, screen: true), count: 0, file: site.file, line: site.line)].count += 1
+            }
+            views[i].usedOn = screens.values.sorted { ($0.count, $1.name) > ($1.count, $0.name) }
         }
         views.sort { ($0.family ?? "~", $0.id) < ($1.family ?? "~", $1.id) }
         return AppViewModel(views: views, proposals: propose(views, measured: measured))
+    }
+
+    /// The first string literal in a call's arguments: what a use shows. Nil for an interpolated or empty one.
+    static func firstLiteral(_ args: String) -> String? {
+        guard let m = ComponentReader.re(#""([^"\\]{1,48})""#).firstMatch(in: args, range: NSRange(args.startIndex..., in: args)),
+              let r = Range(m.range(at: 1), in: args) else { return nil }
+        let text = String(args[r]).trimmingCharacters(in: .whitespaces)
+        return text.isEmpty || text.contains("\\(") ? nil : text
+    }
+
+    /// `plainName` for a view's type, as a function value.
+    public static func plainNameOf(_ type: String) -> String { plainName(type) }
+
+    /// A type's plain name: `HXProblemChip` → "Problem chip", `TicketDetailView` → "Ticket detail" (a screen drops its
+    /// View or Page). A short all-capitals prefix (HX) is the app's, not part of the name.
+    public static func plainName(_ type: String, screen: Bool = false) -> String {
+        var words = SwiftStructure.words(type)
+        if words.count > 1, let first = words.first, first.count <= 3,
+           type.prefix(first.count).allSatisfy(\.isUppercase), type.dropFirst(first.count).first?.isUppercase == true { words.removeFirst() }
+        if screen, words.count > 1, ["view", "page", "screen"].contains(words.last!) { words.removeLast() }
+        guard let first = words.first else { return type }
+        let special = ["github": "GitHub", "ios": "iOS", "macos": "macOS", "ui": "UI", "id": "ID", "url": "URL"]
+        let out = words.enumerated().map { i, w in special[w] ?? (i == 0 ? w.prefix(1).uppercased() + w.dropFirst() : w) }
+        _ = first
+        // Brand names the word splitter cuts in two.
+        return out.joined(separator: " ").replacingOccurrences(of: "Git hub", with: "GitHub").replacingOccurrences(of: "git hub", with: "GitHub")
     }
 
     /// The views of the app at a folder, read with the inventory's own file rules (tests, other platforms and samples
@@ -325,9 +391,16 @@ public enum AppViewScanner {
     /// look with a few sizes and becomes a pile of one-offs.
     public static let variantBudget = 3
 
-    /// Components of the app's own: one per family (chip, card, row…), interactive ones apart. Each distinct form is a
-    /// variant, its colours the variant's tones. A family with more forms than the budget gets a proposal of sizes
-    /// (small, medium, large) with each view's move, for the owner to accept or change.
+    /// Two looks that draw alike: the same shape, text style and weight, padding within a point. Colour is left out:
+    /// a colour that changes with what is shown is the same component.
+    static func drawnAlike(_ a: AppViewStyle, _ b: AppViewStyle) -> Bool {
+        a.shape == b.shape && a.font == b.font && (a.weight ?? "regular") == (b.weight ?? "regular")
+            && abs((a.paddingH ?? 0) - (b.paddingH ?? 0)) <= 1 && abs((a.paddingV ?? 0) - (b.paddingV ?? 0)) <= 1
+    }
+
+    /// The app's own components, as groups of views drawn alike within a family (chips, cards, rows…), interactive
+    /// ones apart. Each group is one proposal: these views look like one thing. The owner names it, merges groups,
+    /// moves a view out or keeps them apart; Hatch never decides.
     static func propose(_ views: [AppView], measured: [String: Double] = [:]) -> [AppComponentProposal] {
         let components = views.filter { $0.kind == .component }
         let wrappersOf = Dictionary(grouping: views.filter { $0.kind == .wrapper }, by: { $0.wraps ?? "" })
@@ -336,29 +409,44 @@ public enum AppViewScanner {
         for (key, members) in families {
             let family = key.replacingOccurrences(of: "+interactive", with: "")
             let interactive = key.hasSuffix("+interactive")
-            let forms = Dictionary(grouping: members, by: { $0.style.form })
-            var variants: [AppComponentProposal.Variant] = []
-            for (_, group) in forms.sorted(by: { ($0.value.reduce(0) { $0 + $1.uses }) > ($1.value.reduce(0) { $0 + $1.uses }) }) {
-                let tones = Set(group.map { toneName($0.style.tone, [$0]) }).sorted()
-                variants.append(.init(name: tones.joined(separator: " · "), members: group.map(\.id).sorted(), style: group.max { $0.uses < $1.uses }!.style))
+            var groups: [[AppView]] = []
+            for v in members.sorted(by: { ($0.uses, $1.id) > ($1.uses, $0.id) }) {
+                if let i = groups.firstIndex(where: { drawnAlike($0[0].style, v.style) }) { groups[i].append(v) } else { groups.append([v]) }
             }
-            let all = members.map(\.id).sorted() + members.flatMap { wrappersOf[$0.id]?.map(\.id) ?? [] }
-            let uses = members.reduce(0) { $0 + $1.uses }
-            let title = interactive ? (family == "chip" ? "Filter chip" : "Interactive \(family)") : family.capitalized
-            let sizes = sizeProposal(members, measured: measured).map { AppComponentProposal.Size(name: $0.name, members: $0.members, note: $0.note) }
-            var why: String
-            if variants.count == 1 {
-                why = members.count > 1 ? "\(members.count) views draw the same \(family): one component." : "One view with a look of its own: a component even when used once."
-            } else {
-                let proposed = sizes.map { "\($0.name): \($0.members.joined(separator: ", "))" + ($0.note.map { " (\($0))" } ?? "") }.joined(separator: "; ")
-                why = sizes.count < variants.count
-                    ? "\(members.count) views in \(variants.count) forms; \(sizes.count) would do. Proposed: \(proposed)."
-                    : "\(members.count) views, \(variants.count) forms: one component with \(variants.count) variants (\(proposed))."
+            for group in groups {
+                let lead = group[0]
+                let all = group.map(\.id) + group.flatMap { wrappersOf[$0.id]?.map(\.id) ?? [] }
+                let title = lead.title
+                let why = group.count > 1
+                    ? "These \(group.count) views are drawn alike: one \(family)?"
+                    : "A \(family) of its own."
+                out.append(AppComponentProposal(id: family + (interactive ? ".interactive" : "") + "." + lead.id, title: title, family: family,
+                                                interactive: interactive, members: all,
+                                                variants: [.init(name: "", members: group.map(\.id), style: lead.style)], sizes: [],
+                                                uses: group.reduce(0) { $0 + $1.uses }, why: why))
             }
-            out.append(AppComponentProposal(id: family + (interactive ? ".interactive" : ""), title: title, family: family, interactive: interactive,
-                                            members: all, variants: variants, sizes: sizes, uses: uses, why: why))
         }
-        return out.sorted { $0.uses > $1.uses }
+        return out.sorted { ($0.uses, $1.id) > ($1.uses, $0.id) }
+    }
+
+    /// How a group's views compare, in a sentence, and whether their looks are the same (then nothing is chosen).
+    public static func compare(_ views: [AppView]) -> (same: Bool, words: String) {
+        guard let first = views.first else { return (true, "") }
+        if views.count == 1 { return (true, first.style.form.isEmpty ? "Its look comes from the controls inside it." : "Drawn with \(first.style.form).") }
+        if views.dropFirst().allSatisfy({ drawnAlike($0.style, first.style) }) {
+            let tones = Set(views.map(\.style.tone)).count
+            return (true, "Drawn the same" + (first.style.form.isEmpty ? "" : ": \(first.style.form)") + "." + (tones > 1 ? " Only the colour differs." : ""))
+        }
+        var diffs: [String] = []
+        func differs(_ name: String, _ value: (AppViewStyle) -> String?) {
+            let values = views.map { value($0.style) ?? "none" }
+            if Set(values).count > 1 { diffs.append("\(name) (" + Array(NSOrderedSet(array: values)).compactMap { $0 as? String }.joined(separator: ", ") + ")") }
+        }
+        differs("text") { $0.font }
+        differs("weight") { $0.weight ?? "regular" }
+        differs("padding") { s in s.paddingH.map { "\(AppViewStyle.n($0))×\(AppViewStyle.n(s.paddingV ?? $0))" } }
+        differs("shape") { $0.shape }
+        return (false, "They differ in " + diffs.joined(separator: ", ") + ".")
     }
 
     /// Sizes for a family: forms that are nearly the same (same shape and text size, padding within a point) are one

@@ -87,15 +87,33 @@ final class ComponentModelTests: XCTestCase {
         XCTAssertEqual(hx.weight, "medium")
     }
 
-    func testChipsThatDifferInColourAreOneComponentWithTones() {
+    func testViewsDrawnAlikeAreOneProposalAndColourDoesNotSplitThem() {
         let model = AppViewScanner.scan(files: [("Chips.swift", chips)])
-        let chip = model.proposals.first { $0.family == "chip" }!
-        XCTAssertEqual(Set(chip.members), ["HXChip", "HXProblemChip", "PlainChip"])
-        let hx = chip.variants.first { $0.members.contains("HXChip") }!
-        XCTAssertEqual(Set(hx.members), ["HXChip", "HXProblemChip"], "same form, two colours")
-        XCTAssertTrue(hx.name.contains("critical") && hx.name.contains("by turn"))
-        // PlainChip differs only in weight: proposed as the same size, with the weight to pick.
-        XCTAssertTrue(chip.why.contains("weights differ"), chip.why)
+        let chips = model.proposals.filter { $0.family == "chip" }
+        // HXChip and HXProblemChip differ only in colour: one group. PlainChip is regular weight, not medium: apart.
+        XCTAssertEqual(Set(chips.first { $0.members.contains("HXChip") }!.members), ["HXChip", "HXProblemChip"])
+        XCTAssertEqual(chips.first { $0.members.contains("PlainChip") }!.members, ["PlainChip"])
+        let same = AppViewScanner.compare(model.views.filter { ["HXChip", "HXProblemChip"].contains($0.id) })
+        XCTAssertTrue(same.same); XCTAssertTrue(same.words.contains("Only the colour differs"), same.words)
+        let differ = AppViewScanner.compare(model.views.filter { ["HXChip", "PlainChip"].contains($0.id) })
+        XCTAssertFalse(differ.same); XCTAssertTrue(differ.words.contains("weight (medium, regular)"), differ.words)
+    }
+
+    func testWhatAViewShowsAndWhereItIsUsed() {
+        let screen = """
+        struct LogView: View {
+            var body: some View { VStack { HXChip(text: "Merged cleanly", turn: .finished); HXChip(text: name, turn: .you); PlainChip(text: "Default") } }
+        }
+        struct RunRow: View { var body: some View { HXChip(text: "Built", turn: .finished) } }
+        """
+        let model = AppViewScanner.scan(files: [("Chips.swift", chips), ("LogView.swift", screen)])
+        let hx = model.views.first { $0.id == "HXChip" }!
+        // The fixture's own SettingsSheet shows "a"; a variable (`name`) says nothing.
+        XCTAssertEqual(hx.shows, ["a", "Merged cleanly", "Built"], "literal texts, once each")
+        XCTAssertEqual(hx.usedOn.map(\.name), ["Log", "Run row", "Settings sheet"], "most used first")
+        XCTAssertEqual(hx.usedOn.first?.count, 2)
+        XCTAssertEqual(AppViewScanner.plainName("HXProblemChip"), "Problem chip")
+        XCTAssertEqual(AppViewScanner.plainName("GitHubSettingsPage", screen: true), "GitHub settings")
     }
 
     func testSizesAreProposedWhereTheyJumpNotByThirds() {

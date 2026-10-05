@@ -539,6 +539,12 @@ public final class StageServer: @unchecked Sendable {
                 let component = try body.string("component", max: 120), variant = try body.string("variant", max: 60)
                 settingDraft = try system.makeOwnSetting(component: component, variant: variant)
                 message = "Components: \(component) \(variant) becomes a setting"
+            case "ownDecide":
+                // Deciding a component (CM17): its name, its code name, whose look it keeps; the ticket that makes the code match.
+                let component = try body.string("component", max: 120)
+                settingDraft = try system.decideOwn(component: component, title: try body.string("title", max: 80), codeName: try body.string("codeName", max: 80),
+                                                    look: try body.optionalString("look", max: 120))
+                message = "Components: decide \(component)"
             case "ownRedesign":
                 // A redesign (CM18): a Proposal for an agent to build options as specimens.
                 let component = try body.string("component", max: 120)
@@ -588,6 +594,9 @@ public final class StageServer: @unchecked Sendable {
         case .rename(let c, let t): "rename \(c) to \(t)"
         case .agree(let c): "agree \(c)"
         case .remove(let c): "remove \(c)"
+        case .merge(let from, let into): "merge \(from) into \(into)"
+        case .apart(let c): "keep the views of \(c) apart"
+        case .notComponent(let views): "\(views.joined(separator: ", ")) are not components"
         }
     }
 

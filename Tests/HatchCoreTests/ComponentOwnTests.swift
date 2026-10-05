@@ -64,6 +64,51 @@ final class ComponentOwnTests: XCTestCase {
         XCTAssertTrue(s.readme().contains("use SwiftUI's badge instead"))
     }
 
+    private func two() throws -> ComponentSystem {
+        var s = ComponentTemplates.native.system(name: "Hatch")
+        try s.change(.accept(.init(id: "chip.HXChip", title: "Chip", family: "chip", interactive: false, members: ["HXChip", "HXProblemChip"],
+                                   variants: [], sizes: [], uses: 12, why: "")))
+        try s.change(.accept(.init(id: "chip.PlainChip", title: "Plain chip", family: "chip", interactive: false, members: ["PlainChip"],
+                                   variants: [], sizes: [], uses: 7, why: "")))
+        return s
+    }
+
+    /// The owner can merge a whole group (Tag) into another (Status chip).
+    func testMergingAGroupIntoAnother() throws {
+        var s = try two()
+        try s.change(.merge(from: "chip.PlainChip", into: "chip.HXChip"))
+        XCTAssertEqual(s.own.map(\.id), ["chip.HXChip"])
+        XCTAssertEqual(Set(s.own[0].views), ["HXChip", "HXProblemChip", "PlainChip"])
+        XCTAssertThrowsError(try s.change(.merge(from: "chip.HXChip", into: "chip.HXChip")))
+    }
+
+    func testDecidingNamesItKeepsALookAndDraftsTheTicket() throws {
+        var s = try two()
+        let draft = try s.decideOwn(component: "chip.HXChip", title: "Status chip", codeName: "StatusChip", look: "HXChip")
+        XCTAssertEqual(s.own("chip.HXChip")?.status, .agreed)
+        XCTAssertEqual(s.own("chip.HXChip")?.codeName, "StatusChip")
+        XCTAssertEqual(draft?.type, .tweak)
+        XCTAssertEqual(draft?.title, "Make HXChip and HXProblemChip one StatusChip")
+        XCTAssertTrue(draft!.body.contains("Keep the look of `HXChip`"))
+        // One view keeping its own name: nothing to change in the code.
+        XCTAssertNil(try s.decideOwn(component: "chip.PlainChip", title: "Tag", codeName: "PlainChip", look: nil))
+        XCTAssertThrowsError(try s.decideOwn(component: "chip.PlainChip", title: "Tag", codeName: "plain chip", look: nil), "a Swift type name")
+        // A view moved in later makes it a decision again.
+        try s.change(.move(views: ["PlainChip"], component: "chip.HXChip", variant: "standard"))
+        XCTAssertEqual(s.own("chip.HXChip")?.status, .provisional)
+    }
+
+    func testKeepingApartAndNotAComponent() throws {
+        var s = try two()
+        try s.change(.apart(component: "chip.HXChip"))
+        XCTAssertEqual(Set(s.own.map(\.id)), ["chip.HXChip", "chip.HXProblemChip", "chip.PlainChip"])
+        XCTAssertTrue(s.own.filter { $0.id != "chip.PlainChip" }.allSatisfy { $0.status == .agreed && $0.views.count == 1 })
+        try s.change(.notComponent(views: ["PlainChip"]))
+        XCTAssertNil(s.ownComponent(containing: "PlainChip"))
+        XCTAssertEqual(s.ownExcluded, ["PlainChip"])
+        XCTAssertEqual(try JSONDecoder().decode(ComponentSystem.self, from: s.encoded()).ownExcluded, ["PlainChip"])
+    }
+
     func testOlderSystemFilesStillLoad() throws {
         var s = ComponentTemplates.native.system(name: "Hatch")
         let data = try s.encoded()

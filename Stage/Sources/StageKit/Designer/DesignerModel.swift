@@ -56,6 +56,8 @@ final class LocalComponentsSource: ComponentsSource {
             let proposals = self.proposals
             try system.change(OwnChange.parse(body.objectValue ?? [:]) { id in proposals.first { $0.id == id } })
         case "ownSetting": _ = try system.makeOwnSetting(component: body["component"]?.stringValue ?? "", variant: body["variant"]?.stringValue ?? "")
+        case "ownDecide": _ = try system.decideOwn(component: body["component"]?.stringValue ?? "", title: body["title"]?.stringValue ?? "",
+                                                   codeName: body["codeName"]?.stringValue ?? "", look: body["look"]?.stringValue)
         case "ownRedesign": _ = try system.redesignOwn(component: body["component"]?.stringValue ?? "", what: body["what"]?.stringValue ?? "")
         case "agree": try system.agree(role)
         case "look": try system.setLook(role ?? "", recipe: recipe())
@@ -329,46 +331,102 @@ final class DesignerModel: ObservableObject {
         isPreviewing(role) && drawn(role.element, look(of: role)) != drawn(role.element, role.draft ?? role.recipe)
     }
 
-    /// The app's own components: the agreed ones, then what Hatch proposes for the views not in one yet, most used first.
+    // MARK: The app's own components (CM16 to CM20)
+
+    /// What is selected on a family's page: a group (a component, proposed or decided) or one view.
+    enum OwnPick: Hashable { case group(String), view(String) }
+    @Published var ownPick: OwnPick?
+    /// The last move or merge, with Undo beside it.
+    @Published var ownNotice: String?
+
+    /// Every group: the components in the system, then what Hatch proposes for the views not in one yet.
     var ownEntries: [OwnEntry] {
-        let claimed = Set(system.own.flatMap(\.views))
-        let agreed = system.own.map { c in
-            OwnEntry(id: c.id, title: c.title, family: c.family, agreed: true, component: c, proposal: appViews?.proposals.first { $0.id == c.id },
-                     sizes: c.variants.map { .init(name: $0.name, views: $0.views, note: weightNote($0.views), use: $0.use, setting: $0.setting) })
+        let claimed = Set(system.own.flatMap(\.views)), excluded = Set(system.ownExcluded)
+        let inSystem = system.own.map { c in
+            OwnEntry(id: c.id, title: c.title, family: c.family, inSystem: true, component: c, proposal: appViews?.proposals.first { $0.id == c.id }, views: c.views)
         }
         let proposed: [OwnEntry] = (appViews?.proposals ?? []).compactMap { p in
             guard system.own(p.id) == nil else { return nil }
-            let sizes = p.sizes.map { OwnEntry.Size(name: $0.name, views: $0.members.filter { !claimed.contains($0) }, note: $0.note, use: "", setting: nil) }
-                .filter { !$0.views.isEmpty }
-            return sizes.isEmpty ? nil : OwnEntry(id: p.id, title: p.title, family: p.family, agreed: false, component: nil, proposal: p, sizes: sizes)
+            let views = p.members.filter { !claimed.contains($0) && !excluded.contains($0) }
+            return views.isEmpty ? nil : OwnEntry(id: p.id, title: p.title, family: p.family, inSystem: false, component: nil, proposal: p, views: views)
         }
-        return agreed + proposed
+        return inSystem + proposed
     }
     func ownEntry(_ id: String) -> OwnEntry? { ownEntries.first { $0.id == id } }
-
-    /// What is still to settle in one size of an agreed component: views that differ in weight.
-    private func weightNote(_ views: [String]) -> String? {
-        let weights = Set(views.compactMap { ownView($0) }.filter { $0.style.font != nil }.map { $0.style.weight ?? "regular" })
-        return weights.count > 1 ? "weights differ (" + weights.sorted().joined(separator: ", ") + "): pick one" : nil
+    func ownGroups(_ family: String) -> [OwnEntry] {
+        ownEntries.filter { $0.family == family }.sorted { ($0.uses(self), $1.title) > ($1.uses(self), $0.title) }
+    }
+    /// The families in the sidebar: Chips, Cards…, and a component made on its own (Footer status) under its own name.
+    var ownFamilies: [(id: String, title: String, views: Int, toDecide: Int)] {
+        let groups = Dictionary(grouping: ownEntries, by: \.family)
+        return groups.map { f, es in (f, Self.familyTitle(f), es.reduce(0) { $0 + $1.views.count }, es.filter { !$0.decided }.count) }
+            .sorted { ($0.views, $1.title) > ($1.views, $0.title) }
+    }
+    static func familyTitle(_ f: String) -> String {
+        ["chip": "Chips", "card": "Cards", "row": "Rows", "header": "Headers", "label": "Labels", "badge": "Badges", "button": "Buttons", "bubble": "Bubbles",
+         "glyph": "Glyphs", "keycap": "Keycaps", "menu": "Menus", "field": "Fields", "section": "Sections", "thumbnail": "Thumbnails", "banner": "Banners",
+         "bar": "Bars", "empty state": "Empty states", "other": "Other"][f] ?? (f.prefix(1).uppercased() + f.dropFirst())
     }
     /// Kept for the snapshot run: Hatch's proposals.
     var ownProposals: [AppComponentProposal] { appViews?.proposals ?? [] }
 
-    /// A change to the app's own components; a proposal is accepted first, so any action works on it (CM17).
-    func changeOwn(_ entry: OwnEntry, _ body: [String: JSONValue], label: String) {
-        if !entry.agreed { run("own", .object(["op": .string("accept"), "component": .string(entry.id)]), label: "Accept \(entry.title)") }
-        guard system.own(entry.id) != nil else { return }
-        guard !body.isEmpty else { return }
-        run("own", .object(body.merging(["component": .string(entry.id)]) { a, _ in a }), label: label)
+    /// A proposal goes into the system the first time it is acted on; returns false when that failed.
+    @discardableResult private func ensure(_ entry: OwnEntry) -> Bool {
+        if !entry.inSystem { run("own", .object(["op": .string("accept"), "component": .string(entry.id)]), label: "Accept \(entry.title)") }
+        return system.own(entry.id) != nil
     }
-    func ownSetting(_ entry: OwnEntry, variant: String) {
-        changeOwn(entry, [:], label: "")
-        run("ownSetting", .object(["component": .string(entry.id), "variant": .string(variant)]), label: "\(entry.title) \(variant) as a setting")
+    private func own(_ body: [String: JSONValue], label: String) { run("own", .object(body), label: label) }
+    private func strings(_ v: [String]) -> JSONValue { .array(v.map { .string($0) }) }
+
+    /// Decide a group: its name, the view it becomes in the code, and whose look it keeps (CM17).
+    func decide(_ entry: OwnEntry, title: String, codeName: String, look: String?) {
+        guard ensure(entry) else { return }
+        var body: [String: JSONValue] = ["component": .string(entry.id), "title": .string(title), "codeName": .string(codeName)]
+        if let look { body["look"] = .string(look) }
+        run("ownDecide", .object(body), label: "Decide \(title)")
+    }
+    /// A whole group into another: Tag into Status chip.
+    func merge(_ entry: OwnEntry, into target: OwnEntry) {
+        guard entry.id != target.id, ensure(entry), ensure(target) else { return }
+        own(["op": .string("merge"), "component": .string(entry.id), "into": .string(target.id)], label: "Merge \(entry.title) into \(target.title)")
+        ownNotice = "\(entry.title) merged into \(target.title)."
+        ownPick = .group(target.id)
+    }
+    /// Views into another group.
+    func move(_ views: [String], to target: OwnEntry) {
+        guard !views.isEmpty, ensure(target) else { return }
+        for source in ownEntries where !source.inSystem && !Set(source.views).isDisjoint(with: views) { ensure(source) }
+        own(["op": .string("move"), "component": .string(target.id), "views": strings(views)], label: "Move to \(target.title)")
+        ownNotice = "\(views.joined(separator: ", ")) moved to \(target.title)."
+    }
+    /// Views out into a component of their own, listed under its own name (New Component…).
+    func newComponent(_ views: [String], from entry: OwnEntry, title: String) {
+        guard ensure(entry) else { return }
+        own(["op": .string("split"), "component": .string(entry.id), "title": .string(title), "views": strings(views)], label: "New component \(title)")
+        // The page stays put, as the other moves do; the new component is listed in the sidebar.
+        ownNotice = "\(views.joined(separator: ", ")) is now \(title), listed on its own in the sidebar."
+        ownPick = nil
+    }
+    func keepApart(_ entry: OwnEntry) {
+        guard ensure(entry) else { return }
+        own(["op": .string("apart"), "component": .string(entry.id)], label: "Keep \(entry.title) apart")
+        ownNotice = "\(entry.views.count) views kept apart: each is a component of its own."
+        ownPick = nil
+    }
+    func notComponent(_ views: [String]) {
+        own(["op": .string("notComponent"), "views": strings(views)], label: "Not a component")
+        ownNotice = "\(views.joined(separator: ", ")) left out: not a component."
+        ownPick = nil
     }
     func ownRedesign(_ entry: OwnEntry, what: String) {
-        changeOwn(entry, [:], label: "")
+        guard ensure(entry) else { return }
         run("ownRedesign", .object(["component": .string(entry.id), "what": .string(what)]), label: "Redesign \(entry.title)")
     }
+    /// The look a view of this group has in the app's gallery, for the picture beside it.
+    func compare(_ entry: OwnEntry) -> (same: Bool, words: String) {
+        AppViewScanner.compare(entry.views.compactMap { ownView($0) })
+    }
+
     func ownView(_ id: String) -> AppView? { appViews?.views.first { $0.id == id } }
     var ownQuestions: [AppView] { appViews?.views.filter { $0.kind == .unknown } ?? [] }
 
@@ -853,21 +911,16 @@ final class DesignerModel: ObservableObject {
     }
 }
 
-/// One of the app's own components as the Designer shows it: agreed in the system, or proposed by Hatch.
+/// One group of the app's own views as the Designer shows it: a component in the system, or Hatch's proposal.
 struct OwnEntry: Identifiable, Equatable {
-    struct Size: Equatable {
-        var name: String
-        var views: [String]
-        var note: String?
-        var use: String
-        var setting: String?
-    }
     var id: String
     var title: String
     var family: String
-    var agreed: Bool
+    /// In the system (accepted, moved, merged or decided), not only proposed.
+    var inSystem: Bool
     var component: OwnComponent?
     var proposal: AppComponentProposal?
-    var sizes: [Size]
-    var views: [String] { sizes.flatMap(\.views) }
+    var views: [String]
+    var decided: Bool { component?.status == .agreed }
+    @MainActor func uses(_ model: DesignerModel) -> Int { views.compactMap { model.ownView($0)?.uses }.reduce(0, +) }
 }

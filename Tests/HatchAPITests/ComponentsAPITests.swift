@@ -83,21 +83,28 @@ final class ComponentsAPITests: APITestCase {
         project = try store.upsertProject(key: "echo", name: "Echo", config: config)
 
         let client = StageClient(paths: paths)
-        var system = try client.changeComponents(project: "echo", action: "own", body: ["op": "accept", "component": "chip"])
-        XCTAssertEqual(Set(system.own("chip")!.views), ["HXChip", "PlainChip", "BigChip"])
-        XCTAssertTrue(commits.last!.contains("Chip becomes a component"), commits.last!)
+        // Each chip here is drawn differently (weight, size): three proposals. Merge them, then take PlainChip out again.
+        var system = try client.changeComponents(project: "echo", action: "own", body: ["op": "accept", "component": "chip.HXChip"])
+        XCTAssertEqual(system.own("chip.HXChip")?.views, ["HXChip"])
+        XCTAssertTrue(commits.last!.contains("becomes a component"), commits.last!)
+        for id in ["chip.PlainChip", "chip.BigChip"] {
+            _ = try client.changeComponents(project: "echo", action: "own", body: ["op": "accept", "component": .string(id)])
+            system = try client.changeComponents(project: "echo", action: "own", body: ["op": "merge", "component": .string(id), "into": "chip.HXChip"])
+        }
+        XCTAssertEqual(Set(system.own("chip.HXChip")!.views), ["HXChip", "PlainChip", "BigChip"])
+        system = try client.changeComponents(project: "echo", action: "own", body: ["op": "split", "component": "chip.HXChip", "title": "Tag", "views": ["PlainChip"]])
+        XCTAssertEqual(system.ownComponent(containing: "PlainChip")?.title, "Tag")
 
-        system = try client.changeComponents(project: "echo", action: "own", body: ["op": "split", "component": "chip", "title": "Big chip", "views": ["BigChip"]])
-        XCTAssertEqual(system.ownComponent(containing: "BigChip")?.title, "Big chip")
-        system = try client.changeComponents(project: "echo", action: "own", body: ["op": "native", "component": "chip.big-chip", "element": "badge"])
-        XCTAssertEqual(try ComponentSystem.load(notebook: notebook.path)?.own("chip.big-chip")?.native, "badge", "written to the notebook")
+        // Deciding drafts the ticket that makes the code match.
+        _ = try client.changeComponents(project: "echo", action: "ownDecide", body: ["component": "chip.HXChip", "title": "Status chip", "codeName": "StatusChip", "look": "HXChip"])
+        var filter = TicketFilter(); filter.projectId = projectId
+        XCTAssertEqual(try store.tickets(filter).first { $0.title == "Make HXChip and BigChip one StatusChip" }?.type, .tweak)
+        XCTAssertEqual(try ComponentSystem.load(notebook: notebook.path)?.own("chip.HXChip")?.status, .agreed, "written to the notebook")
 
         // A redesign is a Proposal ticket for an agent.
-        _ = try client.changeComponents(project: "echo", action: "ownRedesign", body: ["component": "chip", "what": "Calmer chips."])
-        var filter = TicketFilter(); filter.projectId = projectId
-        let redesign = try store.tickets(filter).first { $0.title == "Redesign the chip" }
+        _ = try client.changeComponents(project: "echo", action: "ownRedesign", body: ["component": "chip.HXChip", "what": "Calmer chips."])
+        let redesign = try store.tickets(filter).first { $0.title == "Redesign the status chip" }
         XCTAssertEqual(redesign?.type, .proposal)
-        XCTAssertTrue(redesign!.body.contains("specimens in the Stage"))
 
         // Only a component Hatch proposes from the app's code can be accepted.
         XCTAssertThrowsError(try client.changeComponents(project: "echo", action: "own", body: ["op": "accept", "component": "nothing"]))

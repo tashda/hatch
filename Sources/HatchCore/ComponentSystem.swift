@@ -39,6 +39,8 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
     public var minimumMacOS: String
     /// The app's own components, as much part of the system as SwiftUI's (CM16).
     public var own: [OwnComponent] = []
+    /// The app's views the owner says are not components: Hatch doesn't propose them again.
+    public var ownExcluded: [String] = []
 
     public static let referenceMacOS = "27.0"
 
@@ -50,7 +52,7 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         self.minimumMacOS = minimumMacOS; self.follows = follows; self.rules = rules
     }
 
-    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS, follows, rules, shell, own }
+    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS, follows, rules, shell, own, ownExcluded }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -67,6 +69,7 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         rules = try c.decodeIfPresent([ComponentRule].self, forKey: .rules) ?? []
         shell = try c.decodeIfPresent(ComponentShell.self, forKey: .shell)
         own = try c.decodeIfPresent([OwnComponent].self, forKey: .own) ?? []
+        ownExcluded = try c.decodeIfPresent([String].self, forKey: .ownExcluded) ?? []
     }
 
     /// True when macOS decides this element's look here: the role follows macOS, or a scope covers the element in this

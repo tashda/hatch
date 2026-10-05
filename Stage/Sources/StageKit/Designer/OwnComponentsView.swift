@@ -1,239 +1,454 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import HatchCore
 import HatchComponentKit
 
-// The app's own components (CM8 to CM15): what Hatch found in the app's code, grouped as it proposes, each view drawn by
-// the app itself, where it is used, and what SwiftUI offers instead. Nothing here is a guess: a view without a picture
-// says so, and a view Hatch could not place is a question.
+// The app's own components (concept `design-review/components-own-concept.html`, CM16 to CM20): a family's page with
+// one box per group, titled above it with what Hatch thinks and whether it waits for the owner; inside, today's views
+// that would become it. Selecting a group or a view fills the inspector with its details and its decision. A view is
+// moved by right-clicking it, by its Group pop-up, or by dragging it onto another box; a whole group merges the same way.
 
-/// One of the app's own components: Hatch's proposal or the agreed component, the native option, then each size with
-/// its views. Views are selected on their tiles; the bar above them offers only what applies to the selection (CM17).
-struct OwnComponentView: View {
+// MARK: The page
+
+struct OwnFamilyView: View {
     @ObservedObject var model: DesignerModel
-    let entry: OwnEntry
-    @State private var selected: Set<String> = []
-    @State private var splitting = false
-    @State private var newSize = false
-    @State private var name = ""
+    let family: String
+    @State private var naming: NamingRequest?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(counts).foregroundStyle(.secondary)
-                if !entry.agreed {
-                    HStack(alignment: .center, spacing: 12) {
-                        Label(summary, systemImage: "lightbulb").frame(maxWidth: .infinity, alignment: .leading)
-                        Button("Accept as Proposed") { model.changeOwn(entry, [:], label: "") }
-                            .buttonStyle(.borderedProminent)
-                    }
-                    .padding(12)
-                    .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                } else if let native = entry.component?.native {
-                    Label("Replaced by SwiftUI's \(ComponentElement.named(native)?.title.lowercased() ?? native): agents use it instead of these views.", systemImage: "applelogo")
-                        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-            }
-            NativeOption(model: model, family: entry.family)
-            selectionBar
-            ForEach(Array(entry.sizes.enumerated()), id: \.offset) { _, size in
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(entry.sizes.count == 1 && !entry.agreed ? "One size" : size.name.capitalized).font(.headline)
-                        Text("\(size.views.count) view\(size.views.count == 1 ? "" : "s")").font(.callout).foregroundStyle(.secondary)
-                        if let note = size.note {
-                            Text(note).font(.caption.weight(.semibold)).foregroundStyle(.orange)
-                                .padding(.horizontal, 6).padding(.vertical, 1).background(Color.orange.opacity(0.12), in: Capsule())
-                        }
-                        if size.setting != nil {
-                            Text("a setting").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                                .padding(.horizontal, 6).padding(.vertical, 1).background(.quaternary, in: Capsule())
-                        }
-                        Spacer()
-                        Button(allSelected(size) ? "Deselect" : "Select All") {
-                            if allSelected(size) { selected.subtract(size.views) } else { selected.formUnion(size.views) }
-                        }
-                        .buttonStyle(.link).font(.callout)
-                    }
-                    if !size.use.isEmpty { Text("Used for: \(size.use)").font(.callout).foregroundStyle(.secondary) }
-                    TileGrid(minWidth: 280) {
-                        ForEach(size.views, id: \.self) { id in
-                            OwnViewTile(model: model, id: id, selected: Binding(
-                                get: { selected.contains(id) },
-                                set: { if $0 { selected.insert(id) } else { selected.remove(id) } }))
-                        }
-                    }
-                }
-            }
-        }
-        .onChange(of: entry.id) { _, _ in selected = [] }
-        .popover(isPresented: $splitting) { namePopover(title: "Split Into a New Component", field: "Name", action: "Split") {
-            model.changeOwn(entry, ["op": .string("split"), "title": .string(name), "views": .array(selected.sorted().map { .string($0) })], label: "Split into \(name)")
-            selected = []
-        } }
-        .popover(isPresented: $newSize) { namePopover(title: "Move to a New Size", field: "Size name", action: "Move") {
-            move(to: name)
-        } }
-    }
-
-    /// Only what applies to the selection, as one bar: move to a size, split out, clear.
-    @ViewBuilder private var selectionBar: some View {
-        if !selected.isEmpty {
-            HStack(spacing: 10) {
-                Text("\(selected.count) selected").font(.callout.weight(.semibold))
-                Menu("Move to Size") {
-                    ForEach(entry.sizes.map(\.name), id: \.self) { n in
-                        Button(n.capitalized) { move(to: n) }.disabled(entry.sizes.first { $0.name == n }.map { Set($0.views).isSuperset(of: selected) } ?? false)
-                    }
-                    Divider()
-                    Button("New Size…") { name = ""; newSize = true }
-                }
-                .fixedSize()
-                .help("Consolidate: these views become this size of \(entry.title)")
-                Button("Split Into New Component…") { name = ""; splitting = true }
-                    .disabled(selected.count == entry.views.count)
-                    .help(selected.count == entry.views.count ? "Every view is selected: rename the component instead" : "These views become a component of their own")
+        let groups = model.ownGroups(family)
+        let views = groups.reduce(0) { $0 + $1.views.count }, toDecide = groups.filter { !$0.decided }.count
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(views) view\(views == 1 ? "" : "s") · Hatch suggests \(groups.count) component\(groups.count == 1 ? "" : "s")").foregroundStyle(.secondary)
                 Spacer()
-                Button("Clear") { selected = [] }.buttonStyle(.link)
+                Text(toDecide == 0 ? "All decided" : "\(toDecide) to decide").foregroundStyle(.secondary)
             }
-            .padding(10)
-            .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-    }
-
-    private func allSelected(_ size: OwnEntry.Size) -> Bool { !size.views.isEmpty && Set(size.views).isSubset(of: selected) }
-
-    private func move(to size: String) {
-        model.changeOwn(entry, ["op": .string("move"), "variant": .string(size), "views": .array(selected.sorted().map { .string($0) })],
-                        label: "Move \(selected.count) to \(size)")
-        selected = []
-    }
-
-    private func namePopover(title: String, field: String, action: String, _ run: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
-            TextField(field, text: $name).frame(width: 260)
-            HStack {
-                Spacer()
-                Button(action) { run(); splitting = false; newSize = false }
-                    .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            ForEach(groups) { entry in
+                OwnGroupBox(model: model, entry: entry, others: model.ownEntries.filter { $0.id != entry.id }) { views in
+                    naming = NamingRequest(views: views, from: entry.id)
+                }
             }
+            if let notice = model.ownNotice {
+                HStack {
+                    Text(notice)
+                    Spacer()
+                    Button("Undo") { model.undo(); model.ownNotice = nil }.buttonStyle(.link)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
+            }
+            let missing = groups.flatMap(\.views).filter { model.ownPicture($0, dark: false) == nil }.count
+            Text(missing == 0 ? (views == 1 ? "Drawn by the app's gallery." : "All \(views) views drawn by the app's gallery.")
+                 : missing == views ? (views == 1 ? "Not in the app's gallery yet, so Hatch can't draw it." : "None of these views is in the app's gallery yet, so Hatch can't draw them.")
+                 : "\(missing) of \(views) views \(missing == 1 ? "isn't" : "aren't") in the app's gallery yet, so Hatch can't draw \(missing == 1 ? "it" : "them").")
+                .font(.callout).foregroundStyle(.secondary)
         }
-        .padding(14)
-    }
-
-    private var counts: String {
-        let n = entry.views.count
-        let uses = entry.views.compactMap { model.ownView($0)?.uses }.reduce(0, +)
-        return "\(n) view\(n == 1 ? "" : "s") in the app · \(uses) use\(uses == 1 ? "" : "s") · " + (entry.agreed ? "\(entry.component?.status.title ?? "")" : "proposed by Hatch")
-    }
-
-    private var summary: String {
-        guard let p = entry.proposal else { return "" }
-        let n = p.members.count, forms = p.variants.count, sizes = p.sizes.count
-        if forms == 1 { return n == 1 ? "One view with a look of its own: a component, even used once." : "\(n) views draw the same \(p.family): already one component." }
-        if sizes < forms { return "\(n) views in \(forms) forms. Hatch proposes \(sizes == 1 ? "one size" : "\(sizes) sizes"): each view moves to the nearest." }
-        return "\(n) views in \(forms) forms: one component with \(forms) variants."
+        .onChange(of: family) { _, _ in model.ownPick = nil; model.ownNotice = nil }
+        .sheet(item: $naming) { req in
+            NewComponentSheet(views: req.views) { title in
+                if let from = model.ownEntry(req.from) { model.newComponent(req.views, from: from, title: title) }
+                naming = nil
+            } cancel: { naming = nil }
+        }
     }
 }
 
-/// What SwiftUI offers for this kind of component, drawn by SwiftUI, or said plainly when there is nothing.
-struct NativeOption: View {
+struct NamingRequest: Identifiable { var views: [String]; var from: String; var id: String { views.joined(separator: ",") } }
+
+/// One group: its title above its own box, never a row in it.
+struct OwnGroupBox: View {
+    @ObservedObject var model: DesignerModel
+    let entry: OwnEntry
+    let others: [OwnEntry]
+    let newComponent: ([String]) -> Void
+    @State private var targeted = false
+
+    private var selected: Bool { model.ownPick == .group(entry.id) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .lastTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(entry.title).font(.headline)
+                    Text(subtitle).font(.callout).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if entry.decided {
+                    Label("Decided", systemImage: "checkmark").font(.callout.weight(.semibold)).foregroundStyle(.green)
+                } else {
+                    Text("To decide").font(.callout.weight(.semibold)).foregroundStyle(.orange)
+                }
+            }
+            .padding(.horizontal, 6)
+            .contentShape(Rectangle())
+            .onTapGesture { model.ownPick = .group(entry.id) }
+            .draggable("group:" + entry.id)
+            .contextMenu { groupMenu }
+            VStack(spacing: 0) {
+                ForEach(Array(entry.views.enumerated()), id: \.element) { i, id in
+                    if i > 0 { Divider().padding(.leading, 14) }
+                    OwnRow(model: model, id: id, entry: entry, others: others, newComponent: newComponent)
+                }
+            }
+            .background(.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(selected || targeted ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: selected || targeted ? 2 : 0.5)
+            }
+            // Drop a view to move it here, or a group's title to merge that group in.
+            .dropDestination(for: String.self) { items, _ in
+                for item in items {
+                    if item.hasPrefix("group:"), let from = model.ownEntry(String(item.dropFirst(6))) { model.merge(from, into: entry) }
+                    else if !entry.views.contains(item) { model.move([item], to: entry) }
+                }
+                return true
+            } isTargeted: { targeted = $0 }
+        }
+    }
+
+    private var subtitle: String {
+        if entry.decided, let c = entry.component {
+            return (c.codeName.map { "\($0) · " } ?? "") + (c.ticket == nil ? "decided" : "a ticket makes it so in the code")
+        }
+        return entry.views.count > 1 ? "Hatch thinks these \(entry.views.count) views are one thing" : "Hatch thinks this is a component of its own"
+    }
+
+    @ViewBuilder private var groupMenu: some View {
+        let targets = others.filter { $0.family == entry.family }
+        if !targets.isEmpty {
+            Menu("Merge Into") { ForEach(targets) { t in Button(t.title) { model.merge(entry, into: t) } } }
+        }
+        if entry.views.count > 1 { Button("Keep Them Apart") { model.keepApart(entry) } }
+    }
+}
+
+/// One view in a group: its picture, its name in the code with what it shows, and how much it is used.
+struct OwnRow: View {
+    @ObservedObject var model: DesignerModel
+    let id: String
+    let entry: OwnEntry
+    let others: [OwnEntry]
+    let newComponent: ([String]) -> Void
+
+    var body: some View {
+        let view = model.ownView(id)
+        let selected = model.ownPick == .view(id)
+        HStack(spacing: 14) {
+            OwnThumb(model: model, id: id).frame(width: 190, alignment: .leading)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(id).fontWeight(.medium)
+                Text(shows(view)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 1) {
+                Text("\(view?.uses ?? 0) use\(view?.uses == 1 ? "" : "s")")
+                Text("\(view?.usedOn.count ?? 0) screen\(view?.usedOn.count == 1 ? "" : "s")").foregroundStyle(.secondary)
+            }
+            .monospacedDigit()
+        }
+        .padding(.horizontal, 14).frame(height: 50)
+        .background(selected ? Color.accentColor.opacity(0.14) : .clear)
+        .contentShape(Rectangle())
+        .onTapGesture { model.ownPick = .view(id) }
+        .draggable(id)
+        .contextMenu {
+            Menu("Move To") {
+                ForEach(others.filter { $0.family == entry.family }) { t in Button(t.title) { model.move([id], to: t) } }
+                Divider()
+                Button("New Component…") { newComponent([id]) }
+            }
+            Button("Not a Component") { model.notComponent([id]) }
+            Divider()
+            if let view { Button("Open \((view.file as NSString).lastPathComponent):\(view.line)") { model.openInXcode(view.file, line: view.line) } }
+        }
+    }
+
+    private func shows(_ v: AppView?) -> String {
+        guard let v else { return "" }
+        if !v.shows.isEmpty { return "Shows " + v.shows.prefix(3).map { "“\($0)”" }.joined(separator: ", ") }
+        return v.usedOn.first.map { "On \($0.name)" } ?? "Not used outside its file"
+    }
+}
+
+/// A view's picture from the app's gallery, blended into whatever is behind it; or a plain note when it isn't drawn.
+struct OwnThumb: View {
+    @ObservedObject var model: DesignerModel
+    let id: String
+    var height: CGFloat = 22
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        if let image = model.ownPicture(id, dark: scheme == .dark) {
+            // Always the same height, so a wide view is cut at the column (and fades) rather than shrunk to nothing.
+            Image(nsImage: image).resizable().interpolation(.high)
+                .frame(width: image.size.height > 0 ? height * image.size.width / image.size.height : height, height: height)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).clipped()
+                // A view wider than the column fades out instead of being cut.
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0.8), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
+                // Last, so the gallery's own background melts into the box behind it (a mask applied after would isolate it).
+                .blendMode(scheme == .dark ? .lighten : .multiply)
+        } else {
+            Text("Not drawn yet").font(.callout).foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// Name a component made from views of another.
+struct NewComponentSheet: View {
+    let views: [String]
+    let create: (String) -> Void
+    let cancel: () -> Void
+    @State private var name = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("New Component").font(.headline)
+            Text("\(views.joined(separator: ", ")) leaves this group and becomes a component of its own, listed in the sidebar. Nothing in your app changes.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            TextField("Name", text: $name, prompt: Text("Footer status"))
+            HStack {
+                Spacer()
+                Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
+                Button("Create") { create(name.trimmingCharacters(in: .whitespaces)) }
+                    .keyboardShortcut(.defaultAction).disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20).frame(width: 400)
+    }
+}
+
+// MARK: The inspector
+
+struct OwnInspector: View {
     @ObservedObject var model: DesignerModel
     let family: String
 
     var body: some View {
-        let native = AppViewScanner.nativeOption(family: family)
-        HStack(alignment: .center, spacing: 16) {
-            if let e = native.element {
-                RecipeControl(element: e, recipe: [:], system: model.system, importance: .other,
-                              sample: SampleWords.content(.other, place: "page", base: model.sample))
-                    .allowsHitTesting(false)
-                    .fitted(1, maxHeight: 90)
-                    .frame(width: 220)
-            } else {
-                Image(systemName: "applelogo").font(.title2).foregroundStyle(.tertiary).frame(width: 60)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                switch model.ownPick {
+                case .group(let id)?:
+                    if let entry = model.ownEntry(id) { OwnGroupInspector(model: model, entry: entry).id(entry.id + entry.views.joined()) }
+                case .view(let id)?:
+                    if let view = model.ownView(id) { OwnViewInspector(model: model, view: view) }
+                case nil:
+                    let groups = model.ownGroups(family)
+                    Text(DesignerModel.familyTitle(family)).font(.title3.weight(.semibold))
+                    Text("\(groups.filter { !$0.decided }.count) to decide").foregroundStyle(.secondary).padding(.top, 2)
+                    InspectorHeading("Next")
+                    Text("Select a group to decide it, or a view to see where it's used. Right-click a view to move it; drag a group's title onto another to merge them.")
+                        .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
             }
-            VStack(alignment: .leading, spacing: 3) {
-                Text("The native option").font(.callout.weight(.semibold))
-                Text(native.words).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
     }
 }
 
-/// One of the app's views: its picture as the app draws it, its name, its form, where it is used. Clicking the tile
-/// selects it for the component's actions.
-struct OwnViewTile: View {
+private struct InspectorHeading: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View { Text(text.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.tertiary).padding(.top, 16).padding(.bottom, 6) }
+}
+
+/// The decision for one group: today's views, the one component after, whether the look changes, what happens.
+struct OwnGroupInspector: View {
     @ObservedObject var model: DesignerModel
-    let id: String
-    var selected: Binding<Bool>? = nil
+    let entry: OwnEntry
+    @State private var name = ""
+    @State private var codeName = ""
+    @State private var codeEdited = false
+    @State private var look: String?
+    @State private var redesigning = false
+    @State private var what = ""
 
     var body: some View {
-        let view = model.ownView(id)
-        let on = selected?.wrappedValue == true
+        let views = entry.views
+        let compare = model.compare(entry)
+        let changesCode = views.count > 1 || codeName != views.first
+        VStack(alignment: .leading, spacing: 0) {
+            if entry.decided, let c = entry.component {
+                Text(c.title).font(.title3.weight(.semibold))
+                Text("Decided · \(views.count) view\(views.count == 1 ? "" : "s") today").foregroundStyle(.secondary).padding(.top, 2)
+                InspectorHeading("In the code")
+                Text(c.ticket.map { "“\($0)”: an agent makes it so; you review it in Decide." } ?? "\(c.codeName ?? c.title), as it is.")
+                    .fixedSize(horizontal: false, vertical: true)
+                InspectorHeading("For agents")
+                Text("Use \(c.codeName ?? c.title) wherever this is shown. The README says so.").foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack { Button("Redesign…") { what = ""; redesigning = true }.popover(isPresented: $redesigning) { redesignPopover } }.padding(.top, 18)
+            } else {
+                Text(views.count > 1 ? "Make \(list(views)) one component?" : "Make \(views[0]) a component?")
+                    .font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                InspectorHeading("Today · \(views.count) view\(views.count == 1 ? "" : "s")")
+                OwnPictureList(model: model, ids: views)
+                if !compare.same {
+                    InspectorHeading("The look")
+                    Text(compare.words + " Which one does it keep?").fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(views, id: \.self) { id in
+                            Button { look = id } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: look == id ? "largecircle.fill.circle" : "circle").foregroundStyle(look == id ? Color.accentColor : .secondary)
+                                    OwnThumb(model: model, id: id, height: 18)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+                InspectorHeading("After · 1 component")
+                Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
+                    GridRow { Text("Name").foregroundStyle(.secondary); TextField("Name", text: $name) }
+                    GridRow { Text("In code").foregroundStyle(.secondary)
+                        TextField("Code name", text: Binding(get: { codeName }, set: { codeName = $0; codeEdited = true })).font(.body.monospaced()) }
+                }
+                Text(compare.same ? (views.count > 1 ? "The look doesn't change: they're drawn alike today." : "Its look stays as it is.")
+                     : (look == nil ? "Choose the look it keeps above." : "It keeps the look of \(look!)."))
+                    .foregroundStyle(.secondary).padding(.top, 8).fixedSize(horizontal: false, vertical: true)
+                InspectorHeading("What happens")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("1. Agents use \(name.isEmpty ? "it" : name) wherever this is shown.")
+                    Text(changesCode ? "2. Hatch files a ticket: the code gets one \(codeName.isEmpty ? "view" : codeName) and every use moves to it. You review it in Decide."
+                         : "2. Nothing in the code changes: \(codeName) stays as it is.")
+                    if changesCode { Text("3. Your app doesn't change until that ticket is done.") }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 8) {
+                    Button { model.decide(entry, title: name, codeName: codeName, look: compare.same ? nil : look) } label: {
+                        Text(views.count > 1 ? "Make One \(name.isEmpty ? "Component" : name)" : "Make It a Component").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || codeName.isEmpty || (!compare.same && look == nil))
+                    if views.count > 1 {
+                        Button { model.keepApart(entry) } label: { Text("Keep Them Apart").frame(maxWidth: .infinity) }.controlSize(.large)
+                    } else {
+                        Button { model.notComponent(views) } label: { Text("Not a Component").frame(maxWidth: .infinity) }.controlSize(.large)
+                    }
+                }
+                .padding(.top, 18)
+                let targets = model.ownEntries.filter { $0.family == entry.family && $0.id != entry.id }
+                if !targets.isEmpty {
+                    Menu("Merge Into Another Group") { ForEach(targets) { t in Button(t.title) { model.merge(entry, into: t) } } }
+                        .menuStyle(.borderlessButton).fixedSize().padding(.top, 12)
+                }
+            }
+        }
+        .onAppear {
+            name = entry.component?.title ?? entry.title
+            codeName = entry.component?.codeName ?? (entry.views.count == 1 ? entry.views[0] : Self.typeName(name))
+            look = entry.component?.look
+        }
+        .onChange(of: name) { _, new in if !codeEdited && entry.views.count > 1 { codeName = Self.typeName(new) } }
+    }
+
+    private var redesignPopover: some View {
         VStack(alignment: .leading, spacing: 10) {
-            OwnPicture(model: model, id: id)
-            HStack(alignment: .top, spacing: 8) {
-                if let selected {
-                    Image(systemName: selected.wrappedValue ? "checkmark.circle.fill" : "circle")
-                        .font(.title3).foregroundStyle(selected.wrappedValue ? Color.accentColor : Color.secondary)
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(id).font(.callout.monospaced().weight(.medium))
-                    if let view, !view.style.form.isEmpty { Text(view.style.form).font(.caption).foregroundStyle(.secondary) }
-                    if let view {
-                        Text(view.uses == 0 ? "Not used outside its file" : "Used \(view.uses) time\(view.uses == 1 ? "" : "s") in " + view.usedIn.prefix(3).joined(separator: ", ")
-                             + (view.usedIn.count > 3 ? " and \(view.usedIn.count - 3) more" : ""))
-                            .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        Button("Open " + (view.file as NSString).lastPathComponent + ":" + String(view.line)) { model.openInXcode(view.file, line: view.line) }
-                            .buttonStyle(.link).font(.caption)
-                    }
-                }
-            }
+            Text("Redesign \(entry.title)").font(.headline)
+            Text("An agent builds two or three options, and the native one where SwiftUI has it, as specimens; you pick.").font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField("What should change?", text: $what, axis: .vertical).lineLimit(2...5).frame(width: 300)
+            HStack { Spacer(); Button("Ask for Options") { model.ownRedesign(entry, what: what); redesigning = false }
+                .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(what.trimmingCharacters(in: .whitespaces).isEmpty) }
         }
         .padding(14)
-        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(on ? Color.accentColor.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(on ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: on ? 2 : 0.5) }
-        .contentShape(Rectangle())
-        .onTapGesture { selected?.wrappedValue.toggle() }
+    }
+
+    private func list(_ views: [String]) -> String {
+        let names = views
+        return names.count <= 2 ? names.joined(separator: " and ") : names.dropLast().joined(separator: ", ") + " and " + names.last!
+    }
+
+    /// "Status chip" → StatusChip.
+    static func typeName(_ title: String) -> String {
+        title.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined()
     }
 }
 
-/// A view's picture in the Designer's appearance (both side by side in Both), or an honest gap.
-struct OwnPicture: View {
+/// A few views as a list: the picture, and the name in the code at the end.
+struct OwnPictureList: View {
     @ObservedObject var model: DesignerModel
-    let id: String
+    let ids: [String]
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(ids.enumerated()), id: \.element) { i, id in
+                if i > 0 { Divider() }
+                HStack(spacing: 10) {
+                    OwnThumb(model: model, id: id, height: 18)
+                    Text(id).font(.callout).foregroundStyle(.secondary).fixedSize()
+                }
+                .padding(.horizontal, 10).frame(minHeight: 36)
+            }
+        }
+        .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
+    }
+}
+
+/// One view: its pictures, its group, what it shows, every screen it is used on.
+struct OwnViewInspector: View {
+    @ObservedObject var model: DesignerModel
+    let view: AppView
 
     var body: some View {
-        let schemes: [Bool] = model.appearance == .both ? [false, true] : [model.appearance == .dark]
-        let images = schemes.compactMap { model.ownPicture(id, dark: $0) }
-        Group {
-            if images.isEmpty {
-                // Not drawn yet: Hatch asks the gallery for it; nothing is drawn from memory.
-                Label("Not in the app's gallery yet", systemImage: "photo.badge.exclamationmark")
-                    .font(.caption).foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, minHeight: 64)
-                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(style: StrokeStyle(lineWidth: 0.5, dash: [4])).foregroundStyle(.tertiary) }
-            } else {
-                HStack(alignment: .top, spacing: 8) {
-                    ForEach(Array(images.enumerated()), id: \.offset) { _, image in
-                        Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: min(image.size.width, 520), maxHeight: 180, alignment: .leading)
+        let entry = model.ownEntries.first { $0.views.contains(view.id) }
+        VStack(alignment: .leading, spacing: 0) {
+            Text(view.id).font(.title3.weight(.semibold))
+            Text("\(view.uses) use\(view.uses == 1 ? "" : "s") on \(view.usedOn.count) screen\(view.usedOn.count == 1 ? "" : "s")").foregroundStyle(.secondary).padding(.top, 2)
+            VStack(spacing: 6) {
+                ForEach([false, true], id: \.self) { dark in
+                    if let image = model.ownPicture(view.id, dark: dark) {
+                        Image(nsImage: image).resizable().aspectRatio(contentMode: .fit).frame(maxHeight: 24, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(10)
+                            .background(dark ? Color(white: 0.12) : .white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.top, 12)
+            if let entry {
+                InspectorHeading("Group")
+                Picker("Group", selection: Binding(get: { entry.id }, set: { id in
+                    if let t = model.ownEntry(id) { model.move([view.id], to: t) }
+                })) {
+                    ForEach(model.ownEntries.filter { $0.family == entry.family }) { Text($0.title).tag($0.id) }
+                }
+                .labelsHidden()
+            }
+            if !view.shows.isEmpty {
+                InspectorHeading("Shows")
+                Text(view.shows.map { "“\($0)”" }.joined(separator: ", ")).fixedSize(horizontal: false, vertical: true)
+            }
+            InspectorHeading("Used on")
+            if view.usedOn.isEmpty {
+                Text("Not used outside its file.").foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(view.usedOn.enumerated()), id: \.offset) { i, screen in
+                        if i > 0 { Divider() }
+                        Button { model.openInXcode(screen.file, line: screen.line) } label: {
+                            HStack { Text(screen.name); Spacer(); Text("\(screen.count)").foregroundStyle(.secondary).monospacedDigit() }
+                                .padding(.horizontal, 10).frame(height: 28).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open the first use on \(screen.name) in Xcode")
+                    }
+                }
+                .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
+            }
+            Button("Open \((view.file as NSString).lastPathComponent):\(view.line)") { model.openInXcode(view.file, line: view.line) }
+                .buttonStyle(.link).padding(.top, 14)
         }
     }
 }
+
+// MARK: Not Sure Yet
 
 /// The views Hatch could not place: each with Hatch's reason and its picture, to be answered once.
 struct OwnQuestionsView: View {
@@ -241,121 +456,24 @@ struct OwnQuestionsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Hatch read these views but can't tell what they are from their code. Each answer is kept, so it is asked once.")
-                .foregroundStyle(.secondary)
-            TileGrid(minWidth: 320) {
-                ForEach(model.ownQuestions) { v in
-                    VStack(alignment: .leading, spacing: 8) {
-                        OwnPicture(model: model, id: v.id)
-                        Text(v.id).font(.callout.monospaced().weight(.medium))
-                        Text(v.reason).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        Button("Open " + (v.file as NSString).lastPathComponent + ":" + String(v.line)) { model.openInXcode(v.file, line: v.line) }
-                            .buttonStyle(.link).font(.caption)
-                    }
-                    .padding(14)
-                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
-                }
-            }
-        }
-    }
-}
-
-/// The inspector for the app's own components: how much of the app is accounted for, then the component's own
-/// actions (native option, where each size is used, a setting, a redesign, agree), only those that apply.
-struct OwnInspector: View {
-    @ObservedObject var model: DesignerModel
-    let entry: OwnEntry?
-    @State private var redesigning = false
-    @State private var what = ""
-
-    var body: some View {
-        ScrollView { VStack(alignment: .leading, spacing: 16) {
-            if let views = model.appViews {
-                InspectorSection {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("\(Int((views.covered * 100).rounded()))% of the app accounted for").font(.title3.weight(.semibold))
-                        Text("\(views.views.count) views: \(views.count(.component)) components, \(views.count(.screen)) screens, \(views.count(.unknown)) questions")
-                            .font(.callout).foregroundStyle(.secondary)
-                        let pictured = views.views.filter { $0.kind == .component && model.ownPicture($0.id, dark: false) != nil }.count
-                        Text("\(pictured) of \(views.count(.component)) components drawn by the app so far").font(.callout).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            if let entry {
-                let native = AppViewScanner.nativeOption(family: entry.family)
-                if let element = native.element {
-                InspectorSection(title: "Instead of these views", footer: "Agents use the native element; the views are replaced when their screens are next changed.") {
-                        Toggle("Use SwiftUI's \(ComponentElement.named(element)?.title.lowercased() ?? element)", isOn: Binding(
-                            get: { entry.component?.native == element },
-                            set: { model.changeOwn(entry, ["op": .string("native"), "element": $0 ? .string(element) : .null], label: $0 ? "Use the native \(element)" : "Keep own views") }))
-                }
-                }
-                InspectorSection(title: "Where Each Size Is Used", footer: "Agents read these to pick a size for a new screen.") {
-                    ForEach(entry.sizes, id: \.name) { size in
-                        UseField(model: model, entry: entry, size: size)
-                    }
-                }
-                InspectorSection(footer: "A setting lets the app's users choose; a redesign asks an agent to build options to pick from.") {
-                    // Only with sizes to choose between.
-                    if entry.sizes.count > 1 {
-                        Menu("Make a Size a Setting…") {
-                            ForEach(entry.sizes, id: \.name) { size in
-                                Button(size.name.capitalized) { model.ownSetting(entry, variant: size.name) }.disabled(size.setting != nil)
-                            }
+            Text("Hatch read these views but can't tell what they are from their code.").foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                ForEach(Array(model.ownQuestions.enumerated()), id: \.element.id) { i, v in
+                    if i > 0 { Divider().padding(.leading, 14) }
+                    HStack(alignment: .top, spacing: 14) {
+                        OwnThumb(model: model, id: v.id).frame(width: 190, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(v.title).fontWeight(.medium)
+                            Text(v.reason).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         }
-                        .help("Let people choose the size, with the one picked as the default")
+                        Spacer(minLength: 8)
+                        Button("Open") { model.openInXcode(v.file, line: v.line) }.buttonStyle(.link)
                     }
-                    if let ticket = entry.component?.redesign {
-                        Label("Redesign asked: \(ticket)", systemImage: "paintbrush").font(.callout).foregroundStyle(.secondary)
-                    } else {
-                        Button("Redesign…") { what = ""; redesigning = true }
-                            .popover(isPresented: $redesigning) {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text("Redesign \(entry.title)").font(.headline)
-                                    Text("An agent builds two or three options and the native one as specimens; you pick.").font(.callout).foregroundStyle(.secondary)
-                                    TextField("What should change?", text: $what, axis: .vertical).lineLimit(2...5).frame(width: 300)
-                                    HStack { Spacer(); Button("Ask for Options") { model.ownRedesign(entry, what: what); redesigning = false }
-                                        .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-                                        .disabled(what.trimmingCharacters(in: .whitespaces).isEmpty) }
-                                }
-                                .padding(14)
-                            }
-                    }
-                }
-                if entry.agreed, entry.component?.status != .agreed {
-                    InspectorSection {
-                        Button("Agree \(entry.title)") { model.changeOwn(entry, ["op": .string("agree")], label: "Agree \(entry.title)") }
-                            .help("Agents treat it as decided")
-                    }
+                    .padding(.horizontal, 14).padding(.vertical, 10)
                 }
             }
+            .background(.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
         }
-        .padding(14) }
-    }
-}
-
-/// Where one size is used, saved when the field is left.
-private struct UseField: View {
-    @ObservedObject var model: DesignerModel
-    let entry: OwnEntry
-    let size: OwnEntry.Size
-    @State private var text = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(size.name.capitalized).font(.callout.weight(.medium))
-            TextField("Used for…", text: $text, axis: .vertical).lineLimit(1...3)
-                .onSubmit(save)
-        }
-        .onAppear { text = size.use }
-        .onChange(of: size.use) { _, new in text = new }
-        .onDisappear(perform: save)
-    }
-
-    private func save() {
-        guard text != size.use else { return }
-        model.changeOwn(entry, ["op": .string("use"), "variant": .string(size.name), "text": .string(text)], label: "Where \(entry.title) \(size.name) is used")
     }
 }

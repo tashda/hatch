@@ -246,28 +246,30 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(nanoseconds: 600_000_000)
             save(window, "button-large", dir)
             model.largeText = false
-            // The app's own components: chips, cards and rows, then the questions (CM8, CM9).
-            for p in model.ownProposals.filter({ ["chip", "card", "row"].contains($0.family) && !$0.interactive }) {
-                model.selection = .own(p.id)
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                save(window, "own-\(p.family.replacingOccurrences(of: " ", with: "-"))\(p.interactive ? "-interactive" : "")", dir)
-            }
-            // The actions, applied locally (nothing reaches the notebook): accept Chip, split the problem chip out,
-            // say where the chip is used, then the agreed page and the new component.
-            if let chip = model.ownEntry("chip") {
-                model.changeOwn(chip, [:], label: "")
-                if let agreed = model.ownEntry("chip"), agreed.views.contains("HXProblemChip") {
-                    model.changeOwn(agreed, ["op": .string("split"), "title": .string("Problem chip"), "views": .array([.string("HXProblemChip")])], label: "Split")
+            // The app's own components, step by step on the Chips page (all applied locally; nothing reaches the
+            // notebook): the page, a group, a view, a group merged into another, a decision, a view made its own.
+            func shot(_ name: String) async { try? await Task.sleep(nanoseconds: 700_000_000); save(window, name, dir) }
+            model.selection = .own("chip"); model.ownPick = nil
+            await shot("own-1-page")
+            let chips = model.ownGroups("chip")
+            if let first = chips.first {
+                model.ownPick = .group(first.id); await shot("own-2-group")
+                if let v = first.views.first { model.ownPick = .view(v); await shot("own-3-view") }
+                if let other = chips.dropFirst().first {
+                    model.merge(other, into: first); await shot("own-4-merged")
+                    model.undo(); model.ownNotice = nil
                 }
-                if let agreed = model.ownEntry("chip"), let size = agreed.sizes.first {
-                    model.changeOwn(agreed, ["op": .string("use"), "variant": .string(size.name), "text": .string("A status, a project or an area in a row or a header")], label: "Use")
+                if let entry = model.ownEntry(first.id) {
+                    model.decide(entry, title: "Status chip", codeName: "StatusChip", look: entry.views.first)
+                    model.ownPick = .group(first.id); await shot("own-5-decided")
                 }
-                model.selection = .own("chip")
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                save(window, "own-chip-agreed", dir)
-                model.selection = .own("chip.problem-chip")
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                save(window, "own-chip-split", dir)
+                if let lone = model.ownGroups("chip").last, let view = lone.views.first, lone.id != first.id {
+                    model.newComponent([view], from: lone, title: "Footer status"); await shot("own-6-new")
+                }
+                // The same page in dark mode, with a group selected.
+                model.appearance = .dark
+                model.ownPick = .group(first.id); await shot("own-7-dark")
+                model.appearance = .light
             }
             if !model.ownQuestions.isEmpty {
                 model.selection = .ownQuestions

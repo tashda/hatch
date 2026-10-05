@@ -83,9 +83,9 @@ struct DesignerView: View {
         case .rules?:
             ContentUnavailableView("Rules", systemImage: "checklist", description: Text("Choose a value beside a rule; Hatch checks the ones marked."))
         case .own(let id)?:
-            OwnInspector(model: model, entry: model.ownEntry(id))
+            OwnInspector(model: model, family: id)
         case .ownQuestions?:
-            OwnInspector(model: model, entry: nil)
+            ContentUnavailableView("Not Sure Yet", systemImage: "questionmark.circle", description: Text("Views Hatch can't place from their code."))
         case .foundations(let kind)?:
             ContentUnavailableView(kind.title, systemImage: DesignerSidebar.symbol(kind), description: Text("Named values the roles use."))
         case nil:
@@ -102,7 +102,7 @@ struct DesignerView: View {
         case .decide?: "To Decide"
         case .foundations(let kind)?: kind.title
         case .rules?: "Rules"
-        case .own(let id)?: model.ownEntry(id)?.title ?? id
+        case .own(let id)?: DesignerModel.familyTitle(id)
         case .ownQuestions?: "Not Sure Yet"
         case nil: model.appName
         }
@@ -179,7 +179,7 @@ struct DesignerView: View {
         case .rules?:
             RulesView(model: model)
         case .own(let id)?:
-            if let e = model.ownEntry(id) { OwnComponentView(model: model, entry: e) }
+            OwnFamilyView(model: model, family: id)
         case .ownQuestions?:
             OwnQuestionsView(model: model)
         case .all?:
@@ -315,14 +315,13 @@ struct DesignerSidebar: View {
             let others = model.system.elementsUsed.filter { e in e != "switcher" && !Self.groups.contains { $0.elements.contains(e) } && shown(e) }
             if !others.isEmpty { Section("Other") { ForEach(others, id: \.self) { e in element(e) } } }
             // The app's own components, as much part of the system as SwiftUI's (CM9).
-            let own = model.ownEntries.filter { shown($0.title) }
+            let own = model.ownFamilies.filter { shown($0.title) }
             if !own.isEmpty || !model.ownQuestions.isEmpty {
                 Section("Your Own Components") {
-                    ForEach(own) { e in
-                        // Agreed components solid, Hatch's proposals dashed: what is decided reads apart from what is not.
-                        Label(e.title, systemImage: e.agreed ? "square.on.square" : "square.on.square.dashed")
-                            .badge(e.views.count).tag(DesignerSelection.own(e.id))
-                            .help(e.agreed ? "\(e.title): in the system" : (e.proposal?.why ?? ""))
+                    ForEach(own, id: \.id) { f in
+                        Label(f.title, systemImage: f.toDecide == 0 ? "square.on.square" : "square.on.square.dashed")
+                            .badge(f.views).tag(DesignerSelection.own(f.id))
+                            .help(f.toDecide == 0 ? "\(f.title): all decided" : "\(f.title): \(f.toDecide) to decide")
                     }
                     if !model.ownQuestions.isEmpty {
                         Label("Not Sure Yet", systemImage: "questionmark.circle")
