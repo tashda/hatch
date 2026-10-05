@@ -228,4 +228,14 @@ final class SweepTests: XCTestCase {
         XCTAssertTrue(codes(issues).contains("items.file-missing"))
         XCTAssertEqual(try store.tickets(TicketFilter(types: [.sweep])).count, 1, "nothing was made for the refused one")
     }
+
+    func testASweepsPlanClaimsEveryItemFileItHasNotLeftOut() throws {
+        let t = try Fixture.ticket(store, project, type: .sweep, title: "All cards", body: "x", status: .ready)
+        try store.saveSweepItems(ticketId: t.id, items: items().map(\.input))
+        try store.setSweepItem(ticketId: t.id, key: "agent-card", to: .dropped, by: "owner")
+        XCTAssertEqual(try store.planClaim(for: t, declared: ["Components/CardFooter.swift"]), ["Components/CardFooter.swift", "Views/DecideCard.swift"],
+                       "the shared component the agent names, and the files of the items still in")
+        let bug = try Fixture.ticket(store, project, type: .bug, title: "A bug", body: "x", status: .ready)
+        XCTAssertEqual(try store.planClaim(for: bug, declared: ["a.swift"]), ["a.swift"], "any other ticket claims what it declares")
+    }
 }

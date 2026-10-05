@@ -179,6 +179,14 @@ public extension HatchStore {
         }
     }
 
+    /// The files a ticket's plan claims. A Sweep also claims every item's file that is not left out (decision SW13): the owner accepted
+    /// that list, so two tickets cannot edit the same sheet at once, and the list is not a second reason to ask for approval.
+    func planClaim(for t: Ticket, declared: [String]) throws -> [String] {
+        guard t.type == .sweep else { return declared }
+        let itemFiles = try sweepItems(ticketId: t.id).filter { $0.state != .dropped }.map(\.file)
+        return Array(Set(declared + itemFiles)).sorted()
+    }
+
     /// Items settled out of all that count (dropped ones do not count), for "7 of 12".
     func sweepProgress(ticketId: Int) throws -> (settled: Int, total: Int) {
         let items = try sweepItems(ticketId: ticketId).filter { $0.state != .dropped }

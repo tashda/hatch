@@ -358,8 +358,10 @@ enum CoreCommands {
             }
             return
         }
-        let files = (c.args.option("files") ?? c.args.rest(from: 2)).split(whereSeparator: { $0 == "," || $0 == "\n" }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        guard !files.isEmpty else { throw CLIError("Usage: hatch plan #144 --files \"path/one.swift,folder/**\" [--repo app]") }
+        let declared = (c.args.option("files") ?? c.args.rest(from: 2)).split(whereSeparator: { $0 == "," || $0 == "\n" }).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        // A Sweep also claims its items' files (decision SW13).
+        let files = try c.store.planClaim(for: t, declared: declared)
+        guard !declared.isEmpty else { throw CLIError("Usage: hatch plan #144 --files \"path/one.swift,folder/**\" [--repo app]") }
         var repoId: Int?
         if let role = c.args.option("repo") {
             guard let r = try c.store.repos(projectId: t.projectId).first(where: { $0.role.rawValue == role }) else { throw CLIError("No repo with role '\(role)'.") }
@@ -373,7 +375,7 @@ enum CoreCommands {
             // A Bug, or more files than the project allows, waits for the owner to approve the plan (decisions I2, DC8).
             let limit = (try c.store.project(id: t.projectId))?.config?.planApprovalFileThreshold ?? 8
             let approved = (try c.store.latestPlanReview(ticketId: t.id))?.state == .approved
-            if !approved && (t.type == .bug || files.count > limit) {
+            if !approved && (t.type == .bug || (t.type != .sweep && files.count > limit)) {
                 let reason = t.type == .bug ? "a Bug" : "\(files.count) files, over the limit of \(limit)"
                 try c.store.requestPlanReview(ticketId: t.id, files: files, reason: reason)
                 c.out.emit(["claim": "granted", "plan": "pending", "files": .int(files.count)],

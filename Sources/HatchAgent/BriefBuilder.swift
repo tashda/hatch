@@ -370,7 +370,7 @@ public enum BriefBuilder {
         case .build:
             let limit = config?.planApprovalFileThreshold ?? 8
             let sweep = t.type == .sweep ? [
-                "This is a Sweep: work the items under Sweep items in order, in this one worktree and branch. Build the shared component from the owner's accepted choices first (it is the example the rest adopt); then each item adopts it, with no variations unless its note says so.",
+                "This is a Sweep: work the items under Sweep items in order, in this one worktree and branch. Build the shared component from the owner's accepted choices first (it is the example the rest adopt); then each item adopts it, with no variations unless its note says so. With `hatch plan` name only the new files (the shared component): Hatch adds every item's file to the claim itself.",
                 "One commit per item. After each commit run `hatch item built \(t.displayNumber) <key>`: Hatch records the commit and refuses one that already belongs to another item. `hatch ready` is refused while an item is still To do or Building.",
             ] : []
             return sweep + [
