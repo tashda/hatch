@@ -84,7 +84,7 @@ struct UsageSettingsPage: View {
             } header: {
                 Text("Limits")
             } footer: {
-                Text("Usage is counted from what each program reports. Plans have their own limits; Hatch only warns, or stops starting new work until tomorrow. A coding agent that goes past the limit for one run is stopped and its ticket is Blocked; its work stays in the workspace.")
+                Text("Usage is counted from what each program reports. Plans have their own limits; Hatch only warns, or stops starting new work until tomorrow. A coding agent that goes past the limit for one run is stopped and its ticket is Blocked; its work stays in the workspace. The limit counts re-read context at a tenth and output at five times, since that is how they cost.")
             }
         }
         .formStyle(.grouped)

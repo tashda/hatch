@@ -10,6 +10,38 @@ final class AgentLimitTests: LoopCase {
         #"echo '{"type":"assistant","message":{"content":[{"type":"text","text":"working"}],"usage":{"input_tokens":\#(tokens),"output_tokens":10}}}'"#
     }
 
+    /// A message the way Claude Code writes it: the same usage repeated in two events.
+    func messageLines(id: String, cacheRead: Int) -> String {
+        let line = #"echo '{"type":"assistant","message":{"id":"\#(id)","content":[{"type":"text","text":"turn"}],"usage":{"input_tokens":2,"cache_creation_input_tokens":300,"cache_read_input_tokens":\#(cacheRead),"output_tokens":50}}}'"#
+        return line + "\n" + line
+    }
+
+    func testARunawayThatRereadsABigContextIsStoppedEvenThoughItWritesLittle() throws {
+        let t = try ticket(.tweak, "Rereading")
+        // 30 turns, each re-reading 600k of context: 18M cache reads (1.8M weighted), and almost nothing fresh.
+        let turns = (0..<30).map { messageLines(id: "m\($0)", cacheRead: 600_000) }.joined(separator: "\n")
+        makeLauncher(program: try fakeClaude("\(turns)\nsleep 60"))
+        try launcher.setTokenBudget(1_000_000)
+        launcher.tick()
+        waitUntil("blocked at the limit", timeout: 30) { self.status(t) == .blocked }
+        let notes = try world.store.notes(ticketId: t.id).map(\.body).joined(separator: "\n")
+        XCTAssertTrue(notes.contains("over the limit"), notes)
+    }
+
+    func testTheSameMessageRepeatedDoesNotTripTheBudget() throws {
+        let t = try ticket(.tweak, "Repeated")
+        // One message of 4M cache reads (400k weighted) written as ten events: counted once, under a 1M budget.
+        let repeated = (0..<10).map { _ in messageLines(id: "same", cacheRead: 4_000_000) }.joined(separator: "\n")
+        makeLauncher(program: try fakeClaude("""
+        \(repeated)
+        echo ok > ok.txt && git add ok.txt && git -c user.name=A -c user.email=a@x commit -qm ok
+        hatch ready $T --spec unchanged > /dev/null 2>&1
+        """))
+        try launcher.setTokenBudget(1_000_000)
+        launcher.tick()
+        waitUntil("handed in, not stopped", timeout: 40) { self.status(t) == .toVerify }
+    }
+
     func testAnAgentOverTheTokenBudgetIsStoppedAndTheTicketIsBlockedWithTheReason() throws {
         let t = try ticket(.tweak, "Runaway")
         makeLauncher(program: try fakeClaude("""

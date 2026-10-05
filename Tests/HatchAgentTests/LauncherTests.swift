@@ -18,6 +18,34 @@ final class AgentStreamTests: XCTestCase {
         XCTAssertNil(AgentStream.parse("not json"))
     }
 
+    /// The shape Claude Code really writes: one event per content block of a message, each with the message's whole usage.
+    static let realMessage = #"{"type":"assistant","message":{"id":"msg_A","content":[{"type":"text","text":"Reading"}],"usage":{"input_tokens":2,"cache_creation_input_tokens":4675,"cache_read_input_tokens":5739,"output_tokens":8}}}"#
+
+    func testAMessageWrittenAsSeveralEventsIsCountedOnce() throws {
+        var meter = RunMeter()
+        for _ in 0..<3 {
+            let e = try XCTUnwrap(AgentStream.parse(Self.realMessage))
+            meter.add(messageId: try XCTUnwrap(e.messageId), try XCTUnwrap(e.usage))
+        }
+        XCTAssertEqual(meter.total, RunMeter.Usage(input: 2, cacheWrite: 4675, cacheRead: 5739, output: 8), "three events, one message")
+        // A later event of the same message replaces the earlier one (its output count grows as it streams).
+        meter.add(messageId: "msg_A", .init(input: 2, cacheWrite: 4675, cacheRead: 5739, output: 300))
+        XCTAssertEqual(meter.total.output, 300)
+    }
+
+    func testTheWeightFollowsWhatEachKindOfTokenCosts() {
+        // The numbers of a real 34-turn build that cost $0.42 at API prices.
+        var meter = RunMeter()
+        meter.add(messageId: "all", .init(input: 38, cacheWrite: 43_874, cacheRead: 605_813, output: 11_945))
+        XCTAssertEqual(meter.weighted, 38 + 43_874 + 60_581 + 59_725)
+        XCTAssertLessThan(meter.weighted, AgentLauncher.defaultTokenBudget / 8, "a real build is far below the default budget")
+        // A runaway re-reading a big context turn after turn adds up even though it writes little: the case a count of fresh input missed.
+        var runaway = RunMeter()
+        for i in 0..<400 { runaway.add(messageId: "m\(i)", .init(input: 2, cacheWrite: 300, cacheRead: 60_000 + i * 100, output: 200)) }
+        XCTAssertGreaterThan(runaway.weighted, AgentLauncher.defaultTokenBudget, "400 turns on a 60k to 100k context is over the budget")
+        XCTAssertLessThan(runaway.total.input + runaway.total.output, 200_000, "which fresh input plus output alone would not have shown")
+    }
+
     func testClaudeGetsOnlyTheToolsTheWorkNeeds() {
         let args = AgentLauncher.claudeArguments(model: "claude-opus-5-5", effort: "high", otherDirectories: ["/w/notebook"],
                                                  commands: ["xcodebuild -scheme Echo build", "swift test --filter X"])

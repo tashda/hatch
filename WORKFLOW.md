@@ -109,11 +109,12 @@ blocker ticket. Order: priority, then oldest update.
 - **Stops without handing in**: started once more; a second stop runs once on the "Second try" model; every run failing →
   released and **Blocked** with the log tail in the thread. *Resume* starts it again. This is never put to the owner as a question.
 - **Owner stops it** → released, **Blocked**.
-- **Hatch stops it at a limit** → a run that has used more than the token budget (input plus output, not the re-read cache; 1.5M by
-  default, Settings › Usage › "Stop one run above", 0 for none), or has run past the role's time limit (3 hours for coding agents), is
-  interrupted, released and **Blocked** with the reason and the log tail in the thread. It is not retried by itself; its work stays in
-  the workspace and *Resume* starts it again. This is the ceiling on what a runaway Claude agent can spend.
-- **Run ends but the status moved** (handed in, or someone else moved it) → left alone.
+- **Hatch stops it at a limit** → a run that has used more than the token budget, or has run past the role's time limit (3 hours for
+  coding agents), is interrupted, released and **Blocked** with the reason and the log tail in the thread. It is not retried by itself;
+  its work stays in the workspace and *Resume* starts it again. This is the ceiling on what a runaway Claude agent can spend. The
+  budget is 1.5M by default (Settings › Usage › "Stop one run above", 0 for none) in input-token equivalents (`RunMeter`): fresh input
+  and cache writes count 1, re-read context a tenth, output five times, once per model message (Claude Code writes a message's usage
+  in every one of its events). A real 34-turn build is about 164k of that, so the default is about nine times a real build.
 
 ## 5. The owner's turn, and landing
 

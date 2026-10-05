@@ -41,6 +41,35 @@ public struct AgentRunInfo: Identifiable, Equatable, Sendable {
     }
 }
 
+/// What one run has used so far, counted once per model message and weighed by what each kind of token costs. The stream repeats a
+/// message's usage in every event of that message, and its output count is only final in the result, so a plain running sum
+/// overcounts input two or three times and misses output. Real numbers (a build of 34 turns, about $0.42 at API prices): 38 input,
+/// 43,874 cache writes, 605,813 cache reads, 11,945 output; the cache reads are most of the volume and cost a tenth.
+public struct RunMeter: Sendable {
+    public struct Usage: Equatable, Sendable {
+        public var input: Int, cacheWrite: Int, cacheRead: Int, output: Int
+        public init(input: Int = 0, cacheWrite: Int = 0, cacheRead: Int = 0, output: Int = 0) {
+            self.input = input; self.cacheWrite = cacheWrite; self.cacheRead = cacheRead; self.output = output
+        }
+    }
+    private var messages: [String: Usage] = [:]
+    public init() {}
+
+    public mutating func add(messageId: String, _ usage: Usage) { messages[messageId] = usage }
+
+    /// Input and cache writes (they are sent fresh), the cache the agent re-reads, and what it wrote.
+    public var total: Usage {
+        messages.values.reduce(Usage()) { Usage(input: $0.input + $1.input, cacheWrite: $0.cacheWrite + $1.cacheWrite, cacheRead: $0.cacheRead + $1.cacheRead, output: $0.output + $1.output) }
+    }
+
+    /// One number to hold against a budget, in input-token equivalents: fresh input and cache writes count 1, re-read cache a tenth,
+    /// output five (about the price ratios), so a long run that re-reads a big context turn after turn adds up and a short one does not.
+    public var weighted: Int {
+        let t = total
+        return t.input + t.cacheWrite + t.cacheRead / 10 + t.output * 5
+    }
+}
+
 /// Turns Claude Code's stream-json lines into steps and token counts. Pure, so it is tested without a program.
 public enum AgentStream {
     public struct Event: Equatable, Sendable {
@@ -53,6 +82,10 @@ public enum AgentStream {
         public var finished = false
         public var isError = false
         public var result: String?
+        /// The model message this event belongs to. Claude Code writes one event per content block, each carrying the whole
+        /// message's usage, so usage is kept once per message id (see `RunMeter`).
+        public var messageId: String?
+        public var usage: RunMeter.Usage?
     }
 
     public static func parse(_ line: String) -> Event? {
@@ -75,6 +108,9 @@ public enum AgentStream {
             if let usage = j["message"]?["usage"] {
                 e.tokensIn = usage["input_tokens"]?.intValue
                 e.tokensOut = usage["output_tokens"]?.intValue
+                e.messageId = j["message"]?["id"]?.stringValue
+                e.usage = RunMeter.Usage(input: usage["input_tokens"]?.intValue ?? 0, cacheWrite: usage["cache_creation_input_tokens"]?.intValue ?? 0,
+                                         cacheRead: usage["cache_read_input_tokens"]?.intValue ?? 0, output: usage["output_tokens"]?.intValue ?? 0)
             }
         case "result":
             e.finished = true
@@ -138,8 +174,9 @@ public final class AgentLauncher: @unchecked Sendable {
 
     /// Paused: no new agent starts; running ones finish.
     public static let pausedSetting = "agents_paused"
-    /// The most tokens one run may use, input and output, not counting the cache the agent re-reads. A runaway agent is stopped
-    /// at this and its ticket is Blocked; 0 means no limit. The default is about fifty times what a small change takes.
+    /// The most one run may use, in input-token equivalents (`RunMeter.weighted`: re-read cache at a tenth, output at five times). A
+    /// runaway agent is stopped at this and its ticket is Blocked; 0 means no limit. The default, about $4 at API prices, is nine
+    /// times a real 34-turn build and fifty times a small change.
     public static let tokenBudgetSetting = "agent_token_budget"
     public static let defaultTokenBudget = 1_500_000
     /// How many times a run that stopped early is started again before the owner is asked.
@@ -157,6 +194,7 @@ public final class AgentLauncher: @unchecked Sendable {
     private var stopping: Set<Int> = []
     /// Why a run was stopped by Hatch (budget, time), as opposed to by the owner.
     private var limitStops: [Int: String] = [:]
+    private var meters: [Int: RunMeter] = [:]
     private var lastError: [Int: String] = [:]
 
     public init(store: HatchStore, configuration: Configuration, settings: @escaping @Sendable () -> AgentSettings,
@@ -224,9 +262,9 @@ public final class AgentLauncher: @unchecked Sendable {
     private func enforceBudget(_ ticketId: Int) {
         let budget = tokenBudget
         guard budget > 0 else { return }
-        let used = lock.withLock { runs[ticketId].map { $0.tokensIn + $0.tokensOut } ?? 0 }
+        let used = lock.withLock { meters[ticketId]?.weighted ?? runs[ticketId].map { $0.tokensIn + $0.tokensOut } ?? 0 }
         if used > budget {
-            stopForLimit(ticketId, "It used \(used.formatted()) tokens, over the limit of \(budget.formatted()) a run (Settings, Agents). Nothing is lost: its work is in the workspace.")
+            stopForLimit(ticketId, "It used about \(used.formatted()) tokens (counting re-read context at a tenth and output at five times), over the limit of \(budget.formatted()) a run (Settings, Usage). Nothing is lost: its work is in the workspace.")
         }
     }
 
@@ -377,8 +415,17 @@ public final class AgentLauncher: @unchecked Sendable {
                     guard var r = self.runs[plan.ticketId] else { return }
                     if let s = e.step { r.step = s }
                     if let m = e.model, r.model == nil { r.model = m }
-                    if e.finished { r.tokensIn = e.tokensIn ?? r.tokensIn; r.tokensOut = e.tokensOut ?? r.tokensOut; r.cacheTokens = e.cacheTokens ?? r.cacheTokens }
-                    else { r.tokensIn += e.tokensIn ?? 0; r.tokensOut += e.tokensOut ?? 0 }
+                    if e.finished {
+                        // The result carries the true totals.
+                        r.tokensIn = e.tokensIn ?? r.tokensIn; r.tokensOut = e.tokensOut ?? r.tokensOut; r.cacheTokens = e.cacheTokens ?? r.cacheTokens
+                    } else if let id = e.messageId, let usage = e.usage {
+                        // Once per message, however many events the message was written as.
+                        var meter = self.meters[plan.ticketId] ?? RunMeter()
+                        meter.add(messageId: id, usage)
+                        self.meters[plan.ticketId] = meter
+                        let t = meter.total
+                        r.tokensIn = t.input + t.cacheWrite; r.tokensOut = t.output; r.cacheTokens = t.cacheRead
+                    } else { r.tokensIn += e.tokensIn ?? 0; r.tokensOut += e.tokensOut ?? 0 }
                     self.runs[plan.ticketId] = r
                 }
                 self.enforceBudget(plan.ticketId)
@@ -406,6 +453,7 @@ public final class AgentLauncher: @unchecked Sendable {
     private func finished(_ plan: Plan, attempt: Int, exitCode: Int32) {
         let (info, stopped, limitReason) = lock.withLock { () -> (AgentRunInfo?, Bool, String?) in
             let r = runs.removeValue(forKey: plan.ticketId)
+            meters[plan.ticketId] = nil
             processes[plan.ticketId] = nil
             return (r, stopping.remove(plan.ticketId) != nil, limitStops.removeValue(forKey: plan.ticketId))
         }
