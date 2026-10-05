@@ -260,6 +260,14 @@ struct DesignerSidebar: View {
     @ObservedObject var model: DesignerModel
     @State private var filter = ""
 
+    /// A symbol for each place, so the list can be scanned (every one checked to exist on macOS 27).
+    static func placeSymbol(_ place: String) -> String {
+        ["toolbar": "menubar.rectangle", "sheetFooter": "rectangle.bottomthird.inset.filled", "bottomBar": "dock.rectangle",
+         "listRow": "list.bullet.rectangle", "card": "square.text.square", "inspector": "sidebar.right", "popover": "bubble.middle.top",
+         "form": "checklist", "emptyState": "tray", "contextMenu": "contextualmenu.and.cursorarrow", "alert": "exclamationmark.bubble",
+         "page": "doc.text", "actionRow": "button.horizontal", "floating": "capsule.portrait"][place] ?? "rectangle.dashed"
+    }
+
     /// Elements by kind (CD11), so the list stays readable as the catalog grows.
     static let groups: [(title: String, elements: [String])] = [
         ("Actions", ["button", "menu", "controlGroup"]), ("Choices", ["picker", "toggle", "datePicker", "slider", "stepper"]),
@@ -301,7 +309,7 @@ struct DesignerSidebar: View {
                 Section("By Place") {
                     ForEach(places) { p in
                         // Not more elements: the same roles grouped by where they sit, so they read differently.
-                        Label(p.title, systemImage: "rectangle.dashed").foregroundStyle(.secondary)
+                        Label(p.title, systemImage: Self.placeSymbol(p.id)).foregroundStyle(.secondary)
                             .badge(model.questions(inPlace: p.id).count).tag(DesignerSelection.place(p.id))
                             .help("Every control in \(p.title.lowercased()): \(p.summary)")
                             .contextMenu { BatchMenuItems(model: model, element: nil, place: p.id) }
@@ -914,10 +922,27 @@ struct PlaceInspector: View {
                 }
             }
             InspectorSection(title: "One Look Here") {
-                ActionRows(model: model, actions: elements.map { e in
-                    DesignerAction(title: "Every \(ComponentElement.named(e)?.title.lowercased() ?? e) here", detail: "Choose a setting and its value",
-                                   symbol: "slider.horizontal.3", request: .setting(element: e, place: place))
-                })
+                // One action, the element chosen in its menu: not a row per element saying the same thing.
+                Menu {
+                    ForEach(elements, id: \.self) { e in
+                        Button(ComponentElement.named(e)?.plural ?? e) { model.request = .setting(element: e, place: place) }
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "slider.horizontal.3").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+                            .frame(width: 24, height: 24)
+                            .background(Color.accentColor.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("One Look for Every…").font(.callout)
+                            Text("Choose an element, then a setting and its value").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.up.chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 5).padding(.horizontal, 6)
+                    .contentShape(Rectangle())
+                }
+                .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
             }
         }
         .padding(14) }
