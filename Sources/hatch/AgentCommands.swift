@@ -143,9 +143,23 @@ enum AgentCommands {
             try step("commit", ok: status.dirtyFiles.isEmpty, detail: status.dirtyFiles.isEmpty ? "\(repo.role.rawValue): \(status.commitsAhead) commit(s) ahead" : "\(repo.role.rawValue) has uncommitted files: \(status.dirtyFiles.prefix(5).joined(separator: ", ")). Commit them first.")
             let drift = try ClaimsFromDiff(store: c.store).claimDrift(t, workspace: ws)
             if drift.hasDrift { try c.store.record(t.id, actor: "hatch", kind: "claim-drift", payload: ["files": .array(drift.unclaimedChanges.map { .string($0) })]); lines.append("note: changed files outside the claim: \(drift.unclaimedChanges.prefix(5).joined(separator: ", "))") }
-            // Values typed into views instead of taken from the components (decision CO6): a note, never a failure,
-            // because a plain text check can over-count.
-            if repo.role == .app, project?.config?.componentsLabel != nil {
+            // The design system's roles (decision DS7): what this ticket wrote is checked against the role table. The
+            // agent fixes a finding or asks; only what it cannot settle reaches the owner. Not a failure on its own,
+            // because a text check can misread.
+            if repo.role == .app, let notebook = project?.config?.repo(.notebook)?.localPath,
+               let system = try? ComponentSystem.load(notebook: notebook) {
+                let diff = (try? manager.git.git(["diff", "-U0", "\(repo.defaultBranch)...HEAD", "--", "*.swift"], in: ws.path)) ?? ""
+                let inv = ComponentInventoryScanner.scan(appRoot: ws.path, excluding: [project?.config?.components?.path].compactMap { $0 })
+                let found = ComponentCheck.inDiff(ComponentCheck.findings(inv.uses, system: system), diff: diff)
+                if !found.isEmpty {
+                    try c.store.record(t.id, actor: "hatch", kind: "component-findings",
+                                       payload: ["count": .int(found.count), "findings": .array(found.prefix(20).map { .string("\($0.location) \($0.kind.rawValue) \($0.role ?? "")") })])
+                    lines.append("components: \(found.count) control(s) you added do not follow the roles (\(ComponentSystem.readmePath) in the notebook). "
+                                 + "Fix each one, or ask with hatch ask and suggest: fix to match (recommended), add a variant, or allow it here.")
+                    for f in found.prefix(8) { lines.append("  \(f.location)  \(f.message)") }
+                }
+            } else if repo.role == .app, project?.config?.componentsLabel != nil {
+                // No design system yet: values typed into views instead of taken from the components (CO6), a note.
                 let diff = (try? manager.git.git(["diff", "-U0", "\(repo.defaultBranch)...HEAD", "--", "*.swift"], in: ws.path)) ?? ""
                 let found = TypedValues.inDiff(diff, excluding: project?.config?.components?.path)
                 if !found.isEmpty {

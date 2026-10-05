@@ -22,6 +22,9 @@ public struct ComponentInventory: Equatable, Sendable {
         public var line: Int
         /// The view type it is written in.
         public var view: String?
+        /// The conditional branches it is in, outermost first (`if@120#140`, `case@300#2`): two uses in different
+        /// branches of the same `if`/`else` or `switch` are never on screen together.
+        public var branches: [String] = []
         /// What was around it, innermost first (`HStack`, `.toolbar`, `helper footer`, `view SettingsPage`): why it got
         /// its place, or why none.
         public var trail: [String] = []
@@ -31,6 +34,16 @@ public struct ComponentInventory: Equatable, Sendable {
     }
 
     /// Uses of one element in one place with the same look.
+    /// True when the two uses sit in different branches of one `if`/`else` chain or `switch`.
+    public static func exclusive(_ a: Use, _ b: Use) -> Bool {
+        guard a.file == b.file else { return false }
+        for (x, y) in zip(a.branches, b.branches) where x != y {
+            let sx = x.split(separator: "#").first, sy = y.split(separator: "#").first
+            return sx == sy
+        }
+        return false
+    }
+
     public struct Cluster: Equatable, Sendable {
         public var element: String
         public var place: String?
@@ -622,7 +635,61 @@ struct SwiftStructure {
         }
         return ComponentInventory.Use(element: element, place: context.place, recipe: recipe, importance: importance,
                                       role: env.role.map { "\(element).\($0)" }, file: file, line: line(of: start), view: context.view,
+                                      branches: branches(of: start),
                                       trail: context.trail + (context.view.map { ["view \($0)"] } ?? []))
+    }
+
+    /// The `if`/`else` and `switch` branches around `i`, outermost first. An `if` chain is named by the brace of its
+    /// first branch, so `if a {…} else if b {…} else {…}` gives three ids with one prefix.
+    func branches(of i: Int) -> [String] {
+        var out: [String] = []
+        for brace in enclosingBraces(of: i) {
+            if let chain = ifChainStart(brace) { out.append("if@\(chain)#\(brace)"); continue }
+            if statementKeyword(before: brace) == "switch" {
+                // The case label in force at `i`: the last `case`/`default` at this depth before it.
+                var caseIndex = 0, k = brace + 1, depth = 0
+                while k < i {
+                    let c = b[k]
+                    if c == UInt8(ascii: "{") || c == UInt8(ascii: "(") || c == UInt8(ascii: "[") { depth += 1 }
+                    else if c == UInt8(ascii: "}") || c == UInt8(ascii: ")") || c == UInt8(ascii: "]") { depth -= 1 }
+                    else if depth == 0, Self.isIdentStart(c), k == 0 || !Self.isIdent(b[k - 1]), let id = identifier(startingAt: k),
+                            id.name == "case" || id.name == "default" { caseIndex += 1; k = id.end; continue }
+                    k += 1
+                }
+                out.append("case@\(brace)#\(caseIndex)")
+            }
+        }
+        return out
+    }
+
+    /// Where the statement a `{` opens starts: after the previous line break, `{`, `}` or `;` outside brackets.
+    func statementStart(before brace: Int) -> Int {
+        var k = brace - 1, depth = 0
+        while k >= 0 {
+            let c = b[k]
+            if c == UInt8(ascii: ")") || c == UInt8(ascii: "]") { depth += 1 }
+            else if c == UInt8(ascii: "(") || c == UInt8(ascii: "[") { if depth == 0 { break }; depth -= 1 }
+            else if depth == 0, c == 10 || c == UInt8(ascii: "{") || c == UInt8(ascii: "}") || c == UInt8(ascii: ";") { break }
+            k -= 1
+        }
+        return skipSpace(k + 1, newlines: true)
+    }
+
+    /// The first word of the statement a `{` opens (`if`, `else`, `switch`, `for`, or a call's name).
+    func statementKeyword(before brace: Int) -> String? { identifier(startingAt: statementStart(before: brace))?.name }
+
+    /// For a brace that is a branch of an `if` chain, the brace of the chain's first branch: `else` and `else if`
+    /// branches follow the `}` before their `else` back to the `if`.
+    func ifChainStart(_ brace: Int) -> Int? {
+        guard let word = statementKeyword(before: brace), word == "if" || word == "else" else { return nil }
+        var current = brace
+        while true {
+            let start = statementStart(before: current)
+            guard identifier(startingAt: start)?.name == "else" else { return current }
+            let prev = skipSpaceBack(start - 1)
+            guard prev >= 0, b[prev] == UInt8(ascii: "}"), partner[prev] >= 0 else { return current }
+            current = partner[prev]
+        }
     }
 
     /// Buttons kept only for their keyboard shortcut, drawn at zero size or fully transparent: not part of the look.
@@ -897,5 +964,33 @@ struct StyleEnvironment {
         if lower.contains("red") || lower.contains("critical") || lower.contains("destructive") { return "critical" }
         if lower.contains("accent") { return "accent" }
         return "custom"
+    }
+}
+
+public extension ComponentInventoryScanner {
+    /// The app's oldest supported macOS, from `Package.swift` (`.macOS(.v14)`, `.macOS("26.0")`) and Xcode projects
+    /// (`MACOSX_DEPLOYMENT_TARGET = 13.0;`): the value most targets use. Nil when none says.
+    static func minimumMacOS(appRoot: String) -> String? {
+        let root = URL(fileURLWithPath: (appRoot as NSString).expandingTildeInPath)
+        var found: [String: Int] = [:]
+        let patterns = [ComponentReader.re(#"\.macOS\(\s*\.v(\d+)(?:_(\d+))?\s*\)"#), ComponentReader.re(#"\.macOS\(\s*"(\d+)(?:\.(\d+))?"#),
+                        ComponentReader.re(#"MACOSX_DEPLOYMENT_TARGET\s*=\s*"?(\d+)(?:\.(\d+))?"#)]
+        guard let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { return nil }
+        for case let url as URL in e {
+            let name = url.lastPathComponent
+            if ComponentsScanner.skippedFolders.contains(name) || name == "checkouts" { e.skipDescendants(); continue }
+            if url.pathComponents.count - root.pathComponents.count > 4 { e.skipDescendants(); continue }
+            guard name == "Package.swift" || name == "project.pbxproj" || name.hasSuffix(".xcconfig"),
+                  let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            for re in patterns {
+                for m in re.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                    guard let major = Range(m.range(at: 1), in: text).map({ String(text[$0]) }) else { continue }
+                    let minor = Range(m.range(at: 2), in: text).map { String(text[$0]) } ?? "0"
+                    // Old marketing numbers (10.15) count as they are.
+                    found["\(major).\(minor)", default: 0] += 1
+                }
+            }
+        }
+        return found.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
     }
 }

@@ -25,14 +25,24 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
     /// Places beyond the standard ones (DS5: more as data).
     public var places: [ComponentPlace]
     public var roles: [ComponentRole]
+    /// What the owner still has to decide: looks to pick at setup, mismatches found later (DS4, DS7). Answered in the
+    /// Components Designer or with `hatch components answer`; each answer changes the system and leaves the list.
+    public var questions: [ComponentQuestion]
+    /// The oldest macOS the app runs on. macOS 27 is the reference (glass styles and the rest); generated code falls
+    /// back for anything older.
+    public var minimumMacOS: String
+
+    public static let referenceMacOS = "27.0"
 
     public init(name: String, version: Int = 1, template: String? = nil, foundations: [ComponentFoundation] = [],
-                places: [ComponentPlace] = [], roles: [ComponentRole] = []) {
+                places: [ComponentPlace] = [], roles: [ComponentRole] = [], questions: [ComponentQuestion] = [],
+                minimumMacOS: String = ComponentSystem.referenceMacOS) {
         self.format = Self.currentFormat; self.name = name; self.version = version; self.template = template
-        self.foundations = foundations; self.places = places; self.roles = roles
+        self.foundations = foundations; self.places = places; self.roles = roles; self.questions = questions
+        self.minimumMacOS = minimumMacOS
     }
 
-    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles }
+    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -43,6 +53,8 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         foundations = try c.decodeIfPresent([ComponentFoundation].self, forKey: .foundations) ?? []
         places = try c.decodeIfPresent([ComponentPlace].self, forKey: .places) ?? []
         roles = try c.decodeIfPresent([ComponentRole].self, forKey: .roles) ?? []
+        questions = try c.decodeIfPresent([ComponentQuestion].self, forKey: .questions) ?? []
+        minimumMacOS = try c.decodeIfPresent(String.self, forKey: .minimumMacOS) ?? Self.referenceMacOS
     }
 
     // MARK: Reading and writing
@@ -69,6 +81,9 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
 
     /// The standard places and this system's own, in that order.
     public var allPlaces: [ComponentPlace] { ComponentPlace.standard + places.filter { p in !ComponentPlace.standard.contains { $0.id == p.id } } }
+
+    /// The macOS version as a number for comparisons (`26.4` → 26.4).
+    public var minimumMacOSNumber: Double { Double(minimumMacOS.split(separator: ".").prefix(2).joined(separator: ".")) ?? 27 }
 
     public func place(_ id: String) -> ComponentPlace? { allPlaces.first { $0.id == id } }
     public func role(_ id: String) -> ComponentRole? { roles.first { $0.id == id } }
@@ -122,6 +137,7 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         for id in duplicates(foundations.map(\.id)) { out.append("Foundation \(id) is listed twice.") }
         for id in duplicates(places.map(\.id)) { out.append("Place \(id) is listed twice.") }
         for id in duplicates(roles.map(\.id)) { out.append("Role \(id) is listed twice.") }
+        for id in duplicates(questions.map(\.id)) { out.append("Question \(id) is listed twice.") }
         for p in places where ComponentPlace.standard.contains(where: { $0.id == p.id }) {
             out.append("Place \(p.id) is already a standard place; remove it from the system's own places.")
         }
@@ -474,9 +490,11 @@ public struct ComponentParameter: Equatable, Sendable {
     public var values: [String]
     /// When set, the value may also name a foundation of this kind (`radius.card`).
     public var foundation: ComponentFoundation.Kind?
+    /// False for behaviour (a keyboard key, a tooltip, a confirmation): two uses that differ only there look the same.
+    public var isLook: Bool
 
-    public init(_ id: String, _ title: String, _ values: [String], foundation: ComponentFoundation.Kind? = nil) {
-        self.id = id; self.title = title; self.values = values; self.foundation = foundation
+    public init(_ id: String, _ title: String, _ values: [String], foundation: ComponentFoundation.Kind? = nil, isLook: Bool = true) {
+        self.id = id; self.title = title; self.values = values; self.foundation = foundation; self.isLook = isLook
     }
 
     /// The values as a person reads them, with "a color foundation" style hints.
@@ -491,6 +509,11 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
     public var parameters: [ComponentParameter]
 
     public func parameter(_ id: String) -> ComponentParameter? { parameters.first { $0.id == id } }
+
+    /// The settings that change how it looks, without behaviour (key, tooltip, confirmation).
+    public func look(_ recipe: [String: String]) -> [String: String] {
+        recipe.filter { parameter($0.key)?.isLook ?? true }
+    }
     public static func named(_ id: String) -> ComponentElement? { catalog.first { $0.id == id } }
 
     static let sizes = ["mini", "small", "regular", "large", "extraLarge"]
@@ -504,9 +527,9 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
             ComponentParameter("shape", "Shape", ["automatic", "capsule", "roundedRectangle", "circle"]),
             ComponentParameter("tint", "Tint", tints, foundation: .color),
             ComponentParameter("show", "Shown", ["always", "onHover"]),
-            ComponentParameter("confirm", "Confirm first", ["no", "yes"]),
-            ComponentParameter("key", "Key", ["none", "defaultAction", "cancelAction"]),
-            ComponentParameter("tooltip", "Tooltip", ["none", "title", "shortcut"]),
+            ComponentParameter("confirm", "Confirm first", ["no", "yes"], isLook: false),
+            ComponentParameter("key", "Key", ["none", "defaultAction", "cancelAction"], isLook: false),
+            ComponentParameter("tooltip", "Tooltip", ["none", "title", "shortcut"], isLook: false),
         ]),
         ComponentElement(id: "menu", title: "Menu", plural: "Menus", parameters: [
             ComponentParameter("style", "Style", ["automatic", "button", "borderlessButton"]),

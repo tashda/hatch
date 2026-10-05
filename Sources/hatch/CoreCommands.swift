@@ -62,7 +62,15 @@ enum CoreCommands {
     // hatch components templates   -> the templates a system can start from (DS6)
     // hatch components inventory [<app folder>] [--element button] [--all] -> every control, by place and look (DS4)
     static func components(_ c: Context) throws {
-        if c.args.pos(1) == "inventory" { try componentInventory(c); return }
+        switch c.args.pos(1) {
+        case "inventory": try componentInventory(c); return
+        case "start": try componentStart(c); return
+        case "questions": try componentQuestions(c); return
+        case "answer": try componentAnswer(c); return
+        case "agree": try componentAgree(c); return
+        case "check": try componentCheck(c); return
+        default: break
+        }
         if c.args.pos(1) == "templates" {
             let list = ComponentTemplates.all
             c.out.emit(.array(list.map { ["id": .string($0.id), "title": .string($0.title), "summary": .string($0.summary)] }),
