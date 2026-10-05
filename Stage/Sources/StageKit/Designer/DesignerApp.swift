@@ -224,6 +224,24 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                 save(window, "foundations-\(kind.rawValue)-\(dark ? "dark" : "light")", dir)
             }
         }
+        // Light and dark side by side (Both), on an element's page and on a role being compared.
+        if !liveOnly {
+            model.appearance = .both
+            model.selection = .element("button")
+            model.mode = .inPlace
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            save(window, "button-both", dir)
+            model.appearance = .light
+            // The hard cases: long labels and larger text must wrap, never cut or overlap.
+            model.sample.longLabel = true
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            save(window, "button-long", dir)
+            model.sample.longLabel = false
+            model.largeText = true
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            save(window, "button-large", dir)
+            model.largeText = false
+        }
         // The live window: the shell, then its sheet, alert and empty state.
         model.dark = false
         openLiveWindow()

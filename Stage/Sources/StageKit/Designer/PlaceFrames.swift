@@ -108,9 +108,9 @@ struct PlaceFrame: View {
                 if hovered == role.id {
                     RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 1.5)
                 } else if changed(role) {
-                    // What a preview changes is marked where it is, so a change is seen at a glance.
+                    // What a preview changes is outlined where it is, so a change is seen at a glance; no fill, which
+                    // would tint the control and read as an error on a large block.
                     RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange, lineWidth: 2)
-                        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
                 }
             }
             .overlay(alignment: .topTrailing) {
@@ -284,6 +284,25 @@ struct PlaceFrame: View {
 
     @ViewBuilder private var mock: some View {
         switch place.id {
+        case _ where element == "emptyState":
+            // The empty state is the place: drawn once, not inside another one.
+            HStack(spacing: 12) { ForEach(cells, id: \.id) { control($0, padded: false) } }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(12)
+        case _ where element == "sheet":
+            // A sheet over its dimmed window, as it is seen.
+            ZStack {
+                if framed { dimmedWindow }
+                HStack(spacing: 12) { ForEach(cells, id: \.id) { control($0, padded: false) } }
+                    .padding(.top, framed ? 52 : 10).padding(.bottom, framed ? 20 : 10)
+            }
+        case "inspector" where element == "form" || element == "card", "card" where element == "form", "form" where element == "form" || element == "card", "page" where element == "form":
+            // A form layout or a card here is the panel's own content, drawn once, not a box inside a form.
+            VStack(spacing: 0) {
+                ForEach(cells, id: \.id) { control($0, padded: false).frame(maxWidth: .infinity, alignment: .topLeading) }
+            }
+            .padding(8)
+            .frame(maxHeight: .infinity, alignment: .top)
         case "toolbar":
             VStack(spacing: 0) {
                 titleBar {
@@ -318,11 +337,12 @@ struct PlaceFrame: View {
                         Text("Rename Area").font(.headline)
                         Text("The new name shows on every ticket in this area.").font(.callout).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        HStack(alignment: .center, spacing: 8) {
+                        // Bottom-aligned: when the buttons wrap, the destructive one stays on the last line, beside Save.
+                        HStack(alignment: .bottom, spacing: 8) {
                             HStack(spacing: 8) { ForEach(cells.filter { $0.importance == .destructive }, id: \.id) { control($0) } }.fixedSize()
                             Spacer(minLength: 12)
+                            // Wraps onto a second line when the labels are long, never past the sheet's edge.
                             FlowRow(trailing: true) { ForEach(cells.filter { $0.importance != .destructive }, id: \.id) { control($0) } }
-                                .fixedSize()
                         }
                         .padding(.top, 8)
                     }
@@ -386,12 +406,18 @@ struct PlaceFrame: View {
                         .offset(y: 0.5).zIndex(1)
                         .padding(.trailing, 21)
                     raised {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Ticket #142").font(.headline)
-                            LabeledContent("Status", value: "Building")
-                            controls().padding(.top, 2)
+                        if element == "form" || element == "card" {
+                            // A form or card is the popover's content, sized to it within the tile.
+                            VStack(alignment: .leading, spacing: 0) { ForEach(cells, id: \.id) { control($0, padded: false) } }
+                                .padding(6).frame(maxWidth: 340, alignment: .leading)
+                        } else {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Ticket #142").font(.headline)
+                                LabeledContent("Status", value: "Building")
+                                controls().padding(.top, 2)
+                            }
+                            .padding(14).frame(width: 250, alignment: .leading)
                         }
-                        .padding(14).frame(width: 250, alignment: .leading)
                     }
                 }
                 .padding(.top, framed ? 46 : 10).padding(.trailing, 12).padding(.bottom, 14).padding(.leading, framed ? 0 : 12)
@@ -403,7 +429,8 @@ struct PlaceFrame: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(cells, id: \.id) { role in menuLines(role) }
                     }
-                    .padding(5).frame(width: 210)
+                    // A menu is as wide as its longest item (at least 200 points), as NSMenu draws it.
+                    .padding(5).frame(minWidth: 200, alignment: .leading).fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(.top, framed ? 56 : 10).padding(.leading, framed ? 60 : 12).padding(.bottom, 14)
             }
@@ -463,26 +490,6 @@ struct PlaceFrame: View {
                 .padding([.horizontal, .top], 16)
                 content(1)
             }
-        case _ where element == "emptyState":
-            // The empty state is the place: drawn once, not inside another one.
-            HStack(spacing: 12) { ForEach(cells, id: \.id) { control($0, padded: false) } }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(12)
-        case _ where element == "sheet":
-            // A sheet over its dimmed window, as it is seen.
-            ZStack {
-                if framed { dimmedWindow }
-                HStack(spacing: 12) { ForEach(cells, id: \.id) { control($0, padded: false) } }
-                    .padding(.top, framed ? 52 : 10).padding(.bottom, framed ? 20 : 10)
-            }
-        case "inspector" where element == "form" || element == "card", "popover" where element == "form" || element == "card",
-             "card" where element == "form", "form" where element == "form" || element == "card", "page" where element == "form":
-            // A form layout or a card here is the panel's own content, drawn once, not a box inside a form.
-            VStack(spacing: 0) {
-                ForEach(cells, id: \.id) { control($0, padded: false).frame(maxWidth: .infinity, alignment: .topLeading) }
-            }
-            .padding(8)
-            .frame(maxHeight: .infinity, alignment: .top)
         case "inspector":
             // The inspector column: a grouped form on its own background beside the window's content. In a narrow
             // tile the content side goes, never the inspector's values.

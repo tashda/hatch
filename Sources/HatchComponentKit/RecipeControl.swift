@@ -18,7 +18,16 @@ public struct SampleContent: Equatable {
     /// The place it is drawn in, when a control looks different by place (a badge on a toolbar item or in a row).
     public var place: String?
 
-    public var shownTitle: String { longLabel ? "Save and continue to the next step" : title }
+    /// With Long Label, each title its own longer words (a Delete still reads as Delete), so wrapping is judged on
+    /// real buttons, not the same sentence everywhere.
+    public var shownTitle: String {
+        guard longLabel else { return title }
+        let long = ["Save": "Save and continue to the next step", "Delete": "Delete all archived tickets", "Cancel": "Cancel and go back",
+                    "Share": "Share with the whole team", "Open": "Open in a new window", "Show All": "Show all 128 tickets",
+                    "Refresh": "Refresh every project", "New Ticket": "New ticket from the clipboard", "Filter": "Filter by area and status",
+                    "Rename": "Rename and keep the history"]
+        return long[title] ?? title + " and continue"
+    }
 }
 
 /// One control or block drawn from a recipe.
@@ -658,7 +667,9 @@ private struct RecipeForm: View {
             default: form
             }
         }
-        .frame(width: 330, height: 150)
+        // A columns form centres its labels and controls on a midline; the long checkbox row needs 400 points or the
+        // labels hang outside the frame (seen on the canvas).
+        .frame(width: recipe["style"] == "grouped" ? 330 : 400, height: 150)
         .scrollDisabled(true)
     }
 }

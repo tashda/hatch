@@ -243,11 +243,10 @@ struct Appearances<Content: View>: View {
     @ViewBuilder var content: () -> Content
     var body: some View {
         if model.appearance == .both {
-            HStack(alignment: .top, spacing: 10) {
-                content().padding(10).environment(\.colorScheme, .light)
-                    .background(Color(white: 0.86), in: RoundedRectangle(cornerRadius: 12))
-                content().padding(10).environment(\.colorScheme, .dark)
-                    .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 12))
+            // Each side is its own tile in its own appearance; no band around them (a box around a box).
+            HStack(alignment: .top, spacing: 12) {
+                content().environment(\.colorScheme, .light)
+                content().environment(\.colorScheme, .dark)
             }
         } else {
             content()
