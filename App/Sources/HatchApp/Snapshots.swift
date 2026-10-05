@@ -361,6 +361,7 @@ enum Snapshots {
                 let w = ComponentGallery.window()
                 try? await Task.sleep(nanoseconds: 900_000_000)
                 save(w, name: name, mode: mode, into: folder)
+                ComponentGallery.writeFrames(into: folder, scale: w.backingScaleFactor)
                 w.close()
                 continue
             }

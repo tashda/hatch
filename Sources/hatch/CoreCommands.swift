@@ -66,6 +66,7 @@ enum CoreCommands {
         switch c.args.pos(1) {
         case "inventory": try componentInventory(c); return
         case "views": try componentViews(c); return
+        case "capture": try componentCapture(c); return
         case "start": try componentStart(c); return
         case "questions": try componentQuestions(c); return
         case "answer": try componentAnswer(c); return
@@ -128,7 +129,9 @@ enum CoreCommands {
             guard let app = project.config?.repo(.app)?.localPath else { throw CLIError("Give the app's folder: hatch components views <folder>.") }
             root = app
         }
-        let model = AppViewScanner.scan(appRoot: root, excluding: componentsExclusion(try? c.project(), folder: root))
+        // Heights as the app drew them, when its gallery is in the notebook.
+        let captures = (try? notebookFolder(c)).flatMap { ComponentCaptures.load(from: URL(fileURLWithPath: $0).appendingPathComponent(ComponentCaptures.notebookPath)) }
+        let model = AppViewScanner.scan(appRoot: root, excluding: componentsExclusion(try? c.project(), folder: root), measured: captures?.heights ?? [:])
         if c.out.json {
             let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(model)
@@ -146,9 +149,34 @@ enum CoreCommands {
             let vs = model.views.filter { $0.kind == kind }
             guard !vs.isEmpty, kind != .sample || only == .sample else { continue }
             lines.append("\n\(kind.title) (\(vs.count))")
-            for v in vs { lines.append("  \(v.id)  \(v.file):\(v.line)  \(v.family.map { "[\($0)] " } ?? "")\(v.reason)") }
+            for v in vs { lines.append("  \(v.id)  \((v.file as NSString).lastPathComponent):\(v.line)  \(v.family.map { "[\($0)] " } ?? "")\(v.reason)") }
         }
         c.out.line(lines.joined(separator: "\n"))
+    }
+
+    /// hatch components capture --from <folder>: keeps the pictures the app drew of its own components (its
+    /// `--only component-gallery` snapshot) in the notebook, so the Components Designer shows each view as it is.
+    static func componentCapture(_ c: Context) throws {
+        guard let from = c.args.option("from").map({ URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }) else {
+            throw CLIError("Give the folder the app wrote its gallery to: hatch components capture --from <folder>.")
+        }
+        guard let captures = ComponentCaptures.load(from: from) else {
+            throw CLIError("No component-gallery.json in \(from.path): run the app with --snapshots <folder> --only component-gallery first.")
+        }
+        let notebook = try notebookFolder(c)
+        let target = URL(fileURLWithPath: notebook).appendingPathComponent(ComponentCaptures.notebookPath, isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        for name in ComponentCaptures.files {
+            let src = from.appendingPathComponent(name), dst = target.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: src.path) else { continue }
+            try? FileManager.default.removeItem(at: dst)
+            try FileManager.default.copyItem(at: src, to: dst)
+        }
+        if FileManager.default.fileExists(atPath: (notebook as NSString).appendingPathComponent(".git")) {
+            _ = try NotebookWriter.commit("Components: pictures of \(captures.items.count) of the app's own components", in: notebook)
+        }
+        c.out.emit(["views": .int(captures.items.count), "folder": .string(target.path)],
+                   text: "Kept pictures of \(captures.items.count) views in \(ComponentCaptures.notebookPath).")
     }
 
     static func componentInventory(_ c: Context) throws {

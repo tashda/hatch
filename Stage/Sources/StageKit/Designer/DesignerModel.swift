@@ -161,6 +161,10 @@ enum DesignerSelection: Hashable {
     case foundations(ComponentFoundation.Kind)
     case element(String)
     case rules
+    /// One of the app's own components, as Hatch proposes it (CM9): its views, their pictures, where they are used.
+    case own(String)
+    /// The app's own views Hatch could not place: questions, never guesses (CM8).
+    case ownQuestions
 }
 
 @MainActor
@@ -213,8 +217,15 @@ final class DesignerModel: ObservableObject {
 
     /// The app's folder, so a use can be opened in Xcode at its line (CD49).
     let appRoot: String?
+    /// Every view the app declares, answered, and its own components proposed (CM8, CM9).
+    let appViews: AppViewModel?
+    /// Pictures of the app's own views, drawn by the app (CM5).
+    let captures: ComponentCaptures?
+    private var pictures: [String: NSImage] = [:]
 
-    init(source: ComponentsSource, inventory: ComponentInventory? = nil, appRoot: String? = nil) throws {
+    init(source: ComponentsSource, inventory: ComponentInventory? = nil, appRoot: String? = nil, captures: ComponentCaptures? = nil) throws {
+        self.appViews = appRoot.map { AppViewScanner.scan(appRoot: $0, measured: captures?.heights ?? [:]) }
+        self.captures = captures
         self.source = source
         self.appRoot = appRoot
         let s = try source.load()
@@ -307,6 +318,35 @@ final class DesignerModel: ObservableObject {
     /// The role would be drawn differently from today by the look being tried.
     func isChanged(_ role: ComponentRole) -> Bool {
         isPreviewing(role) && drawn(role.element, look(of: role)) != drawn(role.element, role.draft ?? role.recipe)
+    }
+
+    /// The app's own components Hatch proposes, most used first.
+    var ownProposals: [AppComponentProposal] { appViews?.proposals ?? [] }
+    func ownProposal(_ id: String) -> AppComponentProposal? { ownProposals.first { $0.id == id } }
+    func ownView(_ id: String) -> AppView? { appViews?.views.first { $0.id == id } }
+    var ownQuestions: [AppView] { appViews?.views.filter { $0.kind == .unknown } ?? [] }
+
+    /// A view's picture as the app drew it, cut from the capture; nil when the gallery has not drawn it yet.
+    func ownPicture(_ id: String, dark: Bool) -> NSImage? {
+        let key = id + (dark ? ".dark" : ".light")
+        if let cached = pictures[key] { return cached }
+        guard let captures, let f = captures.frame(of: id), let full = NSImage(contentsOf: captures.picture(dark: dark)),
+              let cg = full.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let pad = 4 * captures.scale
+        let rect = CGRect(x: max(0, f.x - pad), y: max(0, f.y - pad), width: f.width + 2 * pad, height: f.height + 2 * pad)
+        guard let cut = cg.cropping(to: rect) else { return nil }
+        let image = NSImage(cgImage: cut, size: NSSize(width: rect.width / captures.scale, height: rect.height / captures.scale))
+        pictures[key] = image
+        return image
+    }
+
+    /// Opens a file of the app in Xcode at a line.
+    func openInXcode(_ file: String, line: Int) {
+        let path = file.hasPrefix("/") ? file : ((appRoot ?? "") as NSString).appendingPathComponent(file)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/xed")
+        p.arguments = ["--line", String(line), path]
+        try? p.run()
     }
 
     /// The open look question about a role, if any.

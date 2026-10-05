@@ -18,6 +18,8 @@ public struct DesignerLaunchOptions: Equatable {
     public var snapshotDirectory: URL?
     /// With --snapshots: only the live window.
     public var liveOnly = false
+    /// The folder with the pictures the app drew of its own components (`components/captures` in the notebook).
+    public var captures: String?
 
     public var isDesigner: Bool { project != nil || notebook != nil || demoTemplate != nil }
 
@@ -31,6 +33,7 @@ public struct DesignerLaunchOptions: Equatable {
             case "--notebook": o.notebook = value(); if o.notebook != nil { i += 1 }
             case "--components-demo": o.demoTemplate = value() ?? "glass"; if value() != nil { i += 1 }
             case "--app": o.appFolder = value(); if o.appFolder != nil { i += 1 }
+            case "--captures": o.captures = value(); if o.captures != nil { i += 1 }
             case "--home": o.home = value(); if o.home != nil { i += 1 }
             case "--snapshots": if let v = value() { o.snapshotDirectory = URL(fileURLWithPath: v, isDirectory: true); i += 1 }
             case "--live-only": o.liveOnly = true
@@ -76,7 +79,9 @@ enum DesignerApp {
                 source = LocalComponentsSource(system: template.system(name: "Demo"))
             }
             let inventory = options.appFolder.map { ComponentInventoryScanner.scan(appRoot: $0) }
-            let model = try DesignerModel(source: source, inventory: inventory, appRoot: options.appFolder)
+            let capturesFolder = options.captures ?? options.notebook.map { ($0 as NSString).appendingPathComponent(ComponentCaptures.notebookPath) }
+            let captures = capturesFolder.flatMap { ComponentCaptures.load(from: URL(fileURLWithPath: $0, isDirectory: true)) }
+            let model = try DesignerModel(source: source, inventory: inventory, appRoot: options.appFolder, captures: captures)
             let d = DesignerDelegate(model: model, snapshotDirectory: options.snapshotDirectory)
             d.liveOnly = options.liveOnly
             delegate = d
@@ -241,6 +246,17 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
             try? await Task.sleep(nanoseconds: 600_000_000)
             save(window, "button-large", dir)
             model.largeText = false
+            // The app's own components: chips, cards and rows, then the questions (CM8, CM9).
+            for p in model.ownProposals.filter({ ["chip", "card", "row"].contains($0.family) && !$0.interactive }) {
+                model.selection = .own(p.id)
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                save(window, "own-\(p.family.replacingOccurrences(of: " ", with: "-"))\(p.interactive ? "-interactive" : "")", dir)
+            }
+            if !model.ownQuestions.isEmpty {
+                model.selection = .ownQuestions
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                save(window, "own-questions", dir)
+            }
         }
         // The live window: the shell, then its sheet, alert and empty state.
         model.dark = false

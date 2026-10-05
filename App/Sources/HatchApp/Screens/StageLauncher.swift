@@ -74,6 +74,10 @@ final class StageLauncher {
         let home = state.paths.root.path
         var arguments = ["--components", project.key, "--home", home]
         if let app = project.config?.repo(.app)?.localPath { arguments += ["--app", app] }
+        // The pictures the app drew of its own components, read from the notebook (CM5).
+        if let notebook = project.config?.repo(.notebook)?.localPath {
+            arguments += ["--captures", (notebook as NSString).appendingPathComponent(ComponentCaptures.notebookPath)]
+        }
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments

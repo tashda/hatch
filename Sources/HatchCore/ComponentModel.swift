@@ -65,6 +65,7 @@ public struct AppView: Codable, Identifiable, Hashable, Sendable {
     }
 
     public var id: String
+    /// The file's path in the app, as the inventory read it.
     public var file: String
     public var line: Int
     public var kind: Kind
@@ -83,6 +84,12 @@ public struct AppView: Codable, Identifiable, Hashable, Sendable {
 
 /// A component of the app's own, proposed from views that draw alike: one name, a few variants.
 public struct AppComponentProposal: Codable, Identifiable, Hashable, Sendable {
+    public struct Size: Codable, Hashable, Sendable {
+        public var name: String
+        public var members: [String]
+        public var note: String?
+    }
+
     public struct Variant: Codable, Hashable, Sendable {
         public var name: String
         public var members: [String]
@@ -95,6 +102,8 @@ public struct AppComponentProposal: Codable, Identifiable, Hashable, Sendable {
     public var interactive: Bool
     public var members: [String]
     public var variants: [Variant]
+    /// The sizes Hatch proposes (small, medium, large), each with its views and what to settle.
+    public var sizes: [Size]
     public var uses: Int
     /// What Hatch proposes and why, in a sentence.
     public var why: String
@@ -117,7 +126,8 @@ public struct AppViewModel: Codable, Sendable {
 
 public enum AppViewScanner {
     /// Reads every view the app declares, answers each, and proposes the app's own components.
-    public static func scan(files: [(path: String, text: String)]) -> AppViewModel {
+    /// `measured`: each view's height in points as the app drew it (from its gallery), which beats any estimate.
+    public static func scan(files: [(path: String, text: String)], measured: [String: Double] = [:]) -> AppViewModel {
         var found: [(decl: Declaration, structure: SwiftStructure, file: String)] = []
         for f in files {
             let s = SwiftStructure(f.text)
@@ -142,13 +152,13 @@ public enum AppViewScanner {
             views.append(answer(d, s, file: file, names: names, uses: u.count, usedIn: u.files.sorted()))
         }
         views.sort { ($0.family ?? "~", $0.id) < ($1.family ?? "~", $1.id) }
-        return AppViewModel(views: views, proposals: propose(views))
+        return AppViewModel(views: views, proposals: propose(views, measured: measured))
     }
 
     /// The views of the app at a folder, read with the inventory's own file rules (tests, other platforms and samples
     /// marked as such are left out).
-    public static func scan(appRoot: String, excluding: [String] = []) -> AppViewModel {
-        scan(files: ComponentInventoryScanner.appFiles(appRoot: appRoot, excluding: excluding))
+    public static func scan(appRoot: String, excluding: [String] = [], measured: [String: Double] = [:]) -> AppViewModel {
+        scan(files: ComponentInventoryScanner.appFiles(appRoot: appRoot, excluding: excluding), measured: measured)
     }
 
     // MARK: Declarations
@@ -194,7 +204,7 @@ public enum AppViewScanner {
     // MARK: The answer for one view
 
     static let familyWords: [(String, [String])] = [
-        ("chip", ["chip", "pill", "badge", "tag"]), ("banner", ["banner", "callout", "notice", "toast"]),
+        ("chip", ["chip", "pill", "tag"]), ("badge", ["badge", "count"]), ("banner", ["banner", "callout", "notice", "toast"]),
         ("card", ["card", "tile", "box"]), ("row", ["row", "line", "cell", "item"]), ("header", ["header", "subtitle", "title", "heading"]),
         ("label", ["label", "caption"]), ("glyph", ["glyph", "icon", "dot", "avatar"]), ("button", ["button"]),
         ("field", ["field", "editor", "input"]), ("bar", ["bar", "strip"]), ("bubble", ["bubble", "message"]),
@@ -210,7 +220,7 @@ public enum AppViewScanner {
         let style = readStyle(d.body)
         let interactive = ["Button(", "Button {", "Toggle(", "onTapGesture", "Menu(", "Menu {", "Picker("].contains { d.body.contains($0) }
         let family = familyWords.first { $0.1.contains(last) }?.0 ?? (screenWords.contains(last) ? nil : familyByLook(style))
-        var view = AppView(id: d.name, file: (file as NSString).lastPathComponent, line: d.line, kind: .unknown, reason: "", family: family,
+        var view = AppView(id: d.name, file: file, line: d.line, kind: .unknown, reason: "", family: family,
                            style: style, interactive: interactive, wraps: nil, uses: uses, usedIn: usedIn, bodyLines: d.bodyLines)
 
         if d.sample || words.first == "lab" || file.contains("/Labs/") {
@@ -233,8 +243,8 @@ public enum AppViewScanner {
             return view
         }
         // A name and a look that disagree are asked about, not settled by Hatch: a "chip" with no capsule or fill.
-        if family == "chip", style.shape == nil, style.fill == nil, d.bodyLines <= 60 {
-            view.reason = "Named a chip, but draws no chip (no capsule, no fill): a label, or a chip that lost its shape?"
+        if family == "chip" || family == "badge", style.shape == nil, style.fill == nil, d.bodyLines <= 60 {
+            view.reason = "Named a \(family!), but draws none (no shape, no fill): a label, or a \(family!) that lost its shape?"
             view.family = "label"
             return view
         }
@@ -318,7 +328,7 @@ public enum AppViewScanner {
     /// Components of the app's own: one per family (chip, card, row…), interactive ones apart. Each distinct form is a
     /// variant, its colours the variant's tones. A family with more forms than the budget gets a proposal of sizes
     /// (small, medium, large) with each view's move, for the owner to accept or change.
-    static func propose(_ views: [AppView]) -> [AppComponentProposal] {
+    static func propose(_ views: [AppView], measured: [String: Double] = [:]) -> [AppComponentProposal] {
         let components = views.filter { $0.kind == .component }
         let wrappersOf = Dictionary(grouping: views.filter { $0.kind == .wrapper }, by: { $0.wraps ?? "" })
         var out: [AppComponentProposal] = []
@@ -335,18 +345,18 @@ public enum AppViewScanner {
             let all = members.map(\.id).sorted() + members.flatMap { wrappersOf[$0.id]?.map(\.id) ?? [] }
             let uses = members.reduce(0) { $0 + $1.uses }
             let title = interactive ? (family == "chip" ? "Filter chip" : "Interactive \(family)") : family.capitalized
+            let sizes = sizeProposal(members, measured: measured).map { AppComponentProposal.Size(name: $0.name, members: $0.members, note: $0.note) }
             var why: String
             if variants.count == 1 {
                 why = members.count > 1 ? "\(members.count) views draw the same \(family): one component." : "One view with a look of its own: a component even when used once."
             } else {
-                let sizes = sizeProposal(members)
                 let proposed = sizes.map { "\($0.name): \($0.members.joined(separator: ", "))" + ($0.note.map { " (\($0))" } ?? "") }.joined(separator: "; ")
                 why = sizes.count < variants.count
                     ? "\(members.count) views in \(variants.count) forms; \(sizes.count) would do. Proposed: \(proposed)."
                     : "\(members.count) views, \(variants.count) forms: one component with \(variants.count) variants (\(proposed))."
             }
             out.append(AppComponentProposal(id: family + (interactive ? ".interactive" : ""), title: title, family: family, interactive: interactive,
-                                            members: all, variants: variants, uses: uses, why: why))
+                                            members: all, variants: variants, sizes: sizes, uses: uses, why: why))
         }
         return out.sorted { $0.uses > $1.uses }
     }
@@ -354,7 +364,7 @@ public enum AppViewScanner {
     /// Sizes for a family: forms that are nearly the same (same shape and text size, padding within a point) are one
     /// size first, with any difference in weight named; the rest are split where the sizes jump most, into at most
     /// three (small, medium, large). A starting point the owner corrects, never applied on its own.
-    static func sizeProposal(_ members: [AppView]) -> [(name: String, members: [String], note: String?)] {
+    static func sizeProposal(_ members: [AppView], measured: [String: Double] = [:]) -> [(name: String, members: [String], note: String?)] {
         func near(_ a: AppViewStyle, _ b: AppViewStyle) -> Bool {
             a.shape == b.shape && a.font == b.font && abs((a.paddingH ?? 0) - (b.paddingH ?? 0)) <= 1 && abs((a.paddingV ?? 0) - (b.paddingV ?? 0)) <= 1
         }
@@ -362,17 +372,23 @@ public enum AppViewScanner {
         for v in members.sorted(by: { $0.uses > $1.uses }) {
             if let i = groups.firstIndex(where: { near($0[0].style, v.style) }) { groups[i].append(v) } else { groups.append([v]) }
         }
-        let fontRank = ["caption2": 0.0, "caption": 1, "footnote": 2, "subheadline": 3, "callout": 4, "body": 5, "headline": 5, "title3": 6, "title2": 7, "title": 8]
-        func score(_ st: AppViewStyle) -> Double {
-            let f = st.font.flatMap { fontRank[$0] } ?? (st.font?.hasPrefix("system") == true ? (Double(st.font!.split(separator: " ").last ?? "") ?? 13) / 3 : 4)
-            let r = st.shape.flatMap { $0.hasPrefix("rounded") ? Double($0.split(separator: " ").last ?? "") : nil } ?? 0
-            return (st.paddingH ?? 0) + (st.paddingV ?? 0) + f * 2 + r / 2
+        // The height as drawn when the app has drawn it; else text size in points (macOS's own sizes for each
+        // style) plus the vertical padding, one scale for both.
+        let points = ["caption2": 10.0, "caption": 10, "footnote": 10, "subheadline": 11, "callout": 12, "body": 13, "headline": 13,
+                      "title3": 15, "title2": 17, "title": 22, "largeTitle": 26]
+        func height(_ v: AppView) -> Double {
+            if let m = measured[v.id] { return m }
+            let st = v.style
+            let size = st.font?.split(separator: " ").dropFirst().first.flatMap { Double($0) }
+            let text = st.font.flatMap { points[$0] } ?? size ?? 13
+            return text * 1.2 + 2 * (st.paddingV ?? 0)
         }
-        groups.sort { score($0[0].style) < score($1[0].style) }
+        func score(_ group: [AppView]) -> Double { group.map(height).reduce(0, +) / Double(group.count) }
+        groups.sort { score($0) < score($1) }
         // More than three: cut where the scores jump most.
         var buckets: [[AppView]] = groups
         if groups.count > variantBudget {
-            let gaps = (1..<groups.count).map { (i: $0, gap: score(groups[$0][0].style) - score(groups[$0 - 1][0].style)) }
+            let gaps = (1..<groups.count).map { (i: $0, gap: score(groups[$0]) - score(groups[$0 - 1])) }
             let cuts = gaps.sorted { $0.gap > $1.gap }.prefix(variantBudget - 1).map(\.i).sorted()
             buckets = []; var start = 0
             for c in cuts + [groups.count] { buckets.append(groups[start..<c].flatMap { $0 }); start = c }
@@ -382,6 +398,26 @@ public enum AppViewScanner {
             let weights = Set(vs.map { $0.style.weight ?? "regular" })
             let note = weights.count > 1 ? "weights differ (" + weights.sorted().joined(separator: ", ") + "): pick one" : nil
             return (name, vs.map(\.id), note)
+        }
+    }
+
+    /// What SwiftUI offers for a family, if anything: the catalog element to draw, and the words for it. Shown beside
+    /// the app's own views so the owner can choose the native option instead (CM15).
+    public static func nativeOption(family: String) -> (element: String?, words: String) {
+        switch family {
+        case "card", "section": ("card", "SwiftUI's GroupBox: a titled box drawn by macOS.")
+        case "row": ("row", "A List row: macOS draws its height, selection and separators.")
+        case "button": ("button", "Button, in one of SwiftUI's styles.")
+        case "menu": ("menu", "Menu or Picker, as macOS draws them.")
+        case "field": ("field", "TextField, in one of SwiftUI's styles.")
+        case "empty state": ("emptyState", "ContentUnavailableView: macOS's own empty state.")
+        case "chip": (nil, "SwiftUI has no chip. The nearest native is a badge on a row (.badge) or a small bordered button.")
+        case "badge": ("badge", "SwiftUI's .badge: a count on a row or a toolbar item, drawn by macOS.")
+        case "label": (nil, "SwiftUI's Label: an icon and a title, styled by where it sits.")
+        case "header": (nil, "No component: a header is text in one of macOS's styles (.title, .headline).")
+        case "keycap": (nil, "SwiftUI has no keycap; menus show shortcuts themselves.")
+        case "bubble", "banner", "thumbnail", "glyph", "bar": (nil, "SwiftUI has no \(family): this one is the app's own.")
+        default: (nil, "No native equivalent.")
         }
     }
 
@@ -396,3 +432,36 @@ public enum AppViewScanner {
     }
 }
 
+
+/// Pictures of the app's own components, drawn by the app (CM5): `component-gallery-light.png`, `-dark.png` and
+/// `component-gallery.json` with each view's frames, kept in the notebook under `components/captures`.
+public struct ComponentCaptures: Sendable {
+    public static let notebookPath = "components/captures"
+    public static let files = ["component-gallery-light.png", "component-gallery-dark.png", "component-gallery.json"]
+
+    public var folder: URL
+    /// Points to pixels.
+    public var scale: Double
+    /// Each view's frames in points, by type name.
+    public var items: [String: [[Double]]]
+
+    public func picture(dark: Bool) -> URL { folder.appendingPathComponent(dark ? "component-gallery-dark.png" : "component-gallery-light.png") }
+
+    /// The first frame of a view, in pixels of the picture.
+    public func frame(of id: String) -> (x: Double, y: Double, width: Double, height: Double)? {
+        guard let f = items[id]?.first, f.count == 4 else { return nil }
+        return (f[0] * scale, f[1] * scale, f[2] * scale, f[3] * scale)
+    }
+
+    public static func load(from folder: URL) -> ComponentCaptures? {
+        guard let data = try? Data(contentsOf: folder.appendingPathComponent("component-gallery.json")),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = json["items"] as? [String: [[Double]]] else { return nil }
+        return ComponentCaptures(folder: folder, scale: json["scale"] as? Double ?? 2, items: items)
+    }
+}
+
+public extension ComponentCaptures {
+    /// Each view's height in points as the app drew it.
+    var heights: [String: Double] { items.compactMapValues { $0.first.map { $0[3] } } }
+}

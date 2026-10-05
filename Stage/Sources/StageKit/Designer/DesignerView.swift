@@ -82,6 +82,10 @@ struct DesignerView: View {
             AllInspector(model: model)
         case .rules?:
             ContentUnavailableView("Rules", systemImage: "checklist", description: Text("Choose a value beside a rule; Hatch checks the ones marked."))
+        case .own(let id)?:
+            OwnInspector(model: model, proposal: model.ownProposal(id))
+        case .ownQuestions?:
+            OwnInspector(model: model, proposal: nil)
         case .foundations(let kind)?:
             ContentUnavailableView(kind.title, systemImage: DesignerSidebar.symbol(kind), description: Text("Named values the roles use."))
         case nil:
@@ -98,6 +102,8 @@ struct DesignerView: View {
         case .decide?: "To Decide"
         case .foundations(let kind)?: kind.title
         case .rules?: "Rules"
+        case .own(let id)?: model.ownProposal(id)?.title ?? id
+        case .ownQuestions?: "Not Sure Yet"
         case nil: model.appName
         }
     }
@@ -172,6 +178,10 @@ struct DesignerView: View {
             FoundationsView(model: model, kind: kind)
         case .rules?:
             RulesView(model: model)
+        case .own(let id)?:
+            if let p = model.ownProposal(id) { OwnComponentView(model: model, proposal: p) }
+        case .ownQuestions?:
+            OwnQuestionsView(model: model)
         case .all?:
             SystemMatrixView(model: model)
         case .templates?:
@@ -304,6 +314,22 @@ struct DesignerSidebar: View {
             }
             let others = model.system.elementsUsed.filter { e in e != "switcher" && !Self.groups.contains { $0.elements.contains(e) } && shown(e) }
             if !others.isEmpty { Section("Other") { ForEach(others, id: \.self) { e in element(e) } } }
+            // The app's own components, as much part of the system as SwiftUI's (CM9).
+            let own = model.ownProposals.filter { shown($0.title) }
+            if !own.isEmpty || !model.ownQuestions.isEmpty {
+                Section("Your Own Components") {
+                    ForEach(own) { p in
+                        Label(p.title, systemImage: "square.on.square.dashed")
+                            .badge(p.members.count).tag(DesignerSelection.own(p.id))
+                            .help(p.why)
+                    }
+                    if !model.ownQuestions.isEmpty {
+                        Label("Not Sure Yet", systemImage: "questionmark.circle")
+                            .badge(model.ownQuestions.count).tag(DesignerSelection.ownQuestions)
+                            .help("Views Hatch can't place from their code: questions, never guesses")
+                    }
+                }
+            }
             let places = model.placesUsed.filter { shown($0.title) }
             if !places.isEmpty {
                 Section("By Place") {
