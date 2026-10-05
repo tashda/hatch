@@ -1586,3 +1586,15 @@ The owner asked whether the design system fights SwiftUI's own rendering (a Navi
 | NF5 | Make it a setting later | Any question can be answered "Like this, and make it a setting": the choice becomes the default and a draft ticket asks for the app setting; until then the check treats the role as configurable. | Some choices belong to the app's users, not to the design system. |
 
 Order: NF1 and NF3, then NF4 and NF5, then NF2; then component questions in Decide, DS8, DS9 and a live run from the app.
+
+## AE. The Components page as the hub (answered 2026-10-05, ids CP1 to CP5)
+
+The owner found the Components page buggy and behind: it listed whatever sat in the configured components folder, which for Hatch is `App` (the whole app, so 192 "views" and sizes such as `QuickCaptureView.width`), and it showed none of roles, places, rules, following macOS, Apple's reasons, questions, coverage or versions. The page is the hub for every component: beautiful and simple, rich with data, clear about how the app should look, and the place where changing a component starts. Every recommendation was chosen.
+
+| Id | Question | Choice | Reason |
+|---|---|---|---|
+| CP1 | Drawing on the page | The recipe engine moves into a shared macOS library (`HatchComponentKit`) used by the app and the Stage, so the page draws real controls. | It is Hatch's own renderer, not the project's code, so Hatch still never compiles project code (CO4). |
+| CP2 | Structure | A header (title, baseline, the dock, search, one prominent Open Designer, a More menu with Live Window, Rescan, Generate Code, Design Document, Apple Sources) and five sections: Overview, Roles, Rules, Foundations, Health. | Five sections fit the text dock (LK3); each answers one question. |
+| CP3 | Changing a component | Change… on a role, rule or foundation opens a sheet (what should change, everywhere or only in a place or area); it files a Proposal linked to the role; the agent offers two to four looks as recipes; the owner judges them in the Stage (in place and in the live window) or in Decide; accepting makes the role's draft; applying starts the next baseline version and drafts the code and migration tickets. Small rule changes and agreeing a provisional role stay one click. | Changes to the look go through judging, like any visual change, and start where the owner looks at the components. |
+| CP4 | Overview | How the app looks, by place: one card per place with its roles drawn, the state line (baseline, agreed, provisional, in redesign, questions, coverage, settings pending) and the shell with Open Live Window. | Places answer "how does the app look" directly. |
+| CP5 | The old list | The folder-based component list stops being the main content; the old scan moves to Health, folded. A components folder that is the app itself is refused by the scanner and offered for repair on the page. | The design system file is the source of truth (DS2); the old list misled. |
