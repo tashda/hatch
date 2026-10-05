@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Own Components</title>
+<style>
+  :root {
+    --page: #ececee; --sheet: #fbfbfd; --group: #f2f2f5; --line: #e1e1e6; --line2: #d2d2d8; --text: #1d1d1f; --secondary: #6e6e73;
+    --tertiary: #a1a1a6; --blue: #0a66d8; --blue-soft: #e7f0fd; --green: #248a3d; --green-soft: #e6f4ea; --amber: #a05a00;
+    --amber-soft: #fdf1df; --red: #c4271d; --red-soft: #fde8e7; --side: #f4f4f7; --sel: rgba(10,102,216,.12);
+    /* The mock window, as macOS 27 draws it */
+    --w-bg: #f5f5f7; --w-side: #ebebed; --w-row: #ffffff; --w-sep: rgba(0,0,0,.08); --w-text: #1d1d1f; --w-sec: #6e6e73; --w-ter: #a1a1a6;
+    --w-accent: #0a7aff; --w-accent-soft: rgba(10,122,255,.12); --w-insp: #f0f0f2; --w-fill: rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #161618; --sheet: #232326; --group: #2c2c30; --line: #3a3a3f; --line2: #4a4a50; --text: #f2f2f4; --secondary: #a3a3aa;
+      --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+      --amber-soft: #3d2e14; --red: #ff6b61; --red-soft: #3d1c1a; --side: #1d1d20; --sel: rgba(76,155,255,.18);
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #161618; --sheet: #232326; --group: #2c2c30; --line: #3a3a3f; --line2: #4a4a50; --text: #f2f2f4; --secondary: #a3a3aa;
+    --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+    --amber-soft: #3d2e14; --red: #ff6b61; --red-soft: #3d1c1a; --side: #1d1d20; --sel: rgba(76,155,255,.18);
+  }
+  /* The mock follows its own Light / Dark switch, so both can be judged whatever the page uses */
+  .mac.dark {
+    --w-bg: #1e1e1e; --w-side: #262628; --w-row: #2c2c2e; --w-sep: rgba(255,255,255,.08); --w-text: #f5f5f7; --w-sec: #a1a1a6; --w-ter: #6e6e73;
+    --w-accent: #0a84ff; --w-accent-soft: rgba(10,132,255,.22); --w-insp: #252527; --w-fill: rgba(255,255,255,.08);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 20px; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 14px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--blue); text-decoration: none; } a:hover { text-decoration: underline; }
+  code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(--group); padding: 1px 5px; border-radius: 5px; }
+
+  .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 100vh; }
+  nav.toc { position: sticky; top: 0; height: 100vh; overflow: auto; background: var(--side); border-right: 1px solid var(--line); padding: 18px 12px 30px; }
+  nav.toc .brand { font-weight: 600; font-size: 14px; padding: 0 8px 2px; }
+  nav.toc .sub { color: var(--secondary); font-size: 11.5px; padding: 0 8px 12px; }
+  nav.toc .grp { font-size: 11px; font-weight: 600; color: var(--tertiary); text-transform: uppercase; letter-spacing: .04em; padding: 14px 8px 4px; }
+  nav.toc a { display: flex; justify-content: space-between; gap: 6px; padding: 4px 8px; border-radius: 6px; color: var(--text); font-size: 12.5px; }
+  nav.toc a:hover { background: var(--group); text-decoration: none; }
+  nav.toc a .n { color: var(--tertiary); font-size: 11px; font-variant-numeric: tabular-nums; }
+  nav.toc a .n.done { color: var(--green); }
+  .progress { margin: 4px 8px 6px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .progress i { display: block; height: 100%; background: var(--blue); width: 0; transition: width .3s; }
+  .theme { display: flex; gap: 2px; margin: 10px 8px 0; background: var(--group); border-radius: 7px; padding: 2px; }
+  .theme button { flex: 1; font: inherit; font-size: 11.5px; border: 0; background: none; color: var(--text); padding: 3px 0; border-radius: 5px; cursor: pointer; }
+  .theme button.on { background: var(--sheet); box-shadow: 0 0 0 .5px var(--line2), 0 1px 2px rgba(0,0,0,.08); }
+
+  main { max-width: 1180px; padding: 36px 40px 140px; }
+  h1 { font-size: 28px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 21px; font-weight: 600; margin: 0 0 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 24px 0 8px; }
+  .lede { color: var(--secondary); font-size: 15px; max-width: 780px; margin: 0 0 22px; }
+  section.s { background: var(--sheet); border: 1px solid var(--line); border-radius: 14px; padding: 26px 28px; margin: 0 0 22px; }
+  .prose { max-width: 800px; }
+  .tag { font-size: 11px; font-weight: 600; color: var(--secondary); background: var(--group); border-radius: 5px; padding: 2px 6px; vertical-align: middle; margin-left: 6px; }
+  .callout { border-radius: 10px; padding: 12px 14px; margin: 14px 0; font-size: 13.5px; max-width: 860px; }
+  .callout.honest { background: var(--amber-soft); }
+  .callout.info { background: var(--blue-soft); }
+
+  /* Today, annotated */
+  .shot { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #fff; }
+  .shot img { display: block; width: 100%; }
+  .pin { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: #d62839; color: #fff; font-weight: 700; font-size: 13px;
+         display: grid; place-items: center; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+  ol.problems { columns: 2; column-gap: 32px; padding-left: 22px; margin: 16px 0 0; }
+  ol.problems li { break-inside: avoid; margin: 0 0 8px; }
+  ol.problems li b { font-weight: 600; }
+
+  /* Principles */
+  .principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin: 14px 0 0; }
+  .principle { background: var(--group); border-radius: 12px; padding: 14px; }
+  .principle b { display: block; margin-bottom: 4px; }
+  .principle span { color: var(--secondary); font-size: 13px; }
+
+  /* Mock controls */
+  .mockbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 4px 0 12px; }
+  .seg { display: inline-flex; gap: 2px; background: var(--group); border-radius: 8px; padding: 2px; }
+  .seg button { font: inherit; font-size: 12.5px; border: 0; background: none; color: var(--text); padding: 4px 12px; border-radius: 6px; cursor: pointer; }
+  .seg button.on { background: var(--sheet); box-shadow: 0 0 0 .5px var(--line2), 0 1px 2px rgba(0,0,0,.08); }
+  .mockwrap { overflow-x: auto; padding: 6px 24px 40px; margin: 0 -24px; }
+
+  /* The mock window */
+  .mac { width: 100%; min-width: 980px; border-radius: 14px; overflow: hidden; color: var(--w-text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, sans-serif;
+         box-shadow: 0 0 0 .5px rgba(0,0,0,.25), 0 20px 50px rgba(0,0,0,.18); background: var(--w-bg); display: grid; grid-template-columns: 190px minmax(0, 1fr) 230px; }
+  .mac .side { background: var(--w-side); padding: 12px 10px; border-right: .5px solid var(--w-sep); }
+  .mac .lights { display: flex; gap: 8px; padding: 4px 6px 16px; }
+  .mac .lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; } .mac .lights i:nth-child(2) { background: #febc2e; } .mac .lights i:nth-child(3) { background: #28c840; }
+  .mac .sh { font-size: 11px; font-weight: 600; color: var(--w-ter); padding: 12px 8px 4px; }
+  .mac .si { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 7px; font-size: 13px; }
+  .mac .si .ic { width: 16px; text-align: center; color: var(--w-accent); font-size: 12px; }
+  .mac .si .ct { margin-left: auto; color: var(--w-ter); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .mac .si.on { background: var(--w-accent); color: #fff; } .mac .si.on .ic, .mac .si.on .ct { color: #fff; }
+  .mac .si .dash { display: inline-block; width: 11px; height: 11px; border: 1.5px dashed currentColor; border-radius: 3px; }
+  .mac .si .solid { display: inline-block; width: 11px; height: 11px; border: 1.5px solid currentColor; border-radius: 3px; }
+  .mac .main { padding: 18px 22px 26px; min-width: 0; }
+  .mac .top { display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; }
+  .mac .title { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+  .mac .sub { color: var(--w-sec); }
+  .mac .say { color: var(--w-sec); margin: 2px 0 16px; max-width: 640px; }
+  .mac .grouphead { display: flex; align-items: center; gap: 12px; margin: 20px 4px 8px; }
+  .mac .grouphead .gl { min-width: 0; }
+  .mac .grouphead .gt { display: block; font-size: 15px; font-weight: 600; }
+  .mac .grouphead .gs { display: block; color: var(--w-sec); font-size: 12.5px; }
+  .mac .grouphead .st { margin-left: auto; color: var(--w-sec); font-size: 12px; display: flex; gap: 8px; align-items: center; }
+  .mac .badge { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; background: var(--w-fill); color: var(--w-sec); }
+  .mac .badge.ok { background: rgba(40,200,64,.15); color: #1f8a33; } .mac.dark .badge.ok { color: #4cd964; }
+  .mac .btn { font: inherit; font-size: 12.5px; border: 0; border-radius: 7px; padding: 3px 11px; background: var(--w-fill); color: var(--w-text); cursor: default; }
+  .mac .btn.pri { background: var(--w-accent); color: #fff; }
+  .mac .list { background: var(--w-row); border-radius: 10px; box-shadow: 0 0 0 .5px var(--w-sep); }
+  .mac .row { display: grid; grid-template-columns: 190px minmax(0, 1fr) 22px; gap: 16px; padding: 12px 14px; align-items: start; }
+  .mac .row + .row, .mac .row + .diff, .mac .diff + .row { border-top: .5px solid var(--w-sep); }
+  .mac .pic { display: flex; align-items: center; min-height: 26px; min-width: 0; overflow: hidden; }
+  .mac .row.wide { grid-template-columns: minmax(0, 1fr) 22px; }
+  .mac .row.wide .pic, .mac .row.wide .draw { grid-column: 1 / -1; grid-row: 1; }
+  .mac .row.wide .more { grid-column: 2; grid-row: 2; }
+  .mac .pic img { height: 23px; width: auto; display: block; }
+  .mac .pic img.wide { height: 22px; }
+  .mac .vn { font: 12px ui-monospace, "SF Mono", Menlo, monospace; color: var(--w-sec); }
+  .mac .shows { margin: 1px 0 6px; }
+  .mac .uses { display: flex; flex-wrap: wrap; gap: 6px; }
+  .mac .use { display: inline-flex; gap: 5px; align-items: baseline; font-size: 12px; padding: 1px 8px; border-radius: 6px; background: var(--w-fill); color: var(--w-text); }
+  .mac .use b { font-weight: 500; } .mac .use span { color: var(--w-sec); font-variant-numeric: tabular-nums; }
+  .mac .more { color: var(--w-ter); font-size: 18px; line-height: 1; text-align: center; padding-top: 2px; }
+  .mac .diff { padding: 9px 14px; color: var(--w-sec); font-size: 12.5px; display: flex; gap: 8px; align-items: baseline; }
+  .mac .diff .ok { color: #28c840; } .mac .diff .warn { color: #ff9f0a; }
+  .mac .screens { display: grid; grid-template-columns: 1fr; gap: 10px; padding: 12px 14px 14px; border-top: .5px solid var(--w-sep); }
+  .mac .screens .sh2 { font-size: 11px; font-weight: 600; color: var(--w-ter); }
+  .mac .screen { position: relative; border-radius: 8px; overflow: hidden; box-shadow: 0 0 0 .5px var(--w-sep); }
+  .mac .screen img { display: block; width: 100%; }
+  .mac .screen { overflow: visible; box-shadow: none; }
+  .mac .screen .lbl { display: block; font-size: 12px; font-weight: 600; margin: 0 0 4px; }
+  .mac .screen .lbl span { color: var(--w-sec); font-weight: 400; }
+  .mac .screen .frame { position: relative; border-radius: 8px; overflow: hidden; box-shadow: 0 0 0 .5px var(--w-sep); }
+  .mac .screen .hl { position: absolute; border: 1.5px solid var(--w-accent); border-radius: 7px; box-shadow: 0 0 0 2px var(--w-accent-soft); }
+  .mac .draw { display: flex; align-items: center; gap: 10px; height: 26px; color: var(--w-sec); font-size: 12px; }
+  .mac .insp { background: var(--w-insp); border-left: .5px solid var(--w-sep); padding: 16px 16px; }
+  .mac .insp .it { font-size: 15px; font-weight: 600; }
+  .mac .insp .is { color: var(--w-sec); margin: 2px 0 14px; }
+  .mac .insp .ih { font-size: 11px; font-weight: 600; color: var(--w-ter); margin: 14px 0 4px; }
+  .mac .insp .ip { color: var(--w-sec); font-size: 12.5px; }
+  .mac .insp hr { border: 0; border-top: .5px solid var(--w-sep); margin: 14px 0; }
+  .mac .insp .acts { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .mac .menu { position: absolute; right: 36px; top: 34px; z-index: 3; width: 230px; padding: 5px; border-radius: 9px; background: var(--w-row);
+               box-shadow: 0 0 0 .5px var(--w-sep), 0 10px 30px rgba(0,0,0,.2); font-size: 13px; }
+  .mac .menu div { padding: 3px 8px; border-radius: 5px; display: flex; justify-content: space-between; }
+  .mac .menu div.on { background: var(--w-accent); color: #fff; }
+  .mac .menu hr { border: 0; border-top: .5px solid var(--w-sep); margin: 4px 6px; }
+  .mac .menu .k { color: var(--w-ter); } .mac .menu div.on .k { color: #fff; }
+  [hidden] { display: none !important; }
+  .caption { color: var(--secondary); font-size: 13px; margin: 2px 0 0; max-width: 860px; }
+  .legend-anno { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 22px; margin: 14px 0 0; font-size: 13px; }
+  .legend-anno div { display: flex; gap: 8px; } .legend-anno b { color: var(--blue); min-width: 16px; }
+
+  /* Setup sheet mock */
+  .sheetmock { width: 520px; max-width: 100%; margin: 10px 0; border-radius: 14px; background: var(--sheet); box-shadow: 0 0 0 .5px var(--line2), 0 18px 40px rgba(0,0,0,.16); padding: 20px; }
+  .sheetmock h4 { margin: 0 0 6px; font-size: 15px; }
+  .sheetmock p { margin: 0 0 12px; color: var(--secondary); font-size: 13px; }
+  .sheetmock table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 0 0 14px; }
+  .sheetmock td { padding: 5px 0; border-bottom: 1px solid var(--line); } .sheetmock td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .sheetmock .bb { display: flex; justify-content: flex-end; gap: 8px; }
+  .sheetmock button { font: inherit; font-size: 13px; border: 0; border-radius: 7px; padding: 4px 14px; background: var(--group); color: var(--text); }
+  .sheetmock button.pri { background: var(--blue); color: #fff; }
+
+  /* Decisions */
+  .q { border-top: 1px solid var(--line); padding: 22px 0 6px; }
+  .q h3 { margin: 0 0 4px; display: flex; gap: 8px; align-items: baseline; }
+  .q h3 .id { font: 12px ui-monospace, Menlo, monospace; color: var(--tertiary); }
+  .q .ask { color: var(--secondary); margin: 0 0 12px; max-width: 820px; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+  .opt { position: relative; display: block; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 12px 38px; cursor: pointer; background: var(--sheet); }
+  .opt:hover { border-color: var(--line2); }
+  .opt input { position: absolute; left: 14px; top: 15px; accent-color: var(--blue); }
+  .opt .t { font-weight: 600; } .opt .d { color: var(--secondary); font-size: 13px; margin-top: 3px; }
+  .opt.rec .t::after { content: " ★ recommended"; color: var(--blue); font-weight: 600; font-size: 12px; }
+  .opt.on { border-color: var(--blue); background: var(--blue-soft); }
+  .why { margin: 10px 0 0; font-size: 13px; color: var(--secondary); max-width: 820px; }
+  .why b { color: var(--text); font-weight: 600; }
+  .note { width: 100%; margin-top: 10px; font: inherit; font-size: 13px; color: var(--text); background: var(--group); border: 1px solid transparent; border-radius: 8px; padding: 8px 10px; resize: vertical; min-height: 36px; }
+  .note:focus { outline: none; border-color: var(--blue); background: var(--sheet); }
+  .answers { position: fixed; right: 22px; bottom: 22px; display: flex; gap: 8px; align-items: center; background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 8px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.12); z-index: 5; }
+  .answers .c { font-size: 12.5px; color: var(--secondary); font-variant-numeric: tabular-nums; }
+  .answers button { font: inherit; font-size: 13px; font-weight: 600; border: 0; border-radius: 8px; padding: 6px 14px; background: var(--blue); color: #fff; cursor: pointer; }
+
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    main { padding: 22px 16px 120px; }
+    section.s { padding: 20px 16px; }
+    ol.problems { columns: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+  <div class="brand">Your Own Components</div>
+  <div class="sub">The page, from scratch · OC1 to OC14</div>
+  <div class="progress"><i id="prog"></i></div>
+  <div id="toclinks"></div>
+  <div class="theme" id="theme"><button data-t="">Auto</button><button data-t="light">Light</button><button data-t="dark">Dark</button></div>
+</nav>
+<main>
+  <h1>Your Own Components</h1>
+  <p class="lede">The page in the Components Designer where you see the components your app made itself, decide what they are, and make them consistent. Today's version showed my internal model instead of answering your questions. This is the page rebuilt from your questions, with your real views and the real screens they sit on.</p>
+
+<section class="s" id="today" data-toc="What is wrong today" data-grp="Why">
+  <h2>What is wrong today</h2>
+  <p class="prose">Your screenshot, with every problem you named and the ones behind them.</p>
+  <div class="shot">
+    <img src="components-own-concept/today.webp" alt="Today's Chip page">
+    <span class="pin" style="left:64.75%;top:18.1%">1</span><span class="pin" style="left:74.75%;top:29.1%">2</span>
+    <span class="pin" style="left:29.5%;top:40%">3</span><span class="pin" style="left:26.15%;top:60.6%">4</span>
+    <span class="pin" style="left:26.15%;top:66.1%">5</span><span class="pin" style="left:78.8%;top:35.2%">6</span>
+    <span class="pin" style="left:87%;top:47.2%">7</span><span class="pin" style="left:25.75%;top:81.2%">8</span>
+    <span class="pin" style="left:13.6%;top:88.4%">9</span><span class="pin" style="left:24.5%;top:47.7%">10</span>
+  </div>
+  <ol class="problems">
+    <li><b>"Proposes one size."</b> Size is the scanner's word for how it limits variants. It means nothing for chips, and the sentence doesn't say what you're agreeing to.</li>
+    <li><b>The native option as a card of its own,</b> saying SwiftUI has nothing. A card for a non-answer.</li>
+    <li><b>"Move to Size"</b> makes a view part of a group, in words that don't say so.</li>
+    <li><b>White tiles on a white page,</b> which you told me not to do.</li>
+    <li><b>Where it's used is cut off</b> after three file names, on one line, with no screens. That's the opposite of an overview.</li>
+    <li><b>A text field asking where a size is used.</b> Hatch already read that from the code; you shouldn't type it.</li>
+    <li><b>Cards inside the inspector,</b> a field inside a grey box inside a grey card, a button alone in a card.</li>
+    <li><b>"Not in the app's gallery yet."</b> The page is only as good as its pictures, and most were missing.</li>
+    <li><b>The grouping was wrong and the page couldn't show it.</b> HXIssueSample isn't a chip: it's a sample GitHub issue row with labels drawn inside it.</li>
+    <li><b>A stack of boxes before the views:</b> a proposal, a native card and a selection bar, each its own surface, before you see a single view.</li>
+  </ol>
+</section>
+
+<section class="s" id="for" data-toc="What the page is for" data-grp="Why">
+  <h2>What the page is for</h2>
+  <p class="prose">You come to it with five questions, in this order. The page answers them top to bottom, in your words, and asks you only what Hatch can't know.</p>
+  <ol class="prose">
+    <li><b>What did Hatch find?</b> These views look like chips.</li>
+    <li><b>Is Hatch right that they belong together?</b> Here it's three different things that happen to look alike: a status, a tag, and something that isn't a chip at all.</li>
+    <li><b>Where are they used?</b> On which screens, with the screen shown.</li>
+    <li><b>Do they look the same when they should?</b> If not, what differs, and which wins.</li>
+    <li><b>Is it decided?</b> Agree it, or ask for a redesign.</li>
+  </ol>
+  <h3>Rules for the page (and for every Hatch page after it)</h3>
+  <div class="principles">
+    <div class="principle"><b>Your words, not Hatch's</b><span>No "size", "variant", "form" or "family" unless that's the decision. A group is named by what it's for: Status chip, Tag.</span></div>
+    <div class="principle"><b>Hatch reads, you decide</b><span>Never a field for something Hatch can read from the code. What a view shows and where it's used come from the code, with the evidence.</span></div>
+    <div class="principle"><b>One row per view</b><span>The picture, what it shows, and every place it's used, in full and wrapping. Nothing cut off.</span></div>
+    <div class="principle"><b>One surface</b><span>The window's grey background with white grouped rows, as macOS's own settings. No cards inside cards, no white on white.</span></div>
+    <div class="principle"><b>Actions beside what they act on</b><span>Agree on the group it agrees. "Belongs to" in a view's own menu. Nothing that doesn't apply is shown.</span></div>
+    <div class="principle"><b>Nothing from memory</b><span>Every view is drawn by the app. A view that isn't drawn yet says so and can be drawn on request.</span></div>
+  </div>
+</section>
+
+<section class="s" id="concept" data-toc="The page" data-grp="Concept">
+  <h2>The page</h2>
+  <p class="prose">Drawn with your real views as the app draws them, and the real screens they sit on, from Hatch's demo data. Switch the appearance and the step to see each state.</p>
+  <div class="mockbar">
+    <div class="seg" id="mstate"><button class="on" data-s="proposal">Hatch's proposal</button><button data-s="menu">Moving a view</button><button data-s="agreed">After you agree</button><button data-s="undrawn">A view not drawn yet</button></div>
+    <div class="seg" id="mtheme"><button class="on" data-m="light">Light</button><button data-m="dark">Dark</button></div>
+  </div>
+  <div class="mockwrap">
+  <div class="mac st-proposal" id="mac">
+    <div class="side">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="si"><span class="ic">?</span>To Decide<span class="ct">22</span></div>
+      <div class="sh">Actions</div>
+      <div class="si"><span class="ic">▭</span>Buttons<span class="ct">11</span></div>
+      <div class="si"><span class="ic">▾</span>Menus<span class="ct">2</span></div>
+      <div class="sh">Your Own Components</div>
+      <div class="si on" data-state="proposal menu undrawn"><span class="ic"><span class="dash"></span></span>Chips<span class="ct">4</span></div>
+      <div class="si on" data-state="agreed"><span class="ic"><span class="solid"></span></span>Status chip<span class="ct">2</span></div>
+      <div class="si" data-state="agreed"><span class="ic"><span class="dash"></span></span>Tags<span class="ct">1</span></div>
+      <div class="si"><span class="ic"><span class="dash"></span></span>Cards<span class="ct">17</span></div>
+      <div class="si"><span class="ic"><span class="dash"></span></span>Rows<span class="ct">15</span></div>
+      <div class="si"><span class="ic"><span class="dash"></span></span>Headers<span class="ct">4</span></div>
+      <div class="si"><span class="ic">?</span>Not Sure Yet<span class="ct">45</span></div>
+    </div>
+
+    <div class="main">
+      <div class="top"><span class="title" data-state="proposal menu undrawn">Chips</span><span class="title" data-state="agreed">Status chip</span>
+        <span class="sub" data-state="proposal menu undrawn">4 views look like chips · used 23 times on 9 screens</span>
+        <span class="sub" data-state="agreed">2 views · used 13 times on 5 screens · agreed</span></div>
+      <div class="say" data-state="proposal menu undrawn">Hatch reads these as three different things. Check each group: agree it, or move a view where it belongs.</div>
+      <div class="say" data-state="agreed">Agents use Status chip for a state. Its two views stay in the code until a ticket makes them one; Hatch files it when you agree.</div>
+
+      <!-- Group 1: Status chip -->
+      <div class="grouphead" data-state="proposal menu undrawn agreed">
+        <span class="gl"><span class="gt">Status chip</span><span class="gs">A state, coloured by whose turn it is or by a failure</span></span>
+        <span class="st" data-state="proposal menu undrawn"><span class="badge">Proposed</span><button class="btn pri">Agree</button></span>
+        <span class="st" data-state="agreed"><span class="badge ok">✓ Agreed</span></span>
+      </div>
+      <div class="list" data-state="proposal menu undrawn agreed" style="position:relative">
+        <div class="row" data-state="proposal menu undrawn agreed">
+          <div class="pic"><img class="pl" data-n="HXChip" alt=""></div>
+          <div><div class="vn">HXChip</div>
+            <div class="shows">Shows a state: Merged cleanly, Built, Not built, Could not answer, an agent's current step.</div>
+            <div class="uses"><span class="use"><b>Previews</b><span>4</span></span><span class="use"><b>Log</b><span>1</span></span><span class="use"><b>Agents</b><span>1</span></span><span class="use"><b>Ask</b><span>1</span></span></div></div>
+          <div class="more">⋯</div>
+        </div>
+        <div class="row" data-state="proposal menu undrawn agreed">
+          <div class="pic"><img class="pl" data-n="HXProblemChip" alt=""></div>
+          <div><div class="vn">HXProblemChip</div>
+            <div class="shows">Shows a failure: Could not build, Build failed, Conflict, Needs work.</div>
+            <div class="uses"><span class="use"><b>Previews</b><span>4</span></span><span class="use"><b>Log</b><span>1</span></span></div></div>
+          <div class="more">⋯</div>
+        </div>
+        <div class="diff" data-state="proposal menu undrawn agreed"><span class="ok">●</span>The two are drawn the same: caption text, medium weight, the same padding, a capsule. Only the colour differs, and the colour is the state.</div>
+        <div class="screens" data-state="proposal undrawn agreed"><div class="sh2">WHERE IT SITS</div>
+          <div class="screen"><span class="lbl">Log <span>· 2 uses</span></span><div class="frame"><img class="pl" data-n="use-log" data-ext="webp" alt=""><span class="hl" style="left:85.2%;top:44%;width:6.6%;height:19%"></span><span class="hl" style="left:92.2%;top:74.5%;width:7.6%;height:19%"></span></div></div>
+          <div class="screen"><span class="lbl">Agents <span>· 1 use</span></span><div class="frame"><img class="pl" data-n="use-agents" data-ext="webp" alt=""><span class="hl" style="left:47.1%;top:14%;width:7.4%;height:16%"></span></div></div>
+        </div>
+      </div>
+
+      <!-- Group 2: Tag -->
+      <div class="grouphead" data-state="proposal menu undrawn">
+        <span class="gl"><span class="gt">Tag</span><span class="gs">A neutral label: a project, an area, a repository's role</span></span>
+        <span class="st"><span class="badge">Proposed</span><button class="btn">Agree</button></span>
+      </div>
+      <div class="list" data-state="proposal menu undrawn" style="position:relative">
+        <div class="row" data-state="proposal menu undrawn">
+          <div class="pic"><img class="pl" data-n="PlainChip" alt=""></div>
+          <div><div class="vn">PlainChip</div>
+            <div class="shows">Shows a name: a project, an area, a repository's role, "Default", a workspace's state.</div>
+            <div class="uses"><span class="use"><b>Ticket</b><span>2</span></span><span class="use"><b>Ticket › Work</b><span>2</span></span><span class="use"><b>Settings › GitHub</b><span>2</span></span><span class="use"><b>Board</b><span>1</span></span></div></div>
+          <div class="more">⋯</div>
+        </div>
+        <div class="diff" data-state="proposal menu undrawn"><span class="warn">●</span>Close to Status chip but kept apart: a tag never changes colour, and it's regular weight, not medium.</div>
+        <div class="screens" data-state="proposal undrawn"><div class="sh2">WHERE IT SITS</div>
+          <div class="screen"><span class="lbl">Ticket <span>· 2 uses</span></span><div class="frame"><img class="pl" data-n="use-ticket" data-ext="webp" alt=""><span class="hl" style="left:22%;top:56%;width:17.8%;height:36%"></span></div></div>
+        </div>
+        <div class="menu" data-state="menu">
+          <div class="k" style="color:var(--w-ter);font-size:11.5px;font-weight:600">PlainChip belongs to</div>
+          <div>Status chip<span class="k"></span></div>
+          <div>Tag<span class="k">✓</span></div>
+          <div class="on">A new component…<span class="k"></span></div>
+          <hr>
+          <div>Not a component</div>
+          <hr>
+          <div>Open TurnChip.swift:59</div>
+        </div>
+      </div>
+
+      <!-- Group 3: not a chip -->
+      <div class="grouphead" data-state="proposal menu undrawn">
+        <span class="gl"><span class="gt">Not a chip</span><span class="gs">Looks like one at first glance</span></span>
+      </div>
+      <div class="list" data-state="proposal menu undrawn">
+        <div class="row wide" data-state="proposal menu">
+          <div class="pic"><img class="pl wide" data-n="HXIssueSample" alt="" style="height:22px"></div>
+          <div><div class="vn">HXIssueSample</div>
+            <div class="shows">A sample GitHub issue row in project setup. Its labels are capsules drawn by hand inside it.</div>
+            <div class="uses"><span class="use"><b>Project setup</b><span>2</span></span></div></div>
+          <div class="more">⋯</div>
+        </div>
+        <div class="row wide" data-state="undrawn">
+          <div class="draw"><span>Not drawn yet</span><button class="btn">Draw It</button></div>
+          <div><div class="vn">HXIssueSample</div>
+            <div class="shows">A sample GitHub issue row in project setup. Its labels are capsules drawn by hand inside it.</div>
+            <div class="uses"><span class="use"><b>Project setup</b><span>2</span></span></div></div>
+          <div class="more">⋯</div>
+        </div>
+        <div class="diff" data-state="proposal menu"><span class="warn">●</span>Its labels could use Tag instead of drawing their own. <a href="#concept" onclick="return false">Use Tag for Its Labels</a></div>
+        <div class="diff" data-state="undrawn"><span class="warn">●</span>Draw It asks an agent to add this view to the app's gallery; its picture appears here when the ticket is done.</div>
+      </div>
+    </div>
+
+    <div class="insp">
+      <div data-state="proposal menu undrawn">
+        <div class="it">Chips</div>
+        <div class="is">3 groups · 4 views · proposed by Hatch</div>
+        <div class="ih">FROM SWIFTUI</div>
+        <div class="ip">SwiftUI has no chip. The closest is a badge on a list row. Your chips stay your own components.</div>
+        <hr>
+        <div class="ih">PICTURES</div>
+        <div class="ip" data-state="proposal menu">All 4 drawn by the app.</div>
+        <div class="ip" data-state="undrawn">3 of 4 drawn by the app. <a href="#concept" onclick="return false">Draw the Rest</a></div>
+        <hr>
+        <div class="acts"><button class="btn">Agree All Groups</button></div>
+      </div>
+      <div data-state="agreed">
+        <div class="it">Status chip</div>
+        <div class="is">2 views · 13 uses · agreed</div>
+        <div class="ih">FROM SWIFTUI</div>
+        <div class="ip">No native chip. The closest is a badge on a list row.</div>
+        <hr>
+        <div class="ih">IN THE CODE</div>
+        <div class="ip">Ticket #212 makes HXChip and HXProblemChip one view, <code style="font-size:11px">StatusChip(state:)</code>.</div>
+        <hr>
+        <div class="acts"><button class="btn">Redesign…</button></div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="caption">The pictures are your views, cut from the app's own gallery; the screens are Hatch's real screens with its demo data, the chip outlined where it sits. What each view shows is read from its call sites (the texts passed to it), which Hatch can show as evidence.</p>
+  <div class="legend-anno">
+    <div><b>1</b>The groups are named by what they're for, and each says why it's a group.</div>
+    <div><b>2</b>Every use in full: the screen and how many times, wrapping, never cut off. Clicking one shows that screen.</div>
+    <div><b>3</b>The differences in one sentence, under the views they're about. Green means nothing to decide; amber means a choice.</div>
+    <div><b>4</b>Agree on the group it agrees. Moving a view is in its own ⋯ menu, as macOS puts actions on an item.</div>
+    <div><b>5</b>The inspector holds only what's about the whole page: the native answer, the pictures, then the next step.</div>
+    <div><b>6</b>One surface: the window's grey, white grouped rows. The only boxes are the lists.</div>
+  </div>
+</section>
+
+<section class="s" id="flow" data-toc="What happens after" data-grp="Concept">
+  <h2>What happens after you agree</h2>
+  <ol class="prose">
+    <li><b>The system changes, the code doesn't yet.</b> Status chip is agreed: agents use it for every new state from now on, and the README says so.</li>
+    <li><b>Hatch files one ticket to make the code match:</b> HXChip and HXProblemChip become one view; their eleven uses move to it. You see the ticket in Decide like any other.</li>
+    <li><b>Hatch checks the result,</b> not the agent: after the ticket, the scan must find one Status chip view, and the gallery must draw it the same as before.</li>
+    <li><b>Redesign</b> is a Proposal ticket: an agent builds two or three options as Stage specimens, plus the native one where SwiftUI has one; you pick in the Stage.</li>
+  </ol>
+</section>
+
+<section class="s" id="samples" data-toc="Pictures, for any app" data-grp="Concept">
+  <h2>Pictures of every component, for any SwiftUI app</h2>
+  <div class="prose">
+    <p>The page is only as good as its pictures. Hatch draws them by running the app's own code, never from memory, so every app needs a small gallery: a debug-only file that draws each component with sample values, which Hatch captures. Writing that file is agent work. The question is when.</p>
+    <p>Hatch can tell from the code how hard each component is to draw, before anything is written. For Hatch itself, 89 components:</p>
+  </div>
+  <div class="sheetmock">
+    <h4>Draw your components?</h4>
+    <p>Hatch found 89 components your app made itself. To show them, an agent writes a gallery file in a debug-only part of the app; nothing in it ships.</p>
+    <table>
+      <tr><td>Simple values only (text, a colour, a flag)</td><td>55</td></tr>
+      <tr><td>Need one of your app's values (a status, a ticket type)</td><td>14</td></tr>
+      <tr><td>Need your app's live state (drawn inside its demo data)</td><td>20</td></tr>
+      <tr><td><b>About one agent session</b></td><td></td></tr>
+    </table>
+    <div class="bb"><button>Only When I Open One</button><button class="pri">Draw All</button></div>
+  </div>
+  <p class="caption">At setup, after the scan. "Only When I Open One" draws a component the first time you open its page. Either way, every page has Draw It for a view without a picture.</p>
+</section>
+
+<section class="s" id="decide" data-toc="Decisions" data-grp="Decide">
+  <h2>Decisions <span class="tag">OC1–OC14</span></h2>
+  <p class="prose">Pick an option per decision (★ is my recommendation), add a note where you want, then Copy Answers at the bottom right and paste them to me.</p>
+  <div data-q="OC1"></div><div data-q="OC2"></div><div data-q="OC3"></div><div data-q="OC4"></div><div data-q="OC5"></div>
+  <div data-q="OC6"></div><div data-q="OC7"></div><div data-q="OC8"></div><div data-q="OC9"></div><div data-q="OC10"></div>
+  <div data-q="OC11"></div><div data-q="OC12"></div><div data-q="OC13"></div><div data-q="OC14"></div>
+</section>
+</main>
+</div>
+<div class="answers"><span class="c" id="count"></span><button id="copy">Copy Answers</button></div>
+
+<script>
+const Q = {
+  OC1: { t: "How Hatch groups your views", ask: "What makes views one component?",
+    o: [["A", "What they're for, checked by how they look", "Hatch reads what each view shows from its call sites (Merged cleanly, Build failed, a project's name) and groups by purpose; views that look alike but do different jobs are kept apart, and the page says why.", true],
+        ["B", "How they look", "As today: same shape and text, one group."]],
+    why: "<b>A</b>: by look alone, HXIssueSample landed among the chips, and the status chip and the tag would merge though one changes colour and the other never does." },
+  OC2: { t: "What a group is called", ask: "The name you see and agents use.",
+    o: [["A", "By its job", "Status chip, Tag, Problem banner. Proposed by Hatch from what the views show; you can rename it.", true],
+        ["B", "By its kind and size", "Chip, small; Chip, medium."]],
+    why: "<b>A</b>: an agent picking a component for \"show the build's state\" finds Status chip; it can't find \"Chip, medium\"." },
+  OC3: { t: "Sizes", ask: "When does Hatch talk about sizes?",
+    o: [["A", "Only where a component really comes in sizes", "Where the same job is drawn larger or smaller on purpose (a header on a page and in a sheet). Never as the scanner's grouping.", true],
+        ["B", "Always, small to large", ""]],
+    why: "<b>A</b>: sizes were my mechanism. For chips they meant nothing." },
+  OC4: { t: "One row per view", ask: "How each view is shown.",
+    o: [["A", "A row: picture, what it shows, every use", "The picture as the app draws it, the type name, one sentence on what it shows, and every screen it's used on with a count, wrapping, never cut off.", true],
+        ["B", "Tiles in a grid", "As today."]],
+    why: "<b>A</b>: rows read down the page and keep everything about a view on one line; tiles cut the usage." },
+  OC5: { t: "Where it's used", ask: "How uses are shown.",
+    o: [["A", "Screens, with the screen drawn", "Each use names the screen (Log, Agents, Settings › GitHub) with a count; the group shows the screens with the view outlined, from the app's demo data. File and line are in the view's ⋯ menu.", true],
+        ["B", "File names", "As today."]],
+    why: "<b>A</b>: you think in screens; files are for agents." },
+  OC6: { t: "Differences", ask: "How Hatch shows what differs between views in a group.",
+    o: [["A", "One sentence under the views", "Green when they're drawn the same, amber with what differs (weight, padding, colour) and the choice it implies.", true],
+        ["B", "A separate comparison table", ""]],
+    why: "<b>A</b>: the difference sits beside what it's about, and most groups have nothing to decide." },
+  OC7: { t: "Moving a view", ask: "How you correct Hatch's grouping.",
+    o: [["A", "\"Belongs to\" in the view's ⋯ menu", "Another group, a new component, or Not a Component. One view at a time, where it is.", true],
+        ["B", "Select several, then act", "As today: checkboxes and a bar."]],
+    why: "<b>A</b>: corrections are rare and one at a time; a selection bar adds a surface for every visit." },
+  OC8: { t: "Agreeing", ask: "Where you agree.",
+    o: [["A", "On each group, plus Agree All in the inspector", "Agree sits on the group's own header.", true],
+        ["B", "Once for the whole page", ""]],
+    why: "<b>A</b>: groups are often right one by one; you shouldn't have to settle all three to agree one." },
+  OC9: { t: "The native option", ask: "Where SwiftUI's own answer is shown.",
+    o: [["A", "In the inspector; on the group when there is one", "Where SwiftUI has the component (GroupBox for cards), the group offers \"Use SwiftUI's GroupBox\" beside Agree. Where it has none, one line in the inspector.", true],
+        ["B", "A card at the top of every page", "As today."]],
+    why: "<b>A</b>: a real alternative belongs with the decision; a non-answer doesn't need a card." },
+  OC10: { t: "After agreeing", ask: "What Hatch does next.",
+    o: [["A", "File one ticket to make the code match, then check it", "The system changes at once; Hatch files the ticket that makes the views one, and checks the result with the scan and the gallery.", true],
+        ["B", "Only change the system", "Agents follow it for new screens; the old views stay."]],
+    why: "<b>A</b>: otherwise the app keeps two chips that the system says are one." },
+  OC11: { t: "Pictures: when", ask: "When are the app's components drawn?",
+    o: [["A", "Offered at setup, with the estimate, and on request", "After the scan, Hatch shows how many there are and how hard they are to draw, and offers Draw All or Only When I Open One. Every page has Draw It.", true],
+        ["B", "Always at setup", ""], ["C", "Only on request", ""]],
+    why: "<b>A</b>: for a small app, Draw All is cheap; for a large one you may want to start with what you open. Either way, nothing is shown that the app didn't draw." },
+  OC12: { t: "Pictures: where the code lives", ask: "Where the gallery is in an app Hatch doesn't own.",
+    o: [["A", "A debug-only file in the app", "Behind #if DEBUG, opened by a launch argument Hatch passes; it never ships. One line in the app's start-up hands over to it.", true],
+        ["B", "Xcode previews", "Hatch can't render #Preview outside Xcode reliably."],
+        ["C", "A separate target", "Needs the app's views in a module, which most apps aren't."]],
+    why: "<b>A</b>: it works for any SwiftUI app as it is, and it's how Hatch's own gallery already works." },
+  OC13: { t: "Pictures: sample content", ask: "What the components show in their pictures.",
+    o: [["A", "The app's own demo or fixture data", "Real-looking titles, states and names from the app's previews, fixtures or demo mode; Hatch's own demo data for Hatch.", true],
+        ["B", "Placeholder text", "Lorem ipsum and \"Title\"."]],
+    why: "<b>A</b>: a chip is judged by the words it really shows; placeholders hide long labels and wrong colours." },
+  OC14: { t: "Views drawn inside other views", ask: "HXIssueSample draws its own labels. What does Hatch do with styles drawn inline?",
+    o: [["A", "Find them, and suggest the component", "Hatch also reads capsules, cards and other looks drawn by hand inside a view, and suggests the component they should use (\"Its labels could use Tag\").", true],
+        ["B", "Only whole views", ""]],
+    why: "<b>A</b>: inline copies are where a design system drifts; finding them is half its value." },
+};
+const store = (() => { try { return JSON.parse(localStorage.getItem("oc-answers") || "{}"); } catch { return {}; } })();
+function save() { try { localStorage.setItem("oc-answers", JSON.stringify(store)); } catch {} }
+document.querySelectorAll("[data-q]").forEach(el => {
+  const id = el.dataset.q, q = Q[id];
+  el.className = "q"; el.id = id.toLowerCase();
+  const opts = q.o.map(([k, t, d, rec]) => `<label class="opt${rec ? " rec" : ""}${store[id]?.a === k ? " on" : ""}"><input type="radio" name="${id}" value="${k}"${store[id]?.a === k ? " checked" : ""}><div class="t">${k} · ${t}</div>${d ? `<div class="d">${d}</div>` : ""}</label>`).join("");
+  el.innerHTML = `<h3><span class="id">${id}</span>${q.t}</h3><p class="ask">${q.ask}</p><div class="opts">${opts}</div><p class="why">${q.why}</p><textarea class="note" rows="1" placeholder="A note (optional)">${store[id]?.n || ""}</textarea>`;
+  el.querySelectorAll("input").forEach(i => i.addEventListener("change", () => {
+    store[id] = { ...(store[id] || {}), a: i.value }; save();
+    el.querySelectorAll(".opt").forEach(o => o.classList.toggle("on", o.querySelector("input").checked)); refresh();
+  }));
+  el.querySelector(".note").addEventListener("input", e => { store[id] = { ...(store[id] || {}), n: e.target.value }; save(); });
+});
+function refresh() {
+  const ids = Object.keys(Q), done = ids.filter(i => store[i]?.a).length;
+  document.getElementById("count").textContent = `${done} of ${ids.length} answered`;
+  document.getElementById("prog").style.width = (done / ids.length * 100) + "%";
+  const n = document.querySelector('nav a[data-for="decide"] .n');
+  if (n) { n.textContent = `${done}/${ids.length}`; n.classList.toggle("done", done === ids.length); }
+}
+let html = "", grp = "";
+document.querySelectorAll("main section").forEach(s => {
+  if (s.dataset.grp !== grp) { grp = s.dataset.grp; html += `<div class="grp">${grp}</div>`; }
+  html += `<a href="#${s.id}" data-for="${s.id}"><span>${s.dataset.toc}</span><span class="n"></span></a>`;
+});
+document.getElementById("toclinks").innerHTML = html;
+const themeButtons = document.querySelectorAll("#theme button");
+function setTheme(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  themeButtons.forEach(b => b.classList.toggle("on", b.dataset.t === (t || ""))); try { localStorage.setItem("oc-theme", t || ""); } catch {} }
+themeButtons.forEach(b => b.addEventListener("click", () => setTheme(b.dataset.t)));
+try { setTheme(localStorage.getItem("oc-theme") || ""); } catch { setTheme(""); }
+
+// The mock: its own appearance and state
+const mac = document.getElementById("mac");
+function pictures(mode) {
+  mac.querySelectorAll("img.pl").forEach(img => { img.src = `components-own-concept/${img.dataset.n}-${mode}.${img.dataset.ext || "png"}`; });
+}
+document.querySelectorAll("#mtheme button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#mtheme button").forEach(x => x.classList.toggle("on", x === b));
+  mac.classList.toggle("dark", b.dataset.m === "dark"); pictures(b.dataset.m);
+}));
+document.querySelectorAll("#mstate button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#mstate button").forEach(x => x.classList.toggle("on", x === b));
+  showState(b.dataset.s);
+}));
+function showState(state) { mac.querySelectorAll("[data-state]").forEach(el => { el.hidden = !el.dataset.state.split(" ").includes(state); }); }
+const params = new URLSearchParams(location.search);
+// ?only=1: the mock alone, for checking each state at full size.
+if (params.get("only")) { document.querySelector("nav.toc").hidden = true; document.querySelector(".layout").style.display = "block";
+  document.querySelectorAll("main > *").forEach(el => { if (el.id !== "concept") el.hidden = true; });
+  document.querySelector(".answers").hidden = true; }
+showState(params.get("state") || "proposal");
+if (params.get("state")) document.querySelectorAll("#mstate button").forEach(x => x.classList.toggle("on", x.dataset.s === params.get("state")));
+pictures(params.get("mode") || "light");
+if (params.get("mode") === "dark") { mac.classList.add("dark"); document.querySelectorAll("#mtheme button").forEach(x => x.classList.toggle("on", x.dataset.m === "dark")); }
+
+document.getElementById("copy").addEventListener("click", () => {
+  const text = Object.keys(Q).map(id => {
+    const a = store[id]; if (!a?.a) return `${id}: (no answer)`;
+    const rec = Q[id].o.find(o => o[0] === a.a)?.[3] ? " (★)" : "";
+    return `${id}: ${a.a}${rec}${a.n ? " — " + a.n : ""}`;
+  }).join("\n");
+  navigator.clipboard.writeText(text).then(() => { const b = document.getElementById("copy"); b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy Answers", 1400); });
+});
+refresh();
+</script>
+</body>
+</html>

@@ -1163,7 +1163,7 @@ struct HXSetupExample<Content: View>: View {
     }
 }
 
-private struct HXIssueSample: View {
+struct HXIssueSample: View {
     let number: Int
     let title: String
     let labels: [String]

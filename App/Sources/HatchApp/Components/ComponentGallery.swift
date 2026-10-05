@@ -17,6 +17,7 @@ struct ComponentGallery: View {
             item("HXProblemChip") { HXProblemChip(text: "2 problems") }
             item("PlainChip") { HStack(spacing: 6) { PlainChip(text: "Connections", systemImage: "folder"); PlainChip(text: "Editor") } }
             item("DecideCountBadge") { DecideCountBadge(count: 3) }
+            item("HXIssueSample") { HXIssueSample(number: 151, title: "Toast spacing feels cramped", labels: ["type:proposal", "status:your-call"]) }
             item("StatusChip") { HStack(spacing: 10) { StatusChip(status: .building); StatusChip(status: .yourCall); StatusChip(status: .merged) } }
             item("TypeBadge") { HStack(spacing: 10) { TypeBadge(type: .bug); TypeBadge(type: .proposal) } }
             item("TurnLabel") { HStack(spacing: 10) { TurnLabel(turn: .you); TurnLabel(turn: .agent) } }
