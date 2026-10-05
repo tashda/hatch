@@ -95,4 +95,51 @@ final class DesignerModelTests: XCTestCase {
         XCTAssertTrue(picks.contains { $0.label.contains("macOS Native") || $0.label.contains("macOS default") })
         XCTAssertLessThanOrEqual(picks.count, 5)
     }
+
+    /// CD4 and CD24: a template for all buttons is previewed on every role, then kept as one change with one undo.
+    func testTemplateForAnElementIsOneChange() throws {
+        let m = try model()
+        let before = m.system
+        let b = m.batchTemplate(ComponentTemplates.native, element: "button", place: nil)
+        XCTAssertFalse(b.items.isEmpty)
+        m.tryBatch(b)
+        XCTAssertEqual(m.previews.count, b.items.count, "every role it changes is drawn with its new look")
+        XCTAssertEqual(m.system, before, "nothing saved yet")
+        m.keep()
+        XCTAssertNil(m.batch)
+        XCTAssertTrue(m.previews.isEmpty)
+        XCTAssertEqual(m.undoStack.count, 1, "one change")
+        XCTAssertTrue(m.system.role("button.secondary")!.followsMacOS, "Native lets macOS draw other actions")
+        m.undo()
+        XCTAssertEqual(m.system, before)
+    }
+
+    /// CD26: only here makes a variant for the place, with the reason; the role keeps its look elsewhere.
+    func testOnlyHereMakesAVariant() throws {
+        let m = try model()
+        let row = m.system.role("button.inRow")!
+        let param = ComponentElement.named("button")!.parameter("style")!
+        var b = m.batchSetting(param, "plain", element: "button", place: "card")
+        let i = try XCTUnwrap(b.items.firstIndex { $0.role == row.id })
+        XCTAssertFalse(b.items[i].otherPlaces.isEmpty, "says where else it sits")
+        b.items[i].onlyHere = true
+        b.reason = "Cards are dense."
+        m.tryBatch(b)
+        m.keep()
+        let kept = m.system.role(row.id)!
+        XCTAssertEqual(kept.recipe, row.recipe, "unchanged elsewhere")
+        XCTAssertEqual(kept.variants.first?.id, "card")
+        XCTAssertEqual(kept.variants.first?.use, "Cards are dense.")
+        XCTAssertEqual(kept.variants.first?.recipe["style"], "plain")
+    }
+
+    /// CD24: following macOS for everything in a place, as a batch.
+    func testFollowAPlace() throws {
+        let m = try model()
+        let b = m.batchFollow(element: nil, place: "floating")
+        XCTAssertTrue(b.items.allSatisfy(\.follow))
+        m.tryBatch(b)
+        m.keep()
+        XCTAssertTrue(m.system.roles.filter { $0.places == ["floating"] }.allSatisfy(\.followsMacOS))
+    }
 }

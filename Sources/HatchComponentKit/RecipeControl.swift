@@ -156,13 +156,17 @@ private struct RecipeButton: View {
             default: Text(sample.shownTitle)  // what Button("Save") draws when the role says nothing
             }
         }
-        .recipeButtonStyle(recipe["style"])
+        .recipeButtonStyle(recipe["style"] ?? (looksDefault ? "borderedProminent" : nil))
         .controlSize(ControlSize(recipe: recipe["size"]))
         .recipeShape(recipe["shape"])
         .recipeTint(recipe["tint"])
         .help(recipe["tooltip"] == "shortcut" ? "\(sample.shownTitle) (⌘S)" : sample.shownTitle)
         .modifier(RecipeKey(key: sample.liveKeys ? recipe["key"] : nil))
     }
+
+    /// A button with the Return key and no style of its own is drawn as macOS draws a default button (accent filled),
+    /// without the key itself: many samples in one window can't all answer Return.
+    private var looksDefault: Bool { recipe["key"] == "defaultAction" && !sample.liveKeys }
 }
 
 /// The real default and Cancel keys: on macOS the default key is what makes a sheet's button the default button.

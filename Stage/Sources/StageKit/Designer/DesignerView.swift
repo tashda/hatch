@@ -21,6 +21,7 @@ struct DesignerView: View {
                         .padding(8).frame(maxWidth: .infinity, alignment: .leading)
                         .background(.yellow.opacity(0.15))
                 }
+                BatchBanner(model: model)
                 if model.showsCanvas {
                     HardCasesBar(model: model)
                     Divider()
@@ -37,6 +38,7 @@ struct DesignerView: View {
             }
         }
         .background { keys }
+        .sheet(item: $model.request) { BatchSheet(model: model, request: $0) }
     }
 
     @ViewBuilder private var inspector: some View {
@@ -118,8 +120,8 @@ struct DesignerView: View {
     /// The keyboard (CD39): Return keeps, Esc discards or goes back, ⌘Z undoes, ⌘] and ⌘[ walk the questions, ⌘1 and ⌘2 the views.
     private var keys: some View {
         Group {
-            Button("Keep") { model.keep() }.keyboardShortcut(.defaultAction).disabled(model.preview == nil)
-            Button("Back") { if model.preview != nil { model.discard() } else { model.back() } }.keyboardShortcut(.cancelAction)
+            Button("Keep") { model.keep() }.keyboardShortcut(.defaultAction).disabled(model.previews.isEmpty)
+            Button("Back") { if !model.previews.isEmpty { model.discard() } else { model.back() } }.keyboardShortcut(.cancelAction)
             Button("Undo") { model.undo() }.keyboardShortcut("z", modifiers: .command).disabled(model.undoStack.isEmpty)
             Button("Next Question") { model.nextQuestion() }.keyboardShortcut("]", modifiers: .command)
             Button("Previous Question") { model.nextQuestion(forward: false) }.keyboardShortcut("[", modifiers: .command)
@@ -260,6 +262,7 @@ struct DesignerSidebar: View {
                 Section("Places") {
                     ForEach(places) { p in
                         Text(p.title).badge(model.questions(inPlace: p.id).count).tag(DesignerSelection.place(p.id)).help(p.summary)
+                            .contextMenu { BatchMenuItems(model: model, element: nil, place: p.id) }
                     }
                 }
             }
@@ -292,6 +295,11 @@ struct DesignerSidebar: View {
         }
         .badge(open)
         .tag(DesignerSelection.element(e))
+        .contextMenu {
+            BatchMenuItems(model: model, element: e, place: nil)
+            Divider()
+            Button("Agree to All \(ComponentElement.named(e)?.plural ?? e)") { model.agreeAll(element: e) }
+        }
     }
 
     private func shown(_ name: String) -> Bool { filter.isEmpty || name.localizedCaseInsensitiveContains(filter) }
@@ -368,7 +376,15 @@ struct RoleView: View {
                 ForEach(role.places, id: \.self) { id in
                     let place = model.system.place(id) ?? ComponentPlace(id, id, "")
                     GridRow {
-                        Text(place.title).font(.headline).frame(width: 110, alignment: .leading).help(place.summary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(place.title).font(.headline)
+                            if model.isPreviewing(role) && role.places.count > 1 {
+                                Button("Only Here…") { model.request = .onlyHere(role: role.id, place: id) }
+                                    .buttonStyle(.link).font(.caption)
+                                    .help("Keep this look for \(place.title) only: a variant, with a reason (CD26)")
+                            }
+                        }
+                        .frame(width: 110, alignment: .leading).help(place.summary)
                         Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, today: true, framed: false) }
                         Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, framed: false) }
                     }
@@ -579,11 +595,14 @@ struct PlaceInspector: View {
                     .buttonStyle(.plain)
                 }
             }
-            InspectorSection(title: "For the Whole Place", footer: "Roles that also sit in other places follow everywhere they sit.") {
+            InspectorSection(title: "For the Whole Place", footer: "Each opens a list of every role it changes; a role that also sits elsewhere can change everywhere or only here.") {
+                ForEach(ComponentTemplates.all) { t in
+                    Button("Use \(t.title) Here…") { model.request = .template(t.id, element: nil, place: place) }
+                }
+                Button("Follow macOS Here…") { model.request = .follow(element: nil, place: place) }
+                Divider()
                 ForEach(elements, id: \.self) { e in
-                    let all = roles.filter { $0.element == e }.allSatisfy(\.followsMacOS)
-                    Button("Follow macOS for \((ComponentElement.named(e)?.plural ?? e).lowercased()) here") { model.follow(element: e, place: place) }
-                        .disabled(all)
+                    Button("One Look for Every \(ComponentElement.named(e)?.title ?? e) Here…") { model.request = .setting(element: e, place: place) }
                 }
             }
         }
@@ -1081,6 +1100,14 @@ struct ElementInspector: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+            InspectorSection(title: "For All \(ComponentElement.named(element)?.plural ?? element)") {
+                ForEach(ComponentTemplates.all) { t in
+                    Button("Use \(t.title)…") { model.request = .template(t.id, element: element, place: nil) }
+                        .help(t.summary)
+                }
+                Button("Follow macOS…") { model.request = .follow(element: element, place: nil) }
+                Button("One Look for All…") { model.request = .setting(element: element, place: nil) }
             }
             let clear = model.clearQuestions(element)
             if !clear.isEmpty {

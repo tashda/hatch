@@ -505,7 +505,7 @@ public final class StageServer: @unchecked Sendable {
                 let role = try body.string("role", max: 120)
                 try system.rename(role, title: try body.string("title", max: 80))
                 message = "Components: rename \(role)"
-            case "restore":
+            case "restore", "replace":
                 // Undo in the Designer (CD23): the system as it was before the last kept change, checked like any other.
                 let restored = try JSONDecoder().decode(ComponentSystem.self, from: Data(try body.string("system", max: 4_000_000).utf8))
                 let problems = restored.problems()
@@ -513,7 +513,9 @@ public final class StageServer: @unchecked Sendable {
                     throw APIError(status: 422, code: "invalid", message: problems.first ?? "That is another app's design system.")
                 }
                 system = restored
-                message = "Components: undo" + ((try body.optionalString("label", max: 200)).map { " \($0)" } ?? "")
+                // "replace" is a change worked out in the Designer and sent whole, so it is one commit (CD24); "restore" is ⌘Z.
+                let label = try body.optionalString("label", max: 200)
+                message = action == "replace" ? "Components: " + (label ?? "change") : "Components: undo" + (label.map { " \($0)" } ?? "")
             default:
                 throw APIError(status: 404, code: "not_found", message: "Unknown components action \(action).")
             }

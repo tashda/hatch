@@ -56,7 +56,7 @@ final class LocalComponentsSource: ComponentsSource {
             }
         case "removeRule": system.rules.removeAll { $0.id == body["id"]?.stringValue }
         case "rename": try system.rename(role ?? "", title: body["title"]?.stringValue ?? "")
-        case "restore":
+        case "restore", "replace":
             if let json = body["system"]?.stringValue { system = try JSONDecoder().decode(ComponentSystem.self, from: Data(json.utf8)) }
         default: break
         }
@@ -109,6 +109,26 @@ struct DesignerPreview: Equatable {
     var label: String
 }
 
+/// A change to many roles at once (CD24): an element, a place, or an element in a place. Each role can change
+/// everywhere it sits or only in the place (a variant with a reason, CD26). Previewed, then kept as one change.
+struct DesignerBatch: Equatable {
+    struct Item: Equatable, Identifiable {
+        var role: String
+        var recipe: [String: String]
+        var follow: Bool
+        /// Where else the role sits, so the sheet can say what "everywhere" reaches.
+        var otherPlaces: [String]
+        var onlyHere: Bool
+        var id: String { role }
+    }
+    var title: String
+    /// The place the change is about, when it is one.
+    var place: String?
+    var items: [Item]
+    /// Why the place is different, for its variants.
+    var reason = ""
+}
+
 /// What the sidebar selects.
 enum DesignerSelection: Hashable {
     /// Every element in every place, as one drawn matrix (CD33).
@@ -134,8 +154,12 @@ final class DesignerModel: ObservableObject {
     @Published var inactive = false
     /// The role is open on its own level (CD8): "‹ Buttons · Main action", drawn in every place it sits.
     @Published var focused = false
-    /// The look being tried, if any (CD13).
-    @Published private(set) var preview: DesignerPreview?
+    /// The looks being tried, by role (CD13): one role, or every role of a batch change (CD24).
+    @Published private(set) var previews: [String: DesignerPreview] = [:]
+    /// The batch change being previewed, if the previews come from one.
+    @Published private(set) var batch: DesignerBatch?
+    /// The selected role's preview, or the only one.
+    var preview: DesignerPreview? { selectedRole.flatMap { previews[$0] } ?? (previews.count == 1 ? previews.values.first : nil) }
     /// Systems before each kept change, newest last, for ⌘Z (CD23).
     @Published private(set) var undoStack: [(label: String, system: ComponentSystem)] = []
     /// The appearance of the Mac when the Designer opened, so Light and Dark are explicit (B1: macOS doesn't go back from a
@@ -195,10 +219,10 @@ final class DesignerModel: ObservableObject {
 
     /// The look a role is drawn with now: the preview, then its draft, then its look.
     func look(of role: ComponentRole) -> [String: String] {
-        if let p = preview, p.role == role.id { return p.recipe }
+        if let p = previews[role.id] { return p.recipe }
         return role.draft ?? role.recipe
     }
-    func isPreviewing(_ role: ComponentRole) -> Bool { preview?.role == role.id }
+    func isPreviewing(_ role: ComponentRole) -> Bool { previews[role.id] != nil }
 
     /// The open look question about a role, if any.
     func question(for role: ComponentRole) -> ComponentQuestion? { system.questions.first { $0.role == role.id } }
@@ -211,14 +235,14 @@ final class DesignerModel: ObservableObject {
     /// Opens a role on its own level, closing any preview of another role. From a place or All it stays there, so
     /// going back returns to where it was opened (CD9).
     func open(_ roleId: String) {
-        if preview?.role != roleId { preview = nil }
+        if batch == nil { previews = previews.filter { $0.key == roleId } }
         selectedRole = roleId
         if let r = system.role(roleId), !showsCanvas || (selectedElement != nil && selectedElement != r.element) { selection = .element(r.element) }
         focused = true
     }
 
     /// Back to the element (Esc).
-    func back() { preview = nil; focused = false }
+    func back() { if batch == nil { previews = [:] }; focused = false }
 
     /// The next question after the selected role's, anywhere (⌘]).
     func nextQuestion(forward: Bool = true) {
@@ -316,7 +340,8 @@ final class DesignerModel: ObservableObject {
 
     /// Tries a look on a role everywhere it sits, without saving (CD13).
     func tryLook(_ p: DesignerPreview) {
-        preview = p
+        if batch != nil { batch = nil; previews = [:] }
+        previews = [p.role: p]
         if selectedRole != p.role { selectedRole = p.role }
     }
 
@@ -331,8 +356,9 @@ final class DesignerModel: ObservableObject {
 
     /// Saves the preview as one change (CD23): an answer to the open question, Follow macOS, or a new look.
     func keep() {
+        if batch != nil { keepBatch(); return }
         guard let p = preview, let role = system.role(p.role) else { return }
-        preview = nil
+        previews = [:]
         if let i = p.option, let q = question(for: role) {
             run("answer", ["question": .string(q.id), "option": .int(i), "setting": .bool(false)], label: "\(role.title): \(p.label)")
         } else if p.follow {
@@ -365,12 +391,145 @@ final class DesignerModel: ObservableObject {
     }
 
     /// Drops the preview: the role is drawn as it is again (Esc).
-    func discard() { preview = nil }
+    func discard() { previews = [:]; batch = nil }
+
+    // MARK: Batch changes (CD24 to CD26)
+
+    /// Previews a batch change everywhere: every role it changes, at once.
+    func tryBatch(_ b: DesignerBatch) {
+        batch = b
+        previews = Dictionary(uniqueKeysWithValues: b.items.map { ($0.role, DesignerPreview(role: $0.role, recipe: $0.recipe, follow: $0.follow, label: b.title)) })
+    }
+
+    /// Keeps a batch as one change (one commit, one undo): looks, Follow macOS, and variants for "only here".
+    func keepBatch() {
+        guard let b = batch else { return }
+        var next = system
+        do {
+            for item in b.items {
+                guard let role = next.role(item.role), let element = ComponentElement.named(role.element) else { continue }
+                if item.onlyHere, let place = b.place {
+                    try next.addVariant(to: role.id, id: place, use: b.reason.isEmpty ? "Set for \(ComponentPlace.title(place)) only." : b.reason,
+                                        recipe: element.withoutDefaults(element.look(item.recipe)), places: [place])
+                } else if item.follow {
+                    try next.followMacOS(role: role.id)
+                } else {
+                    try next.setLook(role.id, recipe: element.withoutDefaults(item.recipe))
+                }
+            }
+        } catch { notice = "\(error)"; return }
+        previews = [:]
+        batch = nil
+        guard let data = try? next.encoded() else { return }
+        run("replace", ["system": .string(String(decoding: data, as: UTF8.self)), "label": .string(b.title)], label: b.title)
+    }
+
+    /// The look a template gives a role: its role for the same element and importance, nearest by places (CD4).
+    func templateLook(_ template: ComponentTemplate, for role: ComponentRole) -> (recipe: [String: String], follow: Bool)? {
+        let ref = template.system(name: "ref").roles(of: role.element).filter { $0.importance == role.importance }
+            .max { Set($0.places).intersection(role.places).count < Set($1.places).intersection(role.places).count }
+        return ref.map { ($0.recipe, $0.followsMacOS) }
+    }
+
+    /// The roles a scope covers: an element, or an element in a place, or every element in a place.
+    func roles(element: String?, place: String?) -> [ComponentRole] {
+        system.roles.filter { (element == nil || $0.element == element) && (place == nil || $0.places.contains(place!)) }
+    }
+
+    /// "Use macOS Native for all buttons", or for buttons in a place (CD4).
+    func batchTemplate(_ template: ComponentTemplate, element: String?, place: String?) -> DesignerBatch {
+        let items = roles(element: element, place: place).compactMap { r -> DesignerBatch.Item? in
+            guard let t = templateLook(template, for: r) else { return nil }
+            return item(r, recipe: t.recipe, follow: t.follow, place: place)
+        }
+        return DesignerBatch(title: "Use \(template.title) for " + scopeTitle(element: element, place: place), place: place, items: items)
+    }
+
+    /// "Follow macOS for every button here" as a previewed batch.
+    func batchFollow(element: String?, place: String?) -> DesignerBatch {
+        let items = roles(element: element, place: place).filter { !$0.followsMacOS }.map { r in
+            item(r, recipe: r.recipe.filter { ComponentElement.named(r.element)?.parameter($0.key)?.isLook == false }, follow: true, place: place)
+        }
+        return DesignerBatch(title: "Follow macOS for " + scopeTitle(element: element, place: place), place: place, items: items)
+    }
+
+    /// "One look for every button here": one setting to one value on every role in the scope (CD24).
+    func batchSetting(_ parameter: ComponentParameter, _ value: String?, element: String, place: String?) -> DesignerBatch {
+        let words = value.map { ComponentWords.value(element: element, parameter: parameter.id, value: $0) } ?? "macOS default"
+        let items = roles(element: element, place: place).map { r -> DesignerBatch.Item in
+            var recipe = r.draft ?? r.recipe
+            if let value, value != parameter.systemDefault { recipe[parameter.id] = value } else { recipe[parameter.id] = nil }
+            return item(r, recipe: recipe, follow: false, place: place)
+        }
+        return DesignerBatch(title: "\(parameter.title) \(words) for " + scopeTitle(element: element, place: place), place: place, items: items)
+    }
+
+    private func item(_ r: ComponentRole, recipe: [String: String], follow: Bool, place: String?) -> DesignerBatch.Item {
+        let others = place.map { p in r.places.filter { $0 != p } } ?? []
+        // A role that reaches more than three other places is changed only here unless asked (CD24's sheet suggests it).
+        return DesignerBatch.Item(role: r.id, recipe: recipe, follow: follow, otherPlaces: others, onlyHere: others.count > 3)
+    }
+
+    private func scopeTitle(element: String?, place: String?) -> String {
+        let what = element.flatMap { ComponentElement.named($0)?.plural.lowercased() } ?? "everything"
+        return place.map { "\(what) in \(ComponentPlace.title($0))" } ?? "all \(what)"
+    }
+
+    /// Agrees every provisional role of an element as it is, in one change.
+    func agreeAll(element: String) {
+        var next = system
+        for r in next.roles(of: element) where r.status == .provisional { try? next.agree(r.id) }
+        guard next != system, let data = try? next.encoded() else { return }
+        let title = "Agree to all \((ComponentElement.named(element)?.plural ?? element).lowercased())"
+        run("replace", ["system": .string(String(decoding: data, as: UTF8.self)), "label": .string(title)], label: title)
+    }
+
+    /// What a batch sheet is asked to set up (CD24, CD26).
+    enum BatchRequest: Identifiable {
+        case template(String, element: String?, place: String?)
+        case follow(element: String?, place: String?)
+        case setting(element: String, place: String?)
+        case onlyHere(role: String, place: String)
+        var id: String {
+            switch self {
+            case .template(let t, let e, let p): "t.\(t).\(e ?? "").\(p ?? "")"
+            case .follow(let e, let p): "f.\(e ?? "").\(p ?? "")"
+            case .setting(let e, let p): "s.\(e).\(p ?? "")"
+            case .onlyHere(let r, let p): "o.\(r).\(p)"
+            }
+        }
+    }
+    @Published var request: BatchRequest?
+
+    /// The batch a request starts with.
+    func batch(for request: BatchRequest) -> DesignerBatch? {
+        switch request {
+        case .template(let id, let e, let p): return ComponentTemplates.named(id).map { batchTemplate($0, element: e, place: p) }
+        case .follow(let e, let p): return batchFollow(element: e, place: p)
+        case .setting(let e, let p):
+            guard let param = ComponentElement.named(e)?.parameters.first(where: { $0.isLook }) else { return nil }
+            return batchSetting(param, param.values.first, element: e, place: p)
+        case .onlyHere(let id, let p):
+            guard let r = system.role(id) else { return nil }
+            var b = DesignerBatch(title: "\(r.title) only in \(ComponentPlace.title(p))", place: p,
+                                  items: [item(r, recipe: look(of: r), follow: previews[id]?.follow ?? false, place: p)])
+            b.items[0].onlyHere = true
+            return b
+        }
+    }
+
+    /// Changes one item of the batch being set up: everywhere, or only in its place.
+    func setOnlyHere(_ roleId: String, _ onlyHere: Bool) {
+        guard var b = batch, let i = b.items.firstIndex(where: { $0.role == roleId }) else { return }
+        b.items[i].onlyHere = onlyHere
+        batch = b
+    }
+    func setBatchReason(_ reason: String) { batch?.reason = reason }
 
     /// Undoes the last kept change (⌘Z): Hatch writes the system as it was before it.
     func undo() {
         guard let last = undoStack.popLast(), let data = try? last.system.encoded() else { return }
-        preview = nil
+        previews = [:]; batch = nil
         run("restore", ["system": .string(String(decoding: data, as: UTF8.self)), "label": .string(last.label)], label: nil)
     }
     var undoLabel: String? { undoStack.last?.label }

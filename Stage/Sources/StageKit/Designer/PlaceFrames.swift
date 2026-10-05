@@ -43,12 +43,9 @@ struct PlaceFrame: View {
                 Appearances(model: model) { sample }
             }
             .contextMenu {
-                let name = (ComponentElement.named(element)?.plural ?? element).lowercased()
                 ForEach(cells, id: \.id) { r in Button("Open \(r.title)") { model.open(r.id) } }
                 Divider()
-                if !cells.allSatisfy(\.followsMacOS) {
-                    Button("Follow macOS for \(name) in \(place.title)") { model.follow(element: element, place: place.id) }
-                }
+                BatchMenuItems(model: model, element: element, place: place.id)
             }
         } else {
             sample

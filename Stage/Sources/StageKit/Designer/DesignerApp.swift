@@ -174,6 +174,13 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                     model.back()
                 }
             }
+            // A batch change previewed (CD24): macOS Native for every button.
+            model.selection = .element("button")
+            model.mode = .inPlace
+            model.tryBatch(model.batchTemplate(ComponentTemplates.native, element: "button", place: nil))
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            save(window, "button-batch-\(dark ? "dark" : "light")", dir)
+            model.discard()
             // The whole app and one place (CD9, CD33).
             model.selection = .all
             try? await Task.sleep(nanoseconds: 450_000_000)

@@ -42,7 +42,7 @@ final class ComponentSystemTests: XCTestCase {
     }
 
     func testTemplatesHaveNoProblems() {
-        XCTAssertEqual(ComponentTemplates.all.map(\.id), ["native", "glass"])
+        XCTAssertEqual(ComponentTemplates.all.map(\.id), ["native", "glass", "compact"], "Compact ships now (CD6)")
         for t in ComponentTemplates.all {
             let s = t.system(name: "Acme")
             XCTAssertEqual(s.problems(), [], t.id)
@@ -51,7 +51,7 @@ final class ComponentSystemTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(s.elementsUsed.count, 10, t.id)
         }
         XCTAssertNotNil(ComponentTemplates.named("Glass"))
-        XCTAssertNil(ComponentTemplates.named("compact"), "Compact ships later (DS6)")
+        XCTAssertNotNil(ComponentTemplates.named("compact"), "Compact ships now (CD6)")
     }
 
     func testRoleTableAnswersWhichButtonWhere() {

@@ -13,7 +13,7 @@ public struct ComponentTemplate: Sendable, Identifiable {
 }
 
 public enum ComponentTemplates {
-    public static let all: [ComponentTemplate] = [native, glass]
+    public static let all: [ComponentTemplate] = [native, glass, compact]
 
     public static func named(_ id: String) -> ComponentTemplate? { all.first { $0.id == id.lowercased() } }
 
@@ -138,6 +138,31 @@ public enum ComponentTemplates {
                     places: ["page", "emptyState"], importance: .other,
                     recipe: ["action": "prominent"], custom: "ContentUnavailableView", sources: ["swiftui-contentunavailable"]),
             ]))
+    }
+
+    // MARK: Compact
+
+    /// A dense pro tool (DS6, shipped now by CD6): macOS Native with small controls where people work in rows, forms,
+    /// inspectors and action rows, and tighter named spacing. Sheets, alerts, menus and the toolbar stay as macOS draws them.
+    public static let compact = ComponentTemplate(
+        id: "compact", title: "Compact",
+        summary: "macOS Native made dense: small controls in rows, forms, inspectors and action rows, tight spacing; sheets, alerts, menus and the toolbar as macOS draws them. For pro tools with a lot on screen."
+    ) { name in
+        var s = native.system(name: name)
+        s.template = "compact"
+        // Not the toolbar's controls: macOS sizes toolbar items itself (NF1).
+        let small: Set<String> = ["button.secondary", "button.inRow", "button.link", "picker.setting", "toggle.setting", "field.text"]
+        for i in s.roles.indices where small.contains(s.roles[i].id) {
+            s.roles[i].recipe["size"] = "small"
+            s.roles[i].followsMacOS = false
+        }
+        // The main action stays regular in sheets and alerts, where macOS sizes the default button; small elsewhere would
+        // need a role of its own, so it keeps macOS's size.
+        s.foundations += [
+            ComponentFoundation("space.related", .space, use: "Between related controls, such as a row's buttons.", value: 6),
+            ComponentFoundation("space.group", .space, use: "Between groups on a page or in the inspector.", value: 12),
+        ]
+        return s
     }
 
     // MARK: Glass
