@@ -12,10 +12,12 @@ final class QuickCapture: NSObject, NSWindowDelegate {
 
     private weak var state: AppState?
     private var panel: CapturePanel?
-    private var hotKey: EventHotKeyRef?
+    private var hotKeys: [UInt32: EventHotKeyRef] = [:]
     private var handler: EventHandlerRef?
     private var keys: AnyCancellable?
-    private var registered: KeyChord?
+    private var registered: [UInt32: KeyChord] = [:]
+    /// Why a snap could not start (no Screen Recording permission); the bar shows it when it opens.
+    var startupProblem: String?
     /// While an area is dragged or a screenshot is marked up, losing focus does not close the bar.
     var holdOpen = false
     /// The bar's top centre on screen; it stays put while the bar grows with its content.
@@ -31,9 +33,13 @@ final class QuickCapture: NSObject, NSWindowDelegate {
     func start(state: AppState) {
         self.state = state
         installHandler()
-        register(ShortcutStore.shared.chord("capture.quick"))
+        register(ShortcutStore.shared.chord("capture.quick"), id: Self.openKeyID)
+        register(ShortcutStore.shared.chord("capture.snap"), id: Self.snapKeyID)
         keys = ShortcutStore.shared.$map.sink { [weak self] map in
-            Task { @MainActor in self?.register(map.chord(for: "capture.quick")) }
+            Task { @MainActor in
+                self?.register(map.chord(for: "capture.quick"), id: Self.openKeyID)
+                self?.register(map.chord(for: "capture.snap"), id: Self.snapKeyID)
+            }
         }
     }
 
@@ -160,22 +166,50 @@ final class QuickCapture: NSObject, NSWindowDelegate {
         return data
     }
 
-    // MARK: The system-wide key
+    // MARK: The system-wide keys
+
+    private static let openKeyID: UInt32 = 1, snapKeyID: UInt32 = 2
+
+    /// The snap key: drag over an area first, then the bar opens with the picture attached and the cursor in the text,
+    /// so one key press and one drag replace opening the bar, clipping and writing. Esc during the drag leaves things
+    /// as they were. With the bar already open it adds the picture to what is there.
+    func snap() async {
+        guard state != nil, !snapping else { return }
+        if let problem = AreaCapture.permissionProblem() {
+            startupProblem = problem
+            if panel == nil { show() }
+            return
+        }
+        snapping = true
+        defer { snapping = false }
+        let wasOpen = panel?.isVisible == true
+        let data = wasOpen ? await captureArea() : await AreaCapture.run()
+        guard let data else { return }
+        draft.add(name: "area-\(draft.shots.count + 1).png", data: data)
+        if !wasOpen { show() }
+    }
+
+    private var snapping = false
 
     private func installHandler() {
         guard handler == nil else { return }
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
-            Task { @MainActor in QuickCapture.shared.show() }
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+            var id = EventHotKeyID()
+            GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
+                              MemoryLayout<EventHotKeyID>.size, nil, &id)
+            guard id.signature == 0x4854_4348 else { return OSStatus(eventNotHandledErr) }
+            Task { @MainActor in
+                if id.id == QuickCapture.snapKeyID { await QuickCapture.shared.snap() } else { QuickCapture.shared.show() }
+            }
             return noErr
         }, 1, &spec, nil, &handler)
     }
 
-    private func register(_ chord: KeyChord?) {
-        guard chord != registered else { return }
-        if let hotKey { UnregisterEventHotKey(hotKey) }
-        hotKey = nil
-        registered = chord
+    private func register(_ chord: KeyChord?, id keyID: UInt32) {
+        guard chord != registered[keyID] else { return }
+        if let old = hotKeys.removeValue(forKey: keyID) { UnregisterEventHotKey(old) }
+        registered[keyID] = chord
         guard let chord, let code = Self.keyCodes[chord.key] else { return }
         var mods: UInt32 = 0
         if chord.modifiers.contains(.command) { mods |= UInt32(cmdKey) }
@@ -183,8 +217,10 @@ final class QuickCapture: NSObject, NSWindowDelegate {
         if chord.modifiers.contains(.control) { mods |= UInt32(controlKey) }
         if chord.modifiers.contains(.shift) { mods |= UInt32(shiftKey) }
         // "HTCH": Hatch's own signature, so the key is never mistaken for another app's.
-        let id = EventHotKeyID(signature: 0x4854_4348, id: 1)
-        RegisterEventHotKey(UInt32(code), mods, id, GetApplicationEventTarget(), 0, &hotKey)
+        let id = EventHotKeyID(signature: 0x4854_4348, id: keyID)
+        var ref: EventHotKeyRef?
+        RegisterEventHotKey(UInt32(code), mods, id, GetApplicationEventTarget(), 0, &ref)
+        if let ref { hotKeys[keyID] = ref }
     }
 
     /// Key positions (the key at that place on any layout), for the keys a capture shortcut can use.
