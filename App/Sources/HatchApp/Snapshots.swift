@@ -356,6 +356,14 @@ enum Snapshots {
         if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             NSApp.appearance = NSAppearance(named: appearance)
+            if name == "component-gallery" {
+                // The app's own components, drawn by the app, grouped as `hatch components views` proposes (CM5).
+                let w = ComponentGallery.window()
+                try? await Task.sleep(nanoseconds: 900_000_000)
+                save(w, name: name, mode: mode, into: folder)
+                w.close()
+                continue
+            }
             if name.hasPrefix("design-choice"),
                let w = DesignChoiceHarness.window(state: state, layout: DesignChoiceStyle.Layout(rawValue: String(name.dropFirst("design-choice-".count).split(separator: "-").first ?? "")) ?? .gallery,
                                                   toast: name.hasSuffix("-toast")) {

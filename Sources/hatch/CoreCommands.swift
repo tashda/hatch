@@ -61,9 +61,11 @@ enum CoreCommands {
     // hatch components roles [--template glass] [--element button] [--matrix] [--readme] -> the design system's roles (DS2)
     // hatch components templates   -> the templates a system can start from (DS6)
     // hatch components inventory [<app folder>] [--element button] [--all] -> every control, by place and look (DS4)
+    // hatch components views [<app folder>] [--json] -> every view the app declares, answered, and its own components (CM1)
     static func components(_ c: Context) throws {
         switch c.args.pos(1) {
         case "inventory": try componentInventory(c); return
+        case "views": try componentViews(c); return
         case "start": try componentStart(c); return
         case "questions": try componentQuestions(c); return
         case "answer": try componentAnswer(c); return
@@ -117,6 +119,38 @@ enum CoreCommands {
     }
 
     /// Every control in the app by place and look: what setup recommends from. Free: it reads Swift text.
+    /// hatch components views [<app folder>] [--kind unknown] [--json]: every view the app declares with its answer and
+    /// reason, the components of its own proposed from views that draw alike, and how much is accounted for.
+    static func componentViews(_ c: Context) throws {
+        let root: String
+        if let dir = c.args.pos(2) { root = (dir as NSString).expandingTildeInPath } else {
+            let project = try c.project()
+            guard let app = project.config?.repo(.app)?.localPath else { throw CLIError("Give the app's folder: hatch components views <folder>.") }
+            root = app
+        }
+        let model = AppViewScanner.scan(appRoot: root, excluding: componentsExclusion(try? c.project(), folder: root))
+        if c.out.json {
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(model)
+            print(String(decoding: data, as: UTF8.self)); return
+        }
+        var lines = ["\(model.views.count) views. Accounted for: \(Int((model.covered * 100).rounded()))% ("
+                     + AppView.Kind.allCases.map { "\(model.count($0)) \($0.title.lowercased())" }.joined(separator: ", ") + ")."]
+        lines.append("\nComponents of the app's own (\(model.proposals.count)):")
+        for p in model.proposals {
+            lines.append("  \(p.title)  \(p.uses) uses  —  \(p.why)")
+            for v in p.variants { lines.append("      \(v.name): \(v.members.joined(separator: ", "))   [\(v.style.form.isEmpty ? "–" : v.style.form)]") }
+        }
+        let only = c.args.option("kind").flatMap(AppView.Kind.init(rawValue:))
+        for kind in AppView.Kind.allCases where only == nil || only == kind {
+            let vs = model.views.filter { $0.kind == kind }
+            guard !vs.isEmpty, kind != .sample || only == .sample else { continue }
+            lines.append("\n\(kind.title) (\(vs.count))")
+            for v in vs { lines.append("  \(v.id)  \(v.file):\(v.line)  \(v.family.map { "[\($0)] " } ?? "")\(v.reason)") }
+        }
+        c.out.line(lines.joined(separator: "\n"))
+    }
+
     static func componentInventory(_ c: Context) throws {
         let root: String, excluding: [String]
         if let dir = c.args.pos(2) {
