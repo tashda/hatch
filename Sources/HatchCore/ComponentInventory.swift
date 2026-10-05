@@ -36,6 +36,7 @@ public struct ComponentInventory: Equatable, Sendable {
 
         public var signature: String { ComponentRole.summary(recipe) }
         public var location: String { "\((file as NSString).lastPathComponent):\(line)" }
+        public func location(full: Bool) -> String { full ? "\(file):\(line)" : location }
     }
 
     /// Uses of one element in one place with the same look.

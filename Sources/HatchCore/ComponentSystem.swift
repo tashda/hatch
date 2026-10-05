@@ -341,6 +341,29 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         return s
     }
 
+    // MARK: The design document (DS9)
+
+    public static let designStart = "<!-- hatch:components:start -->"
+    public static let designEnd = "<!-- hatch:components:end -->"
+
+    /// A design document with its component section replaced by the system's (DS9): the role tables, rules and Apple
+    /// reasons, generated so they cannot drift from the code. Hand-written text outside the markers is kept; without
+    /// markers the section is added at the end.
+    public func designDocument(updating text: String) -> String {
+        var body = readme().components(separatedBy: "\n")
+        // Drop the README's own title and preamble; the document has its own.
+        if let first = body.firstIndex(where: { $0.hasPrefix("**Rules.**") }) { body.removeFirst(first + 1) }
+        let section = [Self.designStart,
+                       "## Components (generated from the design system; change it through Hatch)",
+                       "", "Baseline v\(version). Roles, rules and why, from `\(Self.notebookPath)` in the notebook."]
+            + body + [Self.designEnd]
+        let generated = section.joined(separator: "\n")
+        if let start = text.range(of: Self.designStart), let end = text.range(of: Self.designEnd), start.lowerBound < end.upperBound {
+            return text.replacingCharacters(in: start.lowerBound..<end.upperBound, with: generated)
+        }
+        return text + (text.hasSuffix("\n") ? "\n" : "\n\n") + generated + "\n"
+    }
+
     static func cell(_ text: String) -> String {
         text.replacingOccurrences(of: "|", with: "\\|").replacingOccurrences(of: "\n", with: " ")
     }
@@ -538,13 +561,16 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
     /// Apple's pages behind this role's look or rule (ids in `ComponentNative.references`), so the owner sees why and Hatch
     /// knows what to recheck when Apple's documentation changes.
     public var sources: [String]
+    /// Built tickets that used this provisional role as it is (DS8); at three, Hatch offers to make it agreed.
+    public var usedOn: [String]
     /// The owner wants this to become a setting in the app (NF5); the check accepts other looks here until it exists.
     public var configurable: Bool
 
     public init(_ id: String, _ title: String, use: String, avoid: String = "", places: [String], importance: Importance,
                 perScreen: Int? = nil, recipe: [String: String] = [:], custom: String? = nil, variants: [ComponentVariant] = [],
                 status: Status = .provisional, decision: String? = nil, followsMacOS: Bool = false, sources: [String] = [],
-                configurable: Bool = false) {
+                configurable: Bool = false, usedOn: [String] = []) {
+        self.usedOn = usedOn
         self.id = id; self.title = title; self.use = use; self.avoid = avoid; self.places = places; self.importance = importance
         self.perScreen = perScreen; self.recipe = recipe; self.custom = custom; self.variants = variants
         self.status = status; self.decision = decision; self.followsMacOS = followsMacOS; self.sources = sources
@@ -552,7 +578,7 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, use, avoid, places, importance, perScreen, recipe, custom, variants, status, decision, draft, followsMacOS, sources, configurable
+        case id, title, use, avoid, places, importance, perScreen, recipe, custom, variants, status, decision, draft, followsMacOS, sources, configurable, usedOn
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -569,6 +595,7 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
         if followsMacOS { try c.encode(true, forKey: .followsMacOS) }
         if !sources.isEmpty { try c.encode(sources, forKey: .sources) }
         if configurable { try c.encode(true, forKey: .configurable) }
+        if !usedOn.isEmpty { try c.encode(usedOn, forKey: .usedOn) }
     }
 
     public init(from decoder: Decoder) throws {
@@ -589,6 +616,7 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
         followsMacOS = try c.decodeIfPresent(Bool.self, forKey: .followsMacOS) ?? false
         sources = try c.decodeIfPresent([String].self, forKey: .sources) ?? []
         configurable = try c.decodeIfPresent(Bool.self, forKey: .configurable) ?? false
+        usedOn = try c.decodeIfPresent([String].self, forKey: .usedOn) ?? []
     }
 
     public var element: String { id.split(separator: ".", maxSplits: 1).first.map(String.init) ?? id }

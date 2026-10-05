@@ -152,6 +152,20 @@ enum AgentCommands {
                 let checked = ComponentCheck.all(appRoot: ws.path, excluding: [project?.config?.components?.path].compactMap { $0 }, system: system,
                                                  areaOf: { project?.config?.area(ofFile: $0) })
                 let all = ComponentCheck.inDiff(checked.findings, diff: diff)
+                // DS8: provisional roles this ticket used exactly as they are count towards agreeing them.
+                let added = ComponentCheck.addedLines(diff: diff)
+                let flagged = Set(all.map { "\($0.file):\($0.line)" })
+                var used = Set<String>()
+                for u in checked.inventory.uses where added[u.file]?.contains(u.line) == true && !flagged.contains(u.location(full: true)) {
+                    if let r = u.role ?? u.place.flatMap({ system.role(element: u.element, place: $0, importance: u.importance)?.id }) { used.insert(r) }
+                }
+                var updated = system
+                let reached = updated.recordUse(roles: used, ticket: t.displayNumber)
+                if updated != system {
+                    try? updated.write(notebook: notebook)
+                    _ = try? NotebookWriter.commit("Components: \(t.displayNumber) used " + used.sorted().joined(separator: ", "), in: notebook)
+                    if !reached.isEmpty, let p = project { _ = try? c.store.syncComponentQuestions(projectId: p.id, system: updated) }
+                }
                 // Only places read from the code's structure are pressed on the agent; guessed ones are a note.
                 let found = all.filter(\.certain)
                 if all.count > found.count {

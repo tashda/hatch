@@ -161,6 +161,21 @@ extension CoreCommands {
         c.out.emit(["ticket": .string(t.displayNumber)], text: "\(id) is configurable. Draft \(t.displayNumber): \(draft.title).")
     }
 
+    /// hatch components design-md [--file DESIGN.md] [--dry-run]: the design document's component section, generated (DS9).
+    static func componentDesignDoc(_ c: Context) throws {
+        let (system, _) = try loadSystem(c)
+        let path = (c.args.option("file") ?? "DESIGN.md" as String)
+        let text = (try? String(contentsOfFile: path, encoding: .utf8)) ?? "# Design\n"
+        let updated = system.designDocument(updating: text)
+        if c.args.flag("dry-run") {
+            c.out.emit(["changed": .bool(updated != text)], text: updated)
+            return
+        }
+        try updated.write(toFile: path, atomically: true, encoding: .utf8)
+        c.out.emit(["file": .string(path), "changed": .bool(updated != text)],
+                   text: updated == text ? "\(path) is up to date." : "Wrote the component section of \(path). Text outside the markers was kept.")
+    }
+
     /// hatch components agree [<role>]
     static func componentAgree(_ c: Context) throws {
         var (system, notebook) = try loadSystem(c)

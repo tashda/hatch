@@ -327,6 +327,34 @@ public extension ComponentSystem {
         }
     }
 
+    /// How many built tickets without change before Hatch offers to agree a provisional role (DS8).
+    static let confirmAfter = 3
+
+    /// Records that a built ticket used these provisional roles as they are (DS8). At three tickets a role gets a confirm
+    /// question: agree to it as it is, or not yet. Returns the roles that just reached three.
+    @discardableResult
+    mutating func recordUse(roles used: Set<String>, ticket: String) -> [String] {
+        var reached: [String] = []
+        for i in roles.indices where used.contains(roles[i].id) && roles[i].status == .provisional && !roles[i].usedOn.contains(ticket) {
+            roles[i].usedOn.append(ticket)
+            let r = roles[i]
+            // Every third use: after "Not yet" it asks again three tickets later, never on each one.
+            guard r.usedOn.count % Self.confirmAfter == 0, !questions.contains(where: { $0.role == r.id }) else { continue }
+            questions.append(ComponentQuestion(
+                id: "confirm.\(r.id)", kind: .confirm, role: r.id,
+                title: "\(r.title): used on \(r.usedOn.count) tickets without change",
+                options: [
+                    .init(title: "Agree to it as it is", recipe: r.followsMacOS ? nil : r.recipe, follow: r.followsMacOS ? true : nil,
+                          effect: "\(r.id) becomes agreed; changing it later is a decision."),
+                    .init(title: "Not yet", effect: "It stays a provisional guess."),
+                ],
+                recommended: 0,
+                reason: "Tickets \(r.usedOn.joined(separator: ", ")) used it as it is, so it already works in practice; agreeing makes it the rule."))
+            reached.append(r.id)
+        }
+        return reached
+    }
+
     /// "Like this, and make it a setting" (NF5): the role or rule keeps its current choice as the default and becomes
     /// configurable; the check accepts other looks until the app has the setting. Returns the draft ticket that asks for it.
     @discardableResult

@@ -27,6 +27,20 @@ final class ComponentSystemTests: XCTestCase {
         XCTAssertEqual(ComponentNative.stale(installedSDK: "28.0").count, ComponentNative.references.count)
     }
 
+    func testDesignDocumentKeepsHandWrittenText() {
+        let s = ComponentTemplates.glass.system(name: "Hatch")
+        let doc = "# Hatch design rules\n\n## Principles\n\n1. Native first.\n"
+        let once = s.designDocument(updating: doc)
+        XCTAssertTrue(once.hasPrefix(doc), "principles stay")
+        XCTAssertTrue(once.contains(ComponentSystem.designStart) && once.contains("## Buttons"))
+        XCTAssertEqual(s.designDocument(updating: once), once, "regenerating changes nothing")
+        var t = s
+        try? t.followMacOS(role: "button.inRow")
+        let twice = t.designDocument(updating: once)
+        XCTAssertTrue(twice.hasPrefix(doc))
+        XCTAssertEqual(twice.components(separatedBy: ComponentSystem.designStart).count, 2, "replaced, not added again")
+    }
+
     func testTemplatesHaveNoProblems() {
         XCTAssertEqual(ComponentTemplates.all.map(\.id), ["native", "glass"])
         for t in ComponentTemplates.all {

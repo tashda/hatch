@@ -79,6 +79,29 @@ final class ComponentDraftTests: XCTestCase {
         XCTAssertEqual(s.role("button.inRow")?.recipe["style"], "bordered")
     }
 
+    func testAgreeingAfterThreeTickets() throws {
+        var s = ComponentTemplates.glass.system(name: "Acme")
+        XCTAssertEqual(s.recordUse(roles: ["button.inRow"], ticket: "#1"), [])
+        XCTAssertEqual(s.recordUse(roles: ["button.inRow"], ticket: "#1"), [], "a ticket counts once")
+        XCTAssertEqual(s.recordUse(roles: ["button.inRow"], ticket: "#2"), [])
+        XCTAssertEqual(s.recordUse(roles: ["button.inRow", "button.toolbar"], ticket: "#3"), ["button.inRow"])
+        let q = s.questions.first { $0.kind == .confirm }!
+        XCTAssertTrue(q.reason.contains("#1, #2, #3"))
+        try s.answer(q.id, option: 1)  // Not yet
+        XCTAssertEqual(s.role("button.inRow")?.status, .provisional)
+        for n in 4...5 { s.recordUse(roles: ["button.inRow"], ticket: "#\(n)") }
+        XCTAssertTrue(s.questions.isEmpty, "not asked on every ticket after Not yet")
+        s.recordUse(roles: ["button.inRow"], ticket: "#6")
+        try s.answer("confirm.button.inRow", option: 0)
+        XCTAssertEqual(s.role("button.inRow")?.status, .agreed)
+        // A role that follows macOS is agreed as following.
+        var n = ComponentTemplates.native.system(name: "Acme")
+        for t in ["#1", "#2", "#3"] { n.recordUse(roles: ["button.secondary"], ticket: t) }
+        try n.answer("confirm.button.secondary", option: 0)
+        XCTAssertTrue(n.role("button.secondary")!.followsMacOS)
+        XCTAssertEqual(n.role("button.secondary")?.status, .agreed)
+    }
+
     func testAgreeAndVariants() throws {
         var s = ComponentTemplates.glass.system(name: "Acme")
         try s.agree("button.inRow")
