@@ -576,8 +576,12 @@ struct SweepItemsSection: View {
 
     @ViewBuilder private func controls(_ item: SweepItem) -> some View {
         if curating, item.state == .todo {
-            Button("Leave out") { act("Could not leave the item out") { try state.store.dropSweepItem(ticketId: ticket.id, key: item.key) } }
-                .buttonStyle(.borderless).controlSize(.small)
+            HStack(spacing: 8) {
+                Button("Own ticket") { act("Could not split the item off") { try state.store.splitOffSweepItem(ticketId: ticket.id, key: item.key) } }
+                    .help("It turns out big: give it its own ticket, and the Sweep leaves it out")
+                Button("Leave out") { act("Could not leave the item out") { try state.store.dropSweepItem(ticketId: ticket.id, key: item.key) } }
+            }
+            .buttonStyle(.borderless).controlSize(.small)
         } else if curating, item.state == .dropped {
             Button("Include") { act("Could not include the item") { try state.store.restoreSweepItem(ticketId: ticket.id, key: item.key) } }
                 .buttonStyle(.borderless).controlSize(.small)

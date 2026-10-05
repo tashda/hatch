@@ -175,6 +175,10 @@ struct TicketDetailView: View {
                 if t.status == .done {
                     Button { move(to: .draft) } label: { Label("Reopen", systemImage: "arrow.uturn.backward") }
                 }
+                // The answer to a broad Question can be done everywhere it found (decision SW9).
+                if t.type == .question, t.status == .yourCall || t.status == .done {
+                    Button { turnIntoSweep() } label: { Label("Turn into a Sweep", systemImage: "square.grid.2x2") }
+                }
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString("\(t.displayNumber) \(t.title)", forType: .string)
@@ -351,6 +355,11 @@ struct TicketDetailView: View {
             while state.agentRuns.contains(where: { $0.ticketId == id }) && waited < 50 { try? await Task.sleep(nanoseconds: 100_000_000); waited += 1 }
             _ = state.perform("Could not reset the ticket") { try TicketReset.run(store: state.store, ticketId: id) }
         }
+    }
+
+    private func turnIntoSweep() {
+        let id = ticketId
+        if let sweep = state.perform("Could not start the Sweep", { try state.store.promoteToSweep(from: id) }) { state.open(sweep) }
     }
 
     private func resume() {

@@ -137,6 +137,48 @@ public extension HatchStore {
         }
     }
 
+    /// "Do this" on the answer to a broad Question (decision SW9): a Sweep starts from it, with the owner's words, the answer as
+    /// its first note and a link back. It goes straight to Ready: the path is decided, so Iris is not asked again.
+    @discardableResult
+    func promoteToSweep(from id: Int, by: String = "owner") throws -> Ticket {
+        try db.transaction {
+            guard let t = try ticket(id: id), t.type == .question, t.status == .yourCall || t.status == .done else {
+                throw StoreError.invalid("Only an answered Question can become a Sweep.")
+            }
+            let answer = try notes(ticketId: id).last(where: { $0.kind == .agent })?.body ?? ""
+            let words = IrisReading.ownerWords(title: t.originalTitle ?? t.title, body: t.originalBody)
+            let sweep = try createTicket(projectId: t.projectId, type: .sweep, title: t.title,
+                                         body: words + "\n\nStarted from the answer to \(t.displayNumber).", area: t.area, status: .draft, actor: .owner)
+            if !answer.isEmpty { _ = try addNote(sweep.id, kind: .note, author: "hatch", body: "Findings from \(t.displayNumber):\n\n\(answer)") }
+            try link(from: sweep.id, to: id, kind: .related, by: by, why: "made from the answer to \(t.displayNumber)")
+            try file(sweep.id, Filing(path: .sweep), by: by)
+            try move(sweep.id, to: .checking, actor: .owner, reason: "started from \(t.displayNumber)")
+            if t.status == .yourCall { try move(id, to: .done, actor: .owner, reason: "turned into a Sweep") }
+            return try move(sweep.id, to: .ready, actor: .hatch, reason: "started from \(t.displayNumber); the path is decided")
+        }
+    }
+
+    /// An item that turns out big gets its own ticket (decision SW5): the Sweep leaves it out and says where it went. Only an item
+    /// not built yet; the new ticket is a Small change the owner can re-path.
+    @discardableResult
+    func splitOffSweepItem(ticketId: Int, key: String, by: String = "owner") throws -> Ticket {
+        try db.transaction {
+            guard let t = try ticket(id: ticketId), let item = try sweepItems(ticketId: ticketId).first(where: { $0.key == key }) else { throw StoreError.invalid("There is no item '\(key)'.") }
+            guard item.state == .todo else { throw StoreError.invalid("\(item.name) is already \(item.state.displayName.lowercased()); only an item not built yet can be split off.") }
+            var body = "One item of \(t.displayNumber) (\(t.title)): \(item.name) in \(item.file)."
+            if let n = item.note, !n.isEmpty { body += " " + n }
+            body += "\n\nThe design accepted on \(t.displayNumber) applies; see it for the choices."
+            let own = try createTicket(projectId: t.projectId, type: .tweak, title: "\(item.name): \(t.title)", body: body, area: t.area, status: .draft, actor: .owner)
+            try link(from: own.id, to: ticketId, kind: .related, by: by, why: "\(item.name) was split off from this Sweep")
+            try file(own.id, Filing(path: .small), by: by)
+            try move(own.id, to: .checking, actor: .owner, reason: "split off from \(t.displayNumber)")
+            let ready = try move(own.id, to: .ready, actor: .hatch, reason: "split off from \(t.displayNumber)")
+            try setSweepItem(ticketId: ticketId, key: key, to: .dropped, by: by)
+            _ = try addNote(ticketId, kind: .note, author: by, body: "\(item.name) was split off to \(ready.displayNumber).")
+            return ready
+        }
+    }
+
     /// Items settled out of all that count (dropped ones do not count), for "7 of 12".
     func sweepProgress(ticketId: Int) throws -> (settled: Int, total: Int) {
         let items = try sweepItems(ticketId: ticketId).filter { $0.state != .dropped }

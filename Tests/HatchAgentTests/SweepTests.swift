@@ -146,4 +146,34 @@ final class SweepTests: XCTestCase {
         XCTAssertEqual(try store.restoreSweepItem(ticketId: t.id, key: "agent-card").state, .todo)
         XCTAssertThrowsError(try store.restoreSweepItem(ticketId: t.id, key: "agent-card"), "it is not left out any more")
     }
+
+    func testAnAnsweredQuestionBecomesASweepWithItsFindings() throws {
+        let q = try store.capture(prompt: "Look at every place we show a count badge and tell me whether we do it consistently", projectId: project.id)
+        try store.file(q.id, Filing(path: .question), by: "Iris")
+        for (status, actor) in [(Status.ready, Actor.hatch), (.preparing, .agent)] { try store.move(q.id, to: status, actor: actor) }
+        _ = try store.addNote(q.id, kind: .agent, author: "Agent on #1", body: "Three badges, three styles: toolbar, Dock, row.")
+        try store.move(q.id, to: .yourCall, actor: .hatch)
+        let sweep = try store.promoteToSweep(from: q.id)
+        XCTAssertEqual(sweep.type, .sweep)
+        XCTAssertEqual(sweep.path, .sweep)
+        XCTAssertEqual(sweep.status, .ready, "the path is decided, so no second vetting")
+        XCTAssertTrue(sweep.body.hasPrefix("Look at every place we show a count badge"), "the owner's words")
+        XCTAssertTrue(try store.notes(ticketId: sweep.id).contains { $0.body.contains("Three badges, three styles") }, "the findings travel with it")
+        XCTAssertEqual(try store.ticket(id: q.id)?.status, .done)
+        XCTAssertTrue(try store.links(ticketId: sweep.id).contains { $0.link.kind == .related })
+        XCTAssertThrowsError(try store.promoteToSweep(from: sweep.id), "only a Question can")
+    }
+
+    func testABigItemIsSplitOffIntoItsOwnTicket() throws {
+        let t = try Fixture.ticket(store, project, type: .sweep, title: "All cards", body: "x", status: .ready)
+        try store.saveSweepItems(ticketId: t.id, items: items().map(\.input))
+        try store.setSweepItem(ticketId: t.id, key: "agent-card", to: .built, commit: "b", by: "agent")
+        XCTAssertThrowsError(try store.splitOffSweepItem(ticketId: t.id, key: "agent-card"), "a built item cannot be split off")
+        let own = try store.splitOffSweepItem(ticketId: t.id, key: "decide-card")
+        XCTAssertEqual(own.type, .tweak)
+        XCTAssertEqual(own.status, .ready)
+        XCTAssertTrue(own.title.hasPrefix("DecideCard"))
+        XCTAssertEqual(try store.sweepItems(ticketId: t.id).first?.state, .dropped, "the Sweep leaves it out")
+        XCTAssertTrue(try store.notes(ticketId: t.id).contains { $0.body.contains("split off to") })
+    }
 }
