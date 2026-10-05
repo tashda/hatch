@@ -397,4 +397,15 @@ final class ComponentInventoryTests: XCTestCase {
         let inv = ComponentInventoryScanner.scan(appRoot: root.path, excluding: ["Packages/UI"])
         XCTAssertEqual(inv.uses.map(\.file), ["App/A.swift"])
     }
+
+    /// A file that only draws samples (a design tool, a lab) is not the app's own looks.
+    func testSampleFilesAreSkipped() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try "struct A: View { var body: some View { Button(\"Save\") {} } }".write(to: root.appendingPathComponent("A.swift"), atomically: true, encoding: .utf8)
+        try "// \(ComponentInventoryScanner.sampleMarker)\nstruct B: View { var body: some View { Button(\"Try\") {} } }"
+            .write(to: root.appendingPathComponent("B.swift"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(ComponentInventoryScanner.appFiles(appRoot: root.path).map(\.path), ["A.swift"])
+    }
 }

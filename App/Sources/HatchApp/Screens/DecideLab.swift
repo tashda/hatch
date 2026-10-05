@@ -1,3 +1,4 @@
+// hatch-inventory: samples (this file draws sample controls; they are not the app's own looks)
 import SwiftUI
 import AppKit
 import HatchCore

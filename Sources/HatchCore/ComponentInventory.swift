@@ -142,10 +142,16 @@ public enum ComponentInventoryScanner {
             if rel.split(separator: "/").contains(where: { $0.hasSuffix("Tests") || $0 == "Package.swift" }) { continue }
             if isOtherPlatform(rel) { continue }
             guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            // A file that only draws samples (a design tool's previews, a lab of variants) says so, so its controls are not
+            // counted as the app's own looks.
+            if text.prefix(2000).contains(sampleMarker) { continue }
             texts.append((rel, text))
         }
         return texts
     }
+
+    /// The comment that keeps a file out of the inventory: `// hatch-inventory: samples`.
+    public static let sampleMarker = "hatch-inventory: samples"
 
     /// Folders and files for another system: `iOS/`, `TableProMobile/`, `Watch Extension/`, `View+iOS.swift`.
     static func isOtherPlatform(_ rel: String) -> Bool {
