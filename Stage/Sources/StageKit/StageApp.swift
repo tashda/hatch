@@ -66,6 +66,9 @@ public enum StageApp {
     ///   - dataSource: where picks go. When `nil`: `--demo` or no `--ticket` uses the in-memory source, `--ticket` uses Hatch.
     public static func run(provider: any SpecimenProvider, manifest: StageManifest,
                            dataSource: StageDataSource? = nil, arguments: [String] = CommandLine.arguments) {
+        // The Components Designer is a mode of the Stage (decision DS1): it needs no round.
+        let designer = DesignerLaunchOptions.parse(Array(arguments.dropFirst()))
+        if designer.isDesigner { DesignerApp.run(designer) }
         let options = StageLaunchOptions.parse(Array(arguments.dropFirst()))
         if let path = options.renderIconPath {
             exit(StageIcon.writePNG(to: URL(fileURLWithPath: path), number: StageIcon.digits(from: options.ticket)) ? 0 : 1)
