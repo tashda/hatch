@@ -7,7 +7,7 @@ struct Args {
     var flags: Set<String> = []
 
     /// Flags that never take a value. Everything else written as `--name` consumes the next word.
-    static let booleanFlags: Set<String> = ["json", "dry-run", "help", "all", "submit", "open", "force", "no-sync", "quiet", "enqueue", "no-workspace", "sketch-flag", "no-push", "build", "tests", "matrix", "readme", "replace", "package", "from-app", "stop", "setting", "verbose", "random-only", "allow-claude"]
+    static let booleanFlags: Set<String> = ["json", "dry-run", "help", "all", "submit", "open", "force", "no-sync", "quiet", "enqueue", "no-workspace", "sketch-flag", "no-push", "build", "tests", "matrix", "readme", "replace", "package", "from-app", "stop", "setting", "verbose", "random-only", "allow-claude", "variants-only"]
 
     init(_ raw: [String]) {
         var i = 0

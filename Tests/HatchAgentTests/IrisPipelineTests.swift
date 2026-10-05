@@ -58,4 +58,20 @@ final class IrisPipelineTests: XCTestCase {
         XCTAssertTrue(r.checks.contains { $0.kind == .gold && !$0.ok }, "Iris being unusable shows as a gold failure")
         XCTAssertTrue(r.invariantFailures.isEmpty, "Hatch itself handled it correctly: \(r.invariantFailures)")
     }
+
+    func testVariantsChangeTheWordsButNotTheGoldAndSkipRepeats() throws {
+        let cases = try IrisEval.loadCorpus(Self.corpusURL)
+        let v = IrisEval.variants(of: cases, seed: 5)
+        XCTAssertGreaterThan(v.count, cases.count / 2)
+        let byId = Dictionary(uniqueKeysWithValues: cases.map { ($0.id, $0) })
+        for one in v {
+            let original = try XCTUnwrap(byId[String(one.id.split(separator: "~")[0])])
+            XCTAssertEqual(one.gold.path, original.gold.path)
+            XCTAssertEqual(one.gold.outcome, original.gold.outcome)
+            XCTAssertNotEqual(one.title + one.body, original.title + original.body, "\(one.id) really changed")
+            XCTAssertNil(one.seeds, "a prompt that repeats an earlier ticket is not varied")
+        }
+        XCTAssertEqual(IrisEval.variants(of: cases, seed: 5).map(\.id), v.map(\.id), "the same seed makes the same variants")
+        XCTAssertEqual(Set(IrisEval.variantKinds).count, 7)
+    }
 }

@@ -641,9 +641,10 @@
    "path": "chore",
    "outcome": "ready",
    "alsoPaths": [
-    "small",
     "question",
-    "approaches"
+    "approaches",
+    "investigate",
+    "small"
    ]
   }
  },
@@ -761,6 +762,9 @@
    "alsoPaths": [
     "small",
     "visual"
+   ],
+   "alsoOutcomes": [
+    "asks"
    ]
   }
  },
@@ -1039,6 +1043,9 @@
     "bug",
     "question",
     "small"
+   ],
+   "alsoOutcomes": [
+    "asks"
    ]
   }
  },
@@ -1053,6 +1060,9 @@
    "alsoPaths": [
     "investigate",
     "small"
+   ],
+   "alsoOutcomes": [
+    "asks"
    ]
   }
  },
@@ -1068,6 +1078,9 @@
     "bug",
     "question",
     "small"
+   ],
+   "alsoOutcomes": [
+    "asks"
    ]
   }
  },
@@ -1196,6 +1209,9 @@
    "area": "Sidebar",
    "alsoPaths": [
     "sweep"
+   ],
+   "alsoOutcomes": [
+    "split"
    ]
   }
  },
@@ -1404,6 +1420,147 @@
     "Menu typo",
     "Sidebar width",
     "Update checker timeout"
+   ]
+  }
+ },
+ {
+  "id": "role-big-red-save",
+  "project": "app",
+  "title": "make the Save button in the sheet big and red",
+  "body": "Save should be huge and red so nobody misses it.",
+  "gold": {
+   "path": "small",
+   "outcome": "asks",
+   "alsoPaths": [
+    "visual"
+   ]
+  }
+ },
+ {
+  "id": "role-two-main",
+  "project": "app",
+  "title": "add a Publish button next to Save, both prominent",
+  "body": "Save and Publish should look equally important in the sheet footer.",
+  "gold": {
+   "path": "small",
+   "outcome": "asks",
+   "alsoPaths": [
+    "visual",
+    "approaches"
+   ]
+  }
+ },
+ {
+  "id": "role-custom-cancel",
+  "project": "app",
+  "title": "give Cancel a custom pill style with a gradient",
+  "body": "Cancel in sheets should look like a pill with a gradient.",
+  "gold": {
+   "path": "visual",
+   "outcome": "asks",
+   "alsoPaths": [
+    "small"
+   ]
+  }
+ },
+ {
+  "id": "role-rename-ok",
+  "project": "app",
+  "title": "rename the Save button in the sheet to Done",
+  "body": "Just the label.",
+  "gold": {
+   "path": "small",
+   "outcome": "ready",
+   "alsoPaths": [
+    "visual"
+   ]
+  }
+ },
+ {
+  "id": "role-new-button-ok",
+  "project": "app",
+  "title": "add a Share button to the editor toolbar",
+  "body": "A secondary action next to the other toolbar buttons.",
+  "gold": {
+   "path": "small",
+   "outcome": "ready",
+   "area": "Toolbar",
+   "alsoPaths": [
+    "approaches",
+    "visual"
+   ],
+   "alsoAreas": [
+    "Editor"
+   ]
+  }
+ },
+ {
+  "id": "role-text-ok",
+  "project": "app",
+  "title": "change the empty state text in the editor",
+  "body": "Say \"Start typing\" instead of \"Empty\".",
+  "gold": {
+   "path": "small",
+   "outcome": "ready",
+   "area": "Editor",
+   "alsoPaths": [
+    "visual"
+   ]
+  }
+ },
+ {
+  "id": "faith-vague-look",
+  "project": "app",
+  "title": "the sheet looks off",
+  "body": "Something about the spacing.",
+  "gold": {
+   "path": "small",
+   "outcome": "ready",
+   "alsoPaths": [
+    "visual",
+    "investigate",
+    "bug"
+   ],
+   "forbidden": [
+    "screenshot",
+    "red mark",
+    "arrow",
+    "circled"
+   ]
+  }
+ },
+ {
+  "id": "faith-see-screenshot",
+  "project": "app",
+  "title": "look at the screenshot, the button is wrong",
+  "body": "As in the picture.",
+  "gold": {
+   "path": "small",
+   "outcome": "ready",
+   "alsoPaths": [
+    "visual",
+    "bug",
+    "investigate",
+    "question"
+   ],
+   "forbidden": [
+    "red mark",
+    "arrow",
+    "circled",
+    "highlighted"
+   ]
+  }
+ },
+ {
+  "id": "faith-no-numbers",
+  "project": "app",
+  "title": "make the toast a bit bigger",
+  "body": "It is small.",
+  "gold": {
+   "path": "small",
+   "outcome": "ready",
+   "alsoPaths": [
+    "visual"
    ]
   }
  }

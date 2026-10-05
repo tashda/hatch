@@ -36,6 +36,8 @@ public struct IrisEvalCase: Codable, Sendable {
         public var alsoAreas: [String]?
         /// Another outcome that is just as right (a prompt with nothing in it may be filed with a best reading or asked about).
         public var alsoOutcomes: [IrisEvalOutcome]?
+        /// Words that must not appear in the ticket after Iris filed it (a mark on a screenshot that was never attached).
+        public var forbidden: [String]?
         public init(path: WorkPath, area: String? = nil, outcome: IrisEvalOutcome = .ready, next: String? = nil, split: [String]? = nil,
                     duplicateOf: Int? = nil, question: String? = nil, alsoPaths: [WorkPath]? = nil) {
             self.path = path; self.area = area; self.outcome = outcome; self.next = next; self.split = split
@@ -99,8 +101,9 @@ public final class IrisEvalWorld {
     public private(set) var tips: [String: String] = [:]
     private var nextNumber = 1000
 
-    public static let areas: [String: [String]] = ["echo": ["Notifications", "Settings", "Sidebar", "Editor"], "web": ["Billing", "Auth"], "docs": []]
-    static let layout: [String: [RepoRole]] = ["echo": [.app, .designSystem, .notebook, .specimens], "web": [.app, .notebook], "docs": [.notebook]]
+    public static let areas: [String: [String]] = ["echo": ["Notifications", "Settings", "Sidebar", "Editor"], "web": ["Billing", "Auth"], "docs": [], "app": ["Editor", "Toolbar"]]
+    /// `app` has a design system (the macOS Native template) in its notebook, so Iris can be tested on clashes with a role.
+    static let layout: [String: [RepoRole]] = ["echo": [.app, .designSystem, .notebook, .specimens], "web": [.app, .notebook], "docs": [.notebook], "app": [.app, .notebook]]
     static let roleFolder: [RepoRole: String] = [.app: "app", .designSystem: "design", .notebook: "notebook", .specimens: "specimens"]
 
     /// The folder a `hatch` command run against this world uses as HATCH_HOME (set `fileBacked` to share the database with it).
@@ -124,6 +127,10 @@ public final class IrisEvalWorld {
                 try git.git(["init", "-q", "-b", "dev"], in: dir)
                 try "x".write(toFile: dir + "/README.md", atomically: true, encoding: .utf8)
                 try git.git(["add", "."], in: dir); try git.git(["commit", "-qm", "start"], in: dir)
+                if key == "app", role == .notebook {
+                    try ComponentTemplates.native.system(name: "App").write(notebook: dir)
+                    try git.git(["add", "."], in: dir); try git.git(["commit", "-qm", "design system"], in: dir)
+                }
                 tips[dir] = try git.git(["rev-parse", "HEAD"], in: dir).trimmingCharacters(in: .whitespacesAndNewlines)
                 repos.append(RepoConfig(role: role, remote: "acme/\(key)-\(Self.roleFolder[role]!)", branch: "dev", localPath: dir,
                                         buildCommand: role == .app ? (buildCommand ?? "swift build -c \(key)") : nil))
@@ -234,10 +241,10 @@ public enum IrisEval {
         let g = c.gold
         switch g.outcome {
         case .ready, .asks:
-            let readyOK = t.status == .ready, asksOK = t.status == .needsAnswers && open.count == 1
+            let readyOK = t.status == .ready, asksOK = t.status == .needsAnswers && open.count == 1, splitOK = !o.split.isEmpty
             let accepted = [g.outcome] + (g.alsoOutcomes ?? [])
-            check(.gold, accepted.map { $0 == .ready ? "filed as ready" : "asks the owner one question" }.joined(separator: " or "),
-                  (accepted.contains(.ready) && readyOK) || (accepted.contains(.asks) && asksOK), "status \(t.status), \(open.count) open")
+            check(.gold, accepted.map { $0 == .ready ? "filed as ready" : $0 == .asks ? "asks the owner one question" : "split" }.joined(separator: " or "),
+                  (accepted.contains(.ready) && readyOK) || (accepted.contains(.asks) && asksOK) || (accepted.contains(.split) && splitOK), "status \(t.status), \(open.count) open, \(o.split.count) parts")
         case .split:
             let oneTicketOK = (g.alsoOutcomes ?? []).contains(.ready) && t.status == .ready && o.split.isEmpty
             check(.gold, "split into \(g.split?.count ?? 0) tickets\(g.alsoOutcomes == nil ? "" : " (or one ticket)")", o.split.count == (g.split?.count ?? 0) || oneTicketOK, "\(o.split.count) parts, status \(t.status)")
@@ -251,7 +258,7 @@ public enum IrisEval {
         case .duplicate:
             check(.gold, "closed as a repeat", t.status.isTerminal, "status \(t.status)")
         }
-        if g.outcome != .split && g.outcome != .duplicate {
+        if g.outcome != .split && g.outcome != .duplicate && o.split.isEmpty {
             let accepted = Set(([g.path] + (g.alsoPaths ?? [])).map(\.type))
             check(.gold, "the kind of work is \(g.path.displayName)\(g.alsoPaths == nil ? "" : " (or " + g.alsoPaths!.map(\.displayName).joined(separator: ", ") + ")")", accepted.contains(t.type), "type \(t.type.rawValue)")
         }
@@ -260,6 +267,15 @@ public enum IrisEval {
             check(.gold, "area is \(accepted.joined(separator: " or "))", accepted.contains(t.area ?? "none"), "area \(t.area ?? "none")")
         }
 
+        // Faithfulness (IR2): she reads, she does not invent. No number the owner never gave, no forbidden word.
+        if g.outcome == .ready || g.outcome == .asks {
+            let given = Set(numbers(in: ([c.title, c.body] + (c.seeds ?? []).flatMap { [$0.title, $0.body] } + (c.decisions ?? []).flatMap { [$0.title, $0.body] }).joined(separator: " ")))
+            let filed = try store.ticket(id: t.id)!
+            let invented = Set(numbers(in: filed.title + " " + filed.body)).subtracting(given)
+            check(.gold, "adds no number the owner did not give", invented.isEmpty, "invented \(invented.sorted())")
+            let text = (filed.title + " " + filed.body).lowercased()
+            for word in g.forbidden ?? [] { check(.gold, "does not say \"\(word)\"", !text.contains(word.lowercased()), "the ticket says it") }
+        }
         // The owner's answer to a clash with a decision (WF-T6): keep closes the ticket, replace lets it go ahead.
         if let f = c.followUp, t.status == .needsAnswers, let q = open.first, IrisChoices.isDecisionClash(q.payload?["about"]?.stringValue) {
             let choice = q.suggestions.first { $0.lowercased().hasPrefix(f) }
@@ -291,6 +307,14 @@ public enum IrisEval {
         // Decisions seeded for this case must not clash with the next case's ticket.
         if c.decisions != nil { try store.db.execute("DELETE FROM decision_fts", []); try store.db.execute("DELETE FROM decision", []) }
         return IrisEvalResult(id: c.id, checks: checks, tokensIn: runs.first?.tokensIn ?? 0, tokensOut: runs.first?.tokensOut ?? 0, reply: recorder.last)
+    }
+
+    /// The numbers written in a text ("4", "2.5"), so what Iris adds can be compared with what the owner gave.
+    static func numbers(in text: String) -> [String] {
+        // A ticket or decision reference ("#1083", "decision #12") is not a number the owner wrote.
+        let text = text.replacingOccurrences(of: "#[0-9]+", with: " ", options: .regularExpression)
+        guard let re = try? NSRegularExpression(pattern: "[0-9]+(?:\\.[0-9]+)?") else { return [] }
+        return re.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range, in: text).map { String(text[$0]) } }
     }
 
     /// A ready ticket waits for exactly one agent task, and that task can be planned.
@@ -372,7 +396,7 @@ public enum IrisEval {
         switch g.outcome {
         case .asks:
             var qs: [[String: Any]] = [["text": g.question ?? "Which one do you mean?", "suggestions": ["The first", "The second"], "stakes": "high"]]
-            if c.decisions != nil { qs[0]["about"] = "decision #1" }
+            if c.decisions != nil { qs[0]["about"] = "decision #1" } else if c.project == "app" { qs[0]["about"] = "component button.primary" }
             if quirks.contains("twoQuestions") { qs.append(["text": "And another thing?", "suggestions": ["Yes"], "stakes": "high"]) }
             d["questions"] = qs
         case .split:
@@ -480,6 +504,53 @@ public enum IrisEval {
                                     style: ["plain", "fence", "prose", "snake"].randomElement(using: &rng), quirks: quirks.isEmpty ? nil : quirks))
         }
         return out
+    }
+
+    // MARK: Variants
+
+    public static let variantKinds = ["typos", "shout", "polite", "signature", "markdown", "spacing", "chatty"]
+
+    /// One case per written prompt, changed in a way that must not change the right answer: typos, capitals, a polite or chatty
+    /// frame, an email signature, markdown, odd spacing. A prompt that repeats an earlier ticket (seeds) is left out, since changing
+    /// its words changes whether it is a repeat. The gold answer is the original's.
+    public static func variants(of cases: [IrisEvalCase], seed: UInt64) -> [IrisEvalCase] {
+        var rng = Random(seed: seed)
+        return cases.compactMap { c in
+            guard c.seeds == nil, c.gold.outcome != .duplicate, !c.title.isEmpty || !c.body.isEmpty else { return nil }
+            let kind = variantKinds.randomElement(using: &rng)!
+            var v = c
+            v.id = c.id + "~" + kind
+            switch kind {
+            case "typos": v.title = typos(c.title, &rng); v.body = typos(c.body, &rng)
+            case "shout": v.title = c.title.uppercased(); v.body = c.body.isEmpty ? c.body : c.body.uppercased()
+            case "polite": v.body = "Hi, could you please look at this when you have a moment? " + c.body + " Thank you so much!"
+            case "signature": v.body = c.body + "\n\n--\nSent from my iPhone"
+            case "markdown": v.body = c.body.isEmpty ? c.body : "**Problem:** " + c.body + "\n\n- [ ] needs a look"
+            case "spacing": v.body = c.body.replacingOccurrences(of: ". ", with: ".\n\n  ").replacingOccurrences(of: " ", with: "  ")
+            default: v.title = "um " + c.title.lowercased() + " i think"; v.body = c.body.isEmpty ? "idk" : c.body + " lol"
+            }
+            // A prompt too short to vary (a bare "?") is left out.
+            return v.title + v.body == c.title + c.body ? nil : v
+        }
+    }
+
+    static func typos(_ text: String, _ rng: inout Random) -> String {
+        var words = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        func hit(_ w: String) -> String {
+            var chars = Array(w)
+            let i = Int.random(in: 1..<(chars.count - 2), using: &rng)
+            if Bool.random(using: &rng) { chars.swapAt(i, i + 1) } else { chars.remove(at: i) }
+            return String(chars)
+        }
+        var changed = false
+        for i in words.indices where words[i].count > 4 && Int.random(in: 0..<8, using: &rng) == 0 {
+            let new = hit(words[i]); if new != words[i] { words[i] = new; changed = true }
+        }
+        // A variant that does not vary is no test: change the longest word at least once.
+        if !changed, let i = words.indices.max(by: { words[$0].count < words[$1].count }), words[i].count > 4 {
+            let new = hit(words[i]); if new != words[i] { words[i] = new }
+        }
+        return words.joined(separator: " ")
     }
 
     // MARK: Corpus and report

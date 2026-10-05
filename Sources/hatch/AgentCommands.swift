@@ -338,6 +338,10 @@ enum AgentCommands {
             if c.args.flag("random-only") { cases = [] }
             cases += IrisEval.generate(seed: c.args.option("seed").flatMap(UInt64.init) ?? UInt64(Date().timeIntervalSince1970) / 86_400, count: n)
         }
+        if let vs = c.args.option("variants").flatMap(UInt64.init) {
+            let changed = IrisEval.variants(of: cases, seed: vs)
+            cases = c.args.flag("variants-only") ? changed : cases + changed
+        }
         if let only = c.args.option("only") { let ids = Set(only.split(separator: ",").map(String.init)); cases = cases.filter { ids.contains($0.id) } }
         if let n = c.args.option("limit").flatMap(Int.init) { cases = Array(cases.prefix(n)) }
         guard !cases.isEmpty else { throw CLIError("No prompts selected.") }
