@@ -314,14 +314,7 @@ public extension ComponentSystem {
         if q.kind == .change, let roleId = q.role {
             // A change: the chosen look becomes the role's draft, or a variant where the change is limited to.
             if let recipe = chosen.recipe {
-                if let scope = q.place ?? q.area {
-                    let id = q.place ?? "area-" + HatchStore.slug(scope)
-                    try addVariant(to: roleId, id: id, use: q.place != nil ? "In \(ComponentPlace.title(scope).lowercased()): \(q.title)" : "In the \(scope) area: \(q.title)",
-                                   recipe: recipe, places: q.place.map { [$0] })
-                } else {
-                    try setLook(roleId, recipe: recipe)
-                }
-                if let i = roles.firstIndex(where: { $0.id == roleId }) { roles[i].decision = decision ?? roles[i].decision }
+                try acceptDesign(role: roleId, look: recipe, place: q.place, area: q.area, use: q.title, decision: decision)
             }
         } else if let roleId = q.role, chosen.follow == true {
             try followMacOS(role: roleId, decision: decision)

@@ -116,32 +116,10 @@ public struct ComponentChangeOffer: Codable, Equatable, Sendable {
         }
         let today = system.roles[i].recipe
         for look in looks {
-            if look.recipe.isEmpty {
-                out.append(Problem(code: "look.empty", message: "Look '\(look.id)' has no recipe.", fix: "Set at least one setting, for example {\"style\": \"bordered\"}."))
-                continue
-            }
-            if element.look(look.recipe) == element.look(today) && !system.roles[i].followsMacOS {
+            if !look.recipe.isEmpty, element.look(look.recipe) == element.look(today) && !system.roles[i].followsMacOS {
                 out.append(Problem(code: "look.today", message: "Look '\(look.id)' is today's look.", fix: "Offer looks that differ from today; the owner can always keep today's."))
             }
-            for (key, value) in look.recipe {
-                guard let p = element.parameter(key) else {
-                    out.append(Problem(code: "look.setting", message: "Look '\(look.id)': \(element.title) has no setting `\(key)`.",
-                                       fix: "Use only: " + element.parameters.map(\.id).joined(separator: ", ") + "."))
-                    continue
-                }
-                let foundations = system.foundations.filter { p.foundation == $0.kind }.map(\.id)
-                if !p.values.contains(value) && !foundations.contains(value) {
-                    out.append(Problem(code: "look.value", message: "Look '\(look.id)': `\(key)` cannot be \"\(value)\".",
-                                       fix: "Use one of: " + (p.values + foundations).joined(separator: ", ") + "."))
-                }
-            }
-            var copy = system
-            copy.roles[i].recipe = look.recipe
-            copy.roles[i].draft = nil
-            copy.roles[i].followsMacOS = false
-            for p in copy.problems() where p.contains(roleId) && !system.problems().contains(p) {
-                out.append(Problem(code: "look.rule", message: "Look '\(look.id)': \(p)", fix: "Change the recipe so the system stays valid."))
-            }
+            out += system.problems(look: look.recipe, forRole: roleId, label: "Look '\(look.id)'")
             if (look.gain ?? "").trimmingCharacters(in: .whitespaces).isEmpty || (look.cost ?? "").trimmingCharacters(in: .whitespaces).isEmpty {
                 out.append(Problem(code: "look.gain-cost", message: "Look '\(look.id)' has no gain or cost.", fix: "Add one line of what it gains and one of what it costs."))
             }
@@ -233,5 +211,62 @@ public extension HatchStore {
             _ = try move(t.id, to: .checking, actor: .owner, reason: "asked on the Components page")
             return try move(t.id, to: .ready, actor: .hatch, reason: "a design system change Hatch wrote; nothing to check")
         }
+    }
+}
+
+// MARK: - A design for a role, from anywhere (decision SW6)
+
+public extension ComponentSystem {
+    /// Checks one look for a role as if it were the role's own: only the element's settings, only their values or a named
+    /// value of the right kind, and the system still valid with it. The gate for a change offer and for a Sweep that
+    /// names a role. `label` names the look in the messages. Empty means it can be saved.
+    func problems(look recipe: [String: String], forRole roleId: String, label: String = "The look") -> [ComponentChangeOffer.Problem] {
+        typealias Problem = ComponentChangeOffer.Problem
+        guard let i = roles.firstIndex(where: { $0.id == roleId }), let element = ComponentElement.named(roles[i].element) else {
+            return [Problem(code: "change.role", message: "The design system has no role `\(roleId)`.", fix: "Use a role from `hatch components roles`, or ask the owner.")]
+        }
+        guard !recipe.isEmpty else {
+            return [Problem(code: "look.empty", message: "\(label) has no recipe.", fix: "Set at least one setting, for example {\"style\": \"bordered\"}.")]
+        }
+        var out: [Problem] = []
+        for (key, value) in recipe.sorted(by: { $0.key < $1.key }) {
+            guard let p = element.parameter(key) else {
+                out.append(Problem(code: "look.setting", message: "\(label): \(element.title) has no setting `\(key)`.",
+                                   fix: "Use only: " + element.parameters.map(\.id).joined(separator: ", ") + "."))
+                continue
+            }
+            let named = foundations.filter { p.foundation == $0.kind }.map(\.id)
+            if !p.values.contains(value) && !named.contains(value) {
+                out.append(Problem(code: "look.value", message: "\(label): `\(key)` cannot be \"\(value)\".",
+                                   fix: "Use one of: " + (p.values + named).joined(separator: ", ") + "."))
+            }
+        }
+        // The whole system with it, once the settings themselves are right (so one mistake is said once).
+        guard out.isEmpty else { return out }
+        var copy = self
+        copy.roles[i].recipe = recipe
+        copy.roles[i].draft = nil
+        copy.roles[i].followsMacOS = false
+        let before = problems()
+        for p in copy.problems() where p.contains(roleId) && !before.contains(p) {
+            out.append(Problem(code: "look.rule", message: "\(label): \(p)", fix: "Change the recipe so the system stays valid."))
+        }
+        return out
+    }
+
+    /// Saves a design the owner accepted as the role's look: the role's draft, applied as the next baseline version when
+    /// the work is built, or a variant when the design is only for one place or area. Refuses a look with problems.
+    /// Hatch writes the system; the caller commits the notebook (the app with NotebookWriter, the API with its hook).
+    mutating func acceptDesign(role roleId: String, look recipe: [String: String], place: String? = nil, area: String? = nil,
+                               use: String, decision: String?) throws {
+        if let first = problems(look: recipe, forRole: roleId).first { throw StoreError.invalid(first.message + " " + first.fix) }
+        if let scope = place ?? area {
+            try addVariant(to: roleId, id: place ?? "area-" + HatchStore.slug(scope),
+                           use: place != nil ? "In \(ComponentPlace.title(scope).lowercased()): \(use)" : "In the \(scope) area: \(use)",
+                           recipe: recipe, places: place.map { [$0] })
+        } else {
+            try setLook(roleId, recipe: recipe)
+        }
+        if let i = roles.firstIndex(where: { $0.id == roleId }) { roles[i].decision = decision ?? roles[i].decision }
     }
 }

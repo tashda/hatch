@@ -137,4 +137,29 @@ final class ComponentChangeTests: XCTestCase {
         let build = BriefBuilder.rules(kind: .build, ticket: t, config: Fixture.config).joined(separator: "\n")
         XCTAssertTrue(build.contains("hatch components generate --out"))
     }
+
+    // The two calls a Sweep uses (SW6): check a design for a role, save an accepted one.
+
+    func testADesignForARoleIsCheckedLikeAnOffer() {
+        XCTAssertEqual(system.problems(look: ["style": "bordered"], forRole: "button.primary"), [])
+        XCTAssertEqual(system.problems(look: ["style": "shiny"], forRole: "button.primary").map(\.code), ["look.value"])
+        XCTAssertEqual(system.problems(look: ["glow": "yes"], forRole: "button.primary").map(\.code), ["look.setting"])
+        XCTAssertEqual(system.problems(look: [:], forRole: "button.primary").map(\.code), ["look.empty"])
+        XCTAssertEqual(system.problems(look: ["style": "bordered"], forRole: "button.nope").map(\.code), ["change.role"])
+        // A named value of the right kind counts as a value.
+        let color = system.foundations.first { $0.kind == .color }!.id
+        XCTAssertEqual(system.problems(look: ["tint": color], forRole: "button.primary"), [])
+    }
+
+    func testAnAcceptedDesignBecomesTheDraftOrAVariant() throws {
+        try system.acceptDesign(role: "button.primary", look: ["style": "bordered"], use: "Calmer", decision: "#200")
+        XCTAssertEqual(system.role("button.primary")?.draft, ["style": "bordered"])
+        XCTAssertEqual(system.role("button.primary")?.status, .inRedesign)
+        XCTAssertEqual(system.role("button.primary")?.decision, "#200")
+
+        try system.acceptDesign(role: "button.primary", look: ["style": "glass"], area: "Inspector", use: "Cards in the inspector", decision: nil)
+        XCTAssertEqual(system.role("button.primary")?.variants.first { $0.id == "area-inspector" }?.recipe["style"], "glass")
+
+        XCTAssertThrowsError(try system.acceptDesign(role: "button.primary", look: ["style": "shiny"], use: "", decision: nil))
+    }
 }
