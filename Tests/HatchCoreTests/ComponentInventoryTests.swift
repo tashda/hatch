@@ -228,12 +228,142 @@ final class ComponentInventoryTests: XCTestCase {
     func testNamesAreReadAsWords() {
         XCTAssertEqual(SwiftStructure.words("HXSetupRow"), ["hx", "setup", "row"])
         XCTAssertEqual(SwiftStructure.words("leadingToolbarItem"), ["leading", "toolbar", "item"])
-        XCTAssertEqual(SwiftStructure.place(forView: "leadingToolbarItem", inStack: false), "toolbar")
-        XCTAssertEqual(SwiftStructure.place(forView: "ScriptAsMenuContent", inStack: false), "contextMenu")
+        // Names only break ties; toolbar, menus, popovers and inspectors come from real modifiers.
+        for name in ["leadingToolbarItem", "TabSectionToolbar", "ScriptAsMenuContent", "ViewCommands", "filterRow"] {
+            XCTAssertNil(SwiftStructure.place(forView: name, inStack: false), name)
+        }
         XCTAssertEqual(SwiftStructure.place(forView: "IdentityFormSections", inStack: false), "form")
         XCTAssertNil(SwiftStructure.place(forView: "PlatformPicker", inStack: false), "platform is not form")
+        XCTAssertEqual(SwiftStructure.place(forView: "UnavailableStateView", inStack: false), "emptyState")
+        XCTAssertEqual(SwiftStructure.place(forView: "SettingsCard", inStack: false), "card")
+        // Kept because they were right three times in four in the audit: panels and panes beside the content, menu bar windows.
+        XCTAssertEqual(SwiftStructure.place(forView: "ProviderDetailPanel", inStack: false), "inspector")
         XCTAssertEqual(SwiftStructure.place(forView: "MenuBarPanel", inStack: false), "popover")
-        XCTAssertEqual(SwiftStructure.place(forView: "ViewCommands", inStack: false), "contextMenu")
+        XCTAssertEqual(SwiftStructure.place(forView: "actionRow", inStack: false), "actionRow")
+    }
+
+    func testOnlyTheMacsCodeIsRead() {
+        let text = """
+            struct V: View {
+                var body: some View {
+                    VStack {
+                        #if os(iOS)
+                        Button("Phone") {}.buttonStyle(.borderedProminent)
+                        #elseif os(macOS)
+                        Button("Mac") {}.buttonStyle(.glass)
+                        #else
+                        Button("Other") {}
+                        #endif
+                        #if canImport(UIKit) && !targetEnvironment(macCatalyst)
+                        Button("UIKit") {}
+                        #endif
+                        #if DEBUG
+                        Button("Debug") {}
+                        #endif
+                    }
+                }
+            }
+            """
+        let uses = ComponentInventoryScanner.uses(in: text, file: "V.swift")
+        XCTAssertEqual(uses.map(\.line), [7, 15])
+        XCTAssertEqual(uses.first?.recipe["style"], "glass")
+        XCTAssertTrue(PlatformCondition.evaluate(" os(macOS) || os(iOS)"))
+        XCTAssertFalse(PlatformCondition.evaluate(" os(iOS) || os(visionOS)"))
+        XCTAssertTrue(PlatformCondition.evaluate(" !os(iOS)"))
+        XCTAssertTrue(ComponentInventoryScanner.isOtherPlatform("TableProMobile/Views/A.swift"))
+        XCTAssertTrue(ComponentInventoryScanner.isOtherPlatform("App/Views/List+iOS.swift"))
+        XCTAssertFalse(ComponentInventoryScanner.isOtherPlatform("App/macOS/List.swift"))
+        XCTAssertFalse(ComponentInventoryScanner.isOtherPlatform("App/Views/MacOSSettings.swift"))
+    }
+
+    func testStructureRulesFromTheAudits() {
+        let text = #"""
+            struct Editor: View {
+                var body: some View {
+                    VStack {
+                        Text("Title").font(.largeTitle)
+                        HStack { Button("Share") {}; Button("Export") {} }
+                        HStack {
+                            Button("Cancel", role: .cancel) {}.keyboardShortcut(.cancelAction)
+                            Button("Save") {}.keyboardShortcut(.defaultAction)
+                        }
+                        LazyVGrid(columns: cols) { ForEach(items) { i in Button("Open") {} } }
+                        GlassEffectContainer { HStack { Button("Zoom") {} } }
+                        VStack { Button("Card action") {} }.padding().background(.background, in: RoundedRectangle(cornerRadius: 12))
+                        Picker("Kind", selection: $k) { Text("A") }
+                    }
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") {} } }
+                    .accessibilityActions { Button("Hidden") {} }
+                }
+            }
+            struct Plain: PrimitiveButtonStyle {
+                func makeBody(configuration: Configuration) -> some View { Button(configuration) }
+            }
+            struct Bar: App {
+                var body: some Scene {
+                    MenuBarExtra("x") { Button("Quit") {} }
+                }
+            }
+            let k = Kind.searchable(options: [])
+            """#
+        let uses = ComponentInventoryScanner.uses(in: text, file: "Editor.swift")
+        func place(_ title: String) -> String? { uses.first { u in text.components(separatedBy: "\n")[u.line - 1].contains(title) }?.place }
+        XCTAssertEqual(place("Share"), "actionRow")
+        XCTAssertEqual(place("Cancel"), "sheetFooter")
+        XCTAssertEqual(place("Open"), "listRow")
+        XCTAssertEqual(place("Zoom"), "floating")
+        XCTAssertEqual(place("Card action"), "card")
+        let done = uses.first { text.components(separatedBy: "\n")[$0.line - 1].contains("Done") }!
+        XCTAssertEqual(done.place, "sheetFooter")
+        XCTAssertEqual(done.importance, .main)
+        XCTAssertEqual(done.recipe["key"], "defaultAction")
+        XCTAssertEqual(place("Quit"), "contextMenu", "a MenuBarExtra without the window style is a menu")
+        XCTAssertNil(place("Hidden"))
+        XCTAssertFalse(uses.contains { text.components(separatedBy: "\n")[$0.line - 1].contains("makeBody") })
+        XCTAssertFalse(uses.contains { $0.element == "field" }, "an enum case named searchable is not the modifier")
+    }
+
+    func testTheAppsOwnContainersAndStyleWrappers() {
+        let container = """
+            struct SheetLayout<Content: View, Footer: View>: View {
+                @ViewBuilder let content: () -> Content
+                @ViewBuilder let footer: () -> Footer
+                var body: some View {
+                    VStack {
+                        content()
+                        HStack { Spacer(); footer() }.controlSize(.large)
+                    }
+                }
+            }
+            extension View {
+                func checkboxStyle() -> some View { toggleStyle(.checkbox) }
+                func fancyButtonStyle(style: FancyStyle) -> some View { buttonStyle(style.native) }
+            }
+            struct GlassButton: ViewModifier {
+                func body(content: Content) -> some View { content.buttonStyle(.glassProminent).controlSize(.large) }
+            }
+            """
+        let use = """
+            struct Export: View {
+                var body: some View {
+                    SheetLayout {
+                        Toggle("All", isOn: $all).checkboxStyle()
+                    } footer: {
+                        Button("Go") {}.modifier(GlassButton())
+                        Button("Fancy") {}.fancyButtonStyle(style: .glass)
+                    }
+                }
+            }
+            """
+        let inv = ComponentInventoryScanner.inventory(files: [("SheetLayout.swift", container), ("Export.swift", use)])
+        let toggle = inv.uses.first { $0.element == "toggle" }!
+        XCTAssertEqual(toggle.recipe["style"], "checkbox", "a wrapper that only applies a style is expanded")
+        let go = inv.uses.first { $0.line == 6 && $0.file == "Export.swift" }!
+        XCTAssertEqual(go.recipe["style"], "glassProminent")
+        XCTAssertEqual(go.recipe["size"], "large")
+        XCTAssertEqual(go.place, "sheetFooter", "footer() sits in a stack with a Spacer at the bottom: found inside the container")
+        let fancy = inv.uses.first { $0.line == 7 && $0.file == "Export.swift" }!
+        XCTAssertEqual(fancy.recipe["style"], "glass", "the style named at the call wins")
     }
 
     func testClustersRecommendTheMostUsedLook() {

@@ -360,7 +360,9 @@ public struct ComponentPlace: Codable, Equatable, Sendable, Identifiable {
     /// content area of a screen, and the actions under a page title.
     public static let page = ComponentPlace("page", "Page", "The content area of a screen or sheet, where cards, sheets and toasts appear.")
     public static let actionRow = ComponentPlace("actionRow", "Action row", "The actions under a page or ticket title.")
-    public static let common: [ComponentPlace] = [page, actionRow]
+    /// A floating glass bar or rail over the content: the Liquid Glass way to keep a few controls at hand (macOS 26 and later).
+    public static let floating = ComponentPlace("floating", "Floating", "A floating glass bar or rail over the content, like a dock or a command bar (macOS 26 and later).")
+    public static let common: [ComponentPlace] = [page, actionRow, floating]
 
     /// A place's title from the standard and common lists, or its id.
     public static func title(_ id: String?) -> String {

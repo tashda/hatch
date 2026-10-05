@@ -129,10 +129,26 @@ public enum ComponentInventoryScanner {
             let rel = ComponentsScanner.relative(url, to: root)
             if skip.contains(where: { rel.hasPrefix($0) }) { continue }
             if rel.split(separator: "/").contains(where: { $0.hasSuffix("Tests") || $0 == "Package.swift" }) { continue }
+            if isOtherPlatform(rel) { continue }
             guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
             texts.append((rel, text))
         }
         return inventory(files: texts)
+    }
+
+    /// Folders and files for another system: `iOS/`, `TableProMobile/`, `Watch Extension/`, `View+iOS.swift`.
+    static func isOtherPlatform(_ rel: String) -> Bool {
+        let parts = rel.split(separator: "/").map(String.init)
+        let folders = parts.dropLast()
+        let other = ["ios", "ipados", "watchos", "watch", "tvos", "visionos", "xros", "mobile", "iphone", "ipad"]
+        for f in folders {
+            let l = f.lowercased()
+            if other.contains(l) || ["iOS", "Mobile", "watchOS", "visionOS", "tvOS", "Watch Extension", "WatchKit Extension", "iPhone", "iPad"].contains(where: { f.hasSuffix($0) && f.count > $0.count })
+                || other.contains(where: { l == $0 + " app" }) { return true }
+        }
+        let file = (parts.last ?? "").replacingOccurrences(of: ".swift", with: "")
+        return ["+iOS", "_iOS", "-iOS", "+iPhone", "+iPad", "+visionOS", "+watchOS", "+tvOS", "_visionOS", "_watchOS"].contains(where: file.hasSuffix)
+            || file.hasSuffix("iOS") && !file.hasSuffix("macOS")
     }
 
     /// The inventory of a set of files read together, so a view's place can come from where other files use it.
@@ -171,13 +187,38 @@ final class SwiftCorpus {
         for (path, text) in texts {
             let s = SwiftStructure(text)
             let hasControls = ["Button", "Menu", "Picker", "Toggle", "TextField", "searchable"].contains(where: text.contains)
-            files.append(File(path: path, structure: s, scope: SwiftStructure.Scope(views: s.structs(), members: s.members(), types: s.typeBodies()),
+            files.append(File(path: path, structure: s, scope: SwiftStructure.Scope(views: s.structs(), members: s.members(), types: s.typeBodies(), path: path),
                               hasControls: hasControls))
         }
         let names = Set(files.flatMap { $0.scope.views.map(\.name) })
         for (index, f) in files.enumerated() {
             for site in f.structure.typeUses(names) { viewUses[site.name, default: []].append((index, site.at, site.modifiers)) }
+            for (name, mods) in f.structure.styleWrappers(f.scope) where customModifiers[name] == nil { customModifiers[name] = mods }
         }
+    }
+
+    /// The app's own modifiers that only apply styles (`func checkboxStyle() -> some View { toggleStyle(.checkbox) }`,
+    /// `struct GlassButton: ViewModifier`), by name, so a control styled through them gets the real style.
+    var customModifiers: [String: [SwiftStructure.Modifier]] = [:]
+    private var closureMemo: [String: SwiftStructure.Context] = [:]
+
+    /// For a control in a closure passed to the app's own container (`SheetLayout(…) { … } footer: { … }`), where the
+    /// container draws that closure: the structure there and the styles it applies (`content().controlSize(.small)`).
+    func closureContext(container: String, label: String?, labeled: Set<String> = [], depth: Int) -> SwiftStructure.Context? {
+        let key = "\(container)|\(label ?? "")|\(labeled.sorted().joined(separator: ","))"
+        if let known = closureMemo[key] { return known }
+        guard depth < 6 else { return nil }
+        for f in files {
+            guard let decl = f.scope.views.first(where: { $0.name == container && f.structure.declaresBody(in: $0) }) else { continue }
+            guard let property = label ?? f.structure.firstClosureProperty(in: decl, excluding: labeled),
+                  let site = f.structure.uses(of: property, in: decl, scope: f.scope).first else { return nil }
+            var ctx = f.structure.context(of: site.at, scope: f.scope, depth: depth + 1, names: false, corpus: nil)
+            ctx.chains = [site.modifiers] + ctx.chains
+            ctx.trail = ["inside \(container)" + (label.map { " \($0):" } ?? "")] + ctx.trail.prefix(3)
+            closureMemo[key] = ctx
+            return ctx
+        }
+        return nil
     }
 
     /// Where a view is used, as one context: the place most of its uses agree on (the first use breaks a tie), with the
@@ -187,7 +228,7 @@ final class SwiftCorpus {
         guard depth < 8, !resolving.contains(name) else { return nil }
         // Used nowhere as a view: shown by a window, a scene or AppKit (`NSHostingView(rootView:)`), so its content is a page.
         guard let sites = viewUses[name], !sites.isEmpty else {
-            let root = SwiftStructure.Context(place: "page", view: name, chains: [], preview: false, trail: ["root view"])
+            let root = SwiftStructure.Context(place: "page", view: name, chains: [], preview: false, trail: ["root view"], source: .page)
             memo[name] = root
             return root
         }
@@ -197,26 +238,83 @@ final class SwiftCorpus {
         for site in sites.prefix(12) {
             let f = files[site.file]
             if f.structure.isRootArgument(at: site.at) {
-                found.append(("page", SwiftStructure.Context(place: "page", view: name, chains: [], preview: false, trail: ["hosted as rootView"]), site.modifiers))
+                found.append(("page", SwiftStructure.Context(place: "page", view: name, chains: [], preview: false, trail: ["hosted as rootView"], source: .page), site.modifiers))
                 continue
             }
             let ctx = f.structure.context(of: site.at, scope: f.scope, depth: depth + 1, names: true, corpus: self)
-            if ctx.preview { continue }
+            if ctx.preview || ctx.hidden { continue }
             found.append((ctx.place, ctx, site.modifiers))
         }
-        guard let first = found.first else { return nil }
+        // Used only in previews or hidden places: a root after all.
+        guard let first = found.first else {
+            let root = SwiftStructure.Context(place: "page", view: name, chains: [], preview: false, trail: ["root view"], source: .page)
+            memo[name] = root
+            return root
+        }
+        // Count only the strongest kind of evidence: structure where any use has it, else names, else Page.
+        let strongest = found.compactMap { $0.place == nil ? nil : $0.ctx.source.rawValue }.max()
+        let counted = found.filter { $0.place != nil && $0.ctx.source.rawValue == strongest }
         var tally: [String: Int] = [:]
-        for f in found { if let p = f.place { tally[p, default: 0] += 1 } }
+        for f in counted { tally[f.place!, default: 0] += 1 }
         // Most uses win; on a tie, the place that appears first.
-        let order = found.compactMap(\.place)
+        let order = counted.compactMap(\.place)
         let best = tally.keys.max { a, b in tally[a]! != tally[b]! ? tally[a]! < tally[b]! : order.firstIndex(of: a)! > order.firstIndex(of: b)! }
-        let chosen = found.first { $0.place == best } ?? first
+        let chosen = found.first { $0.place == best && $0.ctx.source.rawValue == strongest } ?? first
         var out = chosen.ctx
         out.place = best
+        out.source = best == nil ? .page : chosen.ctx.source
         out.chains = [chosen.modifiers] + chosen.ctx.chains
         out.trail = ["used in \(found.count) place\(found.count == 1 ? "" : "s")"] + chosen.ctx.trail.prefix(4)
         memo[name] = out
         return out
+    }
+}
+
+/// `#if` conditions judged for macOS: `os(macOS)` true, other systems and Mac Catalyst false, `canImport(UIKit)` false,
+/// anything else (DEBUG, flags, `swift(>=6)`) true.
+enum PlatformCondition {
+    static func evaluate(_ text: String) -> Bool {
+        var tokens: [String] = []
+        var current = ""
+        for c in text {
+            if c.isLetter || c.isNumber || c == "_" || c == "." { current.append(c); continue }
+            if !current.isEmpty { tokens.append(current); current = "" }
+            if "()!,".contains(c) { tokens.append(String(c)) }
+            else if c == "&" || c == "|" {
+                if tokens.last == String(c) { tokens[tokens.count - 1] = String(c) + String(c) } else { tokens.append(String(c)) }
+            } else if c == "/" { break }  // a trailing comment
+        }
+        if !current.isEmpty { tokens.append(current) }
+        var i = 0
+        func or() -> Bool { var v = and(); while i < tokens.count, tokens[i] == "||" { i += 1; let r = and(); v = v || r }; return v }
+        func and() -> Bool { var v = unary(); while i < tokens.count, tokens[i] == "&&" { i += 1; let r = unary(); v = v && r }; return v }
+        func unary() -> Bool {
+            if i < tokens.count, tokens[i] == "!" { i += 1; return !unary() }
+            return primary()
+        }
+        func primary() -> Bool {
+            guard i < tokens.count else { return true }
+            if tokens[i] == "(" { i += 1; let v = or(); if i < tokens.count, tokens[i] == ")" { i += 1 }; return v }
+            let name = tokens[i]; i += 1
+            var args: [String] = []
+            if i < tokens.count, tokens[i] == "(" {
+                i += 1
+                var depth = 1
+                while i < tokens.count, depth > 0 {
+                    if tokens[i] == "(" { depth += 1 } else if tokens[i] == ")" { depth -= 1; if depth == 0 { i += 1; break } }
+                    if depth > 0 && tokens[i] != "," { args.append(tokens[i]) }
+                    i += 1
+                }
+            }
+            switch name {
+            case "os": return args.contains { ["macOS", "OSX"].contains($0) }
+            case "targetEnvironment": return false
+            case "canImport": return !args.contains { ["UIKit", "WatchKit", "UIKitCore", "CarPlay"].contains($0) }
+            case "false": return false
+            default: return true
+            }
+        }
+        return or()
     }
 }
 
@@ -258,6 +356,48 @@ struct SwiftStructure {
     /// Blanks comments and the insides of string literals (quotes and newlines stay), so brackets and names inside them
     /// are never read as code.
     static func mask(_ b: inout [UInt8]) {
+        maskStringsAndComments(&b)
+        maskOtherPlatforms(&b)
+    }
+
+    /// Blanks the branches of `#if` blocks that are not compiled on macOS (`#if os(iOS)`, `targetEnvironment(macCatalyst)`,
+    /// `canImport(UIKit)`), and the directive lines themselves, so only the Mac's code is read and braces stay balanced.
+    /// A condition Hatch cannot judge (`DEBUG`, a feature flag) counts as true.
+    static func maskOtherPlatforms(_ b: inout [UInt8]) {
+        var stack: [(active: Bool, taken: Bool, parent: Bool)] = []
+        var lineStart = 0
+        func blankLine(_ from: Int, _ to: Int) { var k = from; while k < to { if b[k] != 10 { b[k] = 32 }; k += 1 } }
+        while lineStart < b.count {
+            var lineEnd = lineStart
+            while lineEnd < b.count, b[lineEnd] != 10 { lineEnd += 1 }
+            var first = lineStart
+            while first < lineEnd, isSpace(b[first]) { first += 1 }
+            let line = first < lineEnd ? String(decoding: b[first..<lineEnd], as: UTF8.self) : ""
+            let active = stack.last?.active ?? true
+            if line.hasPrefix("#if ") || line.hasPrefix("#if(") || line == "#if" {
+                let cond = PlatformCondition.evaluate(String(line.dropFirst(3)))
+                stack.append((active && cond, cond, active))
+                blankLine(lineStart, lineEnd)
+            } else if line.hasPrefix("#elseif"), var top = stack.popLast() {
+                let cond = PlatformCondition.evaluate(String(line.dropFirst(7)))
+                top.active = top.parent && !top.taken && cond; top.taken = top.taken || cond
+                stack.append(top)
+                blankLine(lineStart, lineEnd)
+            } else if line.hasPrefix("#else"), var top = stack.popLast() {
+                top.active = top.parent && !top.taken; top.taken = true
+                stack.append(top)
+                blankLine(lineStart, lineEnd)
+            } else if line.hasPrefix("#endif") {
+                _ = stack.popLast()
+                blankLine(lineStart, lineEnd)
+            } else if !active {
+                blankLine(lineStart, lineEnd)
+            }
+            lineStart = lineEnd + 1
+        }
+    }
+
+    static func maskStringsAndComments(_ b: inout [UInt8]) {
         var i = 0
         while i < b.count {
             if b[i] == UInt8(ascii: "/"), i + 1 < b.count, b[i + 1] == UInt8(ascii: "/") {
@@ -431,7 +571,14 @@ struct SwiftStructure {
             j = skipSpaceBack(id.start - 1)
             guard j >= 0 else { return nil }
             if b[j] == UInt8(ascii: "}"), partner[j] >= 0, var found = owner(ofBrace: partner[j]) { found.label = label; return found }
-            if b[j] == UInt8(ascii: "(") { return nil }  // an argument closure: `Button(action: { … })`
+            // An argument closure (`Menu(content: { … }, label: …)`, `.contextMenu(forSelectionType:menu:)`): the call
+            // whose parentheses hold it.
+            if let open = enclosingParen(of: brace), let call = identifier(endingAt: skipSpaceBack(open - 1)) {
+                let before = call.start - 1
+                return (call.name, text(open + 1, partner[open] > open ? partner[open] : open + 1), label,
+                        before >= 0 && b[before] == UInt8(ascii: "."), before >= 0 && b[before] == UInt8(ascii: "#"))
+            }
+            return nil
         }
         var args = ""
         if b[j] == UInt8(ascii: ")"), partner[j] >= 0 {
@@ -441,6 +588,21 @@ struct SwiftStructure {
         guard let id = identifier(endingAt: j) else { return nil }
         let before = id.start - 1
         return (id.name, args, label, before >= 0 && b[before] == UInt8(ascii: "."), before >= 0 && b[before] == UInt8(ascii: "#"))
+    }
+
+    /// The innermost `(` whose parentheses hold position `i`, if that comes before any enclosing `{`.
+    func enclosingParen(of i: Int) -> Int? {
+        var k = i - 1, depth = 0
+        while k >= 0 {
+            let c = b[k]
+            if c == UInt8(ascii: ")") || c == UInt8(ascii: "]") || c == UInt8(ascii: "}") { depth += 1 }
+            else if c == UInt8(ascii: "(") || c == UInt8(ascii: "[") || c == UInt8(ascii: "{") {
+                if depth == 0 { return c == UInt8(ascii: "(") ? k : nil }
+                depth -= 1
+            }
+            k -= 1
+        }
+        return nil
     }
 
     /// Ranges of `struct Name … { … }` and `extension Name … { … }` bodies, for the view a control is written in.
@@ -479,6 +641,94 @@ struct SwiftStructure {
                 while k < b.count, b[k] != UInt8(ascii: "{"), b[k] != UInt8(ascii: "}"), b[k] != UInt8(ascii: "=") { k += 1 }
                 if k < b.count, b[k] == UInt8(ascii: "{") { out.append(k) }
             }
+        }
+        return out
+    }
+
+    static let styleModifierNames: Set<String> = ["buttonStyle", "controlSize", "labelStyle", "buttonBorderShape", "toggleStyle", "pickerStyle",
+                                                  "textFieldStyle", "menuStyle", "menuIndicator", "tint", "labelsHidden"]
+
+    /// Functions and ViewModifiers in this file that apply styles, with the styles in their bodies (the first branch of
+    /// an `if #available` first, so the newest look wins).
+    func styleWrappers(_ scope: Scope) -> [(String, [Modifier])] {
+        var out: [(String, [Modifier])] = []
+        func styles(_ open: Int, _ close: Int) -> [Modifier] {
+            var mods: [Modifier] = [], k = open
+            while k < close {
+                // `.toggleStyle(…)` or, with an implicit self, `toggleStyle(…)` at the start of an expression.
+                let start = b[k] == UInt8(ascii: ".") ? k + 1 : (Self.isIdentStart(b[k]) && !Self.isIdent(b[k - 1]) && b[k - 1] != UInt8(ascii: ".") ? k : -1)
+                if start >= 0, let id = identifier(startingAt: start), Self.styleModifierNames.contains(id.name) {
+                    let paren = skipSpace(id.end, newlines: false)
+                    if paren < b.count, b[paren] == UInt8(ascii: "("), partner[paren] > paren {
+                        let args = text(paren + 1, partner[paren]).trimmingCharacters(in: .whitespaces)
+                        // Only fixed styles: a parameter passed through says nothing here.
+                        if args.isEmpty || args.hasPrefix(".") || args.first?.isUppercase == true { mods.append(Modifier(name: id.name, args: args)) }
+                    }
+                    k = id.end; continue
+                }
+                k += 1
+            }
+            return mods
+        }
+        for m in scope.members where m.name != "body" && m.name != "makeBody" && m.name.first?.isLowercase == true {
+            let mods = styles(m.open, m.close)
+            if !mods.isEmpty { out.append((m.name, mods)) }
+        }
+        // `struct GlassButton: ViewModifier { func body(content: Content) -> some View { … } }`
+        for v in scope.views where text(v.open - min(v.open, 120), v.open).contains("ViewModifier") {
+            let mods = styles(v.open, v.close)
+            if !mods.isEmpty { out.append((v.name, mods)) }
+        }
+        return out
+    }
+
+    /// True when a type's body here declares `var body`.
+    func declaresBody(in decl: (name: String, open: Int, close: Int)) -> Bool {
+        text(decl.open, decl.close).contains("var body")
+    }
+
+    /// The first closure property of a container (`let content: () -> Content`, `@ViewBuilder var content`): what a
+    /// trailing closure fills.
+    func firstClosureProperty(in decl: (name: String, open: Int, close: Int), excluding labeled: Set<String> = []) -> String? {
+        let body = text(decl.open, decl.close)
+        // An explicit initializer decides the order: its first closure parameter not labeled at the call.
+        if let initRange = body.range(of: "init("), let close = body[initRange.upperBound...].firstIndex(of: "{") {
+            let params = body[initRange.upperBound..<close]
+            for part in params.split(separator: ",") {
+                let words = part.split(separator: ":", maxSplits: 1)
+                guard words.count == 2 else { continue }
+                let names = words[0].split(separator: " ").map(String.init)
+                guard let name = names.last?.replacingOccurrences(of: "@ViewBuilder", with: "") , !name.isEmpty else { continue }
+                if (words[1].contains("->") || part.contains("@ViewBuilder")) && !labeled.contains(names.first ?? name) { return name }
+            }
+        }
+        let re = ComponentReader.re(#"(@ViewBuilder\s+)?(?:let|var)\s+(\w+)\s*:\s*([^\n={]+)"#)
+        for m in re.matches(in: body, range: NSRange(body.startIndex..., in: body)) {
+            guard let nameRange = Range(m.range(at: 2), in: body), let typeRange = Range(m.range(at: 3), in: body) else { continue }
+            let name = String(body[nameRange]), type = String(body[typeRange])
+            if name == "body" || labeled.contains(name) { continue }
+            if m.range(at: 1).location != NSNotFound || type.contains("->") || type.trimmingCharacters(in: .whitespaces) == "Content" { return name }
+        }
+        return nil
+    }
+
+    /// Where a property of a type is drawn inside it: `content()`, `footer`, `self.content` (not its declaration).
+    func uses(of property: String, in decl: (name: String, open: Int, close: Int), scope: Scope) -> [(at: Int, modifiers: [Modifier])] {
+        var out: [(Int, [Modifier])] = []
+        let word = Array(property.utf8)
+        var i = decl.open
+        while i + word.count <= decl.close {
+            defer { i += 1 }
+            guard b[i] == word[0], Array(b[i..<(i + word.count)]) == word, !Self.isIdent(b[i - 1]), !Self.isIdent(b[i + word.count]) else { continue }
+            if let before = identifier(endingAt: skipSpaceBack(i - 1)), ["let", "var", "func"].contains(before.name) { continue }
+            let next = skipSpace(i + word.count, newlines: false)
+            if next < b.count, b[next] == UInt8(ascii: ":") || b[next] == UInt8(ascii: "=") { continue }
+            if b[i - 1] == UInt8(ascii: "."), !(i >= 5 && text(i - 5, i) == "self.") { continue }
+            // Inside a member's body (where views are built), not in an initializer's assignment.
+            guard scope.members.contains(where: { $0.open < i && i < $0.close && $0.name != "init" }) else { continue }
+            var p = i + word.count
+            if p < b.count, b[p] == UInt8(ascii: "("), partner[p] > p { p = partner[p] + 1 }
+            out.append((i, chain(after: p).modifiers))
         }
         return out
     }
@@ -547,15 +797,27 @@ struct SwiftStructure {
         "TextField": "field", "SecureField": "field",
     ]
 
+    /// True when the `.` at `dot` continues an expression (`…).searchable(`), not an enum case (`kind: .searchable`).
+    func isChained(_ dot: Int) -> Bool {
+        let p = skipSpaceBack(dot - 1)
+        guard p >= 0 else { return false }
+        if b[p] == UInt8(ascii: ")") || b[p] == UInt8(ascii: "}") || b[p] == UInt8(ascii: "]") { return true }
+        // After a value (`content.searchable`), not a type (`Kind.searchable`) or a keyword.
+        guard let id = identifier(endingAt: p) else { return false }
+        return id.name.first?.isLowercase == true && !["case", "return", "in"].contains(id.name)
+    }
+
     /// The views and helpers of a file, read once.
     struct Scope {
         var views: [(name: String, open: Int, close: Int)]
         var members: [(name: String, open: Int, close: Int)]
         /// Bodies of declarations (types, functions, properties): never a container that names a place.
         var declarations: Set<Int>
+        /// The file's path in the app, for folder hints (`Settings/`).
+        var path: String
 
-        init(views: [(name: String, open: Int, close: Int)], members: [(name: String, open: Int, close: Int)], types: [Int] = []) {
-            self.views = views; self.members = members
+        init(views: [(name: String, open: Int, close: Int)], members: [(name: String, open: Int, close: Int)], types: [Int] = [], path: String = "") {
+            self.views = views; self.members = members; self.path = path
             declarations = Set(views.map(\.open) + members.map(\.open) + types)
         }
     }
@@ -569,7 +831,7 @@ struct SwiftStructure {
             guard let id = identifier(startingAt: i) else { i += 1; continue }
             defer { i = id.end }
             let prev = i > 0 ? b[i - 1] : 0
-            if id.name == "searchable", prev == UInt8(ascii: ".") {
+            if id.name == "searchable", prev == UInt8(ascii: "."), isChained(i - 1) {
                 if let use = searchField(at: i, scope: scope, corpus: corpus, file: file) { out.append(use) }
                 continue
             }
@@ -593,14 +855,17 @@ struct SwiftStructure {
         let own = chain(after: p)
         closures += own.closures
 
-        var context = self.context(of: start, scope: scope, corpus: corpus)
-        guard !context.preview, !Self.hidden([own.modifiers] + context.chains) else { return nil }
+        // Inside a ButtonStyle's makeBody a Button is part of the style, not a use.
+        if scope.members.contains(where: { $0.name == "makeBody" && $0.open < start && start < $0.close }) { return nil }
+        var context = self.context(of: start, scope: scope, corpus: corpus, element: element)
+        guard !context.preview, !context.hidden, !Self.hidden([own.modifiers] + context.chains) else { return nil }
         // A field or switch beside the footer buttons is still part of the sheet's form.
         if context.place == "sheetFooter", element != "button", element != "menu" { context.place = "form" }
 
         var env = StyleEnvironment()
-        env.read(own.modifiers, own: true)
-        for level in context.chains { env.read(level, own: false) }
+        let custom = corpus?.customModifiers ?? [:]
+        env.read(own.modifiers, own: true, custom: custom)
+        for level in context.chains { env.read(level, own: false, custom: custom) }
 
         var recipe: [String: String] = [:]
         var importance = ComponentRole.Importance.other
@@ -616,6 +881,12 @@ struct SwiftStructure {
             if args.contains("role: .destructive") || args.contains("role:.destructive") { importance = .destructive }
             else if env.key == "defaultAction" || (recipe["style"]?.hasSuffix("Prominent") ?? false) { importance = .main }
             else if env.key == "cancelAction" || args.contains("role: .cancel") || recipe["style"] == "link" { importance = .quiet }
+            else if let hint = context.importance {
+                importance = hint
+                // A confirmation or cancellation placement is the Return or Esc button.
+                if recipe["key"] == nil, hint == .main { recipe["key"] = "defaultAction" }
+                if recipe["key"] == nil, hint == .quiet { recipe["key"] = "cancelAction" }
+            }
         case "menu":
             recipe["style"] = env.menuStyle ?? "automatic"
             if let s = env.buttonStyle { recipe["look"] = s }
@@ -722,6 +993,7 @@ struct SwiftStructure {
         let labelClosure = closures.first { $0.label == "label" } ?? (args.contains("action:") ? closures.first { $0.label.isEmpty } : nil)
         guard let open = labelClosure?.open, partner[open] > open else { return "custom" }
         let body = text(open + 1, partner[open])
+        for style in ["iconOnly", "titleOnly", "titleAndIcon"] where body.contains("labelStyle(.\(style))") { return style }
         if body.contains("Label(") { return "titleAndIcon" }
         let image = body.contains("Image(")
         let title = body.contains("Text(")
@@ -731,64 +1003,134 @@ struct SwiftStructure {
         return "custom"
     }
 
-    struct Context { var place: String?; var view: String?; var chains: [[Modifier]]; var preview: Bool; var trail: [String] = [] }
+    /// How a place was found. Structure (a `List`, a `.toolbar`, a `Form` around it, here or where the view is used)
+    /// beats a name (`TicketRow`, `footer`), and a name beats Page, the default for a window's or sheet's content.
+    enum PlaceSource: Int { case page = 0, name = 1, structure = 2 }
 
-    /// Where a control sits, in order: the first enclosing block that names a place; for a control in a helper, the
-    /// places where the helper is called (up to three hops); the helper's name (`footer`); the view's name; else unknown.
-    /// The modifier chains of the enclosing calls are collected on the way, innermost first, for the styles they set.
-    func context(of i: Int, scope: Scope, depth: Int = 0, names: Bool = true, corpus: SwiftCorpus? = nil) -> Context {
-        // A helper's call site must not let its view's name beat the helper's own name (`actionBar` in a `DecideCard`),
-        // so helper hops run with `names` off; a hop to another file's use of the view runs with it on.
+    struct Context {
+        var place: String?
+        var view: String?
+        var chains: [[Modifier]]
+        var preview: Bool
+        var trail: [String] = []
+        var source: PlaceSource = .page
+        /// Importance a container implies (`ToolbarItem(placement: .confirmationAction)` holds the main action).
+        var importance: ComponentRole.Importance?
+        /// Inside something never drawn (`.accessibilityActions`).
+        var hidden = false
+
+        mutating func set(_ place: String?, _ source: PlaceSource) {
+            guard let place else { return }
+            self.place = place
+            self.source = place == "page" ? .page : source
+        }
+    }
+
+    /// Where a control sits. In order: the first enclosing block that names a place; for a control in a helper, the
+    /// blocks around the helper's call sites (up to three hops); the blocks around the view's uses in other files; the
+    /// helper's name (`footer`); the view's name; Page when the view is a window's content; else unknown. The modifier
+    /// chains of the enclosing calls are collected on the way, innermost first, for the styles they set.
+    func context(of i: Int, scope: Scope, depth: Int = 0, names: Bool = true, corpus: SwiftCorpus? = nil, element: String? = nil) -> Context {
+        // Helper hops run with `names` off, so a call site's view name never beats the helper's own name
+        // (`actionBar` in a `DecideCard`); the first level applies names after all structure has been tried.
         let view = scope.views.filter { $0.open < i && i < $0.close }.max { $0.open < $1.open }
         var ctx = Context(place: nil, view: view?.name, chains: [], preview: view?.name.hasSuffix("_Previews") ?? false)
         var inStack = false, collecting = true, customRow = false, inSection = false
-        for brace in enclosingBraces(of: i).reversed() where !scope.declarations.contains(brace) {
-            guard let o = owner(ofBrace: brace) else { continue }
+        let levels = enclosingBraces(of: i).reversed().filter { !scope.declarations.contains($0) }.map { (brace: $0, owner: owner(ofBrace: $0)) }
+        for (k, level) in levels.enumerated() {
+            guard let o = level.owner else { continue }
+            let brace = level.brace
             if o.hash && o.name == "Preview" { ctx.preview = true; return ctx }
+            if o.dotted, o.name.hasPrefix("accessibility") { ctx.hidden = true }
             if ctx.trail.count < 12 { ctx.trail.append((o.dotted ? "." : "") + o.name + (o.label.map { " \($0):" } ?? "")) }
             let end = partner[brace] > brace ? partner[brace] + 1 : brace + 1
-            if collecting { ctx.chains.append(chain(after: end).modifiers) }
+            let after = chain(after: end)
+            // Styles the app's own container applies where it draws this closure come before its outside chain.
+            if collecting, !o.dotted, o.name.first?.isUppercase == true,
+               let inner = corpus?.closureContext(container: o.name, label: o.label, labeled: Set(after.closures.map(\.label)), depth: depth) {
+                ctx.chains += inner.chains
+            }
+            if collecting { ctx.chains.append(after.modifiers) }
             guard ctx.place == nil else { continue }
+            let outer = levels.dropFirst(k + 1).first { $0.owner != nil }?.owner
             switch (o.dotted, o.name) {
             case (true, "contextMenu"), (true, "commands"), (false, "CommandMenu"), (false, "CommandGroup"):
-                ctx.place = "contextMenu"
-            case (false, "Menu") where o.label == nil: ctx.place = "contextMenu"
-            case (false, let name) where o.label == nil && (name.hasSuffix("MenuButton") || name.hasSuffix("Menu")): ctx.place = "contextMenu"
-            case (true, "alert"), (true, "confirmationDialog"): ctx.place = "alert"
+                ctx.set("contextMenu", .structure)
+            case (false, "Menu") where o.label == nil || o.label == "content": ctx.set("contextMenu", .structure)
+            case (false, "MenuBarExtra"):
+                // A menu bar extra is a menu unless it asks for a window.
+                let window = after.modifiers.contains { $0.name == "menuBarExtraStyle" && $0.args.contains("window") }
+                ctx.set(window ? "popover" : "contextMenu", .structure)
+            case (false, let name) where o.label == nil && (name.hasSuffix("MenuButton") || name.hasSuffix("Menu")): ctx.set("contextMenu", .structure)
+            case (true, "alert"), (true, "confirmationDialog"): ctx.set("alert", .structure)
             case (false, "ToolbarItem"), (false, "ToolbarItemGroup"):
-                ctx.place = o.args.contains("confirmationAction") || o.args.contains("cancellationAction") || o.args.contains("destructiveAction")
-                    ? "sheetFooter" : "toolbar"
-            case (true, "toolbar"): ctx.place = "toolbar"
-            case (true, "safeAreaInset"), (true, "safeAreaBar"): if o.args.contains(".bottom") { ctx.place = "bottomBar" }
-            case (true, "popover"), (false, "MenuBarExtra"): ctx.place = "popover"
-            case (true, "inspector"): ctx.place = "inspector"
-            case (false, "Form"): ctx.place = "form"
-            case (false, "List"), (false, "Table"), (false, "TableColumn"), (false, "OutlineGroup"): ctx.place = "listRow"
-            case (false, "ContentUnavailableView"): ctx.place = "emptyState"
-            case (false, "GroupBox"): ctx.place = "card"
-            case (false, "HStack"): inStack = true
+                if o.args.contains("confirmationAction") { ctx.importance = .main }
+                else if o.args.contains("cancellationAction") { ctx.importance = .quiet }
+                else if o.args.contains("destructiveAction") { ctx.importance = .destructive }
+                ctx.set(ctx.importance == nil ? "toolbar" : "sheetFooter", .structure)
+            case (true, "toolbar"): ctx.set("toolbar", .structure)
+            case (true, "safeAreaInset"), (true, "safeAreaBar"):
+                if o.args.contains(".bottom") { ctx.set("bottomBar", .structure) } else if o.args.contains(".top") { ctx.set("actionRow", .structure) }
+            case (true, "popover"): ctx.set("popover", .structure)
+            case (true, "inspector"): ctx.set("inspector", .structure)
+            case (false, "Form"): ctx.set("form", .structure)
+            case (false, "GridRow"): ctx.set("form", .structure)
+            case (false, "List"), (false, "Table"), (false, "TableColumn"), (false, "OutlineGroup"): ctx.set("listRow", .structure)
+            case (false, "ForEach") where ["LazyVGrid", "LazyHGrid", "LazyVStack", "LazyHStack", "Grid"].contains(outer?.name ?? ""):
+                ctx.set("listRow", .structure)
+            case (false, "ForEach") where outer?.name == "Section" && (element == "button" || element == "menu"):
+                // Actions on records listed in a form's section are row actions; a form's own toggles stay form.
+                ctx.set("listRow", .structure)
+            case (false, "ContentUnavailableView"): ctx.set("emptyState", .structure)
+            case (false, "GroupBox"): ctx.set("card", .structure)
+            case (false, "GlassEffectContainer"): ctx.set("floating", .structure)
+            case (false, "NavigationLink") where o.label == nil && after.closures.contains(where: { $0.label == "label" }):
+                ctx.set("page", .structure)  // the destination, not the link's row
+            case (false, "HStack"):
+                inStack = true
+                if isSubmitRow(brace) {
+                    // A popover's own Cancel and Apply row is still the popover.
+                    let inPopover = levels.dropFirst(k + 1).contains { $0.owner?.dotted == true && $0.owner?.name == "popover" }
+                        || Self.words(view?.name ?? "").contains("popover")
+                    ctx.set(inPopover ? "popover" : "sheetFooter", .structure)
+                } else if followsTitle(brace, within: levels.dropFirst(k + 1).first?.brace) {
+                    ctx.set("actionRow", .structure)
+                }
             case (false, "Section"): inSection = true
-            case (true, "sheet"), (true, "fullScreenCover"): ctx.place = inStack ? "sheetFooter" : "page"
+            case (true, "sheet"), (true, "fullScreenCover"): ctx.set(inStack ? "sheetFooter" : "page", .structure)
             case (false, "WindowGroup"), (false, "Window"), (false, "UtilityWindow"), (false, "DocumentGroup"), (false, "NavigationStack"),
                  (false, "TabView"), (false, "Tab"):
-                ctx.place = "page"
-            case (false, "NavigationSplitView") where o.label == "detail" || o.label == "content": ctx.place = "page"
-            case (false, "Settings"): ctx.place = "form"
+                ctx.set("page", .page)
+            case (false, "NavigationSplitView") where o.label == "detail" || o.label == "content": ctx.set("page", .page)
+            case (false, "Settings"): ctx.set("form", .structure)
+            case (false, let name) where name.first?.isUppercase == true
+                    && corpus?.closureContext(container: name, label: o.label, labeled: Set(after.closures.map(\.label)), depth: depth)?.place != nil:
+                // Inside the app's own container: where it draws this closure decides.
+                let inner = corpus!.closureContext(container: name, label: o.label, labeled: Set(after.closures.map(\.label)), depth: depth)!
+                ctx.set(inner.place, inner.source == .page ? .page : .structure)
+                ctx.importance = ctx.importance ?? inner.importance
             case (_, let name) where o.label != nil && (name.first?.isUppercase == true || o.dotted):
-                // A labeled closure of the app's own container: `StandardSheetView(actionButtons:)`, `footer:`, `toolbar:`.
+                // A labeled closure of the app's own container: `StandardSheetView(actionButtons:)`, `footer:`.
                 let owner = Self.words(name), label = Self.words(o.label!)
                 if owner.contains(where: { ["sheet", "dialog", "modal"].contains($0) }), label.contains(where: { ["action", "actions", "button", "buttons", "footer"].contains($0) }) {
-                    ctx.place = "sheetFooter"
-                } else if let named = Self.place(forView: o.label!, inStack: false), named != "listRow" { ctx.place = named }
+                    ctx.set("sheetFooter", .structure)
+                } else if let named = Self.place(forView: name, inStack: false), ["emptyState", "card", "popover", "inspector", "alert"].contains(named) {
+                    ctx.set(named, .structure)  // `UnavailableStateView(actions:)`, `SectionCard(footer:)`
+                } else if let named = Self.place(forView: o.label!, inStack: false), named != "listRow" { ctx.set(named, .structure) }
             case (true, let name) where !Self.systemModifiers.contains(name):
                 // The app's own modifiers that present something: `.bottomBar { }`, `.alert2(…) { }`.
-                if let named = Self.place(forView: name, inStack: false), named != "listRow", named != "form" { ctx.place = named }
+                if let named = Self.place(forView: name, inStack: false), named != "listRow", named != "form" { ctx.set(named, .structure) }
             case (false, let name) where name.first?.isUppercase == true:
-                // The app's own containers say where they are by name: `HXSettingsCard`, `ActionBar`. A custom row
-                // (`PropertyRow`, `InsetRow`) is a labeled form row as often as a list row, so it waits for what is around it.
-                let named = Self.place(forView: name, inStack: inStack)
-                if named == "listRow" { customRow = true } else { ctx.place = named }
+                // The app's own containers say where they are by name: `HXSettingsCard`, `ActionBar`, `CompatList`.
+                // A custom row (`PropertyRow`) is a labeled form row as often as a list row, so it waits for what is around it.
+                let named = Self.words(name).last == "list" ? "listRow" : Self.place(forView: name, inStack: inStack)
+                if named == "listRow" && Self.words(name).last != "list" { customRow = true } else { ctx.set(named, .structure) }
             default: break
+            }
+            // A container drawn as glass floats; one with a rounded background is a card.
+            if ctx.place == nil {
+                if after.modifiers.contains(where: { $0.name == "glassEffect" }) { ctx.set("floating", .structure) }
+                else if after.modifiers.contains(where: Self.isRoundedBackground) { ctx.set("card", .structure) }
             }
             // Menu and alert items are drawn by the system: the styles after a Menu or an alert's view are its own, not theirs.
             if ctx.place == "contextMenu" || ctx.place == "alert" {
@@ -796,38 +1138,96 @@ struct SwiftStructure {
                 collecting = false
             }
         }
-        if ctx.place == nil, let member = scope.members.filter({ $0.open < i && i < $0.close && $0.name != "body" }).max(by: { $0.open < $1.open }) {
+        if ctx.place != nil, ctx.source == .page, ctx.place != "page" { ctx.source = .structure }
+
+        let member = scope.members.filter({ $0.open < i && i < $0.close && $0.name != "body" }).max(by: { $0.open < $1.open })
+        if let member, ctx.place == nil || ctx.source == .page {
             ctx.trail.append("helper \(member.name)")
             if depth < 3 {
                 // The styles come from the call site that gives the place, or else from the first one.
                 var first: [[Modifier]]?
-                for site in callSites(of: member.name, outside: member).prefix(4) {
+                for site in callSites(of: member.name, outside: member, in: scope).prefix(4) {
                     let at = context(of: site.start, scope: scope, depth: depth + 1, names: false, corpus: corpus)
-                    if at.preview { continue }
+                    if at.preview || at.hidden { continue }
                     ctx.trail.append("called in: " + at.trail.prefix(4).joined(separator: " < "))
-                    if let place = at.place { ctx.place = place; ctx.chains += [site.modifiers] + at.chains; first = nil; break }
-                    if first == nil { first = [site.modifiers] + at.chains }
+                    if let place = at.place, at.source.rawValue > ctx.source.rawValue || ctx.place == nil {
+                        ctx.set(place, at.source); ctx.importance = ctx.importance ?? at.importance
+                        ctx.chains += [site.modifiers] + at.chains; first = nil
+                        if at.source == .structure { break }
+                    }
+                    if first == nil, ctx.place == nil { first = [site.modifiers] + at.chains }
                 }
                 if let first { ctx.chains += first }
             }
-            if ctx.place == nil, names { ctx.place = Self.place(forView: member.name, inStack: inStack) }
         }
         guard names else { return ctx }
-        // In a sheet, a Section is a form; only a stack outside one is the footer.
-        if ctx.place == nil, let name = view?.name { ctx.place = Self.place(forView: name, inStack: inStack && !inSection) }
-        // The view is used elsewhere: its uses say where it is, and their styles reach it.
-        if let name = view?.name, let used = corpus?.context(ofView: name, depth: depth) {
-            if ctx.place == nil, let place = used.place, !(customRow && place == "listRow" && Self.formish(view?.name)) {
-                ctx.place = place
-                ctx.trail += used.trail
-            }
-            if collecting { ctx.chains += used.chains }
+
+        // Where other files use this view: structure there beats any name here.
+        let used = view.flatMap { corpus?.context(ofView: $0.name, depth: depth) }
+        if let used, let place = used.place, used.source == .structure, ctx.place == nil || ctx.source != .structure {
+            ctx.set(place, .structure); ctx.trail += used.trail
+            ctx.importance = ctx.importance ?? used.importance
         }
+        // Names: the helper's, then the view's. In a sheet, a Section is a form; only a stack outside one is the footer.
+        if ctx.place == nil || ctx.source == .page, let member, var named = Self.place(forView: member.name, inStack: inStack) {
+            if named == "bottomBar" || named == "actionRow", isSubmitRow(member.open) || Self.words(view?.name ?? "").contains(where: { ["sheet", "dialog"].contains($0) }) {
+                named = "sheetFooter"
+            }
+            ctx.set(named, .name); ctx.trail.append("named \(member.name)")
+        }
+        if ctx.place == nil || ctx.source == .page, let name = view?.name, let named = Self.place(forView: name, inStack: inStack && !inSection) {
+            ctx.set(named, .name); ctx.trail.append("named \(name)")
+        }
+        if ctx.place == nil, let used, let place = used.place { ctx.set(place, used.source); ctx.trail += used.trail }
+        if collecting, let used { ctx.chains += used.chains }
+
         let formish = Self.formish(view?.name) || scope.members.contains { $0.open < i && i < $0.close && Self.formish($0.name) }
-        if ctx.place == nil, inSection, formish { ctx.place = "form" }
-        if ctx.place == nil && customRow { ctx.place = formish ? "form" : "listRow" }
-        if ctx.place == "listRow", customRow, formish { ctx.place = "form" }
+        if ctx.place == nil, inSection, formish { ctx.set("form", .name); ctx.trail.append("section in a form-like view") }
+        if ctx.place == nil && customRow { ctx.set(formish ? "form" : "listRow", .name); ctx.trail.append("custom row") }
+        if ctx.place == "listRow", customRow, formish { ctx.set("form", .name); ctx.trail.append("custom row in a form-like view") }
+        // A file in a Settings or Preferences folder is a settings form when nothing else says.
+        if ctx.place == nil,
+           scope.path.split(separator: "/").dropLast().contains(where: { ["settings", "preferences"].contains($0.lowercased()) }) {
+            ctx.set("form", .name); ctx.trail.append("settings folder")
+        }
         return ctx
+    }
+
+    /// A stack holding a Cancel and a default button: a sheet's or dialog's footer, wherever it is defined.
+    func isSubmitRow(_ brace: Int) -> Bool {
+        guard partner[brace] > brace else { return false }
+        let body = text(brace, partner[brace])
+        let cancels = body.contains(".cancelAction") || body.contains("role: .cancel")
+        let confirms = body.contains(".defaultAction") || body.contains("Prominent")
+        // Cancel and OK anywhere, or a right-aligned Done that dismisses as the last thing in its parent (a title bar's
+        // close button is not a footer).
+        return (cancels && confirms) || (body.contains("dismiss()") && body.contains("Spacer(") && body.contains("Button") && isLastChild(brace))
+    }
+
+    /// True when nothing but modifiers follows this block before its parent closes.
+    func isLastChild(_ brace: Int) -> Bool {
+        guard partner[brace] > brace else { return false }
+        let end = chain(after: partner[brace] + 1).end
+        let next = skipSpace(end, newlines: true)
+        return next >= b.count || b[next] == UInt8(ascii: "}")
+    }
+
+    /// A row right under a title (`Text(…).font(.largeTitle)` or `.title`): the page's actions.
+    func followsTitle(_ brace: Int, within parent: Int?) -> Bool {
+        let start = statementStart(before: brace)
+        // Earlier siblings in the same parent (at most a dozen lines back).
+        var k = start - 1, lines = 0
+        let floor = parent ?? 0
+        while k > floor, lines < 12 { if b[k] == 10 { lines += 1 }; k -= 1 }
+        let before = text(max(floor, k), start)
+        return [".font(.largeTitle", ".font(.title)", ".font(.title2", ".font(.title.", ".font(.title2.", ".font(.title3"].contains { before.contains($0) }
+    }
+
+    /// `.background(…, in: RoundedRectangle(…))`, `.clipShape(.rect(cornerRadius:))` and the like.
+    static func isRoundedBackground(_ m: Modifier) -> Bool {
+        guard ["background", "clipShape", "cornerRadius", "containerShape"].contains(m.name) else { return false }
+        if m.name == "cornerRadius" { return true }
+        return m.args.contains("RoundedRectangle") || m.args.contains("cornerRadius") || m.args.contains(".rect(")
     }
 
     /// Names that say a view is a form-like page: a labeled row there is a form row, not a list row.
@@ -848,8 +1248,10 @@ struct SwiftStructure {
     ]
 
     /// Where a helper is used in this file, and the modifiers written after the call (`headerButtons(t).buttonStyle(.glass)`).
-    func callSites(of name: String, outside member: (name: String, open: Int, close: Int)) -> [(start: Int, modifiers: [Modifier])] {
+    func callSites(of name: String, outside member: (name: String, open: Int, close: Int), in scope: Scope) -> [(start: Int, modifiers: [Modifier])] {
         var out: [(Int, [Modifier])] = []
+        let owner = scope.views.filter { $0.open < member.open && member.close < $0.close }.max { $0.open < $1.open }
+        let sameType = owner.map { o in scope.views.filter { $0.name == o.name } } ?? [(name: "", open: 0, close: b.count)]
         let word = Array(name.utf8)
         var i = 0
         while i + word.count <= b.count {
@@ -857,8 +1259,13 @@ struct SwiftStructure {
             guard b[i] == word[0], Array(b[i..<(i + word.count)]) == word, i == 0 || !Self.isIdent(b[i - 1]),
                   i + word.count == b.count || !Self.isIdent(b[i + word.count]) else { continue }
             if i > member.open && i < member.close { continue }
-            // Skip the declaration itself (`func name`, `var name`).
+            // Only inside the same type (its struct or extensions in this file): `content` elsewhere is another thing.
+            if !sameType.contains(where: { $0.open < i && i < $0.close }) { continue }
+            // Skip the declaration itself (`func name`, `var name`), argument labels (`content:`) and other objects' members.
             if let before = identifier(endingAt: skipSpaceBack(i - 1)), ["func", "var", "let"].contains(before.name) { continue }
+            let next = skipSpace(i + word.count, newlines: false)
+            if next < b.count, b[next] == UInt8(ascii: ":") { continue }
+            if i > 0, b[i - 1] == UInt8(ascii: "."), !(i >= 5 && text(i - 5, i) == "self.") { continue }
             var p = i + word.count
             if p < b.count, b[p] == UInt8(ascii: "("), partner[p] > p { p = partner[p] + 1 }
             out.append((i, chain(after: p).modifiers))
@@ -869,21 +1276,25 @@ struct SwiftStructure {
     /// Places told by a view's or helper's name, read as words: `TicketRow`, `DetailsCard`, `leadingToolbarItem`,
     /// `ScriptAsMenuContent`, `IdentityFormSections`. Chrome words come first, so `SettingsToolbar` is a toolbar.
     static func place(forView raw: String, inStack: Bool) -> String? {
+        // Names only break ties: toolbar, menu, popover and inspector come from real modifiers, never a name
+        // (`TabSectionToolbar` is a strip in the pane, `CertificateStatusPanel` a block in Settings).
         var w = words(raw)
         if w.last == "view", w.count > 1 { w.removeLast() }
         func has(_ x: String...) -> Bool { x.contains { w.contains($0) } }
         func pair(_ a: String, _ b: String) -> Bool { zip(w, w.dropFirst()).contains { $0 == a && $1 == b } }
-        if pair("menu", "bar") { return "popover" }
-        if has("toolbar") { return "toolbar" }
-        if has("popover") { return "popover" }
-        if has("inspector", "panel", "pane") { return "inspector" }
         if has("footer") || pair("bottom", "bar") || pair("action", "bar") { return "bottomBar" }
-        if pair("empty", "state") { return "emptyState" }
-        if has("menu", "commands") && !pair("menu", "button") { return "contextMenu" }
+        if pair("empty", "state") || has("unavailable", "placeholder") { return "emptyState" }
+        if has("popover", "popup") || pair("menu", "bar") { return "popover" }
         if has("alert") { return "alert" }
-        if has("card") { return "card" }
+        if has("card") || pair("group", "box") { return "card" }
         if has("settings", "setup", "preferences", "properties", "property", "options", "form") { return "form" }
-        if let last = w.last, ["row", "cell"].contains(last) { return "listRow" }
+        if has("inspector", "panel", "pane") { return "inspector" }
+        // `actionRow` is the actions under a title; `filterRow` or `headerRow` are strips, not list rows.
+        if pair("action", "row") || pair("actions", "row") { return inStack && has("sheet", "dialog") ? "sheetFooter" : "actionRow" }
+        if let last = w.last, ["row", "cell"].contains(last) {
+            let strip = ["filter", "header", "title", "top", "bottom", "tool", "button", "buttons", "tab", "search", "status"]
+            return w.dropLast().last.map(strip.contains) == true ? nil : "listRow"
+        }
         if has("sheet", "dialog") { return inStack ? "sheetFooter" : nil }
         return nil
     }
@@ -913,8 +1324,21 @@ struct StyleEnvironment {
     var labelsHidden = false
     var key: String?, help = false, role: String?
 
-    mutating func read(_ modifiers: [SwiftStructure.Modifier], own: Bool) {
+    mutating func read(_ modifiers: [SwiftStructure.Modifier], own: Bool, custom: [String: [SwiftStructure.Modifier]] = [:]) {
         for m in modifiers {
+            // The app's own style wrappers: a style named at the call (`style: .glass`) wins, then what the wrapper applies.
+            if !SwiftStructure.styleModifierNames.contains(m.name), m.name != "keyboardShortcut", m.name != "help" {
+                // A button style named at the call of a wrapper (`.fancyButtonStyle(style: .glass)`).
+                if m.name.lowercased().contains("button"), m.name.lowercased().contains("style"), buttonStyle == nil,
+                   let named = ["glassProminent", "glass", "borderedProminent", "bordered", "borderless", "plain", "link"].first(where: { m.args.contains(".\($0)") }) {
+                    buttonStyle = named
+                }
+                let wrapped = m.name == "modifier" ? m.args.split(whereSeparator: { $0 == "(" || $0 == " " }).first.map(String.init) : m.name
+                if let wrapped, let inner = custom[wrapped] {
+                    read(inner, own: false)
+                    continue
+                }
+            }
             let a = m.args.trimmingCharacters(in: .whitespacesAndNewlines)
             switch m.name {
             case "buttonStyle": if buttonStyle == nil { buttonStyle = Self.style(a, suffix: "ButtonStyle") }
