@@ -101,14 +101,21 @@
   .mac .sub { color: var(--w-sec); }
   /* The table */
   .mac .tbl { background: var(--w-row); border-radius: 10px; box-shadow: 0 0 0 .5px var(--w-sep); overflow: hidden; }
+  .mac .top .prog { margin-left: auto; color: var(--w-sec); font-size: 12px; }
   .mac .th, .mac .tr, .mac .tg { display: grid; grid-template-columns: 200px minmax(0, 1fr) 92px; column-gap: 14px; align-items: center; padding: 0 14px; }
   .mac .th { height: 28px; font-size: 11px; font-weight: 600; color: var(--w-ter); border-bottom: .5px solid var(--w-sep); }
   .mac .th .r, .mac .tr .r { text-align: right; }
-  .mac .tg { height: 34px; background: var(--w-fill); font-weight: 600; grid-template-columns: minmax(0, 1fr) auto; cursor: default; }
-  .mac .tg .d { color: var(--w-sec); font-weight: 400; margin-left: 8px; }
-  .mac .tg .s { color: var(--w-sec); font-weight: 400; font-size: 12px; }
-  .mac .tr { height: 48px; border-top: .5px solid var(--w-sep); cursor: default; }
-  .mac .tg + .tr { border-top: 0; }
+  /* A group is a proposed component: its title above its own box, never a row in it */
+  .mac .grp { margin: 0 0 18px; }
+  .mac .gh { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 0 6px 7px; }
+  .mac .gh .gt { font-size: 14px; font-weight: 600; }
+  .mac .gh .gd { color: var(--w-sec); font-size: 12px; margin-top: 1px; }
+  .mac .gh .gs { font-size: 12px; font-weight: 600; white-space: nowrap; padding-bottom: 1px; }
+  .mac .gh .todo { color: #c26a00; } .mac.dark .gh .todo { color: #ff9f0a; }
+  .mac .gh .done { color: #1f8a33; } .mac.dark .gh .done { color: #32d74b; }
+  .mac .grp.sel { background: none; } .mac .grp.sel .tbl { box-shadow: 0 0 0 2px var(--w-accent); }
+  .mac .tr { height: 48px; cursor: default; }
+  .mac .tr + .tr { border-top: .5px solid var(--w-sep); }
   .mac .tr .pic { display: flex; align-items: center; height: 100%; overflow: hidden; }
   .mac .tr .pic img { height: 22px; width: auto; display: block; mix-blend-mode: multiply; }
   .mac.dark .tr .pic img { mix-blend-mode: lighten; }
@@ -145,6 +152,7 @@
   .mac .btn { font: inherit; border: 0; border-radius: 6px; padding: 3px 12px; background: var(--w-row); box-shadow: 0 0 0 .5px var(--w-sep), 0 .5px 1px rgba(0,0,0,.1); color: var(--w-text); }
   .mac .btn.pri { background: var(--w-accent); color: #fff; box-shadow: none; }
   .mac .lnk { color: var(--w-accent); }
+  .mac code { background: var(--w-fill); color: var(--w-text); }
   .caption { color: var(--secondary); font-size: 13px; margin: 2px 0 0; max-width: 860px; }
   .legend-anno { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 22px; margin: 14px 0 0; font-size: 13px; }
   .legend-anno div { display: flex; gap: 8px; } .legend-anno b { color: var(--blue); min-width: 16px; }
@@ -249,9 +257,9 @@
 
 <section class="s" id="concept" data-toc="The page" data-grp="Concept">
   <h2>The page</h2>
-  <p class="prose">One table of the views, grouped as Hatch proposes; select a group or a view and the inspector shows its details and the decisions for it. Your real views, and the real screens they sit on. Switch the selection and the appearance.</p>
+  <p class="prose">Each component Hatch proposes in its own box, with today's views that would become it; select a component or a view and the inspector shows its details and the decisions for it. Your real views, and the real screens they sit on. Switch the selection and the appearance.</p>
   <div class="mockbar">
-    <div class="seg" id="mstate"><button class="on" data-s="group">A group selected</button><button data-s="view">A view selected</button><button data-s="notchip">Not a chip selected</button><button data-s="agreed">After you agree</button></div>
+    <div class="seg" id="mstate"><button class="on" data-s="group">A component selected</button><button data-s="view">A view selected</button><button data-s="notchip">Not a chip selected</button><button data-s="agreed">After you agree</button></div>
     <div class="seg" id="mtheme"><button class="on" data-m="light">Light</button><button data-m="dark">Dark</button></div>
   </div>
   <div class="mockwrap">
@@ -271,21 +279,36 @@
     </div>
 
     <div class="main">
-      <div class="top"><span class="title">Chips</span><span class="sub">4 views · 21 uses · 3 groups proposed</span></div>
-      <div class="tbl">
-        <div class="th"><span>Look</span><span>View</span><span class="r">Used</span></div>
-        <div class="tg" data-sel="group agreed"><span>Status chip<span class="d">A state, coloured by whose turn it is or by a failure</span></span>
-          <span class="s" data-state="group view notchip">Proposed</span><span class="s" data-state="agreed">Agreed</span></div>
-        <div class="tr" data-sel="view"><div class="pic"><img class="pl" data-n="HXChip" alt=""></div>
-          <div><div class="n">HXChip</div><div class="w">A ticket's or run's state</div></div><div class="r"><div>7 uses</div><div class="w">4 screens</div></div></div>
-        <div class="tr"><div class="pic"><img class="pl" data-n="HXProblemChip" alt=""></div>
-          <div><div class="n">HXProblemChip</div><div class="w">A failure</div></div><div class="r"><div>5 uses</div><div class="w">2 screens</div></div></div>
-        <div class="tg"><span>Tag<span class="d">A neutral label: a project, an area, a role</span></span><span class="s">Proposed</span></div>
-        <div class="tr"><div class="pic"><img class="pl" data-n="PlainChip" alt=""></div>
-          <div><div class="n">PlainChip</div><div class="w">A project, area or role</div></div><div class="r"><div>7 uses</div><div class="w">4 screens</div></div></div>
-        <div class="tg" data-sel="notchip"><span>Not a chip<span class="d">Looks like one at first glance</span></span><span class="s">1 suggestion</span></div>
-        <div class="tr"><div class="pic fade"><img class="pl" data-n="HXIssueSample" alt="" style="height:19px"></div>
-          <div><div class="n">HXIssueSample</div><div class="w">A sample issue in setup</div></div><div class="r"><div>2 uses</div><div class="w">1 screen</div></div></div>
+      <div class="top"><span class="title">Chips</span><span class="sub">Hatch proposes 2 components for these 4 views</span>
+        <span class="prog" data-state="group view notchip">0 of 3 decided</span><span class="prog" data-state="agreed">1 of 3 decided</span></div>
+
+      <div class="grp" data-sel="group agreed">
+        <div class="gh"><div><div class="gt">Status chip</div><div class="gd">Proposed component · a state, coloured by whose turn it is or by a failure</div></div>
+          <span class="gs todo" data-state="group view notchip">To decide</span><span class="gs done" data-state="agreed">✓ Agreed</span></div>
+        <div class="tbl">
+          <div class="tr" data-sel="view"><div class="pic"><img class="pl" data-n="HXChip" alt=""></div>
+            <div><div class="n">HXChip</div><div class="w">A ticket's or run's state</div></div><div class="r"><div>7 uses</div><div class="w">4 screens</div></div></div>
+          <div class="tr"><div class="pic"><img class="pl" data-n="HXProblemChip" alt=""></div>
+            <div><div class="n">HXProblemChip</div><div class="w">A failure</div></div><div class="r"><div>5 uses</div><div class="w">2 screens</div></div></div>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="gh"><div><div class="gt">Tag</div><div class="gd">Proposed component · a neutral label: a project, an area, a role</div></div>
+          <span class="gs todo">To decide</span></div>
+        <div class="tbl">
+          <div class="tr"><div class="pic"><img class="pl" data-n="PlainChip" alt=""></div>
+            <div><div class="n">PlainChip</div><div class="w">A project, area or role</div></div><div class="r"><div>7 uses</div><div class="w">4 screens</div></div></div>
+        </div>
+      </div>
+
+      <div class="grp" data-sel="notchip">
+        <div class="gh"><div><div class="gt">Not a chip</div><div class="gd">Looks like a chip, does another job · Hatch suggests a change</div></div>
+          <span class="gs todo">To decide</span></div>
+        <div class="tbl">
+          <div class="tr"><div class="pic fade"><img class="pl" data-n="HXIssueSample" alt="" style="height:19px"></div>
+            <div><div class="n">HXIssueSample</div><div class="w">A sample issue in setup</div></div><div class="r"><div>2 uses</div><div class="w">1 screen</div></div></div>
+        </div>
       </div>
       <div class="foot">All 4 views drawn by the app.</div>
     </div>
@@ -294,7 +317,7 @@
       <!-- A group -->
       <div data-state="group">
         <div class="it">Status chip</div>
-        <div class="is">2 views · 12 uses · proposed</div>
+        <div class="is">Proposed component · 2 views · 12 uses</div>
         <div class="ih">HOW THEY COMPARE</div>
         <div class="ip">Drawn the same: caption text, medium weight, one padding, a capsule. Only the colour differs, and the colour is the state.</div>
         <div class="ih">FROM SWIFTUI</div>
@@ -327,7 +350,7 @@
       <!-- Agreed -->
       <div data-state="agreed">
         <div class="it">Status chip</div>
-        <div class="is">2 views · 12 uses · agreed</div>
+        <div class="is">Component · 2 views · 12 uses · agreed</div>
         <div class="ih">IN THE CODE</div>
         <div class="ip">Ticket #212 makes the two views one, <code style="font-size:11px">StatusChip(state:)</code>; Hatch checks the result.</div>
         <div class="ih">FOR AGENTS</div>
@@ -339,11 +362,11 @@
   </div>
   <p class="caption">The pictures are your views, cut from the app's own gallery; the screen in the inspector is Hatch's real Log screen with its demo data, the chip outlined. What a view shows is read from its call sites.</p>
   <div class="legend-anno">
-    <div><b>1</b>One table: the view's picture, its name with what it shows under it, how often and on how many screens. Every row the same height.</div>
-    <div><b>2</b>Groups are section headers named by their job, with their state on the right. Nothing else in the list.</div>
-    <div><b>3</b>Select a group: how its views compare, the native option, Agree and Redesign.</div>
+    <div><b>1</b>Each proposed component is its own box, titled above it with what it is and whether it waits for you (To decide) or is done (✓ Agreed).</div>
+    <div><b>2</b>In the box, today's views that would become it: the picture, the name with what it shows, how often and on how many screens. Every row the same height.</div>
+    <div><b>3</b>Select a component: how its views compare, the native option, Agree and Redesign.</div>
     <div><b>4</b>Select a view: its pictures in light and dark, its group as a pop-up, what it shows, every screen it's on; select a screen to see it.</div>
-    <div><b>5</b>Two text levels, one accent colour, the window's grey with one white table. No pills, dots, badges or buttons in the list.</div>
+    <div><b>5</b>Two text levels, one accent colour, white boxes on the window's grey. No pills, dots, badges or buttons in the boxes.</div>
   </div>
 </section>
 
