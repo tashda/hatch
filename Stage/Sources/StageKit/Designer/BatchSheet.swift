@@ -163,8 +163,11 @@ struct BatchMenuItems: View {
     var body: some View {
         let what = element.flatMap { ComponentElement.named($0)?.plural } ?? "Everything"
         let scope = place.map { " in \(ComponentPlace.title($0))" } ?? ""
+        if place == nil, let element, ["button", "menu"].contains(element) {
+            Button("Use Glass Where It Fits…") { model.request = .glass(element: element) }
+        }
         ForEach(model.templates) { t in
-            Button("Use \(t.title) for \(place == nil ? "All " : "")\(what)\(scope)") { model.request = .template(t.id, element: element, place: place) }
+            Button("Match \(t.title) for \(place == nil ? "All " : "")\(what)\(scope)…") { model.request = .template(t.id, element: element, place: place) }
         }
         Button("Follow macOS for \(place == nil ? "All " : "")\(what)\(scope)") { model.request = .follow(element: element, place: place) }
         if let element {

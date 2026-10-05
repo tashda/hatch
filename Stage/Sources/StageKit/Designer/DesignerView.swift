@@ -26,8 +26,10 @@ struct DesignerView: View {
                     HardCasesBar(model: model)
                     Divider()
                 }
-                ScrollView { main.padding(20).frame(maxWidth: .infinity, alignment: .leading) }
+                ScrollView { main.padding(24).frame(maxWidth: .infinity, alignment: .leading) }
                     .modifier(CanvasLook(model: model))
+                    // A toned backdrop, as in Xcode's canvas: the samples are the white surfaces on it.
+                    .background(model.showsCanvas ? Color(nsColor: .underPageBackgroundColor) : Color.clear)
             }
             .navigationTitle(title)
             .navigationSubtitle(subtitle)
@@ -39,6 +41,9 @@ struct DesignerView: View {
         }
         .background { keys }
         .sheet(item: $model.request) { BatchSheet(model: model, request: $0) }
+        // Dark is the whole Designer, like the system setting (CD48; replaces CD15's canvas only). Always an explicit
+        // scheme, because macOS doesn't go back from a forced dark one to none (B1).
+        .preferredColorScheme(model.appearance == .both ? model.systemScheme : model.liveScheme)
     }
 
     @ViewBuilder private var inspector: some View {
@@ -170,7 +175,7 @@ struct DesignerView: View {
 
 // MARK: - Hard cases (CD15)
 
-/// Light, dark or both, long label, disabled, larger text and an inactive window, for the canvas only.
+/// Light, dark or both for the whole Designer (CD48); long label, disabled, larger text and an inactive window for the canvas.
 struct HardCasesBar: View {
     @ObservedObject var model: DesignerModel
 
@@ -196,15 +201,13 @@ struct HardCasesBar: View {
     }
 }
 
-/// The canvas's hard cases: its appearance, text size and window state, never the inspector's.
+/// The canvas's hard cases: its text size and window state (the appearance is the whole window's, CD48).
 struct CanvasLook: ViewModifier {
     @ObservedObject var model: DesignerModel
     func body(content: Content) -> some View {
         content
-            .environment(\.colorScheme, model.appearance == .dark ? .dark : model.appearance == .light ? .light : model.systemScheme)
             .dynamicTypeSize(model.largeText ? .xxLarge : .large)
             .environment(\.controlActiveState, model.inactive ? .inactive : .key)
-            .background(model.appearance == .dark ? Color.black.opacity(0.85) : model.appearance == .light ? Color.white : Color.clear)
     }
 }
 
@@ -215,8 +218,10 @@ struct Appearances<Content: View>: View {
     var body: some View {
         if model.appearance == .both {
             HStack(alignment: .top, spacing: 10) {
-                content().padding(8).environment(\.colorScheme, .light).background(Color.white, in: RoundedRectangle(cornerRadius: 10))
-                content().padding(8).environment(\.colorScheme, .dark).background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 10))
+                content().padding(10).environment(\.colorScheme, .light)
+                    .background(Color(white: 0.86), in: RoundedRectangle(cornerRadius: 12))
+                content().padding(10).environment(\.colorScheme, .dark)
+                    .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 12))
             }
         } else {
             content()
@@ -232,7 +237,7 @@ struct DesignerSidebar: View {
 
     /// Elements by kind (CD11), so the list stays readable as the catalog grows.
     static let groups: [(title: String, elements: [String])] = [
-        ("Actions", ["button", "menu"]), ("Choices", ["picker", "toggle", "switcher"]), ("Text", ["field"]),
+        ("Actions", ["button", "menu"]), ("Choices", ["picker", "toggle"]), ("Text", ["field"]),
         ("Lists and Containers", ["row", "card", "sheet"]), ("Feedback", ["badge", "toast", "emptyState"]),
     ]
 
@@ -260,7 +265,7 @@ struct DesignerSidebar: View {
                     }
                 }
             }
-            let others = model.system.elementsUsed.filter { e in !Self.groups.contains { $0.elements.contains(e) } && shown(e) }
+            let others = model.system.elementsUsed.filter { e in e != "switcher" && !Self.groups.contains { $0.elements.contains(e) } && shown(e) }
             if !others.isEmpty { Section("Other") { ForEach(others, id: \.self) { e in element(e) } } }
             let places = model.placesUsed.filter { shown($0.title) }
             if !places.isEmpty {
@@ -288,9 +293,9 @@ struct DesignerSidebar: View {
         .searchable(text: $filter, placement: .sidebar, prompt: "Filter")
         .onChange(of: model.selection) { _, new in
             // Opening a role in another element changes the selection too; that keeps the role open.
-            if case .element(let e)? = new, model.focused, model.role?.element == e { return }
+            if case .element(let e)? = new, model.focused, model.role.map({ model.page(of: $0.element) }) == e { return }
             model.back()
-            if case .element(let e)? = new, model.role?.element != e { model.selectedRole = model.system.roles(of: e).first?.id }
+            if case .element(let e)? = new, model.role.map({ model.page(of: $0.element) }) != e { model.selectedRole = model.system.roles(of: e).first?.id }
         }
     }
 
@@ -336,10 +341,18 @@ struct RoleInPlaceView: View {
     let element: String
 
     var body: some View {
-        let places = model.system.allPlaces.filter { p in model.system.roles(of: element).contains { $0.places.contains(p.id) } }
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: model.appearance == .both ? 560 : 340), spacing: 24, alignment: .top)], alignment: .leading, spacing: 28) {
-            ForEach(places) { place in
-                PlaceFrame(place: place, element: element, model: model)
+        let members = model.members(of: element)
+        VStack(alignment: .leading, spacing: 28) {
+            ForEach(members, id: \.self) { e in
+                let places = model.system.allPlaces.filter { p in model.system.roles(of: e).contains { $0.places.contains(p.id) } }
+                if members.count > 1 {
+                    Text(ComponentElement.named(e)?.plural ?? e).font(.title3.weight(.semibold))
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: model.appearance == .both ? 560 : 340), spacing: 24, alignment: .top)], alignment: .leading, spacing: 28) {
+                    ForEach(places) { place in
+                        PlaceFrame(place: place, element: e, model: model)
+                    }
+                }
             }
         }
     }
@@ -357,7 +370,7 @@ struct RoleView: View {
         case .place(let p)?: model.system.place(p)?.title ?? p
         case .all?: "All Elements"
         case .templates?: "Templates"
-        default: ComponentElement.named(role.element)?.plural ?? role.element
+        default: ComponentElement.named(model.page(of: role.element))?.plural ?? role.element
         }
     }
 
@@ -394,13 +407,18 @@ struct RoleView: View {
                     GridRow {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(place.title).font(.headline)
+                            let here = model.screens(of: role, place: id)
+                            if !here.isEmpty {
+                                Text("In " + here.prefix(3).map(\.screen).joined(separator: ", ") + (here.count > 3 ? " and \(here.count - 3) more" : ""))
+                                    .font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                            }
                             if model.isPreviewing(role) && role.places.count > 1 {
                                 Button("Only Here…") { model.request = .onlyHere(role: role.id, place: id) }
                                     .buttonStyle(.link).font(.caption)
                                     .help("Keep this look for \(place.title) only: a variant, with a reason (CD26)")
                             }
                         }
-                        .frame(width: 110, alignment: .leading).help(place.summary)
+                        .frame(width: 140, alignment: .leading).help(place.summary)
                         Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, today: true, framed: false) }
                         if comparing {
                             Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, framed: false) }
@@ -484,6 +502,21 @@ struct EmptyCell: View {
 struct RoleMatrixView: View {
     @ObservedObject var model: DesignerModel
     let element: String
+
+    var body: some View {
+        let members = model.members(of: element)
+        VStack(alignment: .leading, spacing: 24) {
+            ForEach(members, id: \.self) { e in
+                if members.count > 1 { Text(ComponentElement.named(e)?.plural ?? e).font(.title3.weight(.semibold)) }
+                ElementMatrix(model: model, element: e)
+            }
+        }
+    }
+}
+
+struct ElementMatrix: View {
+    @ObservedObject var model: DesignerModel
+    let element: String
     @State private var hovered: String?
 
     var body: some View {
@@ -519,7 +552,7 @@ struct SystemMatrixView: View {
     @State private var hovered: String?
 
     private var elements: [String] {
-        let order = DesignerSidebar.groups.flatMap(\.elements)
+        let order = DesignerSidebar.groups.flatMap { $0.elements.flatMap { $0 == "picker" ? ["picker", "switcher"] : [$0] } }
         return model.system.elementsUsed.filter { e in only.map { p in model.system.roles(of: e).contains { $0.places.contains(p) } } ?? true }
             .sorted { (order.firstIndex(of: $0) ?? 99) < (order.firstIndex(of: $1) ?? 99) }
     }
@@ -574,7 +607,8 @@ struct PlaceOverview: View {
 
     var body: some View {
         let p = model.system.place(place) ?? ComponentPlace(place, place, "")
-        let elements = DesignerSidebar.groups.flatMap(\.elements).filter { e in model.system.roles(of: e).contains { $0.places.contains(place) } }
+        let elements = DesignerSidebar.groups.flatMap { $0.elements.flatMap { $0 == "picker" ? ["picker", "switcher"] : [$0] } }
+            .filter { e in model.system.roles(of: e).contains { $0.places.contains(place) } }
         VStack(alignment: .leading, spacing: 14) {
             Text(p.summary).foregroundStyle(.secondary)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: model.appearance == .both ? 560 : 340), spacing: 24, alignment: .top)], alignment: .leading, spacing: 28) {
@@ -617,7 +651,7 @@ struct PlaceInspector: View {
             }
             InspectorSection(title: "For the Whole Place", footer: "Each opens a list of every role it changes; a role that also sits elsewhere can change everywhere or only here.") {
                 ForEach(model.templates) { t in
-                    Button("Use \(t.title) Here…") { model.request = .template(t.id, element: nil, place: place) }
+                    Button("Match \(t.title) Here…") { model.request = .template(t.id, element: nil, place: place) }
                 }
                 Button("Follow macOS Here…") { model.request = .follow(element: nil, place: place) }
                 Divider()
@@ -713,6 +747,7 @@ struct RoleInspector: View {
                 }
                 .padding(.vertical, 2)
             }
+            WhereSection(model: model, role: role)
             if let finding {
                 InspectorSection { AppleCallout(model: model, role: role, advice: finding) }
             }
@@ -722,13 +757,11 @@ struct RoleInspector: View {
                     Text("macOS draws \(role.places.map { ComponentPlace.title($0).lowercased() }.joined(separator: " and ")) itself, so there is no look to choose here.")
                     if !role.followsMacOS { Button("Follow macOS") { model.tryLook(DesignerPreview(role: role.id, recipe: role.recipe.filter { ComponentElement.named(role.element)?.parameter($0.key)?.isLook == false }, follow: true, label: "Follow macOS")) } }
                 }
-            } else if let q = model.question(for: role) {
-                QuestionPicks(model: model, role: role, question: q)
             } else {
+                if let q = model.question(for: role) { QuestionPicks(model: model, role: role, question: q) }
+                if let element { LookChoices(model: model, role: role, element: element) }
                 LookPicks(model: model, role: role)
-            }
-            if let element {
-                FineTune(model: model, role: role, element: element)
+                if let element { FineTune(model: model, role: role, element: element) }
             }
             InspectorSection(title: "Use When") {
                 Text(role.use)
@@ -743,13 +776,6 @@ struct RoleInspector: View {
                             Text(v.use).font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                }
-            }
-            if model.inventory != nil {
-                InspectorSection(title: "In the App Today") {
-                    let looks = model.looksToday(role)
-                    let total = looks.reduce(0) { $0 + $1.count }
-                    Text(total == 0 ? "Not used yet." : "\(total) uses, \(looks.count) look\(looks.count == 1 ? "" : "s").")
                 }
             }
             InspectorSection {
@@ -877,6 +903,54 @@ struct RoleInspector: View {
             }
         }
         .padding(14)
+    }
+}
+
+/// Where the role is in the app (CD49): the screens that use it, what each control says, and the file and line, so a
+/// change is never abstract. A use opens in Xcode.
+struct WhereSection: View {
+    @ObservedObject var model: DesignerModel
+    let role: ComponentRole
+    @State private var open = false
+
+    var body: some View {
+        let screens = model.screens(of: role)
+        let total = screens.reduce(0) { $0 + $1.uses.count }
+        InspectorSection(title: "Where It Is in \(model.appName)",
+                         footer: total == 0 ? nil : "Changing this role changes all \(total). New screens that need it use it too.") {
+            if model.inventory == nil {
+                Text("Open the Designer from Hatch to see where the app uses it.").foregroundStyle(.secondary)
+            } else if total == 0 {
+                Text("Not used yet: the first screen that needs it will.").foregroundStyle(.secondary)
+            } else {
+                Text("\(total) control\(total == 1 ? "" : "s") on \(screens.count) screen\(screens.count == 1 ? "" : "s")").font(.callout.weight(.medium))
+                ForEach(Array(screens.prefix(open ? 40 : 4).enumerated()), id: \.offset) { _, s in
+                    DisclosureGroup {
+                        ForEach(Array(s.uses.prefix(12).enumerated()), id: \.offset) { _, u in
+                            Button { model.reveal(u) } label: {
+                                HStack {
+                                    Text(u.title.map { "“\($0)”" } ?? "A control").lineLimit(1)
+                                    Spacer()
+                                    Text(u.location).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help("Open \(u.location) in Xcode")
+                        }
+                    } label: {
+                        HStack {
+                            Text(s.screen)
+                            Spacer()
+                            Text("\(s.uses.count)").monospacedDigit().foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if screens.count > 4 {
+                    Button(open ? "Show Fewer" : "Show All \(screens.count) Screens") { open.toggle() }.buttonStyle(.link)
+                }
+            }
+        }
     }
 }
 
@@ -1020,7 +1094,7 @@ struct LookPicks: View {
     let role: ComponentRole
 
     var body: some View {
-        InspectorSection(title: "Look") {
+        InspectorSection(title: "Shortcuts", footer: "A whole look at once: macOS's, a template's, or the one the app uses most.") {
             ForEach(Array(model.picks(for: role).enumerated()), id: \.offset) { _, pick in
                 let current = pick.label.hasPrefix("Current")
                 let on = model.isPreviewing(role) ? model.preview?.recipe == pick.recipe && model.preview?.follow == pick.follow : current
@@ -1045,6 +1119,96 @@ struct LookPicks: View {
     }
 }
 
+/// How wide a choice tile is for an element: wide controls (a segmented picker, a list) need room to be seen whole.
+enum ChoiceTile {
+    static func width(_ element: String) -> CGFloat {
+        ["picker": 150, "switcher": 160, "row": 220, "card": 220, "sheet": 220, "toast": 180, "emptyState": 220][element] ?? 84
+    }
+}
+
+/// The choices that make the look (CD50): each key setting as a row of drawn options, the role drawn with each value on
+/// top of its current look. Clicking one previews it everywhere; Keep saves it (and answers an open question).
+struct LookChoices: View {
+    @ObservedObject var model: DesignerModel
+    let role: ComponentRole
+    let element: ComponentElement
+
+    var body: some View {
+        let recipe = model.look(of: role)
+        InspectorSection(title: "Look", footer: "Each choice is drawn on this role as it looks now. Keep saves what you try.") {
+            ForEach(element.keyParameters.filter { $0.applies(to: recipe) }, id: \.id) { p in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(p.title).font(.callout.weight(.semibold))
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: ChoiceTile.width(element.id)), spacing: 6, alignment: .top)], alignment: .leading, spacing: 6) {
+                        ForEach(model.choices(of: p), id: \.self) { value in chip(p, value, recipe) }
+                    }
+                }
+            }
+        }
+    }
+
+    /// One value of a setting, drawn on the role.
+    private func chip(_ p: ComponentParameter, _ value: String?, _ recipe: [String: String]) -> some View {
+        var tried = recipe
+        if let value, value != p.systemDefault { tried[p.id] = value } else { tried[p.id] = nil }
+        let current = (recipe[p.id] ?? p.systemDefault) == (value ?? p.systemDefault)
+        let name = value.map { ComponentWords.value(element: element.id, parameter: p.id, value: $0) } ?? "macOS default"
+        return Button { model.tryValue(p, value) } label: {
+            VStack(spacing: 4) {
+                RecipeControl(element: element.id, recipe: tried, system: model.system, importance: role.importance,
+                              sample: SampleWords.content(role.importance, place: role.places.first ?? "page", base: SampleContent()))
+                    .allowsHitTesting(false)
+                    .fixedSize()
+                    .scaleEffect(0.8)
+                    .frame(maxWidth: .infinity, minHeight: 34)
+                    .clipped()
+                Text(name).font(.caption2).lineLimit(2).multilineTextAlignment(.center).foregroundStyle(current ? .primary : .secondary)
+            }
+            .padding(5)
+            .frame(maxWidth: .infinity)
+            .background(current ? Color.accentColor.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(current ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: current ? 1.5 : 0.5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(value ?? "macOS default")
+    }
+}
+
+/// The same key choices for every role of an element at once (CD50): "Capsule for every button" in one click,
+/// previewed on the canvas under a banner, kept as one change. Roles where a value doesn't apply are left as they are.
+struct ElementChoices: View {
+    @ObservedObject var model: DesignerModel
+    let element: ComponentElement
+
+    var body: some View {
+        InspectorSection(title: "Look for All \(element.plural)", footer: "Applies to every \(element.title.lowercased()) where it fits; menus and alerts that macOS draws are left alone. Previewed first.") {
+            ForEach(element.keyParameters, id: \.id) { p in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(p.title).font(.callout.weight(.semibold))
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: ChoiceTile.width(element.id)), spacing: 6, alignment: .top)], alignment: .leading, spacing: 6) {
+                        ForEach(model.choices(of: p), id: \.self) { value in
+                            Button { model.tryBatch(model.batchSetting(p, value, element: element.id, place: nil)) } label: {
+                                VStack(spacing: 4) {
+                                    RecipeControl(element: element.id, recipe: value.map { [p.id: $0] } ?? [:], system: model.system, importance: .other,
+                                                  sample: SampleWords.content(.other, place: "page", base: SampleContent()))
+                                        .allowsHitTesting(false).fixedSize().scaleEffect(0.8).frame(maxWidth: .infinity, minHeight: 34).clipped()
+                                    Text(value.map { ComponentWords.value(element: element.id, parameter: p.id, value: $0) } ?? "macOS default")
+                                        .font(.caption2).lineLimit(2).multilineTextAlignment(.center).foregroundStyle(.secondary)
+                                }
+                                .padding(5).frame(maxWidth: .infinity)
+                                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.2), lineWidth: 0.5))
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Every setting as a pop-up with plain names (CD19, CD20), behaviour apart (CD22). Settings that need another one show
 /// only with it (CD21). Choosing previews; Keep saves.
 struct FineTune: View {
@@ -1056,11 +1220,14 @@ struct FineTune: View {
 
     var body: some View {
         let recipe = model.look(of: role)
-        let look = element.parameters.filter { $0.isLook && $0.applies(to: recipe) }
+        let keys = Set(element.keyParameters.map(\.id))
+        let look = element.parameters.filter { $0.isLook && $0.applies(to: recipe) && !keys.contains($0.id) }
         let behaviour = element.parameters.filter { !$0.isLook }
         InspectorSection {
-            DisclosureGroup("Fine-Tune", isExpanded: $lookOpen) {
-                ForEach(look, id: \.id) { p in row(p, recipe) }
+            if !look.isEmpty {
+                DisclosureGroup("Fine-Tune", isExpanded: $lookOpen) {
+                    ForEach(look, id: \.id) { p in row(p, recipe) }
+                }
             }
             if !behaviour.isEmpty {
                 DisclosureGroup("Behaviour", isExpanded: $behaviourOpen) {
@@ -1103,8 +1270,8 @@ struct ElementInspector: View {
     let element: String
 
     var body: some View {
-        let roles = model.system.roles(of: element)
-        let open = model.questions(for: element)
+        let roles = model.members(of: element).flatMap { model.system.roles(of: $0) }
+        let open = model.members(of: element).flatMap { model.questions(for: $0) }
         ScrollView { VStack(alignment: .leading, spacing: 16) {
             InspectorSection {
                 VStack(alignment: .leading, spacing: 4) {
@@ -1127,10 +1294,15 @@ struct ElementInspector: View {
                     .buttonStyle(.plain)
                 }
             }
+            if let el = ComponentElement.named(element), !el.keyParameters.isEmpty { ElementChoices(model: model, element: el) }
             InspectorSection(title: "For All \(ComponentElement.named(element)?.plural ?? element)") {
+                if ["button", "menu"].contains(element) {
+                    Button("Use Glass Where It Fits…") { model.request = .glass(element: element) }
+                        .help("Only the style, only where Liquid Glass belongs: bottom bars, floating bars and action rows")
+                }
                 ForEach(model.templates) { t in
-                    Button("Use \(t.title)…") { model.request = .template(t.id, element: element, place: nil) }
-                        .help(t.summary)
+                    Button("Match \(t.title)…") { model.request = .template(t.id, element: element, place: nil) }
+                        .help("Every role takes \(t.title)'s look for it; the list shows each change. " + t.summary)
                 }
                 Button("Follow macOS…") { model.request = .follow(element: element, place: nil) }
                 Button("One Look for All…") { model.request = .setting(element: element, place: nil) }

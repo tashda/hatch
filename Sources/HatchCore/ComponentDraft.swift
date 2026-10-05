@@ -405,6 +405,20 @@ public extension ComponentSystem {
         return ComponentDraft.jobTitle(element: element, importance: r.importance, places: r.places)
     }
 
+    /// Answers a look question with a look of the owner's own, not one of its options (CD50: a shape or style chosen
+    /// directly). The look becomes the role's, the role is agreed, and the question leaves the list.
+    mutating func answer(_ questionId: String, look recipe: [String: String], decision: String? = nil) throws {
+        guard let q = questions.first(where: { $0.id == questionId }), let roleId = q.role else { throw ComponentAnswerError.noQuestion(questionId) }
+        guard let ri = roles.firstIndex(where: { $0.id == roleId }), let element = ComponentElement.named(roles[ri].element) else { throw ComponentAnswerError.noRole(roleId) }
+        roles[ri].recipe = element.withoutDefaults(recipe)
+        roles[ri].custom = nil
+        roles[ri].draft = nil
+        roles[ri].followsMacOS = element.withoutDefaults(element.look(recipe)).filter { $0.key != "label" }.isEmpty
+        roles[ri].status = .agreed
+        roles[ri].decision = decision ?? roles[ri].decision
+        questions.removeAll { $0.id == questionId }
+    }
+
     /// Marks a role agreed as it is (DS8), or every provisional role when `id` is nil.
     mutating func agree(_ id: String? = nil, decision: String? = nil) throws {
         if let id {

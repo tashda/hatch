@@ -434,6 +434,11 @@ public final class StageServer: @unchecked Sendable {
         var settingDraft: ComponentsSetup.Draft?
         do {
             switch action {
+            case "answerLook":
+                // A look question answered with a look of the owner's own (CD50), not one of its options.
+                let id = try body.string("question", max: 200)
+                try system.answer(id, look: try recipe(), decision: decision)
+                message = "Components: \(system.questions.first { $0.id == id }?.title ?? id) — own look"
             case "answer":
                 let id = try body.string("question", max: 200)
                 guard let option = try body.optionalInt("option") else { throw APIError(status: 400, code: "bad_request", message: "option is required.") }

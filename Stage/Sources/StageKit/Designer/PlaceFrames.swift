@@ -52,17 +52,32 @@ struct PlaceFrame: View {
         }
     }
 
-    private var sample: some View {
-        mock
-            .frame(maxWidth: .infinity, minHeight: framed ? 110 : 60)
-            .padding(12)
-            .background(.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.separator, lineWidth: 0.5))
+    /// Places that are a surface of their own (a sheet, a popover, an alert, a menu, a floating bar) are drawn as they
+    /// are; the rest sit on one window surface. Never a box inside a box of the same colour.
+    private static let ownSurface: Set<String> = ["sheetFooter", "popover", "alert", "contextMenu", "floating"]
+
+    @ViewBuilder private var sample: some View {
+        if Self.ownSurface.contains(place.id) {
+            mock
+                .frame(maxWidth: .infinity, minHeight: framed ? 110 : 60)
+                .padding(.vertical, 10)
+        } else {
+            mock
+                .frame(maxWidth: .infinity, minHeight: framed ? 110 : 60, alignment: .leading)
+                .padding(14)
+                .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: .black.opacity(0.10), radius: 6, y: 2)
+        }
     }
 
     /// The look a role is drawn with here.
     private func recipe(_ role: ComponentRole) -> [String: String] {
         today ? (role.draft ?? role.recipe) : model.look(of: role)
+    }
+
+    /// Drawn with a look that is being tried and differs from today's.
+    private func changed(_ role: ComponentRole) -> Bool {
+        !today && model.isChanged(role)
     }
 
     /// How strongly a role shows: the focused role (or the one under the pointer) in full, the rest dimmed.
@@ -84,6 +99,18 @@ struct PlaceFrame: View {
             .overlay {
                 if hovered == role.id {
                     RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 1.5)
+                } else if changed(role) {
+                    // What a preview changes is marked where it is, so a change is seen at a glance.
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange, lineWidth: 2)
+                        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if changed(role) && hovered != role.id {
+                    Text("Changed").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .background(Color.orange, in: Capsule())
+                        .offset(x: 6, y: -8).fixedSize()
                 }
             }
             .overlay(alignment: .bottom) {

@@ -142,4 +142,38 @@ final class DesignerModelTests: XCTestCase {
         m.keep()
         XCTAssertTrue(m.system.roles.filter { $0.places == ["floating"] }.allSatisfy(\.followsMacOS))
     }
+
+    /// CD50: a shape chosen directly (not one of the question's looks) is kept and answers the open question.
+    func testAChosenShapeAnswersTheQuestion() throws {
+        let m = try model()
+        m.open("button.inRow")
+        m.tryValue(ComponentElement.named("button")!.parameter("shape")!, "capsule")
+        m.keep()
+        XCTAssertNil(m.question(for: m.system.role("button.inRow")!), "answered")
+        XCTAssertEqual(m.system.role("button.inRow")?.recipe["shape"], "capsule")
+        XCTAssertEqual(m.system.problems(), [])
+    }
+
+    /// CD50: Capsule for every button leaves menu items alone (macOS draws them) and skips roles already capsule.
+    func testOneShapeForAllButtons() throws {
+        let m = try model()
+        let shape = ComponentElement.named("button")!.parameter("shape")!
+        let b = m.batchSetting(shape, "capsule", element: "button", place: nil)
+        XCTAssertFalse(b.items.contains { $0.role == "button.menuItem" }, "macOS draws menu items")
+        XCTAssertFalse(b.items.isEmpty)
+        m.tryBatch(b)
+        m.keep()
+        XCTAssertTrue(m.system.roles(of: "button").filter { !$0.places.allSatisfy { ["contextMenu", "alert"].contains($0) } }
+            .allSatisfy { ($0.draft ?? $0.recipe)["shape"] == "capsule" })
+        XCTAssertTrue(m.batchSetting(shape, "capsule", element: "button", place: nil).items.isEmpty, "nothing left to change")
+    }
+
+    /// CD53: glass only where it fits, and only the style; a role that also sits in content is left alone.
+    func testGlassWhereItFits() throws {
+        let m = try model()
+        let b = m.batchGlass(element: "button")
+        XCTAssertTrue(b.items.allSatisfy { Set(m.system.role($0.role)!.places).isSubset(of: DesignerModel.glassPlaces) })
+        XCTAssertFalse(b.items.contains { $0.role == "button.link" || $0.role == "button.inRow" }, "links and row actions sit in content")
+        for item in b.items { XCTAssertTrue(["glass", "glassProminent"].contains(item.recipe["style"] ?? "")) }
+    }
 }

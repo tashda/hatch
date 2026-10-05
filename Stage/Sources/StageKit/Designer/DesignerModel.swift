@@ -48,6 +48,7 @@ final class LocalComponentsSource: ComponentsSource {
             try system.answer(id, option: body["option"]?.intValue ?? -1)
             if body["setting"]?.boolValue == true, let role { try system.makeConfigurable(role) }
             return system
+        case "answerLook": try system.answer(body["question"]?.stringValue ?? "", look: recipe())
         case "agree": try system.agree(role)
         case "look": try system.setLook(role ?? "", recipe: recipe())
         case "apply": try system.applyDrafts(role)
@@ -190,8 +191,8 @@ final class DesignerModel: ObservableObject {
         get { appearance == .dark }
         set { appearance = newValue ? .dark : .light }
     }
-    /// The live window's scheme: Both shows it light.
-    var liveScheme: ColorScheme { appearance == .dark ? .dark : .light }
+    /// The window's scheme: Light or Dark; Both keeps the Mac's and draws each place in both.
+    var liveScheme: ColorScheme { appearance == .dark ? .dark : appearance == .light ? .light : systemScheme }
     /// A problem worth showing: Hatch is away, or a change was refused.
     @Published private(set) var notice: String?
     @Published private(set) var busy = false
@@ -205,8 +206,12 @@ final class DesignerModel: ObservableObject {
     let live = LiveState()
     var openLiveWindow: (() -> Void)?
 
-    init(source: ComponentsSource, inventory: ComponentInventory? = nil) throws {
+    /// The app's folder, so a use can be opened in Xcode at its line (CD49).
+    let appRoot: String?
+
+    init(source: ComponentsSource, inventory: ComponentInventory? = nil, appRoot: String? = nil) throws {
         self.source = source
+        self.appRoot = appRoot
         let s = try source.load()
         system = s
         appName = s.name
@@ -247,6 +252,21 @@ final class DesignerModel: ObservableObject {
     }
     func isPreviewing(_ role: ComponentRole) -> Bool { previews[role.id] != nil }
 
+    /// A look as it is drawn: settings macOS uses anyway left out, and a button's or menu's label as drawn when none is
+    /// set (a button shows its title, a menu its title and icon), so two looks that draw the same compare equal.
+    func drawn(_ element: String, _ recipe: [String: String]) -> [String: String] {
+        guard let e = ComponentElement.named(element) else { return recipe }
+        var look = e.withoutDefaults(e.look(recipe))
+        if element == "button", look["label"] == "titleOnly" { look["label"] = nil }
+        if element == "menu", look["label"] == "titleAndIcon" { look["label"] = nil }
+        return look
+    }
+
+    /// The role would be drawn differently from today by the look being tried.
+    func isChanged(_ role: ComponentRole) -> Bool {
+        isPreviewing(role) && drawn(role.element, look(of: role)) != drawn(role.element, role.draft ?? role.recipe)
+    }
+
     /// The open look question about a role, if any.
     func question(for role: ComponentRole) -> ComponentQuestion? { system.questions.first { $0.role == role.id } }
 
@@ -260,7 +280,7 @@ final class DesignerModel: ObservableObject {
     func open(_ roleId: String) {
         if batch == nil { previews = previews.filter { $0.key == roleId } }
         selectedRole = roleId
-        if let r = system.role(roleId), !showsCanvas || (selectedElement != nil && selectedElement != r.element) { selection = .element(r.element) }
+        if let r = system.role(roleId), !showsCanvas || (selectedElement != nil && selectedElement != page(of: r.element)) { selection = .element(page(of: r.element)) }
         focused = true
     }
 
@@ -307,6 +327,26 @@ final class DesignerModel: ObservableObject {
         inventory?.uses.filter { $0.element == role.element && $0.importance == role.importance && $0.place.map(role.places.contains) == true } ?? []
     }
 
+    /// Where a role is used in the app (CD49), by screen: the view it sits in (or its file), with each use.
+    func screens(of role: ComponentRole, place: String? = nil) -> [(screen: String, uses: [ComponentInventory.Use])] {
+        var order: [String] = [], groups: [String: [ComponentInventory.Use]] = [:]
+        for u in uses(of: role) where place == nil || u.place == place {
+            let screen = u.view ?? ((u.file as NSString).lastPathComponent as NSString).deletingPathExtension
+            if groups[screen] == nil { order.append(screen) }
+            groups[screen, default: []].append(u)
+        }
+        return order.map { ($0, groups[$0]!) }.sorted { $0.uses.count > $1.uses.count }
+    }
+
+    /// Opens a use in Xcode at its line.
+    func reveal(_ use: ComponentInventory.Use) {
+        let path = use.file.hasPrefix("/") ? use.file : ((appRoot ?? "") as NSString).appendingPathComponent(use.file)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/xed")
+        p.arguments = ["--line", String(use.line), path]
+        try? p.run()
+    }
+
     /// The looks in use today for a role, most used first.
     func looksToday(_ role: ComponentRole) -> [(look: [String: String], count: Int, examples: [String])] {
         guard let element = ComponentElement.named(role.element) else { return [] }
@@ -320,7 +360,14 @@ final class DesignerModel: ObservableObject {
     }
 
     /// How many open questions an element has, for the sidebar.
-    func openCount(_ element: String) -> Int { questions(for: element).count }
+    func openCount(_ element: String) -> Int { members(of: element).reduce(0) { $0 + questions(for: $1).count } }
+
+    /// The elements shown on one page: Pickers include section switchers, which are pickers that switch views.
+    func members(of element: String) -> [String] {
+        element == "picker" ? ["picker", "switcher"].filter { system.elementsUsed.contains($0) || $0 == "picker" } : [element]
+    }
+    /// The page an element is shown on (section switchers on Pickers).
+    func page(of element: String) -> String { element == "switcher" ? "picker" : element }
 
     /// The element's state in one word, for the sidebar dot.
     func state(of element: String) -> ComponentRole.Status? {
@@ -356,6 +403,12 @@ final class DesignerModel: ObservableObject {
     func discard(_ role: ComponentRole) { run("discard", ["role": .string(role.id)]) }
     func apply(_ role: ComponentRole?) { run("apply", role.map { ["role": .string($0.id)] } ?? [:]) }
 
+    /// The values to draw as choices for a setting: macOS's default first (nil), then the others, without the value that
+    /// is macOS's default (it is the first).
+    func choices(of p: ComponentParameter) -> [String?] {
+        [nil] + values(of: p).filter { $0 != p.systemDefault }.map { Optional($0) }
+    }
+
     /// The values a setting can take for this system: its own and the system's foundations of its kind.
     func values(of parameter: ComponentParameter) -> [String] {
         parameter.values + system.foundations.filter { parameter.foundation == $0.kind }.map(\.id)
@@ -384,6 +437,13 @@ final class DesignerModel: ObservableObject {
         previews = [:]
         if let i = p.option, let q = question(for: role) {
             run("answer", ["question": .string(q.id), "option": .int(i), "setting": .bool(false)], label: "\(role.title): \(p.label)")
+        } else if let q = question(for: role), !p.follow {
+            // A look of the owner's own (a shape, a style) answers the open question too (CD50).
+            let element = ComponentElement.named(role.element)
+            run("answerLook", ["question": .string(q.id), "recipe": .object((element.map { $0.withoutDefaults(p.recipe) } ?? p.recipe).mapValues { .string($0) })],
+                label: "\(role.title): \(p.label)")
+        } else if p.follow, let q = question(for: role), let i = q.options.firstIndex(where: { $0.follow == true }) {
+            run("answer", ["question": .string(q.id), "option": .int(i), "setting": .bool(false)], label: "\(role.title) follows macOS")
         } else if p.follow {
             run("follow", ["role": .string(role.id)], label: "\(role.title) follows macOS")
         } else {
@@ -487,7 +547,25 @@ final class DesignerModel: ObservableObject {
             guard let t = templateLook(template, for: r) else { return nil }
             return item(r, recipe: t.recipe, follow: t.follow, place: place)
         }
-        return DesignerBatch(title: "Use \(template.title) for " + scopeTitle(element: element, place: place), place: place, items: items)
+        return DesignerBatch(title: "Match \(template.title) for " + scopeTitle(element: element, place: place), place: place, items: items)
+    }
+
+    /// Places where Liquid Glass belongs for a screen's own actions (controls floating over content, not content).
+    static let glassPlaces: Set<String> = ["bottomBar", "floating", "actionRow"]
+
+    /// "Use glass where it fits" (CD53): only the style, only for buttons and menus that sit where glass belongs; a main
+    /// action gets the filled glass. A role that also sits elsewhere is left alone (split it first).
+    func batchGlass(element: String) -> DesignerBatch {
+        let items = roles(element: element, place: nil).compactMap { r -> DesignerBatch.Item? in
+            guard !r.places.isEmpty, Set(r.places).isSubset(of: Self.glassPlaces), ["button", "menu"].contains(r.element) else { return nil }
+            var recipe = r.draft ?? r.recipe
+            if r.element == "menu" { recipe["style"] = "button"; recipe["look"] = "glass" }
+            else { recipe["style"] = r.importance == .main ? "glassProminent" : "glass" }
+            if drawn(r.element, recipe) == drawn(r.element, r.draft ?? r.recipe) { return nil }
+            return item(r, recipe: recipe, follow: false, place: nil)
+        }
+        let what = ComponentElement.named(element)?.plural.lowercased() ?? element
+        return DesignerBatch(title: "Glass for \(what) where it fits", place: nil, items: items)
     }
 
     /// "Follow macOS for every button here" as a previewed batch.
@@ -501,9 +579,14 @@ final class DesignerModel: ObservableObject {
     /// "One look for every button here": one setting to one value on every role in the scope (CD24).
     func batchSetting(_ parameter: ComponentParameter, _ value: String?, element: String, place: String?) -> DesignerBatch {
         let words = value.map { ComponentWords.value(element: element, parameter: parameter.id, value: $0) } ?? "macOS default"
-        let items = roles(element: element, place: place).map { r -> DesignerBatch.Item in
+        let fits = roles(element: element, place: place).filter { r in
+            parameter.applies(to: r.draft ?? r.recipe) && !r.places.allSatisfy { ComponentNative.systemPlaces[$0]?.allowed.isEmpty == true }
+        }
+        let items = fits.compactMap { r -> DesignerBatch.Item? in
             var recipe = r.draft ?? r.recipe
             if let value, value != parameter.systemDefault { recipe[parameter.id] = value } else { recipe[parameter.id] = nil }
+            // Already like this: nothing to change.
+            if recipe == (r.draft ?? r.recipe) { return nil }
             return item(r, recipe: recipe, follow: false, place: place)
         }
         return DesignerBatch(title: "\(parameter.title) \(words) for " + scopeTitle(element: element, place: place), place: place, items: items)
@@ -535,12 +618,14 @@ final class DesignerModel: ObservableObject {
         case follow(element: String?, place: String?)
         case setting(element: String, place: String?)
         case onlyHere(role: String, place: String)
+        case glass(element: String)
         var id: String {
             switch self {
             case .template(let t, let e, let p): "t.\(t).\(e ?? "").\(p ?? "")"
             case .follow(let e, let p): "f.\(e ?? "").\(p ?? "")"
             case .setting(let e, let p): "s.\(e).\(p ?? "")"
             case .onlyHere(let r, let p): "o.\(r).\(p)"
+            case .glass(let e): "g.\(e)"
             }
         }
     }
@@ -554,6 +639,7 @@ final class DesignerModel: ObservableObject {
         case .setting(let e, let p):
             guard let param = ComponentElement.named(e)?.parameters.first(where: { $0.isLook }) else { return nil }
             return batchSetting(param, param.values.first, element: e, place: p)
+        case .glass(let e): return batchGlass(element: e)
         case .onlyHere(let id, let p):
             guard let r = system.role(id) else { return nil }
             var b = DesignerBatch(title: "\(r.title) only in \(ComponentPlace.title(p))", place: p,

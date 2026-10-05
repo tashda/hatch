@@ -76,7 +76,7 @@ enum DesignerApp {
                 source = LocalComponentsSource(system: template.system(name: "Demo"))
             }
             let inventory = options.appFolder.map { ComponentInventoryScanner.scan(appRoot: $0) }
-            let model = try DesignerModel(source: source, inventory: inventory)
+            let model = try DesignerModel(source: source, inventory: inventory, appRoot: options.appFolder)
             let d = DesignerDelegate(model: model, snapshotDirectory: options.snapshotDirectory)
             d.liveOnly = options.liveOnly
             delegate = d

@@ -714,6 +714,19 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
     public func parameter(_ id: String) -> ComponentParameter? { parameters.first { $0.id == id } }
     public static func named(_ id: String) -> ComponentElement? { catalog.first { $0.id == id } }
 
+    /// The choices that make the look, in the order people decide them (CD50): for a button its style, shape, size and
+    /// label. They are drawn as options of their own; the rest stay in Fine-tune.
+    public var keyParameters: [ComponentParameter] {
+        (Self.keys[id] ?? []).compactMap(parameter)
+    }
+
+    static let keys: [String: [String]] = [
+        "button": ["style", "shape", "size", "label"], "menu": ["style", "look", "label", "indicator", "size"],
+        "picker": ["style", "size", "label"], "toggle": ["style", "size"], "field": ["style", "size"], "switcher": ["style", "size"],
+        "row": ["separators", "accessory"], "card": ["container", "surface"], "sheet": ["sizing", "title"], "badge": ["style"],
+        "toast": ["surface", "position"], "emptyState": ["action"],
+    ]
+
     /// The settings that change how it looks, without behaviour (key, tooltip, confirmation).
     public func look(_ recipe: [String: String]) -> [String: String] {
         recipe.filter { parameter($0.key)?.isLook ?? true }
