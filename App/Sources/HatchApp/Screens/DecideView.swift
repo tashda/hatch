@@ -1037,6 +1037,8 @@ private struct DecideQueueCard: View {
                 .padding(.horizontal, 6).padding(.vertical, 8)
             }
             .scrollBounceBehavior(.basedOnSize)
+            // Still scrolls when the queue is long, without a scroll bar on the glass.
+            .scrollIndicators(.never)
         }
         .frame(width: 340)
         .frame(maxHeight: 460)
