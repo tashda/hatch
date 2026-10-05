@@ -1,0 +1,1377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Components Designer, round two</title>
+<style>
+  :root {
+    --page: #ececee; --sheet: #fbfbfd; --group: #f2f2f5; --line: #e1e1e6; --line2: #d2d2d8; --text: #1d1d1f; --secondary: #6e6e73;
+    --tertiary: #a1a1a6; --blue: #0a66d8; --blue-soft: #e7f0fd; --green: #248a3d; --green-soft: #e6f4ea; --amber: #a05a00;
+    --amber-soft: #fdf1df; --red: #c4271d; --red-soft: #fde8e7; --side: #f4f4f7; --shot: #ffffff; --win: #ffffff; --winside: #ececef;
+    --insp: #f5f5f7; --sel: rgba(10,102,216,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #161618; --sheet: #232326; --group: #2c2c30; --line: #3a3a3f; --line2: #4a4a50; --text: #f2f2f4; --secondary: #a3a3aa;
+      --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+      --amber-soft: #3d2e14; --red: #ff6b61; --red-soft: #3d1c1a; --side: #1d1d20; --shot: #1e1e1e; --win: #1e1e1e; --winside: #2a2a2d;
+      --insp: #262629; --sel: rgba(76,155,255,.18);
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #161618; --sheet: #232326; --group: #2c2c30; --line: #3a3a3f; --line2: #4a4a50; --text: #f2f2f4; --secondary: #a3a3aa;
+    --tertiary: #6d6d74; --blue: #4c9bff; --blue-soft: #1d3554; --green: #4cc46a; --green-soft: #1d3a26; --amber: #f0b14a;
+    --amber-soft: #3d2e14; --red: #ff6b61; --red-soft: #3d1c1a; --side: #1d1d20; --shot: #1e1e1e; --win: #1e1e1e; --winside: #2a2a2d;
+    --insp: #262629; --sel: rgba(76,155,255,.18);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 20px; }
+  body { margin: 0; background: var(--page); color: var(--text); font: 13.5px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace; }
+
+  /* Frame: navigation on the left, content on the right */
+  .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 100vh; }
+  nav.toc { position: sticky; top: 0; height: 100vh; overflow: auto; background: var(--side); border-right: 1px solid var(--line); padding: 18px 12px 30px; }
+  nav.toc .brand { font-weight: 600; font-size: 14px; padding: 0 8px 2px; }
+  nav.toc .sub { color: var(--secondary); font-size: 11.5px; padding: 0 8px 12px; }
+  nav.toc a.ref span:first-child::after { content: ' · reference'; color: var(--tertiary); font-size: 11px; }
+  nav.toc .grp { font-size: 11px; font-weight: 600; color: var(--tertiary); text-transform: uppercase; letter-spacing: .04em; padding: 14px 8px 4px; }
+  nav.toc a { display: flex; justify-content: space-between; gap: 6px; padding: 4px 8px; border-radius: 6px; color: var(--text); font-size: 12.5px; }
+  nav.toc a:hover { background: var(--group); text-decoration: none; }
+  nav.toc a.on { background: var(--sel); }
+  nav.toc a .n { color: var(--tertiary); font-size: 11px; font-variant-numeric: tabular-nums; }
+  nav.toc a .n.done { color: var(--green); }
+  .progress { margin: 4px 8px 6px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .progress i { display: block; height: 100%; background: var(--blue); width: 0; transition: width .3s; }
+  .theme { display: flex; gap: 2px; margin: 10px 8px 0; background: var(--group); border-radius: 7px; padding: 2px; }
+  .theme button { flex: 1; font: inherit; font-size: 11.5px; border: 0; background: none; color: var(--text); padding: 3px 0; border-radius: 5px; cursor: pointer; }
+  .theme button.on { background: var(--sheet); box-shadow: 0 0 0 .5px var(--line2), 0 1px 2px rgba(0,0,0,.08); }
+
+  main { max-width: 1180px; padding: 36px 40px 120px; }
+  h1 { font-size: 28px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 21px; font-weight: 600; margin: 64px 0 6px; letter-spacing: -0.005em; }
+  h2 .tag { font-size: 12px; font-weight: 500; color: var(--secondary); margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 6px; }
+  h4 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--secondary); font-size: 14.5px; max-width: 760px; }
+  .prose { max-width: 780px; }
+  .muted { color: var(--secondary); }
+  .small { font-size: 12px; }
+  .tiny { font-size: 11px; }
+  ul.tight { margin: 4px 0 10px; padding-left: 20px; }
+  ul.tight li { margin: 2px 0; }
+  .note { background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+  .chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 5px; background: var(--group); color: var(--secondary); vertical-align: 1px; }
+  .chip.blue { background: var(--blue-soft); color: var(--blue); }
+  .chip.green { background: var(--green-soft); color: var(--green); }
+  .chip.amber { background: var(--amber-soft); color: var(--amber); }
+  .chip.red { background: var(--red-soft); color: var(--red); }
+  .scope { font-size: 10.5px; font-weight: 600; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line2); color: var(--secondary); margin-left: 4px; }
+
+  table.t { border-collapse: collapse; width: 100%; font-size: 12.5px; background: var(--sheet); border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+  table.t th { text-align: left; font-weight: 600; font-size: 11.5px; color: var(--secondary); padding: 8px 10px; background: var(--group); }
+  table.t td { padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+  table.t td.c { text-align: center; }
+
+  /* Real captures */
+  img.shot { display: block; max-width: 100%; height: auto; border-radius: 6px; background: var(--shot); }
+  .shotbox { background: var(--shot); border-radius: 8px; box-shadow: 0 0 0 1px var(--line); padding: 2px; display: inline-block; max-width: 100%; }
+  .cap { font-size: 11.5px; color: var(--secondary); margin-top: 4px; }
+
+  /* Questions */
+  .q { background: var(--sheet); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 16px; margin: 18px 0; }
+  .q.answered { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); }
+  .qh { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  .qid { font: 600 11.5px ui-monospace, "SF Mono", Menlo, monospace; color: var(--blue); background: var(--blue-soft); padding: 1px 6px; border-radius: 5px; }
+  .qt { font-size: 15.5px; font-weight: 600; }
+  .qctx { color: var(--text); max-width: 820px; }
+  .qctx p { margin-bottom: 8px; }
+  .qvis { margin: 12px 0 6px; }
+  .opts { display: grid; gap: 8px; margin-top: 12px; }
+  .opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; background: var(--page); }
+  .opt:hover { border-color: var(--line2); }
+  .opt input { margin: 3px 0 0; accent-color: var(--blue); }
+  .opt.on { border-color: var(--blue); background: var(--blue-soft); }
+  .opt b { font-weight: 600; }
+  .opt .d { color: var(--secondary); font-size: 12.5px; display: block; margin-top: 1px; }
+  .star { color: var(--blue); font-weight: 700; }
+  .why { margin-top: 10px; font-size: 12.5px; padding: 9px 12px; border-radius: 9px; background: var(--group); }
+  .why b { font-weight: 600; }
+  .qnote { margin-top: 8px; }
+  .qnote summary { font-size: 12px; color: var(--secondary); cursor: pointer; }
+  .qnote textarea { width: 100%; min-height: 54px; margin-top: 6px; font: inherit; font-size: 12.5px; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line2); background: var(--sheet); color: var(--text); resize: vertical; }
+
+  /* The proposed window, drawn with HTML around real captures */
+  .win { border-radius: 12px; overflow: hidden; background: var(--win); box-shadow: 0 0 0 1px var(--line2), 0 24px 60px rgba(0,0,0,.18); display: grid; grid-template-columns: 186px minmax(0,1fr) 288px; height: 700px; font-size: 12.5px; }
+  .win .wside { background: var(--winside); padding: 10px 8px; border-right: 1px solid var(--line); overflow: auto; }
+  .win .lights { display: flex; gap: 7px; padding: 4px 6px 12px; }
+  .win .lights i { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57; } .win .lights i:nth-child(2) { background: #febc2e; } .win .lights i:nth-child(3) { background: #28c840; }
+  .win .sg { font-size: 10.5px; font-weight: 600; color: var(--tertiary); padding: 10px 8px 3px; }
+  .win .si { display: flex; justify-content: space-between; align-items: center; padding: 3px 8px; border-radius: 6px; cursor: pointer; }
+  .win .si:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+  .win .si.on { background: color-mix(in srgb, var(--text) 10%, transparent); font-weight: 500; }
+  .win .si .b { font-size: 10.5px; font-weight: 600; color: var(--secondary); background: color-mix(in srgb, var(--text) 9%, transparent); border-radius: 8px; padding: 0 6px; }
+  .win .si .ok { color: var(--green); font-size: 11px; }
+  .win .wmain { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .win .wbar { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); }
+  .win .wtitle { font-weight: 600; font-size: 13px; }
+  .win .wsub { color: var(--secondary); font-size: 11px; }
+  .seg { display: inline-flex; background: var(--group); border-radius: 7px; padding: 2px; gap: 1px; }
+  .seg span { padding: 2px 10px; border-radius: 5px; font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+  .seg span.on { background: var(--sheet); box-shadow: 0 0 0 .5px var(--line2), 0 1px 2px rgba(0,0,0,.08); }
+  .tbtn { font-size: 11.5px; padding: 2px 9px; border-radius: 6px; background: var(--group); white-space: nowrap; cursor: pointer; }
+  .tbtn.amber { background: var(--amber-soft); color: var(--amber); font-weight: 600; }
+  .win .hard { display: flex; gap: 8px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--line); font-size: 11.5px; color: var(--secondary); flex-wrap: wrap; }
+  .win .hard label { display: inline-flex; gap: 4px; align-items: center; }
+  .win .wcanvas { padding: 14px; overflow: auto; flex: 1; }
+  .pcard { border-radius: 10px; }
+  .pcard .ph { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; margin: 0 0 5px 2px; }
+  .pcard .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
+  .pcard .pb { background: var(--shot); border-radius: 10px; box-shadow: 0 0 0 1px var(--line); padding: 2px; cursor: pointer; transition: opacity .15s; }
+  .pcard .pb:hover { box-shadow: 0 0 0 2px var(--blue); }
+  .wgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .pcard .pb img { width: 100%; height: auto; }
+  .win .winsp { background: var(--insp); border-left: 1px solid var(--line); padding: 12px 12px 16px; overflow: auto; }
+  .ih { font-size: 15px; font-weight: 600; }
+  .isec { font-size: 10.5px; font-weight: 600; color: var(--tertiary); margin: 14px 2px 5px; text-transform: none; }
+  .ibox { background: var(--sheet); border-radius: 9px; box-shadow: 0 0 0 .5px var(--line2); overflow: hidden; }
+  .irow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; min-height: 30px; }
+  .irow + .irow { border-top: 1px solid var(--line); }
+  .pop { display: inline-flex; align-items: center; gap: 5px; border-radius: 6px; padding: 1px 6px 1px 8px; background: var(--sheet); box-shadow: 0 0 0 .5px var(--line2), 0 1px 1px rgba(0,0,0,.05); font-size: 11.5px; white-space: nowrap; }
+  .pop::after { content: "⌃⌄"; font-size: 8px; letter-spacing: -2px; writing-mode: vertical-lr; color: var(--secondary); }
+  .pick { display: flex; gap: 8px; align-items: center; padding: 6px 8px; cursor: pointer; }
+  .pick + .pick { border-top: 1px solid var(--line); }
+  .pick .rd { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--line2); flex: none; background: var(--sheet); }
+  .pick.on .rd { border: 4px solid var(--blue); }
+  .pick .pi { flex: 1; min-width: 0; }
+  .pick .pi img { width: 100%; height: auto; border-radius: 4px; }
+  .pick .pi img.ctl { width: auto; max-height: 34px; }
+  .pick .src { font-size: 10.5px; color: var(--secondary); }
+  .callout { display: flex; gap: 8px; padding: 9px 10px; border-radius: 9px; background: var(--amber-soft); color: var(--text); font-size: 12px; }
+  .callout .ic { color: var(--amber); font-weight: 700; }
+  .btn { display: inline-block; font: inherit; font-size: 12px; border: 0; border-radius: 999px; padding: 4px 12px; background: var(--group); color: var(--text); box-shadow: inset 0 0 0 .5px var(--line2); cursor: pointer; white-space: nowrap; }
+  .btn.primary { background: var(--blue); color: #fff; box-shadow: none; }
+  .btn.small { font-size: 11px; padding: 2px 9px; }
+  .crumb { color: var(--blue); cursor: pointer; }
+  .frow { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .frow .pl { font-weight: 600; font-size: 12px; }
+  .frow .hd { font-size: 10.5px; color: var(--tertiary); font-weight: 600; }
+
+  /* Galleries */
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+  .tabs span { padding: 4px 11px; border-radius: 999px; background: var(--sheet); box-shadow: 0 0 0 1px var(--line); cursor: pointer; font-size: 12.5px; }
+  .tabs span.on { background: var(--blue); color: #fff; box-shadow: none; }
+  .param { background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+  .param .pt { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+  .vals { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .vals.wide { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  .val { border-radius: 9px; padding: 6px; background: var(--page); }
+  .val.same { outline: 1px dashed var(--amber); }
+  .val .vn { font-size: 12px; font-weight: 500; margin-top: 4px; }
+  .val .vc { font-size: 10.5px; color: var(--tertiary); }
+  .val .marks { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+  .lineup { display: grid; grid-template-columns: 130px repeat(3, minmax(0,1fr)); gap: 10px; align-items: start; }
+  .lineup .lh { font-size: 11.5px; font-weight: 600; color: var(--secondary); position: sticky; top: 0; background: var(--page); padding: 6px 0; z-index: 1; }
+  .lineup .lp { font-weight: 600; font-size: 12.5px; padding-top: 8px; }
+  .lineup .lp span { display: block; font-weight: 400; font-size: 11px; color: var(--secondary); }
+  .empty { color: var(--tertiary); font-size: 11.5px; padding: 14px 8px; border: 1px dashed var(--line2); border-radius: 8px; text-align: center; }
+  .hq { background: var(--sheet); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+  .hq .ho { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
+  .hq .hopt { border: 1px solid var(--line); border-radius: 10px; padding: 8px; cursor: pointer; background: var(--page); }
+  .hq .hopt.on { border-color: var(--blue); background: var(--blue-soft); }
+  .hq .hopt .ht { font-size: 11.5px; margin-top: 4px; }
+  .hq .hopt .hc { font-size: 10.5px; color: var(--tertiary); }
+  .mx { display: grid; gap: 6px; align-items: center; }
+  .mx .mh { font-size: 11px; font-weight: 600; color: var(--secondary); }
+  .mx .mp { font-size: 12px; font-weight: 500; }
+  .mx .mc { background: var(--shot); border-radius: 8px; box-shadow: 0 0 0 1px var(--line); padding: 3px; min-height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
+  .mx .mc img { max-height: 34px; width: auto; }
+  .mx .mc .mn { font-size: 9.5px; color: var(--tertiary); }
+  .mx .mc.hl { box-shadow: 0 0 0 2px var(--blue); }
+  .mx .mc.none { background: none; box-shadow: none; border: 1px dashed var(--line2); color: var(--tertiary); font-size: 10.5px; }
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+  .flow .fb { background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; width: 158px; font-size: 12px; }
+  .flow .fb b { display: block; font-size: 12.5px; margin-bottom: 2px; }
+  .flow .fb.you { border-color: var(--amber); }
+  .flow .ar { align-self: center; color: var(--tertiary); }
+  .answers { margin-top: 16px; }
+  .answers textarea { width: 100%; min-height: 220px; font: 12px/1.45 ui-monospace, "SF Mono", Menlo, monospace; padding: 10px; border-radius: 10px; border: 1px solid var(--line2); background: var(--sheet); color: var(--text); }
+  .bar { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; height: auto; }
+    main { padding: 24px 16px 80px; }
+    .win { grid-template-columns: 1fr; }
+    .win .wside, .win .winsp { display: none; }
+    .lineup { grid-template-columns: 90px repeat(3, minmax(0,1fr)); }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" id="toc">
+  <div class="brand">Components Designer</div>
+  <div class="sub">Round two · 2026-10-05</div>
+  <div class="progress"><i id="prog"></i></div>
+  <div class="sub" id="progtext"></div>
+  <div class="theme" id="theme"><button data-t="auto">Auto</button><button data-t="light">Light</button><button data-t="dark">Dark</button></div>
+  <div id="tocitems"></div>
+</nav>
+<main>
+
+<section id="start" data-toc="Start here" data-grp="Overview">
+  <h1>Components Designer, round two</h1>
+  <p class="lead">The Designer is where people choose how their app looks, so it has to be easy to read, easy to move around in, and easy to compare looks in. This page covers every UI and UX decision for it: the words, how you start from a template, the window, how you see and compare options, how you change one look or many at once, how questions are asked, the Matrix, Apple's guidance, settings, rules and foundations, and navigation.</p>
+  <div class="grid2" style="margin-top:16px">
+    <div class="note">
+      <h4 style="margin-top:0">How to answer</h4>
+      <ul class="tight">
+        <li>There are 45 questions (<span class="mono">CD1</span> to <span class="mono">CD45</span>). My recommendation <span class="star">★</span> is already selected, with its reason under the options.</li>
+        <li>Change any answer and add a note if you like. Answers are saved in this browser as you go.</li>
+        <li>At the end, <b>Copy my answers</b> and paste them in chat. I'll record them in <span class="mono">DECISIONS.md</span> and build from them.</li>
+        <li>Your 19 open questions about Hatch's own looks are in their own section (optional): answer them here or later in the Designer.</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4 style="margin-top:0">What the pictures are</h4>
+      <ul class="tight">
+        <li><b>Every control picture is a real capture</b> of Hatch's recipe engine (<span class="mono">HatchComponentKit</span>) on macOS 27, the same code the Designer draws with. Nothing is drawn by hand.</li>
+        <li>Switch the pictures between light and dark with the control at the top left.</li>
+        <li>The window around them (sidebar, inspector) is a sketch in HTML, because that window doesn't exist yet. After you answer, the layout choices get built as switchable variants in the real Designer, so you can confirm them there (CD44).</li>
+      </ul>
+    </div>
+  </div>
+  <p class="small muted" style="margin-top:12px">Scope tags: <span class="scope">D</span> Designer only · <span class="scope">K</span> the shared renderer, so it also changes Decide and the Components page · <span class="scope">S</span> worth bringing to the Proposal Stage later · <span class="scope">core</span> Hatch's data and rules.</p>
+</section>
+
+<section id="heard" data-toc="What you said, what I found" data-grp="Overview">
+  <h2>What you said, and what I found</h2>
+  <div class="grid2">
+    <div class="note">
+      <h4 style="margin-top:0">What you said</h4>
+      <ul class="tight">
+        <li>It's cluttered, and it's hard to change something and see what it looks like.</li>
+        <li>No way to give every button in Sheet footer one style, or to use a template for all buttons (right-click Buttons).</li>
+        <li>The inspector is crowded. Look lets you change everything but doesn't say what you <i>should</i> change. ‹ › feels broken.</li>
+        <li>Should you change all buttons at once, or open Bottom bar and change only that?</li>
+        <li>"Against Apple's guidance" is useful but could look nicer.</li>
+        <li>Dark mode doesn't go back to light.</li>
+        <li>The Matrix lists what is decided but gives no overview; it should show previews.</li>
+        <li>Today vs Draft belongs inside editing one role.</li>
+        <li>The bottom bar's options don't change what's drawn; only the inspector does. There should be one place to decide.</li>
+        <li>"Make it a setting" means nothing to users and should come with a recommendation (for buttons, never).</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h4 style="margin-top:0">What I found by looking at every page</h4>
+      <ul class="tight">
+        <li><b>Every ‹ › click makes a git commit</b> in the notebook (through Hatch's API), which is why switching lags.</li>
+        <li><b>13 of the 39 look settings</b> have values that draw exactly the same as another value (measured pixel by pixel below). Picking one of those changes nothing visible, which also feels broken.</li>
+        <li><b>Recommendations only count uses</b>: for toggles Hatch recommends a checkbox even though Hatch's own Glass look and the macOS 27 reference are a mini switch. For "Action with a choice", the Glass look isn't offered at all.</li>
+        <li><b>Seven roles have generated names</b>, such as "Button (main, list row, card, popover, form)" and <span class="mono">menu.toolbar</span>, which is also used in rows, cards and the inspector.</li>
+        <li><b>A template is chosen by name only</b>, from a menu on Hatch's Components page, before you have seen it. After that the Designer never mentions templates again.</li>
+        <li>The same role inspector and the same rules editor exist twice: on Hatch's Components page and in the Designer.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>Bugs that get fixed whatever you answer</h3>
+  <div id="bugs"></div>
+</section>
+
+<section id="words" data-toc="Words and names" data-grp="Decisions">
+  <h2>Words and names <span class="tag">CD1–CD2</span></h2>
+  <p class="prose">If the words are clear, the window is easy to read. These are the words the Designer would use, with what each one means and an example from Hatch.</p>
+  <div id="vocab"></div>
+  <div data-q="CD1"></div>
+  <div data-q="CD2"></div>
+</section>
+
+<section id="templates" data-toc="Starting point and templates" data-grp="Decisions">
+  <h2>Starting point and templates <span class="tag">CD3–CD6</span></h2>
+  <p class="prose">A template is a complete set of looks, one for every role (DS6). Today there are two: <b>macOS Native</b> ("Apple's defaults throughout") and <b>Glass</b> ("Hatch's own look"). The other way to start is <b>your app as it is</b>: the look used most in each role is recommended, and every other look becomes a question (DS4). That's how Hatch's own system was started, which is why it has 19 questions.</p>
+  <h3>How it works today</h3>
+  <div class="flow" id="flow-today"></div>
+  <h3>How I propose it works</h3>
+  <div class="flow" id="flow-new"></div>
+  <div data-q="CD3"></div>
+  <div data-q="CD4"></div>
+  <div data-q="CD5"></div>
+  <div data-q="CD6"></div>
+</section>
+
+<section id="lineup" data-toc="Templates side by side" data-grp="Reference">
+  <h2>Templates side by side <span class="tag">reference</span></h2>
+  <p class="prose">Every place, drawn by the three starting points: <b>Hatch today</b> (your system as it stands, made from the app), <b>macOS Native</b> and <b>Glass</b>. Pick an element. An empty cell means that system has no role there yet. This is the comparison the start gallery (CD3) and the template references (CD5) would show.</p>
+  <div class="tabs" id="lineup-tabs"></div>
+  <div class="lineup" id="lineup-grid"></div>
+</section>
+
+<section id="window" data-toc="The window" data-grp="Decisions">
+  <h2>The window <span class="tag">CD7–CD12</span></h2>
+  <p class="prose">A sketch of the proposed Designer with Hatch's real roles in it. <b>It works</b>: choose an element or a place on the left, click a control on the canvas to open its role, choose a look in the inspector and watch the canvas change, then go back with "‹ Buttons".</p>
+  <div id="mockwin" style="margin:16px 0 8px"></div>
+  <p class="cap">Canvas pictures are real captures of Hatch's system. The sketch previews an option in the role's first place only; the real Designer draws every place live. Roles Hatch named after what it found carry the names proposed in CD2 (the old name is in the tooltip).</p>
+  <div data-q="CD7"></div>
+  <div data-q="CD8"></div>
+  <div data-q="CD9"></div>
+  <div data-q="CD10"></div>
+  <div data-q="CD11"></div>
+  <div data-q="CD12"></div>
+</section>
+
+<section id="seeing" data-toc="Seeing and comparing" data-grp="Decisions">
+  <h2>Seeing and comparing options <span class="tag">CD13–CD16</span></h2>
+  <p class="prose">You choose a look by seeing it in place. These decide what happens when you point at or pick an option, how Today and the Draft are put side by side, and how hard cases are shown.</p>
+  <div data-q="CD13"></div>
+  <div data-q="CD14"></div>
+  <div data-q="CD15"></div>
+  <div data-q="CD16"></div>
+</section>
+
+<section id="inspector" data-toc="Changing a look" data-grp="Decisions">
+  <h2>Changing a look: the inspector <span class="tag">CD17–CD23</span></h2>
+  <p class="prose">Today the inspector shows everything at the same weight: role id, code name, ten ‹ › rows (seven of them "–"), three Apple sections and three buttons. The proposal: one plain title, the decision first, real looks to pick from, then the fine detail folded away.</p>
+  <div data-q="CD17"></div>
+  <div data-q="CD18"></div>
+  <div data-q="CD19"></div>
+  <div data-q="CD20"></div>
+  <div data-q="CD21"></div>
+  <div data-q="CD22"></div>
+  <div data-q="CD23"></div>
+</section>
+
+<section id="gallery" data-toc="Every look option" data-grp="Reference">
+  <h2>Every look option <span class="tag">reference</span></h2>
+  <p class="prose">Every setting of every element, each value drawn on its own with macOS's defaults for the rest, with the plain name I propose (CD20). Marks show where each starting point uses it: <span class="chip">Native</span> <span class="chip blue">Glass</span> <span class="chip green">Hatch</span>. A dashed outline means the value <b>draws the same as another value</b> in its row (CD21). Behaviour settings (key, tooltip, confirmation, when it shows) can't be drawn and are listed by name.</p>
+  <div class="tabs" id="gal-tabs"></div>
+  <div id="gal-body"></div>
+</section>
+
+<section id="batch" data-toc="One look for many" data-grp="Decisions">
+  <h2>One look for many <span class="tag">CD24–CD26</span></h2>
+  <p class="prose">"Make every button in Sheet footer the same", "use a template for all buttons", "make the inspector all small controls". These are batch changes. They need clear scopes and an honest preview of everything they touch, because a role reaches more than one place.</p>
+  <div class="note" style="margin:12px 0">
+    <h4 style="margin-top:0">All buttons, or only Bottom bar?</h4>
+    <p>A <b>place</b> is where a control sits (Bottom bar). A <b>role</b> is one job (Main action). <b>A look belongs to a role, and a role sits in several places</b>: in Hatch, Main action is in Bottom bar, Empty state, Page, Action row and Floating. Changing Main action changes all five, which is the point of a design system. To make it different <b>only</b> in Bottom bar, you make a <b>variant</b> (Main action, Bottom bar) with a reason. The proposal makes this visible: the role view shows every place a change reaches before you keep it, and "Only here…" is always next to it.</p>
+  </div>
+  <div data-q="CD24"></div>
+  <div data-q="CD25"></div>
+  <div data-q="CD26"></div>
+</section>
+
+<section id="deciding" data-toc="Deciding" data-grp="Decisions">
+  <h2>Deciding: the questions <span class="tag">CD27–CD31</span></h2>
+  <p class="prose">Questions come from the inventory (several looks in one role), from agents (Change… on a role), and from tickets that need a role that doesn't exist yet. Today they sit in a bottom bar that doesn't preview, and Hatch recommends by counting uses only.</p>
+  <div data-q="CD27"></div>
+  <div data-q="CD28"></div>
+  <div data-q="CD29"></div>
+  <div data-q="CD30"></div>
+  <div data-q="CD31"></div>
+</section>
+
+<section id="hq" data-toc="Hatch's 19 questions" data-grp="Reference">
+  <h2>Hatch's own 19 open questions <span class="tag">optional</span></h2>
+  <p class="prose">Your system's open questions, each option drawn in the role's first place by the real engine. <span class="chip">Hatch</span> marks what Hatch recommends today (most used). <span class="star">★</span> marks what I recommend under the rule proposed in CD28 (Apple's guidance, then the Glass template you work in, then use counts). Pick here or leave them for the Designer; anything you pick here is included in your answers.</p>
+  <div id="hq-list"></div>
+</section>
+
+<section id="matrix" data-toc="The Matrix" data-grp="Decisions">
+  <h2>The Matrix <span class="tag">CD32–CD33</span></h2>
+  <p class="prose">The Matrix answers "which role where". Today it is a table of names. The proposal draws each cell with the real control, so you can see whether the system holds together. Below is the Buttons matrix of Hatch's system, drawn. Point at a cell to light up every cell with the same role.</p>
+  <div id="mx-buttons" style="margin:12px 0"></div>
+  <div data-q="CD32"></div>
+  <h3>The whole app at a glance</h3>
+  <p class="prose">One row per place and one column per element, each cell showing that element's main role in that place. This is the view for "make the inspector consistent": read across a row.</p>
+  <div id="mx-system" style="margin:12px 0"></div>
+  <div data-q="CD33"></div>
+</section>
+
+<section id="apple" data-toc="Apple's guidance" data-grp="Decisions">
+  <h2>Apple's guidance <span class="tag">CD34–CD35</span></h2>
+  <p class="prose">Hatch checks each role against Apple's documentation (NF1) and links the source. Today the warnings and the sources look the same and sit under the look settings. Hatch's system currently has six findings:</p>
+  <div id="advice"></div>
+  <div data-q="CD34"></div>
+  <div data-q="CD35"></div>
+</section>
+
+<section id="settings" data-toc="Settings for people" data-grp="Decisions">
+  <h2>Letting people choose in Settings <span class="tag">CD36</span></h2>
+  <p class="prose">"Make it a setting" (NF5) keeps a choice as the default and drafts a ticket for a setting in the app, so the app's users can change it. It's useful for a few things and wrong for most.</p>
+  <div data-q="CD36"></div>
+</section>
+
+<section id="rulesf" data-toc="Rules and Foundations" data-grp="Decisions">
+  <h2>Rules and Foundations <span class="tag">CD37–CD38</span></h2>
+  <div data-q="CD37"></div>
+  <div data-q="CD38"></div>
+</section>
+
+<section id="nav" data-toc="Reading and navigating" data-grp="Decisions">
+  <h2>Reading and navigating <span class="tag">CD39–CD43</span></h2>
+  <div data-q="CD39"></div>
+  <div data-q="CD40"></div>
+  <div data-q="CD41"></div>
+  <div data-q="CD42"></div>
+  <div data-q="CD43"></div>
+</section>
+
+<section id="right" data-toc="Getting it right" data-grp="Decisions">
+  <h2>Getting it right <span class="tag">CD44–CD45</span></h2>
+  <div data-q="CD44"></div>
+  <div data-q="CD45"></div>
+</section>
+
+<section id="done" data-toc="Your answers" data-grp="Finish">
+  <h2>Your answers</h2>
+  <p class="prose">Everything you picked, with notes, as text. Copy it and paste it in chat, or download it.</p>
+  <div class="answers">
+    <textarea id="summary" readonly></textarea>
+    <div class="bar">
+      <button class="btn primary" id="copy">Copy My Answers</button>
+      <button class="btn" id="download">Download</button>
+      <button class="btn" id="reset">Reset to Recommendations</button>
+      <span class="small muted" id="copystatus"></span>
+    </div>
+  </div>
+</section>
+</main>
+</div>
+<script>
+const DATA = {"sizes":{"role/native/menu.choice":[200,52],"role/native/button.destructive":[200,52],"role/native/button.cancel":[200,52],"role/native/card.group":[340,93],"role/native/button.link":[200,44],"role/native/row.standard":[340,138],"role/native/button.secondary":[200,52],"role/native/field.search":[200,52],"role/native/switcher.sections":[340,138],"role/native/picker.viewMode":[200,52],"role/native/emptyState.standard":[340,218],"role/native/button.toolbar":[200,53],"role/native/button.inRow":[200,52],"role/native/badge.count":[200,72],"role/native/toggle.setting":[200,45],"role/native/sheet.standard":[340,167],"role/native/button.primary":[200,52],"role/native/button.toolbarPrimary":[200,53],"role/native/picker.setting":[200,52],"role/native/button.menuItem":[200,52],"role/native/field.text":[200,52],"role/hatch/menu.choice":[200,44],"role/hatch/toast.feedback":[340,60],"role/hatch/field.inPage":[200,52],"role/hatch/button.destructive":[200,52],"role/hatch/button.cancel":[200,52],"role/hatch/button.link":[200,44],"role/hatch/button.secondary":[200,52],"role/hatch/field.search":[200,52],"role/hatch/card.details":[340,158],"role/hatch/switcher.sections":[340,59],"role/hatch/picker.viewMode":[200,52],"role/hatch/emptyState.standard":[340,218],"role/hatch/button.destructiveInRow":[200,52],"role/hatch/button.toolbar":[200,53],"role/hatch/button.inRow":[200,48],"role/hatch/badge.count":[200,72],"role/hatch/picker.menuItem":[200,52],"role/hatch/toggle.setting":[200,45],"role/hatch/sheet.standard":[340,167],"role/hatch/button.primary":[200,56],"role/hatch/button.sheetDefault":[200,52],"role/hatch/picker.setting":[200,52],"role/hatch/button.linkOther":[200,52],"role/hatch/button.menuItem":[200,52],"role/hatch/field.text":[200,52],"role/hatch/row.queue":[340,138],"role/hatch/menu.toolbar":[200,52],"role/hatch/toggle.menuItem":[200,45],"role/hatch/menu.more":[200,52],"role/hatch/button.primaryInRow":[200,56],"role/glass/menu.choice":[200,52],"role/glass/toast.feedback":[340,60],"role/glass/button.destructive":[200,52],"role/glass/button.cancel":[200,52],"role/glass/button.link":[200,44],"role/glass/button.secondary":[200,58],"role/glass/field.search":[200,52],"role/glass/card.details":[340,158],"role/glass/switcher.sections":[340,59],"role/glass/picker.viewMode":[200,52],"role/glass/emptyState.standard":[340,218],"role/glass/button.toolbar":[200,53],"role/glass/button.inRow":[200,48],"role/glass/badge.count":[200,72],"role/glass/toggle.setting":[200,44],"role/glass/sheet.standard":[340,167],"role/glass/button.primary":[200,56],"role/glass/button.sheetDefault":[200,52],"role/glass/picker.setting":[200,52],"role/glass/button.menuItem":[200,52],"role/glass/field.text":[200,52],"role/glass/row.queue":[340,138],"role/glass/menu.more":[200,52],"tpl/native/inspector-button":[460,120],"tpl/native/page-switcher":[460,209],"tpl/native/form-picker":[460,76],"tpl/native/sheetFooter-field":[460,127],"tpl/native/inspector-card":[460,161],"tpl/native/popover-picker":[460,120],"tpl/native/contextMenu-button":[460,82],"tpl/native/popover-field":[460,120],"tpl/native/toolbar-badge":[460,105],"tpl/native/actionRow-menu":[460,103],"tpl/native/popover-toggle":[460,113],"tpl/native/page-card":[460,164],"tpl/native/card-button":[460,120],"tpl/native/toolbar-menu":[460,85],"tpl/native/bottomBar-button":[460,91],"tpl/native/emptyState-emptyState":[460,292],"tpl/native/form-toggle":[460,69],"tpl/native/toolbar-picker":[460,85],"tpl/native/sheetFooter-button":[460,127],"tpl/native/listRow-button":[460,102],"tpl/native/alert-button":[460,191],"tpl/native/emptyState-button":[460,126],"tpl/native/toolbar-field":[460,85],"tpl/native/toolbar-button":[460,86],"tpl/native/form-field":[460,76],"tpl/native/actionRow-button":[460,103],"tpl/native/inspector-toggle":[460,113],"tpl/native/inspector-field":[460,120],"tpl/native/form-button":[460,98],"tpl/native/page-sheet":[460,238],"tpl/native/inspector-picker":[460,120],"tpl/native/listRow-badge":[460,142],"tpl/native/listRow-row":[460,274],"tpl/native/page-emptyState":[460,289],"tpl/native/popover-button":[460,120],"tpl/hatch/floating-toast":[460,100],"tpl/hatch/inspector-button":[460,116],"tpl/hatch/floating-menu":[460,92],"tpl/hatch/page-toggle":[460,116],"tpl/hatch/form-picker":[460,76],"tpl/hatch/card-field":[460,120],"tpl/hatch/inspector-card":[460,226],"tpl/hatch/popover-picker":[460,120],"tpl/hatch/form-menu":[460,100],"tpl/hatch/floating-picker":[460,92],"tpl/hatch/listRow-toggle":[460,87],"tpl/hatch/contextMenu-button":[460,82],"tpl/hatch/popover-field":[460,120],"tpl/hatch/toolbar-badge":[460,105],"tpl/hatch/actionRow-menu":[460,103],"tpl/hatch/popover-toggle":[460,113],"tpl/hatch/page-card":[460,229],"tpl/hatch/listRow-picker":[460,102],"tpl/hatch/card-button":[460,124],"tpl/hatch/toolbar-menu":[460,85],"tpl/hatch/bottomBar-button":[460,95],"tpl/hatch/emptyState-emptyState":[460,292],"tpl/hatch/page-picker":[460,123],"tpl/hatch/card-menu":[460,120],"tpl/hatch/bottomBar-menu":[460,91],"tpl/hatch/form-toggle":[460,69],"tpl/hatch/listRow-field":[460,102],"tpl/hatch/toolbar-picker":[460,85],"tpl/hatch/sheetFooter-button":[460,127],"tpl/hatch/card-picker":[460,120],"tpl/hatch/contextMenu-toggle":[460,60],"tpl/hatch/listRow-button":[460,110],"tpl/hatch/page-menu":[460,115],"tpl/hatch/page-field":[460,123],"tpl/hatch/alert-button":[460,191],"tpl/hatch/emptyState-button":[460,130],"tpl/hatch/toolbar-field":[460,85],"tpl/hatch/toolbar-button":[460,86],"tpl/hatch/page-button":[460,127],"tpl/hatch/form-field":[460,76],"tpl/hatch/actionRow-button":[460,107],"tpl/hatch/listRow-menu":[460,102],"tpl/hatch/inspector-toggle":[460,113],"tpl/hatch/inspector-field":[460,120],"tpl/hatch/floating-switcher":[460,99],"tpl/hatch/floating-field":[460,92],"tpl/hatch/form-button":[460,132],"tpl/hatch/inspector-menu":[460,120],"tpl/hatch/page-sheet":[460,238],"tpl/hatch/inspector-picker":[460,120],"tpl/hatch/listRow-badge":[460,142],"tpl/hatch/listRow-row":[460,274],"tpl/hatch/card-toggle":[460,113],"tpl/hatch/contextMenu-menu":[460,60],"tpl/hatch/page-emptyState":[460,289],"tpl/hatch/floating-button":[460,96],"tpl/hatch/contextMenu-picker":[460,60],"tpl/hatch/alert-field":[460,131],"tpl/hatch/popover-button":[460,124],"tpl/glass/floating-toast":[460,100],"tpl/glass/inspector-button":[460,116],"tpl/glass/form-picker":[460,76],"tpl/glass/inspector-card":[460,226],"tpl/glass/popover-picker":[460,120],"tpl/glass/contextMenu-button":[460,82],"tpl/glass/popover-field":[460,120],"tpl/glass/toolbar-badge":[460,105],"tpl/glass/actionRow-menu":[460,103],"tpl/glass/popover-toggle":[460,112],"tpl/glass/page-card":[460,229],"tpl/glass/card-button":[460,116],"tpl/glass/bottomBar-button":[460,97],"tpl/glass/emptyState-emptyState":[460,292],"tpl/glass/bottomBar-menu":[460,91],"tpl/glass/form-toggle":[460,68],"tpl/glass/toolbar-picker":[460,85],"tpl/glass/sheetFooter-button":[460,127],"tpl/glass/listRow-button":[460,94],"tpl/glass/alert-button":[460,191],"tpl/glass/emptyState-button":[460,118],"tpl/glass/toolbar-field":[460,85],"tpl/glass/toolbar-button":[460,86],"tpl/glass/form-field":[460,76],"tpl/glass/actionRow-button":[460,109],"tpl/glass/inspector-toggle":[460,112],"tpl/glass/inspector-field":[460,120],"tpl/glass/floating-switcher":[460,99],"tpl/glass/form-button":[460,68],"tpl/glass/page-sheet":[460,238],"tpl/glass/inspector-picker":[460,120],"tpl/glass/listRow-badge":[460,142],"tpl/glass/listRow-row":[460,274],"tpl/glass/page-emptyState":[460,289],"tpl/glass/floating-button":[460,98],"tpl/glass/popover-button":[460,116],"q/button.sheetDefault-3":[460,127],"q/button.link-0":[460,110],"q/toggle.menuItem-0":[460,60],"q/picker.menuItem-1":[460,60],"q/button.menuItem-0":[460,82],"q/button.cancel-3":[460,127],"q/menu.toolbar-0":[460,85],"q/button.secondary-1":[460,127],"q/button.primary-0":[460,95],"q/field.inPage-1":[460,123],"q/toggle.setting-0":[460,87],"q/button.toolbar-1":[460,85],"q/button.inRow-3":[460,110],"q/button.primaryInRow-2":[460,102],"q/field.text-1":[460,86],"q/picker.setting-1":[460,102],"q/button.destructive-0":[460,127],"q/menu.choice-1":[460,91],"q/button.sheetDefault-2":[460,127],"q/button.link-1":[460,110],"q/button.menuItem-1":[460,82],"q/toggle.menuItem-1":[460,60],"q/picker.menuItem-0":[460,60],"q/button.cancel-2":[460,131],"q/button.secondary-0":[460,127],"q/button.primary-1":[460,91],"q/menu.toolbar-1":[460,81],"q/button.inRow-2":[460,110],"q/button.toolbar-0":[460,86],"q/field.inPage-0":[460,131],"q/toggle.setting-1":[460,87],"q/field.text-0":[460,102],"q/button.primaryInRow-3":[460,102],"q/button.destructive-1":[460,128],"q/picker.setting-0":[460,102],"q/button.destructiveInRow-2":[460,121],"q/menu.choice-0":[460,91],"q/picker.menuItem-3":[460,60],"q/toggle.menuItem-2":[460,60],"q/button.sheetDefault-1":[460,127],"q/button.link-2":[460,110],"q/menu.toolbar-2":[460,77],"q/button.primary-2":[460,95],"q/button.secondary-3":[460,127],"q/button.cancel-1":[460,127],"q/button.primaryInRow-0":[460,110],"q/field.text-3":[460,96],"q/toggle.setting-2":[460,102],"q/button.inRow-1":[460,110],"q/menu.choice-3":[460,91],"q/button.destructiveInRow-1":[460,117],"q/picker.setting-3":[460,102],"q/picker.menuItem-2":[460,60],"q/toggle.menuItem-3":[460,60],"q/button.sheetDefault-0":[460,127],"q/button.primary-3":[460,91],"q/button.secondary-2":[460,129],"q/menu.toolbar-3":[460,85],"q/button.cancel-0":[460,127],"q/field.text-2":[460,102],"q/button.primaryInRow-1":[460,102],"q/button.inRow-0":[460,110],"q/button.toolbar-2":[460,85],"q/field.inPage-2":[460,131],"q/toggle.setting-3":[460,102],"q/menu.choice-2":[460,91],"q/button.destructiveInRow-0":[460,120],"q/picker.setting-2":[460,102],"look/toggle-style-switch":[220,52],"look/emptyState-action-link":[360,218],"look/menu-style-automatic":[220,52],"look/row-accessory-none":[360,138],"look/picker-style-segmented":[220,52],"look/picker-size-extraLarge":[220,64],"look/menu-look-borderless":[220,44],"look/row-accessory-chevron":[360,138],"look/row-accessory-badge":[360,138],"look/field-style-roundedBorder":[220,52],"look/button-style-automatic":[220,54],"look/toast-surface-material":[360,60],"look/card-padding-system":[360,120],"look/switcher-size-extraLarge":[360,64],"look/button-size-regular":[220,54],"look/switcher-style-segmented":[360,52],"look/field-style-automatic":[220,52],"look/sheet-title-inline":[360,167],"look/menu-size-extraLarge":[220,64],"look/picker-label-visible":[220,52],"look/picker-style-automatic":[220,52],"look/button-label-iconOnly":[220,54],"look/button-size-extraLarge":[220,66],"look/field-size-extraLarge":[220,52],"look/switcher-style-menu":[360,52],"look/card-container-custom":[360,120],"look/toggle-style-button":[220,52],"look/toast-surface-glass":[360,60],"look/menu-look-automatic":[220,52],"look/button-style-bordered":[220,54],"look/switcher-size-regular":[360,52],"look/card-container-groupBox":[360,93],"look/card-border-hairline":[360,120],"look/field-style-plain":[220,44],"look/picker-size-mini":[220,44],"look/picker-style-menu":[220,52],"look/button-label-titleAndIcon":[220,54],"look/switcher-style-tabs":[360,138],"look/button-shape-capsule":[220,54],"look/menu-label-titleAndIcon":[220,52],"look/badge-tint-accent":[220,72],"look/menu-look-bordered":[220,52],"look/card-shadow-none":[360,120],"look/menu-look-plain":[220,44],"look/button-style-plain":[220,46],"look/card-shadow-soft":[360,120],"look/button-shape-circle":[220,54],"look/sheet-title-none":[360,141],"look/button-style-glassProminent":[220,54],"look/button-style-link":[220,46],"look/menu-indicator-visible":[220,52],"look/card-container-formSection":[360,158],"look/menu-label-titleOnly":[220,52],"look/card-surface-material":[360,120],"look/picker-size-regular":[220,52],"look/button-label-titleOnly":[220,52],"look/field-size-mini":[220,47],"look/field-size-regular":[220,52],"look/menu-size-regular":[220,52],"look/toggle-size-mini":[220,40],"look/button-style-borderedProminent":[220,54],"look/emptyState-action-none":[360,218],"look/card-surface-none":[360,120],"look/card-radius-none":[360,120],"look/field-size-large":[220,52],"look/picker-label-hidden":[220,52],"look/menu-size-large":[220,56],"look/badge-tint-critical":[220,72],"look/sheet-sizing-fitted":[360,167],"look/button-size-mini":[220,43],"look/sheet-sizing-automatic":[360,167],"look/switcher-size-mini":[360,44],"look/button-tint-accent":[220,54],"look/badge-tint-none":[220,72],"look/toast-surface-solid":[360,60],"look/sheet-title-large":[360,172],"look/picker-size-small":[220,48],"look/card-surface-glass":[360,120],"look/menu-style-borderlessButton":[220,44],"look/sheet-sizing-page":[360,167],"look/field-style-squareBorder":[220,52],"look/card-surface-bordered":[360,120],"look/picker-style-inline":[220,90],"look/switcher-size-small":[360,48],"look/picker-style-palette":[220,52],"look/toggle-size-large":[220,46],"look/toast-position-bottom":[360,60],"look/toggle-size-regular":[220,45],"look/button-size-large":[220,58],"look/button-style-borderless":[220,46],"look/badge-style-capsule":[220,43],"look/button-tint-critical":[220,54],"look/badge-style-system":[220,72],"look/picker-style-radioGroup":[220,90],"look/switcher-size-large":[360,56],"look/sheet-sizing-form":[360,167],"look/row-separators-visible":[360,138],"look/toggle-size-small":[220,43],"look/button-size-small":[220,50],"look/row-separators-hidden":[360,138],"look/toggle-style-checkbox":[220,45],"look/emptyState-action-prominent":[360,218],"look/switcher-style-dock":[360,59],"look/toggle-style-automatic":[220,45],"look/menu-look-glass":[220,52],"look/field-size-small":[220,49],"look/button-shape-automatic":[220,54],"look/button-style-glass":[220,54],"look/menu-size-small":[220,48],"look/menu-size-mini":[220,44],"look/badge-style-plain":[220,41],"look/card-border-none":[360,120],"look/button-tint-none":[220,54],"look/card-surface-grouped":[360,120],"look/button-shape-roundedRectangle":[220,54],"look/toggle-size-extraLarge":[220,46],"look/menu-label-iconOnly":[220,52],"look/menu-indicator-hidden":[220,52],"look/toast-position-top":[360,60],"look/picker-size-large":[220,56],"look/menu-style-button":[220,52]},"elements":[{"id":"button","title":"Button","plural":"Buttons","tier":"systemStyle","params":[{"id":"style","title":"Style","look":true,"def":"automatic","values":[{"id":"automatic","name":"macOS default"},{"id":"bordered","name":"Bordered"},{"id":"borderedProminent","name":"Filled"},{"id":"borderless","name":"Borderless"},{"id":"plain","name":"Plain"},{"id":"link","name":"Link"},{"id":"glass","name":"Glass"},{"id":"glassProminent","name":"Glass, filled"}],"same":[["automatic","bordered"]]},{"id":"size","title":"Size","look":true,"def":"regular","values":[{"id":"mini","name":"Mini"},{"id":"small","name":"Small"},{"id":"regular","name":"Regular"},{"id":"large","name":"Large"},{"id":"extraLarge","name":"Extra large"}],"same":[]},{"id":"label","title":"Label","look":true,"def":"","values":[{"id":"titleAndIcon","name":"Icon and title"},{"id":"titleOnly","name":"Title"},{"id":"iconOnly","name":"Icon only"}],"same":[]},{"id":"shape","title":"Shape","look":true,"def":"automatic","values":[{"id":"automatic","name":"macOS default"},{"id":"capsule","name":"Capsule"},{"id":"roundedRectangle","name":"Rounded rectangle"},{"id":"circle","name":"Circle"}],"same":[["automatic","roundedRectangle"]]},{"id":"tint","title":"Tint","look":true,"def":"none","values":[{"id":"none","name":"None"},{"id":"accent","name":"Accent colour"},{"id":"critical","name":"Red (critical)"}],"same":[]},{"id":"show","title":"Shown","look":false,"def":"always","values":[{"id":"always","name":"Always"},{"id":"onHover","name":"On hover"}],"same":[]},{"id":"confirm","title":"Confirm first","look":false,"def":"no","values":[{"id":"no","name":"No"},{"id":"yes","name":"Ask first"}],"same":[]},{"id":"key","title":"Key","look":false,"def":"none","values":[{"id":"none","name":"None"},{"id":"defaultAction","name":"Return (default button)"},{"id":"cancelAction","name":"Escape (cancel button)"}],"same":[]},{"id":"tooltip","title":"Tooltip","look":false,"def":"none","values":[{"id":"none","name":"None"},{"id":"title","name":"Title"},{"id":"shortcut","name":"Title and shortcut"}],"same":[]}]},{"id":"menu","title":"Menu","plural":"Menus","tier":"systemStyle","params":[{"id":"style","title":"Style","look":true,"def":"automatic","values":[{"id":"automatic","name":"macOS default"},{"id":"button","name":"Button"},{"id":"borderlessButton","name":"Borderless"}],"same":[["automatic","button"]]},{"id":"look","title":"Button look","look":true,"def":"automatic","values":[{"id":"automatic","name":"macOS default"},{"id":"bordered","name":"Bordered"},{"id":"borderless","name":"Borderless"},{"id":"plain","name":"Plain"},{"id":"glass","name":"Glass"}],"same":[["automatic","bordered","glass"]]},{"id":"indicator","title":"Arrow","look":true,"def":"visible","values":[{"id":"visible","name":"Shown"},{"id":"hidden","name":"Hidden"}],"same":[]},{"id":"label","title":"Label","look":true,"def":"","values":[{"id":"titleAndIcon","name":"Icon and title"},{"id":"titleOnly","name":"Title"},{"id":"iconOnly","name":"Icon only"}],"same":[]},{"id":"size","title":"Size","look":true,"def":"regular","values":[{"id":"mini","name":"Mini"},{"id":"small","name":"Small"},{"id":"regular","name":"Regular"},{"id":"large","name":"Large"},{"id":"extraLarge","name":"Extra large"}],"same":[]}]},{"id":"picker","title":"Picker","plural":"Pickers","tier":"systemStyle","params":[{"id":"style","title":"Style","look":true,"def":"automatic","values":[{"id":"automatic","name":"macOS default (pop-up)"},{"id":"menu","name":"Pop-up"},{"id":"segmented","name":"Segmented"},{"id":"inline","name":"Inline list"},{"id":"radioGroup","name":"Radio buttons"},{"id":"palette","name":"Palette"}],"same":[["automatic","menu"],["inline","radioGroup"],["palette","segmented"]]},{"id":"label","title":"Label","look":true,"def":"visible","values":[{"id":"visible","name":"Shown"},{"id":"hidden","name":"Hidden"}],"same":[]},{"id":"size","title":"Size","look":true,"def":"regular","values":[{"id":"mini","name":"Mini"},{"id":"small","name":"Small"},{"id":"regular","name":"Regular"},{"id":"large","name":"Large"},{"id":"extraLarge","name":"Extra large"}],"same":[]}]},{"id":"toggle","title":"Toggle","plural":"Toggles","tier":"systemStyle","params":[{"id":"style","title":"Style","look":true,"def":"automatic","values":[{"id":"automatic","name":"macOS default (checkbox)"},{"id":"switch","name":"Switch"},{"id":"checkbox","name":"Checkbox"},{"id":"button","name":"Button"}],"same":[["automatic","checkbox"]]},{"id":"size","title":"Size","look":true,"def":"regular","values":[{"id":"mini","name":"Mini"},{"id":"small","name":"Small"},{"id":"regular","name":"Regular"},{"id":"large","name":"Large"},{"id":"extraLarge","name":"Extra large"}],"same":[["extraLarge","large"]]}]},{"id":"field","title":"Text field","plural":"Text fields","tier":"systemStyle","params":[{"id":"style","title":"Style","look":true,"def":"automatic","values":[{"id":"automatic","name":"macOS default"},{"id":"roundedBorder","name":"Rounded border"},{"id":"plain","name":"No border"},{"id":"squareBorder","name":"Square border"}],"same":[["automatic","roundedBorder","squareBorder"]]},{"id":"size","title":"Size","look":true,"def":"regular","values":[{"id":"mini","name":"Mini"},{"id":"small","name":"Small"},{"id":"regular","name":"Regular"},{"id":"large","name":"Large"},{"id":"extraLarge","name":"Extra large"}],"same":[["large","regular"]]}]},{"id":"switcher","title":"Section switcher","plural":"Section switchers","tier":"systemStyle","params":[{"id":"style","title":"Style","look":true,"def":"","values":[{"id":"segmented","name":"Segmented"},{"id":"menu","name":"Pop-up"},{"id":"tabs","name":"Tabs"},{"id":"dock","name":"Dock (drawn by Hatch)"}],"same":[]},{"id":"size","title":"Size","look":true,"def":"regular","values":[{"id":"mini","name":"Mini"},{"id":"small","name":"Small"},{"id":"regular","name":"Regular"},{"id":"large","name":"Large"},{"id":"extraLarge","name":"Extra large"}],"same":[]}]},{"id":"row","title":"List row","plural":"List rows","tier":"systemStyle","params":[{"id":"separators","title":"Separators","look":true,"def":"visible","values":[{"id":"visible","name":"Shown"},{"id":"hidden","name":"Hidden"}],"same":[]},{"id":"accessory","title":"Accessory","look":true,"def":"none","values":[{"id":"none","name":"None"},{"id":"chevron","name":"Chevron"},{"id":"badge","name":"Count"}],"same":[]},{"id":"actions","title":"Actions","look":false,"def":"none","values":[{"id":"none","name":"None"},{"id":"onHover","name":"On hover"},{"id":"always","name":"Always"}],"same":[]}]},{"id":"card","title":"Card","plural":"Cards","tier":"systemStyle","params":[{"id":"container","title":"Container","look":true,"def":"","values":[{"id":"groupBox","name":"Group box"},{"id":"formSection","name":"Form section"},{"id":"custom","name":"Custom"}],"same":[]},{"id":"surface","title":"Surface (custom)","look":true,"def":"","values":[{"id":"none","name":"None"},{"id":"grouped","name":"Grouped fill"},{"id":"bordered","name":"Bordered"},{"id":"material","name":"Material"},{"id":"glass","name":"Glass"}],"same":[["grouped","none"]]},{"id":"radius","title":"Corners (custom)","look":true,"def":"","values":[{"id":"none","name":"macOS default"}],"same":[]},{"id":"padding","title":"Padding (custom)","look":true,"def":"system","values":[{"id":"system","name":"macOS default"}],"same":[]},{"id":"border","title":"Border (custom)","look":true,"def":"none","values":[{"id":"none","name":"None"},{"id":"hairline","name":"Hairline"}],"same":[]},{"id":"shadow","title":"Shadow (custom)","look":true,"def":"none","values":[{"id":"none","name":"None"},{"id":"soft","name":"Soft"}],"same":[["none","soft"]]}]},{"id":"sheet","title":"Sheet","plural":"Sheets","tier":"systemStyle","params":[{"id":"sizing","title":"Sizing","look":true,"def":"automatic","values":[{"id":"automatic","name":"macOS default"},{"id":"form","name":"Form"},{"id":"page","name":"Page"},{"id":"fitted","name":"Fit the content"}],"same":[]},{"id":"title","title":"Title","look":true,"def":"inline","values":[{"id":"inline","name":"In the sheet"},{"id":"large","name":"Large"},{"id":"none","name":"None"}],"same":[]}]},{"id":"badge","title":"Badge","plural":"Badges","tier":"systemStyle","params":[{"id":"style","title":"Style","look":true,"def":"system","values":[{"id":"system","name":"macOS default"},{"id":"capsule","name":"Capsule"},{"id":"plain","name":"Plain number"}],"same":[]},{"id":"tint","title":"Tint","look":true,"def":"none","values":[{"id":"none","name":"None"},{"id":"accent","name":"Accent colour"},{"id":"critical","name":"Red (critical)"}],"same":[["accent","critical","none"]]}]},{"id":"toast","title":"Toast","plural":"Toasts","tier":"hatchDrawn","params":[{"id":"surface","title":"Surface","look":true,"def":"","values":[{"id":"glass","name":"Glass"},{"id":"material","name":"Material"},{"id":"solid","name":"Solid"}],"same":[]},{"id":"position","title":"Position","look":true,"def":"","values":[{"id":"top","name":"Top"},{"id":"bottom","name":"Bottom"}],"same":[["bottom","top"]]},{"id":"duration","title":"Duration","look":false,"def":"","values":[{"id":"short","name":"Short"},{"id":"long","name":"Long"}],"same":[]}]},{"id":"emptyState","title":"Empty state","plural":"Empty states","tier":"systemStyle","params":[{"id":"action","title":"Next step","look":true,"def":"","values":[{"id":"none","name":"None"},{"id":"prominent","name":"Prominent button"},{"id":"link","name":"Link"}],"same":[]}]}],"systems":{"native":{"roles":[{"id":"button.primary","title":"Main action","element":"button","importance":"main","places":["actionRow","sheetFooter","alert","bottomBar","emptyState"],"recipe":{"key":"defaultAction"},"follows":true,"use":"The one action a screen, sheet or alert exists for; Return triggers it and macOS draws it as the default button.","avoid":"A second one on the same screen; anything destructive or Cancel."},{"id":"button.secondary","title":"Other action","element":"button","importance":"other","places":["actionRow","sheetFooter","bottomBar","card","form"],"recipe":{},"follows":true,"use":"Other actions on the same object, beside the main one.","avoid":"Rare or risky actions (put them in a menu)."},{"id":"button.cancel","title":"Cancel","element":"button","importance":"quiet","places":["sheetFooter","alert"],"recipe":{"key":"cancelAction"},"follows":true,"use":"Leaving a sheet or alert without a change; Escape triggers it. On the leading side of the default button.","avoid":""},{"id":"button.inRow","title":"Row action","element":"button","importance":"other","places":["listRow","inspector","popover"],"recipe":{"show":"onHover","tooltip":"title"},"follows":true,"use":"Actions on one row, item or inspector line; the list or form styles them.","avoid":"The main action of the screen."},{"id":"button.toolbar","title":"Toolbar item","element":"button","importance":"other","places":["toolbar"],"recipe":{"label":"titleAndIcon","tooltip":"title"},"follows":true,"use":"Commands for the window or the selection, with a symbol and a title; the window decides icon or text. Every one is also in the menu bar.","avoid":""},{"id":"button.toolbarPrimary","title":"Toolbar key action","element":"button","importance":"main","places":["toolbar"],"recipe":{"label":"titleAndIcon","style":"borderedProminent"},"follows":false,"use":"The one prominent action in a toolbar (Done, Submit), on its trailing side.","avoid":"More than one per toolbar."},{"id":"button.destructive","title":"Destructive action","element":"button","importance":"destructive","places":["contextMenu","alert"],"recipe":{"confirm":"yes"},"follows":true,"use":"Deleting or anything that cannot be undone: role destructive (red), confirmed first when it cannot be undone.","avoid":"The default button; an alert for a common action that can be undone."},{"id":"button.menuItem","title":"Menu item","element":"button","importance":"other","places":["contextMenu"],"recipe":{},"follows":true,"use":"An item in a menu or a context menu; the system draws it.","avoid":""},{"id":"button.link","title":"Link","element":"button","importance":"quiet","places":["form","card","inspector","emptyState"],"recipe":{"style":"link"},"follows":false,"use":"A light action inside text or under a group, such as Show All.","avoid":""},{"id":"menu.choice","title":"Action with a choice","element":"menu","importance":"other","places":["actionRow","toolbar"],"recipe":{},"follows":true,"use":"An action that needs a choice first, such as Export As.","avoid":""},{"id":"picker.viewMode","title":"View mode","element":"picker","importance":"other","places":["toolbar"],"recipe":{"style":"segmented"},"follows":false,"use":"Switching how the same content is shown, in the toolbar.","avoid":""},{"id":"picker.setting","title":"Setting","element":"picker","importance":"other","places":["form","inspector","popover"],"recipe":{},"follows":true,"use":"Choosing one value of a setting: a pop-up button.","avoid":""},{"id":"toggle.setting","title":"On or off","element":"toggle","importance":"other","places":["form","inspector","popover"],"recipe":{},"follows":true,"use":"A single setting that is on or off: a checkbox.","avoid":"A switch, except for an emphasized setting that governs a group."},{"id":"field.text","title":"Text field","element":"field","importance":"other","places":["form","sheetFooter","popover","inspector"],"recipe":{},"follows":true,"use":"Typing a short value, sized to what is expected.","avoid":""},{"id":"field.search","title":"Search","element":"field","importance":"other","places":["toolbar"],"recipe":{},"follows":true,"use":"Filtering what a pane shows.","avoid":""},{"id":"switcher.sections","title":"Sections","element":"switcher","importance":"other","places":["page"],"recipe":{"style":"tabs"},"follows":false,"use":"Switching between views of one pane: a tab view in the main area.","avoid":"A segmented control in the main area (use it in a toolbar or inspector)."},{"id":"row.standard","title":"Row","element":"row","importance":"other","places":["listRow"],"recipe":{},"follows":true,"use":"One record in a list or table; the list style draws it.","avoid":""},{"id":"card.group","title":"Group","element":"card","importance":"other","places":["page","inspector"],"recipe":{"container":"groupBox"},"follows":false,"use":"Related facts or settings grouped on a page or in the inspector: a GroupBox, small, never nested.","avoid":""},{"id":"sheet.standard","title":"Sheet","element":"sheet","importance":"other","places":["page"],"recipe":{},"follows":true,"use":"A short task that needs full attention; macOS sizes it to a form fitted to its content.","avoid":""},{"id":"badge.count","title":"Count","element":"badge","importance":"other","places":["toolbar","listRow"],"recipe":{},"follows":true,"use":"How many things wait, on a list row, a toolbar item or a menu item.","avoid":""},{"id":"emptyState.standard","title":"Nothing here","element":"emptyState","importance":"other","places":["page","emptyState"],"recipe":{"action":"prominent"},"follows":false,"use":"A pane with nothing to show: say why and give the next step, ideally a button.","avoid":""}],"places":[{"id":"toolbar","summary":"The window's toolbar.","title":"Toolbar"},{"id":"sheetFooter","summary":"The buttons at the bottom of a sheet or dialog.","title":"Sheet footer"},{"id":"bottomBar","summary":"A bar pinned to the bottom of a pane, with the pane's actions.","title":"Bottom bar"},{"id":"listRow","summary":"One row of a list, table or queue.","title":"List row"},{"id":"card","summary":"Inside a card or a grouped box on a page.","title":"Card"},{"id":"inspector","summary":"The trailing inspector or a side panel about the selection.","title":"Inspector"},{"id":"popover","summary":"A popover or a small floating panel.","title":"Popover"},{"id":"form","summary":"A settings form or another grouped form.","title":"Form"},{"id":"emptyState","summary":"What a pane shows when there is nothing in it.","title":"Empty state"},{"id":"contextMenu","summary":"A right-click menu or the items of a More menu.","title":"Context menu"},{"id":"alert","summary":"An alert or a confirmation dialog.","title":"Alert"},{"id":"page","summary":"The content area of a screen or sheet, where cards, sheets and toasts appear.","title":"Page"},{"id":"actionRow","summary":"The actions under a page or ticket title.","title":"Action row"}],"advice":[]},"glass":{"roles":[{"id":"button.primary","title":"Main action","element":"button","importance":"main","places":["actionRow","bottomBar","floating"],"recipe":{"key":"defaultAction","label":"titleAndIcon","size":"large","style":"glassProminent"},"follows":false,"use":"The one main action of a screen, ticket or bottom bar, first in its row; in a sheet, the default button.","avoid":"A second one on the same screen; actions inside a row or card."},{"id":"button.sheetDefault","title":"Default button","element":"button","importance":"main","places":["sheetFooter","alert"],"recipe":{"key":"defaultAction"},"follows":true,"use":"The button Return triggers in a sheet or alert; macOS draws it as the default.","avoid":"Cancel or a destructive action."},{"id":"button.secondary","title":"Other action","element":"button","importance":"other","places":["actionRow","bottomBar","floating"],"recipe":{"label":"titleAndIcon","size":"large","style":"glass"},"follows":false,"use":"Other actions on the same object, in the same row as the main action; the row wraps.","avoid":"Inside a row, card or toast; rare or risky actions (put them in More)."},{"id":"button.cancel","title":"Cancel","element":"button","importance":"quiet","places":["sheetFooter","alert"],"recipe":{"key":"cancelAction"},"follows":true,"use":"Leaving a sheet or dialog without a change; on the leading side of the default button.","avoid":""},{"id":"button.inRow","title":"Row action","element":"button","importance":"other","places":["listRow","card","inspector","popover"],"recipe":{"label":"titleOnly","show":"onHover","size":"small","style":"bordered"},"follows":false,"use":"Actions inside a row, card, inspector line or toast, shown on hover or selection.","avoid":"The main action of the screen; glass inside content."},{"id":"button.toolbar","title":"Toolbar item","element":"button","importance":"other","places":["toolbar"],"recipe":{"label":"titleAndIcon","tooltip":"shortcut"},"follows":true,"use":"Commands for the window or the selection, with a symbol and a title; the tooltip shows the shortcut. Every one is also in the menu bar.","avoid":"Shortcuts in the label; a toolbar background or tint."},{"id":"button.destructive","title":"Destructive action","element":"button","importance":"destructive","places":["contextMenu","alert"],"recipe":{"confirm":"yes"},"follows":true,"use":"Rare or risky actions (Drop, Delete): an item in More or a context menu, then a confirmation.","avoid":"A visible button in an action row or row; the default button."},{"id":"button.menuItem","title":"Menu item","element":"button","importance":"other","places":["contextMenu"],"recipe":{},"follows":true,"use":"An item in a menu, a More menu or a context menu; the system draws it.","avoid":""},{"id":"button.link","title":"Link","element":"button","importance":"quiet","places":["form","inspector","emptyState"],"recipe":{"style":"link"},"follows":false,"use":"A light action inside text or under a group, such as Show All or Open in GitHub.","avoid":""},{"id":"menu.choice","title":"Action with a choice","element":"menu","importance":"other","places":["actionRow","bottomBar"],"recipe":{"indicator":"hidden","label":"titleAndIcon","look":"glass","style":"button"},"follows":false,"use":"An action that needs a choice first: a glass button that opens a menu, no arrow.","avoid":""},{"id":"menu.more","title":"More","element":"menu","importance":"quiet","places":["actionRow","bottomBar"],"recipe":{"indicator":"hidden","label":"titleAndIcon","look":"glass","style":"button"},"follows":false,"use":"Rare actions on the object, the risky ones last and confirmed.","avoid":""},{"id":"picker.viewMode","title":"View mode","element":"picker","importance":"other","places":["toolbar"],"recipe":{"label":"hidden","style":"segmented"},"follows":false,"use":"Switching how the same content is shown, in the toolbar.","avoid":""},{"id":"picker.setting","title":"Setting","element":"picker","importance":"other","places":["form","inspector","popover"],"recipe":{},"follows":true,"use":"Choosing one value of a setting, such as a provider or a model: a pop-up button.","avoid":""},{"id":"toggle.setting","title":"On or off","element":"toggle","importance":"other","places":["form","inspector","popover"],"recipe":{"size":"mini","style":"switch"},"follows":false,"use":"A setting that is on or off: a mini switch, so rows in a grouped form keep their height.","avoid":""},{"id":"field.text","title":"Text field","element":"field","importance":"other","places":["form","popover","inspector"],"recipe":{},"follows":true,"use":"Typing a short value, sized to what is expected.","avoid":""},{"id":"field.search","title":"Search","element":"field","importance":"other","places":["toolbar"],"recipe":{},"follows":true,"use":"Filtering what a pane shows, with tokens and saved views.","avoid":""},{"id":"switcher.sections","title":"Sections","element":"switcher","importance":"other","places":["floating"],"recipe":{"size":"large","style":"dock"},"follows":false,"use":"Switching between up to five sections of one pane: a glass text dock floating over it.","avoid":""},{"id":"row.queue","title":"Row","element":"row","importance":"other","places":["listRow"],"recipe":{"actions":"onHover"},"follows":true,"use":"One record in a list or queue: status glyph, title, actions on hover; the list draws the row.","avoid":""},{"id":"card.details","title":"Details","element":"card","importance":"other","places":["page","inspector"],"recipe":{"container":"formSection"},"follows":false,"use":"Facts or settings grouped on a page or in the inspector: a grouped Form section.","avoid":"Glass: glass is for floating controls, never for content."},{"id":"sheet.standard","title":"Sheet","element":"sheet","importance":"other","places":["page"],"recipe":{},"follows":true,"use":"A short task that needs full attention; macOS sizes it.","avoid":""},{"id":"badge.count","title":"Count","element":"badge","importance":"other","places":["toolbar","listRow"],"recipe":{},"follows":true,"use":"How many things wait for the owner, on a toolbar item or a row.","avoid":""},{"id":"toast.feedback","title":"Toast","element":"toast","importance":"other","places":["floating"],"recipe":{"duration":"short","position":"bottom","surface":"glass"},"follows":false,"use":"Short feedback after an action, with Undo when it can be undone: a glass capsule floating over the content.","avoid":"Errors that need an answer."},{"id":"emptyState.standard","title":"Nothing here","element":"emptyState","importance":"other","places":["page","emptyState"],"recipe":{"action":"prominent"},"follows":false,"use":"A pane with nothing to show: say why and give the next step.","avoid":""}],"places":[{"id":"toolbar","summary":"The window's toolbar.","title":"Toolbar"},{"id":"sheetFooter","summary":"The buttons at the bottom of a sheet or dialog.","title":"Sheet footer"},{"id":"bottomBar","summary":"A bar pinned to the bottom of a pane, with the pane's actions.","title":"Bottom bar"},{"id":"listRow","summary":"One row of a list, table or queue.","title":"List row"},{"id":"card","summary":"Inside a card or a grouped box on a page.","title":"Card"},{"id":"inspector","summary":"The trailing inspector or a side panel about the selection.","title":"Inspector"},{"id":"popover","summary":"A popover or a small floating panel.","title":"Popover"},{"id":"form","summary":"A settings form or another grouped form.","title":"Form"},{"id":"emptyState","summary":"What a pane shows when there is nothing in it.","title":"Empty state"},{"id":"contextMenu","summary":"A right-click menu or the items of a More menu.","title":"Context menu"},{"id":"alert","summary":"An alert or a confirmation dialog.","title":"Alert"},{"id":"page","summary":"The content area of a screen or sheet, where cards, sheets and toasts appear.","title":"Page"},{"id":"actionRow","summary":"The actions under a page or ticket title.","title":"Action row"},{"id":"floating","summary":"A floating glass bar or rail over the content, like a dock or a command bar (macOS 26 and later).","title":"Floating"}],"advice":[]},"hatch":{"roles":[{"id":"button.primary","title":"Main action","element":"button","importance":"main","places":["bottomBar","emptyState","page","actionRow","floating"],"recipe":{"label":"titleOnly","size":"large","style":"automatic"},"follows":false,"use":"The one main action of a screen, ticket or bottom bar, first in its row; in a sheet, the default button.","avoid":"A second one on the same screen; actions inside a row or card."},{"id":"button.sheetDefault","title":"Default button","element":"button","importance":"main","places":["sheetFooter","alert"],"recipe":{"key":"defaultAction","label":"titleOnly","style":"automatic"},"follows":false,"use":"The button Return triggers in a sheet or alert; macOS draws it as the default.","avoid":"Cancel or a destructive action."},{"id":"button.secondary","title":"Other action","element":"button","importance":"other","places":["sheetFooter","bottomBar","emptyState","alert","page","actionRow","floating"],"recipe":{"label":"titleOnly","style":"automatic"},"follows":false,"use":"Other actions on the same object, in the same row as the main action; the row wraps.","avoid":"Inside a row, card or toast; rare or risky actions (put them in More)."},{"id":"button.cancel","title":"Cancel","element":"button","importance":"quiet","places":["sheetFooter","alert","page"],"recipe":{"key":"cancelAction","label":"titleOnly"},"follows":false,"use":"Leaving a sheet or dialog without a change; on the leading side of the default button.","avoid":""},{"id":"button.inRow","title":"Row action","element":"button","importance":"other","places":["listRow","card","inspector","popover","form"],"recipe":{"label":"titleOnly","size":"small","style":"bordered"},"follows":false,"use":"Actions inside a row, card, inspector line or toast, shown on hover or selection.","avoid":"The main action of the screen; glass inside content."},{"id":"button.toolbar","title":"Toolbar item","element":"button","importance":"other","places":["toolbar"],"recipe":{"label":"titleAndIcon","tooltip":"title"},"follows":false,"use":"Commands for the window or the selection, with a symbol and a title; the tooltip shows the shortcut. Every one is also in the menu bar.","avoid":"Shortcuts in the label; a toolbar background or tint."},{"id":"button.destructive","title":"Destructive action","element":"button","importance":"destructive","places":["sheetFooter","contextMenu","alert"],"recipe":{"label":"titleOnly"},"follows":false,"use":"Rare or risky actions (Drop, Delete): an item in More or a context menu, then a confirmation.","avoid":"A visible button in an action row or row; the default button."},{"id":"button.menuItem","title":"Menu item","element":"button","importance":"other","places":["contextMenu"],"recipe":{"label":"titleOnly"},"follows":false,"use":"An item in a menu, a More menu or a context menu; the system draws it.","avoid":""},{"id":"button.link","title":"Link","element":"button","importance":"quiet","places":["listRow","card","inspector","form","emptyState"],"recipe":{"label":"titleOnly","style":"link"},"follows":false,"use":"A light action inside text or under a group, such as Show All or Open in GitHub.","avoid":""},{"id":"menu.choice","title":"Action with a choice","element":"menu","importance":"other","places":["bottomBar","page","actionRow"],"recipe":{"label":"titleAndIcon","style":"borderlessButton"},"follows":false,"use":"An action that needs a choice first: a glass button that opens a menu, no arrow.","avoid":""},{"id":"menu.more","title":"More","element":"menu","importance":"quiet","places":["actionRow","bottomBar"],"recipe":{"indicator":"hidden","label":"titleAndIcon","look":"glass","style":"button"},"follows":false,"use":"Rare actions on the object, the risky ones last and confirmed. Not used in the app yet.","avoid":""},{"id":"picker.viewMode","title":"View mode","element":"picker","importance":"other","places":["toolbar"],"recipe":{"label":"hidden","style":"segmented"},"follows":false,"use":"Switching how the same content is shown, in the toolbar.","avoid":""},{"id":"picker.setting","title":"Setting","element":"picker","importance":"other","places":["listRow","card","inspector","popover","form"],"recipe":{"label":"hidden","style":"segmented"},"follows":false,"use":"Choosing one value of a setting, such as a provider or a model: a pop-up button.","avoid":""},{"id":"toggle.setting","title":"On or off","element":"toggle","importance":"other","places":["listRow","card","inspector","popover","form"],"recipe":{},"follows":true,"use":"A setting that is on or off: a mini switch, so rows in a grouped form keep their height.","avoid":""},{"id":"field.text","title":"Text field","element":"field","importance":"other","places":["listRow","card","inspector","popover","form"],"recipe":{},"follows":true,"use":"Typing a short value, sized to what is expected.","avoid":""},{"id":"field.search","title":"Search","element":"field","importance":"other","places":["toolbar"],"recipe":{},"follows":false,"use":"Filtering what a pane shows, with tokens and saved views.","avoid":""},{"id":"switcher.sections","title":"Sections","element":"switcher","importance":"other","places":["floating"],"recipe":{"size":"large","style":"dock"},"follows":false,"use":"Switching between up to five sections of one pane: a glass text dock floating over it. Not used in the app yet.","avoid":""},{"id":"row.queue","title":"Row","element":"row","importance":"other","places":["listRow"],"recipe":{"actions":"onHover"},"follows":true,"use":"One record in a list or queue: status glyph, title, actions on hover; the list draws the row. Not used in the app yet.","avoid":""},{"id":"card.details","title":"Details","element":"card","importance":"other","places":["page","inspector"],"recipe":{"container":"formSection"},"follows":false,"use":"Facts or settings grouped on a page or in the inspector: a grouped Form section. Not used in the app yet.","avoid":"Glass: glass is for floating controls, never for content."},{"id":"sheet.standard","title":"Sheet","element":"sheet","importance":"other","places":["page"],"recipe":{},"follows":true,"use":"A short task that needs full attention; macOS sizes it. Not used in the app yet.","avoid":""},{"id":"badge.count","title":"Count","element":"badge","importance":"other","places":["toolbar","listRow"],"recipe":{},"follows":true,"use":"How many things wait for the owner, on a toolbar item or a row. Not used in the app yet.","avoid":""},{"id":"toast.feedback","title":"Toast","element":"toast","importance":"other","places":["floating"],"recipe":{"duration":"short","position":"bottom","surface":"glass"},"follows":false,"use":"Short feedback after an action, with Undo when it can be undone: a glass capsule floating over the content. Not used in the app yet.","avoid":"Errors that need an answer."},{"id":"emptyState.standard","title":"Nothing here","element":"emptyState","importance":"other","places":["page","emptyState"],"recipe":{"action":"prominent"},"follows":false,"use":"A pane with nothing to show: say why and give the next step. Not used in the app yet.","avoid":""},{"id":"toggle.menuItem","title":"Toggle (other, context menu, page)","element":"toggle","importance":"other","places":["contextMenu","page"],"recipe":{},"follows":true,"use":"Toggles at other importance in: context menu, page. The app's most used look there (13 uses).","avoid":""},{"id":"menu.toolbar","title":"Menu (other, toolbar, list row, card, inspector, form, context menu, floating)","element":"menu","importance":"other","places":["toolbar","listRow","card","inspector","form","contextMenu","floating"],"recipe":{"label":"titleOnly"},"follows":false,"use":"Menus at other importance in: toolbar, list row, card, inspector, form, context menu, floating. The app's most used look there (23 uses).","avoid":""},{"id":"picker.menuItem","title":"Picker (other, context menu, page, floating)","element":"picker","importance":"other","places":["contextMenu","page","floating"],"recipe":{"label":"hidden","style":"segmented"},"follows":false,"use":"Pickers at other importance in: context menu, page, floating. The app's most used look there (21 uses).","avoid":""},{"id":"button.primaryInRow","title":"Button (main, list row, card, popover, form)","element":"button","importance":"main","places":["listRow","card","popover","form"],"recipe":{"label":"titleOnly","size":"large","style":"glassProminent"},"follows":false,"use":"Buttons at main importance in: list row, card, popover, form. The app's most used look there (25 uses).","avoid":""},{"id":"button.destructiveInRow","title":"Button (destructive, card, form)","element":"button","importance":"destructive","places":["card","form"],"recipe":{"label":"titleOnly"},"follows":false,"use":"Buttons at destructive importance in: card, form. The app's most used look there (3 uses).","avoid":""},{"id":"button.linkOther","title":"Button (quiet, floating)","element":"button","importance":"quiet","places":["floating"],"recipe":{"label":"titleAndIcon"},"follows":true,"use":"Buttons at quiet importance in: floating. The app's most used look there (4 uses).","avoid":""},{"id":"field.inPage","title":"Text field (other, alert, page, floating)","element":"field","importance":"other","places":["alert","page","floating"],"recipe":{"style":"roundedBorder"},"follows":false,"use":"Text fields at other importance in: alert, page, floating. The app's most used look there (25 uses).","avoid":""}],"places":[{"id":"toolbar","summary":"The window's toolbar.","title":"Toolbar"},{"id":"sheetFooter","summary":"The buttons at the bottom of a sheet or dialog.","title":"Sheet footer"},{"id":"bottomBar","summary":"A bar pinned to the bottom of a pane, with the pane's actions.","title":"Bottom bar"},{"id":"listRow","summary":"One row of a list, table or queue.","title":"List row"},{"id":"card","summary":"Inside a card or a grouped box on a page.","title":"Card"},{"id":"inspector","summary":"The trailing inspector or a side panel about the selection.","title":"Inspector"},{"id":"popover","summary":"A popover or a small floating panel.","title":"Popover"},{"id":"form","summary":"A settings form or another grouped form.","title":"Form"},{"id":"emptyState","summary":"What a pane shows when there is nothing in it.","title":"Empty state"},{"id":"contextMenu","summary":"A right-click menu or the items of a More menu.","title":"Context menu"},{"id":"alert","summary":"An alert or a confirmation dialog.","title":"Alert"},{"id":"page","summary":"The content area of a screen or sheet, where cards, sheets and toasts appear.","title":"Page"},{"id":"actionRow","summary":"The actions under a page or ticket title.","title":"Action row"},{"id":"floating","summary":"A floating glass bar or rail over the content, like a dock or a command bar (macOS 26 and later).","title":"Floating"}],"advice":[{"kind":"redundant","message":"button.primary: style automatic is what macOS does anyway; leave it out.","role":"button.primary"},{"kind":"redundant","message":"button.sheetDefault: style automatic is what macOS does anyway; leave it out.","role":"button.sheetDefault"},{"kind":"redundant","message":"button.secondary: style automatic is what macOS does anyway; leave it out.","role":"button.secondary"},{"kind":"systemPlace","message":"picker.menuItem styles a context menu: Menu items are drawn by the system; a role here can only be destructive, and icons are a rule for the whole group.","role":"picker.menuItem"},{"kind":"glassInContent","message":"button.primaryInRow puts Liquid Glass in the content layer (list row, card, form); Apple keeps glass for controls and navigation and uses standard materials for content.","role":"button.primaryInRow"},{"kind":"systemPlace","message":"field.inPage styles a alert: Alert buttons are drawn by the system; the default and Cancel come from their keys and roles.","role":"field.inPage"}]}},"questions":[{"id":"look.button.primary","role":"button.primary","roleTitle":"Main action","element":"button","title":"Main action","detail":"12 looks in use in bottom bar, empty state, page, action row, floating (8 rare ones not shown)","rec":0,"reason":"It is the look most of them have today (6 of 19), so choosing it changes the fewest screens.","my":0,"myReason":"Same as the Glass template and the most used; nothing to change.","options":[{"title":"style glassProminent, size large, label titleAndIcon","recipe":{"label":"titleAndIcon","size":"large","style":"glassProminent"},"count":6,"img":"q/button.primary-0","follow":false},{"title":"style glassProminent, label titleAndIcon","recipe":{"label":"titleAndIcon","style":"glassProminent"},"count":2,"img":"q/button.primary-1","follow":false},{"title":"style glassProminent, size large, label titleOnly","recipe":{"label":"titleOnly","size":"large","style":"glassProminent"},"count":2,"img":"q/button.primary-2","follow":false},{"title":"style borderedProminent, label titleOnly","recipe":{"label":"titleOnly","style":"borderedProminent"},"count":1,"img":"q/button.primary-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["bottomBar","emptyState","page","actionRow","floating"]},{"id":"look.button.sheetDefault","role":"button.sheetDefault","roleTitle":"Default button","element":"button","title":"Default button","detail":"5 looks in use in sheet footer, alert (1 rare ones not shown)","rec":0,"reason":"It is the look most of them have today (14 of 24), so choosing it changes the fewest screens. Closest to the Glass template, the macOS 27 reference (\u2013): option 3.","my":4,"myReason":"The Return key already makes it the prominent button in a sheet or alert, so a filled style only repeats macOS. The Glass template follows macOS here.","options":[{"title":"style borderedProminent, label titleOnly","recipe":{"key":"defaultAction","label":"titleOnly","style":"borderedProminent"},"count":14,"img":"q/button.sheetDefault-0","follow":false},{"title":"style glassProminent, label titleOnly","recipe":{"label":"titleOnly","style":"glassProminent"},"count":6,"img":"q/button.sheetDefault-1","follow":false},{"title":"label titleOnly","recipe":{"key":"defaultAction","label":"titleOnly"},"count":2,"img":"q/button.sheetDefault-2","follow":false},{"title":"style glassProminent, label titleAndIcon","recipe":{"key":"defaultAction","label":"titleAndIcon","style":"glassProminent"},"count":1,"img":"q/button.sheetDefault-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["sheetFooter","alert"]},{"id":"look.button.secondary","role":"button.secondary","roleTitle":"Other action","element":"button","title":"Other action","detail":"18 looks in use in sheet footer, bottom bar, empty state, alert, page, action row, floating (14 rare ones not shown)","rec":0,"reason":"It is the look most of them have today (27 of 116), so choosing it changes the fewest screens.","my":0,"myReason":"Keep the most used for now, but this role spans sheet footers and floating bars, which the Glass template keeps apart. Split it first (CD32).","options":[{"title":"label titleOnly","recipe":{"label":"titleOnly"},"count":27,"img":"q/button.secondary-0","follow":false},{"title":"style plain, label titleOnly","recipe":{"label":"titleOnly","style":"plain"},"count":15,"img":"q/button.secondary-1","follow":false},{"title":"label iconOnly","recipe":{"label":"iconOnly","tooltip":"title"},"count":8,"img":"q/button.secondary-2","follow":false},{"title":"style plain, label iconOnly","recipe":{"label":"iconOnly","style":"plain"},"count":8,"img":"q/button.secondary-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["sheetFooter","bottomBar","emptyState","alert","page","actionRow","floating"]},{"id":"look.button.cancel","role":"button.cancel","roleTitle":"Cancel","element":"button","title":"Cancel","detail":"4 looks in use in sheet footer, alert, page","rec":0,"reason":"It is the look most of them have today (24 of 29), so choosing it changes the fewest screens.","my":4,"myReason":"Escape makes it the cancel button and macOS draws it; the Glass template follows macOS.","options":[{"title":"label titleOnly","recipe":{"key":"cancelAction","label":"titleOnly"},"count":24,"img":"q/button.cancel-0","follow":false},{"title":"style glass, label titleOnly","recipe":{"key":"cancelAction","label":"titleOnly","style":"glass"},"count":3,"img":"q/button.cancel-1","follow":false},{"title":"style glass, size large, label titleAndIcon","recipe":{"key":"cancelAction","label":"titleAndIcon","size":"large","style":"glass"},"count":1,"img":"q/button.cancel-2","follow":false},{"title":"style link, label titleOnly","recipe":{"label":"titleOnly","style":"link"},"count":1,"img":"q/button.cancel-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["sheetFooter","alert","page"]},{"id":"look.button.inRow","role":"button.inRow","roleTitle":"Row action","element":"button","title":"Row action","detail":"29 looks in use in list row, card, inspector, popover, form (25 rare ones not shown)","rec":0,"reason":"It is the look most of them have today (24 of 167), so choosing it changes the fewest screens.","my":0,"myReason":"Same as the Glass template (small, bordered, title) and the most used.","options":[{"title":"style bordered, size small, label titleOnly","recipe":{"label":"titleOnly","size":"small","style":"bordered"},"count":24,"img":"q/button.inRow-0","follow":false},{"title":"label titleOnly","recipe":{"label":"titleOnly"},"count":21,"img":"q/button.inRow-1","follow":false},{"title":"size small, label titleOnly","recipe":{"label":"titleOnly","size":"small"},"count":17,"img":"q/button.inRow-2","follow":false},{"title":"style glass, label titleAndIcon","recipe":{"label":"titleAndIcon","style":"glass","tooltip":"title"},"count":17,"img":"q/button.inRow-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["listRow","card","inspector","popover","form"]},{"id":"look.button.toolbar","role":"button.toolbar","roleTitle":"Toolbar item","element":"button","title":"Toolbar item","detail":"3 looks in use in toolbar","rec":0,"reason":"It is the look most of them have today (10 of 17), so choosing it changes the fewest screens.","my":0,"myReason":"Icon and title, as the Glass template; macOS 27 toolbars draw the glass.","options":[{"title":"label titleAndIcon","recipe":{"label":"titleAndIcon","tooltip":"title"},"count":10,"img":"q/button.toolbar-0","follow":false},{"title":"label iconOnly","recipe":{"label":"iconOnly","tooltip":"title"},"count":6,"img":"q/button.toolbar-1","follow":false},{"title":"label titleOnly","recipe":{"label":"titleOnly"},"count":1,"img":"q/button.toolbar-2","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["toolbar"]},{"id":"look.button.destructive","role":"button.destructive","roleTitle":"Destructive action","element":"button","title":"Destructive action","detail":"2 looks in use in sheet footer, context menu, alert","rec":0,"reason":"It is the look most of them have today (13 of 16), so choosing it changes the fewest screens.","my":2,"myReason":"In context menus and alerts macOS draws it; the Glass template follows macOS and asks to confirm.","options":[{"title":"label titleOnly","recipe":{"label":"titleOnly"},"count":13,"img":"q/button.destructive-0","follow":false},{"title":"label titleAndIcon","recipe":{"label":"titleAndIcon"},"count":3,"img":"q/button.destructive-1","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["sheetFooter","contextMenu","alert"]},{"id":"look.button.menuItem","role":"button.menuItem","roleTitle":"Menu item","element":"button","title":"Menu item","detail":"2 looks in use in context menu","rec":0,"reason":"It is the look most of them have today (74 of 90), so choosing it changes the fewest screens.","my":2,"myReason":"Menu items are drawn by macOS; only order and wording are yours (Rules).","options":[{"title":"label titleOnly","recipe":{"label":"titleOnly"},"count":74,"img":"q/button.menuItem-0","follow":false},{"title":"label titleAndIcon","recipe":{"label":"titleAndIcon"},"count":16,"img":"q/button.menuItem-1","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["contextMenu"]},{"id":"look.button.link","role":"button.link","roleTitle":"Link","element":"button","title":"Link","detail":"3 looks in use in list row, card, inspector, form, empty state","rec":0,"reason":"It is the look most of them have today (28 of 30), so choosing it changes the fewest screens.","my":0,"myReason":"Same as the Glass template and 28 of 30 uses.","options":[{"title":"style link, label titleOnly","recipe":{"label":"titleOnly","style":"link"},"count":28,"img":"q/button.link-0","follow":false},{"title":"style glass, label titleOnly, shape capsule","recipe":{"key":"cancelAction","label":"titleOnly","shape":"capsule","style":"glass"},"count":1,"img":"q/button.link-1","follow":false},{"title":"style link, label titleAndIcon","recipe":{"label":"titleAndIcon","style":"link"},"count":1,"img":"q/button.link-2","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["listRow","card","inspector","form","emptyState"]},{"id":"look.menu.choice","role":"menu.choice","roleTitle":"Action with a choice","element":"menu","title":"Action with a choice","detail":"8 looks in use in bottom bar, page, action row (4 rare ones not shown)","rec":0,"reason":"It is the look most of them have today (2 of 9), so choosing it changes the fewest screens. Closest to the Glass template, the macOS 27 reference (style button, label titleAndIcon, look glass, indicator hidden): option 4.","my":null,"myReason":"None of the four is the Glass template's look (glass button, icon and title, no arrow). The Designer should offer it as an option; until then choose option 1 as provisional.","options":[{"title":"style borderlessButton, label titleAndIcon","recipe":{"label":"titleAndIcon","style":"borderlessButton"},"count":2,"img":"q/menu.choice-0","follow":false},{"title":"label titleAndIcon, indicator hidden","recipe":{"indicator":"hidden","label":"titleAndIcon"},"count":1,"img":"q/menu.choice-1","follow":false},{"title":"style borderlessButton, label titleOnly","recipe":{"label":"titleOnly","style":"borderlessButton"},"count":1,"img":"q/menu.choice-2","follow":false},{"title":"style button, label titleOnly","recipe":{"label":"titleOnly","style":"button"},"count":1,"img":"q/menu.choice-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["bottomBar","page","actionRow"]},{"id":"look.picker.setting","role":"picker.setting","roleTitle":"Setting","element":"picker","title":"Setting","detail":"5 looks in use in list row, card, inspector, popover, form (1 rare ones not shown)","rec":0,"reason":"It is the look most of them have today (26 of 53), so choosing it changes the fewest screens. Closest to the Glass template, the macOS 27 reference (\u2013): option 2.","my":4,"myReason":"The Glass template follows macOS (a pop-up) for settings; 26 uses are segmented today. Choose segmented only if you want that as Hatch's own rule.","options":[{"title":"style segmented, label hidden","recipe":{"label":"hidden","style":"segmented"},"count":26,"img":"q/picker.setting-0","follow":false},{"title":"label hidden","recipe":{"label":"hidden"},"count":12,"img":"q/picker.setting-1","follow":false},{"title":"style menu, label hidden","recipe":{"label":"hidden","style":"menu"},"count":8,"img":"q/picker.setting-2","follow":false},{"title":"\u2013","recipe":{},"count":6,"img":"q/picker.setting-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["listRow","card","inspector","popover","form"]},{"id":"look.toggle.setting","role":"toggle.setting","roleTitle":"On or off","element":"toggle","title":"On or off","detail":"5 looks in use in list row, card, inspector, popover, form (1 rare ones not shown)","rec":0,"reason":"It is the look most of them have today (23 of 30), so choosing it changes the fewest screens. Closest to the Glass template, the macOS 27 reference (style switch, size mini): option 4.","my":3,"myReason":"The Glass template and the macOS 27 reference use a mini switch; option 4 is the closest. The most used (a checkbox) is the macOS default, not Hatch's look.","options":[{"title":"\u2013","recipe":{},"count":23,"img":"q/toggle.setting-0","follow":false},{"title":"style checkbox","recipe":{"style":"checkbox"},"count":3,"img":"q/toggle.setting-1","follow":false},{"title":"style button","recipe":{"style":"button"},"count":2,"img":"q/toggle.setting-2","follow":false},{"title":"style switch","recipe":{"style":"switch"},"count":1,"img":"q/toggle.setting-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["listRow","card","inspector","popover","form"]},{"id":"look.field.text","role":"field.text","roleTitle":"Text field","element":"field","title":"Text field","detail":"4 looks in use in list row, card, inspector, popover, form","rec":0,"reason":"It is the look most of them have today (21 of 51), so choosing it changes the fewest screens.","my":0,"myReason":"macOS default, as the Glass template, and the most used.","options":[{"title":"\u2013","recipe":{},"count":21,"img":"q/field.text-0","follow":false},{"title":"style plain","recipe":{"style":"plain"},"count":17,"img":"q/field.text-1","follow":false},{"title":"style roundedBorder","recipe":{"style":"roundedBorder"},"count":12,"img":"q/field.text-2","follow":false},{"title":"style roundedBorder, size small","recipe":{"size":"small","style":"roundedBorder"},"count":1,"img":"q/field.text-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["listRow","card","inspector","popover","form"]},{"id":"look.toggle.menuItem","role":"toggle.menuItem","roleTitle":"Toggle (other, context menu, page)","element":"toggle","title":"Toggle (other, context menu, page)","detail":"4 looks in use in context menu, page","rec":0,"reason":"It is the look most of them have today (6 of 13), so choosing it changes the fewest screens.","my":4,"myReason":"A context menu draws its own toggles (a check mark); there is no look to choose.","options":[{"title":"\u2013","recipe":{},"count":6,"img":"q/toggle.menuItem-0","follow":false},{"title":"style button","recipe":{"style":"button"},"count":4,"img":"q/toggle.menuItem-1","follow":false},{"title":"style checkbox","recipe":{"style":"checkbox"},"count":2,"img":"q/toggle.menuItem-2","follow":false},{"title":"style switch, size small","recipe":{"size":"small","style":"switch"},"count":1,"img":"q/toggle.menuItem-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["contextMenu","page"]},{"id":"look.menu.toolbar","role":"menu.toolbar","roleTitle":"Menu (other, toolbar, list row, card, inspector, form, context menu, floating)","element":"menu","title":"Menu (other, toolbar, list row, card, inspector, form, context menu, floating)","detail":"14 looks in use in toolbar, list row, card, inspector, form, context menu, floating (10 rare ones not shown)","rec":0,"reason":"It is the look most of them have today (5 of 23), so choosing it changes the fewest screens.","my":0,"myReason":"Keep the most used, but rename it: it is used in rows, cards and the inspector, not only the toolbar.","options":[{"title":"label titleOnly","recipe":{"label":"titleOnly"},"count":5,"img":"q/menu.toolbar-0","follow":false},{"title":"style button, size small, look bordered","recipe":{"look":"bordered","size":"small","style":"button"},"count":4,"img":"q/menu.toolbar-1","follow":false},{"title":"style button, label iconOnly, look borderless, indicator hidden","recipe":{"indicator":"hidden","label":"iconOnly","look":"borderless","style":"button"},"count":3,"img":"q/menu.toolbar-2","follow":false},{"title":"label iconOnly","recipe":{"label":"iconOnly"},"count":1,"img":"q/menu.toolbar-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["toolbar","listRow","card","inspector","form","contextMenu","floating"]},{"id":"look.picker.menuItem","role":"picker.menuItem","roleTitle":"Picker (other, context menu, page, floating)","element":"picker","title":"Picker (other, context menu, page, floating)","detail":"8 looks in use in context menu, page, floating (4 rare ones not shown)","rec":0,"reason":"It is the look most of them have today (7 of 21), so choosing it changes the fewest screens.","my":4,"myReason":"Context menus are drawn by macOS. The page and floating uses are different jobs and should move to Setting and Sections.","options":[{"title":"style segmented, label hidden","recipe":{"label":"hidden","style":"segmented"},"count":7,"img":"q/picker.menuItem-0","follow":false},{"title":"style menu, label hidden","recipe":{"label":"hidden","style":"menu"},"count":5,"img":"q/picker.menuItem-1","follow":false},{"title":"\u2013","recipe":{},"count":3,"img":"q/picker.menuItem-2","follow":false},{"title":"label hidden","recipe":{"label":"hidden"},"count":2,"img":"q/picker.menuItem-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["contextMenu","page","floating"]},{"id":"look.button.primaryInRow","role":"button.primaryInRow","roleTitle":"Button (main, list row, card, popover, form)","element":"button","title":"Button (main, list row, card, popover, form)","detail":"14 looks in use in list row, card, popover, form (10 rare ones not shown)","rec":0,"reason":"It is the look most of them have today (4 of 25), so choosing it changes the fewest screens.","my":1,"myReason":"Option 1 puts Liquid Glass in content, which Apple keeps for controls and navigation. Filled (bordered prominent) is the nearest look without glass.","options":[{"title":"style glassProminent, size large, label titleOnly","recipe":{"label":"titleOnly","size":"large","style":"glassProminent"},"count":4,"img":"q/button.primaryInRow-0","follow":false},{"title":"style borderedProminent, label titleOnly","recipe":{"label":"titleOnly","style":"borderedProminent"},"count":3,"img":"q/button.primaryInRow-1","follow":false},{"title":"style glassProminent, label titleAndIcon","recipe":{"label":"titleAndIcon","style":"glassProminent"},"count":2,"img":"q/button.primaryInRow-2","follow":false},{"title":"style glassProminent, label titleOnly, shape capsule","recipe":{"label":"titleOnly","shape":"capsule","style":"glassProminent"},"count":2,"img":"q/button.primaryInRow-3","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["listRow","card","popover","form"]},{"id":"look.button.destructiveInRow","role":"button.destructiveInRow","roleTitle":"Button (destructive, card, form)","element":"button","title":"Button (destructive, card, form)","detail":"3 looks in use in card, form","rec":0,"reason":"It is the look most of them have today (1 of 3), so choosing it changes the fewest screens.","my":1,"myReason":"Small, bordered and red: the same as Row action with the critical tint, so a row reads the same everywhere.","options":[{"title":"label titleOnly","recipe":{"label":"titleOnly"},"count":1,"img":"q/button.destructiveInRow-0","follow":false},{"title":"style bordered, size small, label titleAndIcon, tint critical","recipe":{"label":"titleAndIcon","size":"small","style":"bordered","tint":"critical"},"count":1,"img":"q/button.destructiveInRow-1","follow":false},{"title":"style glass, label titleAndIcon","recipe":{"label":"titleAndIcon","style":"glass","tooltip":"title"},"count":1,"img":"q/button.destructiveInRow-2","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["card","form"]},{"id":"look.field.inPage","role":"field.inPage","roleTitle":"Text field (other, alert, page, floating)","element":"field","title":"Text field (other, alert, page, floating)","detail":"3 looks in use in alert, page, floating","rec":0,"reason":"It is the look most of them have today (17 of 25), so choosing it changes the fewest screens.","my":0,"myReason":"Keep the most used, and take Alert out of its places: alerts draw their own fields.","options":[{"title":"style roundedBorder","recipe":{"style":"roundedBorder"},"count":17,"img":"q/field.inPage-0","follow":false},{"title":"style plain","recipe":{"style":"plain"},"count":5,"img":"q/field.inPage-1","follow":false},{"title":"\u2013","recipe":{},"count":3,"img":"q/field.inPage-2","follow":false},{"title":"Follow macOS","recipe":null,"count":0,"img":null,"follow":true},{"title":"Not sure yet","recipe":null,"count":0,"img":null,"follow":false}],"places":["alert","page","floating"]}],"rules":[{"apple":"allOrNoneInGroup","caveat":"","checked":true,"id":"menuIcons","title":"Icons in menus","values":[{"id":"allOrNoneInGroup","says":"Icons sparingly: every item in a group has one, or none does."},{"id":"never","says":"No icons in menus."},{"id":"always","says":"Every menu item has an icon."}]},{"apple":"betweenGroups","caveat":"","checked":true,"id":"menuDividers","title":"Dividers in menus","values":[{"id":"betweenGroups","says":"Related items are grouped and groups are separated by a divider."},{"id":"off","says":"No rule."}]},{"apple":"short","caveat":"","checked":true,"id":"contextMenuLength","title":"Short context menus","values":[{"id":"short","says":"Context menus stay short: about three groups at most."},{"id":"off","says":"No rule."}]},{"apple":"hidden","caveat":"","checked":true,"id":"contextMenuShortcuts","title":"Shortcuts in context menus","values":[{"id":"hidden","says":"Context menus show no keyboard shortcuts."},{"id":"shown","says":"Context menu items show their shortcuts."}]},{"apple":"","caveat":"Apple states this for iOS, iPadOS and visionOS; for macOS it is the app's choice.","checked":true,"id":"destructiveLast","title":"Destructive items last","values":[{"id":"last","says":"Destructive menu items come last, after a divider."},{"id":"off","says":"No rule."}]},{"apple":"titleCase","caveat":"Alert buttons are left out: Apple's Alerts page asks for sentence case there, its Buttons page for title case.","checked":true,"id":"titleCase","title":"Capitalization","values":[{"id":"titleCase","says":"Buttons and menu items use title-style capitalization (Open Recent, Show All)."},{"id":"sentenceCase","says":"Buttons and menu items use sentence case."},{"id":"off","says":"No rule."}]},{"apple":"character","caveat":"","checked":true,"id":"ellipsis","title":"Ellipsis","values":[{"id":"character","says":"An item that needs more input ends with the ellipsis character (\u2026), never three periods."},{"id":"off","says":"No rule."}]},{"apple":"required","caveat":"","checked":true,"id":"toolbarInMenuBar","title":"Toolbar commands in the menu bar","values":[{"id":"required","says":"Every toolbar command is also a command in the menu bar."},{"id":"off","says":"No rule."}]},{"apple":"required","caveat":"","checked":true,"id":"noBarBackgrounds","title":"No custom bar backgrounds","values":[{"id":"required","says":"No custom backgrounds on toolbars, sidebars, sheets or popovers: macOS gives them Liquid Glass."},{"id":"off","says":"No rule."}]},{"apple":"required","caveat":"","checked":true,"id":"systemColors","title":"System colours","values":[{"id":"required","says":"Colours are system colours or named ones in the components, never typed in."},{"id":"off","says":"No rule."}]},{"apple":"required","caveat":"","checked":true,"id":"standardSpacing","title":"Standard spacing","values":[{"id":"required","says":"Spacing is the system's (padding(), stacks' defaults) or a named value, never a number typed in."},{"id":"off","says":"No rule."}]},{"apple":"","caveat":"","checked":false,"id":"note","title":"Note","values":[{"id":"text","says":"A rule in words, for agents and Iris; Hatch does not check it."}]}],"places":[{"id":"toolbar","summary":"The window's toolbar.","title":"Toolbar"},{"id":"sheetFooter","summary":"The buttons at the bottom of a sheet or dialog.","title":"Sheet footer"},{"id":"bottomBar","summary":"A bar pinned to the bottom of a pane, with the pane's actions.","title":"Bottom bar"},{"id":"listRow","summary":"One row of a list, table or queue.","title":"List row"},{"id":"card","summary":"Inside a card or a grouped box on a page.","title":"Card"},{"id":"inspector","summary":"The trailing inspector or a side panel about the selection.","title":"Inspector"},{"id":"popover","summary":"A popover or a small floating panel.","title":"Popover"},{"id":"form","summary":"A settings form or another grouped form.","title":"Form"},{"id":"emptyState","summary":"What a pane shows when there is nothing in it.","title":"Empty state"},{"id":"contextMenu","summary":"A right-click menu or the items of a More menu.","title":"Context menu"},{"id":"alert","summary":"An alert or a confirmation dialog.","title":"Alert"},{"id":"page","summary":"The content area of a screen or sheet, where cards, sheets and toasts appear.","title":"Page"},{"id":"actionRow","summary":"The actions under a page or ticket title.","title":"Action row"},{"id":"floating","summary":"A floating glass bar or rail over the content, like a dock or a command bar (macOS 26 and later).","title":"Floating"}]};
+
+// ---------------------------------------------------------------------------------------------------------------
+// The questions. Each: id, title, scope, context (HTML), visual (function returning HTML, optional), options, rec, why.
+// ---------------------------------------------------------------------------------------------------------------
+const Q = [
+{ id: 'CD1', title: 'The words the Designer uses', scope: 'D',
+  context: `<p>Today the window mixes code words (<span class="mono">button.primary</span>, "recipe", <span class="mono">glassProminent</span>) with plain ones. The table above has the words I'd use.</p>`,
+  options: [
+    { k: 'A', t: 'Plain words, code underneath', d: 'Element, Place, Role, Look, Variant, Starting point, Foundation, Rule. A role shows its plain title ("Main action"); the id and code name appear only in a Code row and in tooltips. "Recipe" stays an internal word for the code and the CLI.' },
+    { k: 'B', t: 'Plain words, and "Style" instead of "Look"', d: 'The same, but "Style" for what a role looks like. Shorter, but it clashes with SwiftUI\'s button styles, which are only one part of a look.' },
+    { k: 'C', t: 'Keep today\'s words', d: 'Role ids and recipe parameters as they are in code.' },
+  ], rec: 'A',
+  why: 'Someone choosing how an app looks thinks "the main action should be glass", not "button.primary.style = glassProminent". The code words stay one hover away for whoever needs them.' },
+
+{ id: 'CD2', title: 'Names for roles Hatch makes up', scope: 'core',
+  context: `<p>When an app's controls don't match a template role, Hatch names the new role after what it found: <b>"Button (main, list row, card, popover, form)"</b>, <span class="mono">menu.toolbar</span> (which is used in rows, cards and the inspector too), <span class="mono">picker.menuItem</span>, <span class="mono">field.inPage</span>. Seven of Hatch's 30 roles are like this.</p>`,
+  options: [
+    { k: 'A', t: 'Name by job from a fixed list, and let you rename', d: 'Hatch picks from a small vocabulary of jobs (Main action in a row, Destructive in a row, Menu button, Setting, Field in a page…) by element, importance and place. Double-click a title to rename; the id follows once, before it is agreed.' },
+    { k: 'B', t: 'Ask a model to name them', d: 'The skippable setup call from DS10, with its cost shown first.' },
+    { k: 'C', t: 'Keep generated names', d: 'Rename by hand when it bothers you.' },
+  ], rec: 'A',
+  why: 'Names are what you read most in the Designer. A fixed list covers almost every case for free, and renaming covers the rest. DS10\'s model call stays available for names the list can\'t make.' },
+
+{ id: 'CD3', title: 'Choosing a starting point', scope: 'D',
+  context: `<p>Today: on Hatch's Components page, <b>Start from the App</b> or a menu <b>Start from a Template ▸ macOS Native / Glass</b>, by name, with nothing drawn. Proposed: a start sheet in the Designer that draws each starting point in four key places, side by side, with real controls.</p>`,
+  visual: () => startGallery(),
+  options: [
+    { k: 'A', t: 'A drawn gallery, and a mix per element', d: 'The sheet draws "Your app today", "macOS Native" and "Glass" in Bottom bar, Sheet footer, List row and Inspector, light or dark. Pick one for everything, or open "Mix" to choose per element (Buttons from Glass, Pickers from Native, the rest from the app). Your app today is recommended for an app that ships (DS4).' },
+    { k: 'B', t: 'A drawn gallery, one choice for everything', d: 'The same sheet without Mix. Mixing happens later with CD4.' },
+    { k: 'C', t: 'Keep the menu', d: 'Pick by name as today.' },
+  ], rec: 'A',
+  why: 'The starting point is the biggest look decision there is, and it is made today without seeing anything. Mix lets an app keep its own buttons and take Apple\'s pickers in one step, which today takes many questions.' },
+
+{ id: 'CD4', title: 'Using a template after the start', scope: 'D core',
+  context: `<p>Today a template can only be chosen once, at the start. You asked to right-click Buttons and use a template for all of them.</p>`,
+  options: [
+    { k: 'A', t: 'Any time, at any scope, as a preview first', d: 'Right-click an element, a place or a role (or use the element\'s inspector): "Use macOS Native / Glass for…". The canvas shows the result before anything is saved. Keep makes drafts of agreed roles (the next baseline, DS8) and changes provisional ones directly. Roles the template doesn\'t have stay as they are.' },
+    { k: 'B', t: 'Only for a whole element', d: 'Right-click Buttons → Use a template for all buttons.' },
+    { k: 'C', t: 'Only at the start', d: 'As today.' },
+  ], rec: 'A',
+  why: 'Templates are the quickest way to a coherent look, and needing them doesn\'t stop after day one. Previewing first and making drafts of agreed roles keeps NF3: a template never changes anything without you seeing it.' },
+
+{ id: 'CD5', title: 'Templates as references inside the Designer', scope: 'D',
+  context: `<p>Once you've started, the Designer never mentions templates again. Hatch's reasons say things like "Closest to the Glass template… option 4", but you can't see the Glass look, and sometimes it isn't one of the options (Action with a choice).</p>`,
+  options: [
+    { k: 'A', t: 'Always offer each template\'s look as a pick', d: 'In every role\'s Look picks: "macOS Native" and "Glass" (whichever differ from what\'s shown), drawn, next to the app\'s own looks. In the Matrix, an overlay marks cells that differ from the template you started from.' },
+    { k: 'B', t: 'Only the template you started from', d: 'One reference look per role.' },
+    { k: 'C', t: 'No references', d: 'Templates only at the start and in batch changes.' },
+  ], rec: 'A',
+  why: 'Native is the safe answer and Glass is Hatch\'s own look; seeing both next to the app\'s looks answers "what should I change" without reading anything.' },
+
+{ id: 'CD6', title: 'Which templates ship', scope: 'core',
+  context: `<p>DS6 decided macOS Native and Glass first, then Compact (a dense pro tool: small controls, tight spacing).</p>`,
+  options: [
+    { k: 'A', t: 'Native and Glass now, Compact when an app needs it', d: 'As decided.' },
+    { k: 'B', t: 'Add Compact now', d: 'A third starting point in the gallery, and a ready-made "make the inspector compact" (CD25).' },
+  ], rec: 'A',
+  why: 'Both shipped templates are tested on Hatch. Compact would be written without an app to test it on, and the batch tools (CD24) already let you make a place smaller.' },
+
+{ id: 'CD7', title: 'The layout', scope: 'D S',
+  context: `<p>The sketch above: sidebar, canvas and inspector, with no bottom bar. The view switch and a "to decide" button sit in the toolbar, and hard cases in a thin bar over the canvas.</p>`,
+  options: [
+    { k: 'A', t: 'Three columns, no bottom bar', d: 'Sidebar (what to look at), canvas (how it looks), inspector (what to change). Questions live in the inspector (CD27). The canvas gets the bottom bar\'s 200 pt back.' },
+    { k: 'B', t: 'Keep the bottom bar', d: 'Three columns plus a question bar, which now previews (fixes B4).' },
+  ], rec: 'A',
+  why: 'Deciding a look and fine-tuning one are the same act and should happen in one place. Today\'s canvas is about 60% of the window height; without the bar it has the full height.' },
+
+{ id: 'CD8', title: 'Two levels: an element, then a role', scope: 'D S',
+  context: `<p>Today everything is on one level: every place, every role, a box around every copy of the selected role. Try both levels in the sketch: Buttons shows the overview; clicking a control opens its role.</p>`,
+  options: [
+    { k: 'A', t: 'Two levels', d: '<b>Element</b>: every place drawn calmly, no boxes; pointing at a control dims the rest; the inspector shows the element (roles, questions, starting point). <b>Role</b>: "‹ Buttons · Main action": the role drawn in every place it sits, Today beside the Draft, and the inspector edits it. Esc goes back.' },
+    { k: 'B', t: 'One level, a calmer highlight', d: 'As today, with a soft halo instead of boxes and the rest dimmed.' },
+  ], rec: 'A',
+  why: 'It answers "all buttons or only Bottom bar" in the layout itself: you change a role, you see every place the change reaches, and "Only here…" is next to each place.' },
+
+{ id: 'CD9', title: 'Browsing by place as well as by element', scope: 'D',
+  context: `<p>Your idea of one look for, say, the Inspector needs a way to look at a place with everything in it: its buttons, pickers, toggles, fields and cards together. Try "Inspector" under Places in the sketch.</p>`,
+  options: [
+    { k: 'A', t: 'A Places section in the sidebar', d: 'Choosing a place draws one realistic sample of it with every element in it. The inspector lists its roles and offers "One look for every control here…" (CD24). Clicking a control opens its role, as from an element.' },
+    { k: 'B', t: 'Elements only', d: 'Places stay the cards inside each element.' },
+  ], rec: 'A',
+  why: 'People judge a screen area as a whole ("the inspector feels busy"), not one element at a time. Places are already in the data; this is a second way into the same roles.' },
+
+{ id: 'CD10', title: 'The views', scope: 'D',
+  context: `<p>Today: In Place · Matrix · Today vs Draft, for every selection, even Rules and Foundations, where they do nothing (B5).</p>`,
+  options: [
+    { k: 'A', t: 'In Place and Matrix; Compare inside a role', d: 'Two views for an element or place. Today vs Draft becomes Compare inside a role (CD14). The switch is hidden for Rules and Foundations.' },
+    { k: 'B', t: 'Keep three views', d: 'Today vs Draft stays its own view, working on the selected role.' },
+    { k: 'C', t: 'Add a Live view', d: 'In Place, Matrix and the live window as a third view instead of a separate window.' },
+  ], rec: 'A',
+  why: 'Comparing Today with a Draft only makes sense for one role, so it belongs where you edit that role. Fewer views means less to learn.' },
+
+{ id: 'CD11', title: 'The sidebar', scope: 'D',
+  context: `<p>Today: 12 elements in catalog order, grey dots (everything is provisional, so they say nothing), orange count capsules, then Rules and Foundations.</p>`,
+  options: [
+    { k: 'A', t: 'Grouped by kind, system badges, a check when done', d: 'Actions (Buttons, Menus) · Choices (Pickers, Toggles, Section switchers) · Text (Text fields) · Lists and containers (List rows, Cards, Sheets) · Feedback (Badges, Toasts, Empty states) · Places · System (Rules, Foundations). Each row shows the system badge with its open questions, and a check mark only when every role is agreed. A filter field at the top (⌘F) finds roles by name.' },
+    { k: 'B', t: 'Elements sorted by what needs you', d: 'Elements with questions first, most first; the rest in catalog order.' },
+    { k: 'C', t: 'As today, with system badges', d: 'Only the badge style changes.' },
+  ], rec: 'A',
+  why: 'Groups stay manageable when the catalog grows (DS1). A fixed order lets you learn where things are; the toolbar\'s "to decide" button (CD12) already takes you to what needs you.' },
+
+{ id: 'CD12', title: 'The toolbar', scope: 'D',
+  context: `<p>Today: the view switch, an icon-only Hard Cases menu, Live Window, Inspector. The subtitle "Hatch · baseline v1 · 0 agreed, 30 provisional" is cut off.</p>`,
+  options: [
+    { k: 'A', t: 'Title, view switch, "To decide", Live Window, Inspector', d: 'Title "Buttons", subtitle "12 to decide · 30 provisional". The baseline version moves into a menu on the title (v1 ▾: history, the drafts in v2). <b>To decide</b> shows the count and jumps to the next question anywhere (⌘]). Hard cases move to the canvas bar (CD15).' },
+    { k: 'B', t: 'As today, with a shorter subtitle', d: '' },
+  ], rec: 'A',
+  why: 'The one thing you most often want from the toolbar is "next thing that needs me". Hard cases are judged on the canvas, so they belong over it.' },
+
+{ id: 'CD13', title: 'Previewing an option', scope: 'D S',
+  context: `<p>Today, choosing an option in the bottom bar draws nothing (B4); a ‹ › step saves and commits at once (B3).</p>`,
+  options: [
+    { k: 'A', t: 'Click to preview everywhere, Keep to save', d: 'Clicking a look draws it in every place on the canvas, marked "Preview", without saving. Keep (Return) saves once; Discard (Esc) goes back. Pointing at an option for half a second shows a quick peek in the role\'s first place.' },
+    { k: 'B', t: 'Point to preview, click to keep', d: 'Faster, but moving the mouse across options flickers the whole canvas, and a stray click saves.' },
+    { k: 'C', t: 'Click saves at once', d: 'As the ‹ › steps do today, with Undo.' },
+  ], rec: 'A',
+  why: 'You compare by flipping between options and looking; nothing should be written while you do. One save per decision also means one commit in the notebook, not one per click.' },
+
+{ id: 'CD14', title: 'Comparing Today with the Draft', scope: 'D S',
+  context: `<p>Inside a role. "Today" is how the app draws it now (the app's most used look, or the agreed look); the "Draft" is what you're previewing.</p>`,
+  options: [
+    { k: 'A', t: 'Side by side per place, ⌥ to flip', d: 'Each place in two columns, Today and Draft. Holding ⌥ flips the whole canvas to Today while held, for a quick before and after. Below, "Also in the app today" lists the app\'s other looks for this role, drawn, with their counts and where they are used.' },
+    { k: 'B', t: 'A film strip of all options', d: 'Every option drawn in the role\'s main place in one row, like the Stage\'s film strip; click one to make it the Draft.' },
+    { k: 'C', t: 'Both', d: 'Side by side by default, film strip as a toggle.' },
+  ], rec: 'A',
+  why: 'Side by side per place shows what really changes where, which is the question behind every look decision. The options list in the inspector already works as a film strip.' },
+
+{ id: 'CD15', title: 'Hard cases', scope: 'D S',
+  context: `<p>Today they're hidden in an icon-only menu, and Dark and Large text change the whole window, inspector included. Going back from Dark doesn't work (B1).</p>`,
+  visual: () => `<div class="win" style="display:block;min-height:0"><div class="hard" style="border:0">Hard cases <span class="seg"><span>Light</span><span>Dark</span><span class="on">Both</span></span><label><input type="checkbox">Long label</label><label><input type="checkbox">Disabled</label><label><input type="checkbox">Larger text</label><label><input type="checkbox">Inactive window</label><label><input type="checkbox">Increase contrast</label></div></div>`,
+  options: [
+    { k: 'A', t: 'A bar over the canvas, for the canvas only', d: 'Light · Dark · Both (each place twice, side by side), Long label, Disabled, Larger text, Inactive window (prominent buttons turn grey when the window isn\'t key), Increase contrast. They apply to the canvas and the Live window, never to the inspector.' },
+    { k: 'B', t: 'Keep the menu, fix Dark', d: '' },
+  ], rec: 'A',
+  why: 'Hard cases are the best part of the Decide Lab (DS12) and are hidden today. "Both" lets dark be judged without flipping back and forth; Inactive window catches a real surprise for glass and prominent buttons.' },
+
+{ id: 'CD16', title: 'The Live window', scope: 'D',
+  context: `<p>A separate window with the app's real shell (sidebar, toolbar, inspector, sheet, alert) drawn by SwiftUI itself (NF2).</p>`,
+  options: [
+    { k: 'A', t: 'Keep it separate, and follow the selection', d: 'It shows the preview while you choose, and highlights the selected role where it appears. "Show in Live Window" on a place opens the shell at that place (opens the sheet, the alert, the empty state). Its demo links move to a menu so they no longer run under the toast (B11).' },
+    { k: 'B', t: 'Make it a view of the canvas', d: 'CD10 C.' },
+  ], rec: 'A',
+  why: 'A real window is the closest thing to the app, and you can put it beside the Designer on a second screen. Following the selection makes it part of choosing rather than a demo.' },
+
+{ id: 'CD17', title: 'The order of the inspector', scope: 'D',
+  context: `<p>Try it in the sketch: open Buttons → Main action.</p>`,
+  options: [
+    { k: 'A', t: 'Decide first, detail folded', d: '1 Title, status and places (chips). 2 Apple callout, only when there is one. 3 To decide (the open question), or Look (picks) when nothing is open. 4 Fine-tune (folded). 5 Behaviour (folded). 6 Use when / not when. 7 Variants. 8 In the app today (count, Compare). 9 Sources (one row of links). 10 Code (id and code name). Footer: one prominent action (Answer, Keep, Agree or Apply Draft), the rest in a ⋯ menu.' },
+    { k: 'B', t: 'Describe first, then decide', d: 'Title, Use when, then To decide and Look, then the rest.' },
+  ], rec: 'A',
+  why: 'You open a role to change or decide it; the description is for when you\'re unsure, and it stays one scroll away. Folding fine-tune and behaviour removes about two thirds of today\'s rows.' },
+
+{ id: 'CD18', title: 'What the Look picks offer', scope: 'D',
+  context: `<p>When a role has no open question, the inspector still shows real looks to choose from instead of only parameters.</p>`,
+  options: [
+    { k: 'A', t: 'Up to five, each labelled with where it comes from', d: 'Current · macOS default · macOS Native · Glass · Most used in the app (and a Proposal\'s looks when an agent offered some). Duplicates are merged ("Glass · Most used"). Each one is drawn in the role\'s main place.' },
+    { k: 'B', t: 'Current and macOS default only', d: 'The rest through Fine-tune.' },
+  ], rec: 'A',
+  why: 'This is the answer to "what should I change": a handful of sensible looks, each with a reason it is there. Parameters stay for whoever wants to go further.' },
+
+{ id: 'CD19', title: 'How Fine-tune changes a setting', scope: 'D',
+  context: `<p>Today each setting has ‹ value ›. From "–" (nothing set) › skips the first value, you can't get back to "–", and the list wraps around with no sign (B2).</p>`,
+  visual: () => `<div class="grid3">
+    <div><div class="ibox"><div class="irow"><span>Style</span><span class="pop">Glass, filled</span></div><div class="irow"><span>Size</span><span class="pop">Large</span></div><div class="irow"><span>Label</span><span class="pop">macOS default (Title)</span></div></div><div class="cap">A · Pop-up menus</div></div>
+    <div><div class="ibox"><div class="irow"><span>Style</span><span class="pop">Glass, filled</span></div><div class="irow"><span>Size</span><span class="seg"><span>S</span><span>M</span><span class="on">L</span><span>XL</span></span></div><div class="irow"><span>Label</span><span class="seg"><span>Icon+Title</span><span class="on">Title</span><span>Icon</span></span></div></div><div class="cap">B · Segmented where 4 or fewer, pop-up otherwise</div></div>
+    <div><div class="ibox"><div class="irow"><span>Style</span><span>‹ glassProminent ›</span></div><div class="irow"><span>Size</span><span>‹ large ›</span></div><div class="irow"><span>Label</span><span>‹ – ›</span></div></div><div class="cap">C · Today\'s arrows, fixed</div></div></div>`,
+  options: [
+    { k: 'A', t: 'Pop-up menus', d: 'Every value in a list with its plain name; Apple\'s default first and marked; the recommended value marked ★; values that look the same merged (CD21). ← → step through the values when the row has focus, and nothing wraps.' },
+    { k: 'B', t: 'Segmented for four or fewer, pop-up for more', d: 'One click for Size and Label; wider rows.' },
+    { k: 'C', t: 'Keep ‹ ›, fixed', d: 'Default reachable, no wrap, values named.' },
+  ], rec: 'A',
+  why: 'A pop-up shows where you are in the list and what\'s left, which is what makes ‹ › feel broken today. Keyboard stepping keeps the quick flipping you liked in the Lab.' },
+
+{ id: 'CD20', title: 'Plain names for every value', scope: 'D K',
+  context: `<p>Every value in the "Every look option" section has a proposed plain name: <span class="mono">borderedProminent</span> → Filled, <span class="mono">glassProminent</span> → Glass, filled, <span class="mono">titleAndIcon</span> → Icon and title, <span class="mono">defaultAction</span> → Return (default button), <span class="mono">automatic</span> → macOS default (and what that is, in brackets, when it is known).</p>`,
+  options: [
+    { k: 'A', t: 'Plain names, code name in the tooltip', d: 'As in the gallery. The code value shows in the tooltip and in the Code row.' },
+    { k: 'B', t: 'Plain name and code name together', d: '"Filled (borderedProminent)".' },
+    { k: 'C', t: 'Code names', d: 'As today.' },
+  ], rec: 'A',
+  why: 'Most people choosing looks never write SwiftUI; those who do get the code name one hover away and in the generated code.' },
+
+{ id: 'CD21', title: 'Values that draw the same', scope: 'D K core',
+  context: `<p>I compared every value with the others for the same setting, pixel by pixel. These draw the same:</p>`,
+  visual: () => sameTable(),
+  options: [
+    { k: 'A', t: 'Merge real twins, fix the rest', d: '"macOS default" shows what it is ("macOS default (Bordered)") and its twin is hidden. Values that only matter in a real window (toast position) are drawn in the Live window. Values that should differ but don\'t are renderer bugs and get fixed (badge tint, card shadow, menu glass), checked against the SDK.' },
+    { k: 'B', t: 'Show them all, with a "looks the same as" note', d: '' },
+  ], rec: 'A',
+  why: 'A choice that changes nothing on screen feels broken and wastes a decision. Merging the true twins also makes recipes shorter, as NF1 asks ("a recipe holds only what differs").' },
+
+{ id: 'CD22', title: 'Behaviour apart from look', scope: 'D',
+  context: `<p>Buttons have four behaviour settings (Shown, Confirm first, Key, Tooltip) mixed in with five look settings. Toasts have Duration, list rows have Actions.</p>`,
+  options: [
+    { k: 'A', t: 'A folded Behaviour section', d: 'Behaviour settings in their own section under Fine-tune, with a one-line explanation each ("Key: Return makes it the default button of a sheet or alert").' },
+    { k: 'B', t: 'Together, behaviour marked', d: 'One list, with a small "behaviour" label on those rows.' },
+  ], rec: 'A',
+  why: 'Behaviour can\'t be judged by looking, so it shouldn\'t sit among the things you\'re comparing. It\'s also set far less often.' },
+
+{ id: 'CD23', title: 'Saving, undo and history', scope: 'D core',
+  context: `<p>Today every change goes through Hatch at once and becomes a notebook commit (B3). There is no undo.</p>`,
+  options: [
+    { k: 'A', t: 'Changes collect until Keep; ⌘Z undoes', d: 'A preview is local to the window. Keep (or Answer) sends one change to Hatch: one commit, with a readable message. ⌘Z undoes the last kept change (Hatch writes the reverse change). Closing with an unsaved preview asks.' },
+    { k: 'B', t: 'Save every change, batch the commits', d: 'Every step saves, and Hatch commits at most once a minute.' },
+  ], rec: 'A',
+  why: 'A decision is one change; the history in the notebook should read as decisions, not as clicks. Undo makes trying things safe.' },
+
+{ id: 'CD24', title: 'The scopes of a batch change', scope: 'D core',
+  context: `<p>What a batch can do, and where you start it.</p>`,
+  visual: () => batchSheet(),
+  options: [
+    { k: 'A', t: 'Element, place and whole system, always previewed', d: '<b>Element</b> (right-click in the sidebar): use a template, follow macOS, one style for all, agree to all. <b>Place</b> (right-click a place, or the place\'s inspector): one look for every control here, use a template here, follow macOS here. <b>System</b> (the title menu): change the starting point. Each opens a sheet that lists every role it changes, the other places those roles reach, and "Only here" per place (CD26). Nothing is saved until Keep.' },
+    { k: 'B', t: 'Element and place only', d: 'No system-wide change except at the start.' },
+    { k: 'C', t: 'Element only', d: 'Right-click Buttons, as you described.' },
+  ], rec: 'A',
+  why: 'These are exactly your two requests (Sheet footer, all buttons) plus the Inspector case. The sheet that lists every role and place touched is what keeps a batch from surprising you.' },
+
+{ id: 'CD25', title: 'A place\'s look: written into roles, or a layer of its own', scope: 'core',
+  context: `<p>"Make the inspector all small controls" could be a one-time change to roles, or a stored rule for the place that roles inherit.</p>`,
+  options: [
+    { k: 'A', t: 'Written into the roles (and variants)', d: 'The batch sets the roles in that place; where a role also sits elsewhere, you choose "everywhere" or "only here" (a variant). The data model stays as it is (DS2, DS3): roles, variants, places.' },
+    { k: 'B', t: 'A place style that roles inherit', d: 'The inspector has "size: small"; every control in it inherits unless its role says otherwise. Powerful, but a look then comes from two layers, which is harder to read and to check.' },
+  ], rec: 'A',
+  why: 'One place where a look is written is what makes it readable and checkable for free. A place\'s consistency can still be kept by a Rule ("controls in the inspector are small") that Hatch checks.' },
+
+{ id: 'CD26', title: 'A change for one place only', scope: 'D core',
+  context: `<p>When a change should apply only in Bottom bar.</p>`,
+  options: [
+    { k: 'A', t: '"Only here…" makes a variant, with a reason', d: 'Next to each place in the role view and in batch sheets. It asks one line ("why is Bottom bar different?") and creates "Main action, Bottom bar". Variants show as a small mark on the canvas and in the Matrix.' },
+    { k: 'B', t: 'Split into a new role', d: 'Bottom bar gets its own role instead of a variant.' },
+  ], rec: 'A',
+  why: 'A variant keeps the role and its rules (one per screen, Return key) and records why the place differs, which is what agents need when they build there.' },
+
+{ id: 'CD27', title: 'Where questions are answered', scope: 'D',
+  context: `<p>Today: a bottom bar per element with option cards that don't preview, and a separate inspector that does change the look.</p>`,
+  options: [
+    { k: 'A', t: 'In the role\'s inspector, with a queue in the toolbar', d: 'A role\'s open question is the top of its inspector: options as a list of drawn looks, recommended first with its reason; clicking previews (CD13); Answer saves. "To decide" in the toolbar (⌘]) walks the queue across elements. Decide keeps showing component questions with an "Open in the Designer" link.' },
+    { k: 'B', t: 'In the bottom bar, which previews', d: 'The inspector becomes read-only for questions.' },
+    { k: 'C', t: 'Both, kept in step', d: '' },
+  ], rec: 'A',
+  why: 'One place to choose a look. The inspector is already tied to the selected role, and the canvas shows the preview right next to it.' },
+
+{ id: 'CD28', title: 'How Hatch picks its recommendation', scope: 'core',
+  context: `<p>Today Hatch recommends the most used look, every time ("changes the fewest screens"). For Hatch that recommends a checkbox for toggles, a filled style for the sheet's default button that only repeats macOS, and glass inside list rows that Apple's guidance argues against. The section "Hatch's own 19 open questions" shows what changes under the rule below.</p>`,
+  options: [
+    { k: 'A', t: 'Apple first, then your template, then use counts', d: '1 Never recommend a look Apple\'s guidance flags (glass in content, a destructive default). 2 Where macOS draws it anyway (a sheet\'s default button, Cancel, menu items), recommend Follow macOS. 3 Prefer the starting template\'s look (always offered, CD5). 4 Otherwise the most used. The reason says which rule decided.' },
+    { k: 'B', t: 'Most used, as today', d: 'Changes the fewest screens.' },
+    { k: 'C', t: 'Template first, always', d: 'Move the app to the template, whatever it uses today.' },
+  ], rec: 'A',
+  why: 'Most used is a good tie-breaker but a poor judge: it repeats the app\'s accidents. Apple\'s guidance and your chosen template are decisions you already made; the recommendation should follow them.' },
+
+{ id: 'CD29', title: 'Accepting the safe ones in one go', scope: 'D',
+  context: `<p>Hatch starts with 19 questions. Several are easy: one look covers most uses and matches the template.</p>`,
+  options: [
+    { k: 'A', t: '"Accept the clear ones" per element', d: 'One button in the element inspector answers every question where the recommendation is also the template\'s look or covers 80% or more of uses. It lists them first and shows them drawn. The roles stay provisional (DS8).' },
+    { k: 'B', t: 'Always one at a time', d: '' },
+  ], rec: 'A',
+  why: 'Your attention goes to the questions that are real choices (Main action, Row action), not to Link (28 of 30) or Menu item (macOS draws it).' },
+
+{ id: 'CD30', title: '"Follow macOS" and "Not sure yet"', scope: 'D',
+  context: `<p>Today they are option cards like the drawn looks, so a question shows six cards where four are looks.</p>`,
+  options: [
+    { k: 'A', t: 'As plain choices under the looks', d: 'The drawn looks first; then two quiet rows: "Follow macOS: no look of its own" and "Not sure yet: keep the most used for now". Follow macOS is drawn too (it has a look: the system\'s).' },
+    { k: 'B', t: 'Keep them as cards', d: '' },
+  ], rec: 'A',
+  why: 'They are answers about the question, not looks. Keeping them apart makes the four real looks easy to compare.' },
+
+{ id: 'CD31', title: 'A role that mixes jobs', scope: 'core D',
+  context: `<p>Hatch's "Other action" sits in Sheet footer, Bottom bar, Empty state, Alert, Page, Action row and Floating, with 18 looks in use. The Glass template keeps a floating glass action apart from a sheet's plain button. One look can't be right for all of them.</p>`,
+  options: [
+    { k: 'A', t: 'Hatch offers a split before the question', d: 'When a role\'s looks group by place (glass in Floating and Bottom bar, plain in sheets and alerts), the first question is "Split Other action into Other action (floating) and Other action (sheet)?", drawn. Then each part gets its own look question.' },
+    { k: 'B', t: 'Answer one look, make variants', d: 'Pick a look; the places that differ become variants.' },
+  ], rec: 'A',
+  why: 'Splitting matches what the app really does and what the template says. Variants are for exceptions, and here the "exception" is half the uses.' },
+
+{ id: 'CD32', title: 'The Matrix, drawn', scope: 'D S',
+  context: `<p>The drawn Buttons matrix is above.</p>`,
+  options: [
+    { k: 'A', t: 'Drawn cells, linked by role', d: 'Places down, Main / Other / Quiet / Destructive across; each cell draws the role\'s control with its name small under it. Pointing at a cell lights up every cell of that role. A column with more than two different looks gets a mark ("Main: 3 looks"). The template overlay marks cells that differ from your starting point (CD5). Empty cells say "Decide…" and file the question.' },
+    { k: 'B', t: 'The table of names, with a preview on hover', d: '' },
+  ], rec: 'A',
+  why: 'Reading across a column tells you whether every main action looks like a main action, which is what the Matrix is for. Names alone can\'t tell you that.' },
+
+{ id: 'CD33', title: 'The whole-app matrix', scope: 'D',
+  context: `<p>Places × elements, shown above.</p>`,
+  options: [
+    { k: 'A', t: 'Yes, as the Matrix of a place and of "All"', d: 'Choosing a place, or "All elements" at the top of the sidebar, shows this matrix. Read across a row to see whether a place is consistent; batch changes start from a row.' },
+    { k: 'B', t: 'Not now', d: 'The per-element Matrix only.' },
+  ], rec: 'A',
+  why: 'It\'s the view for "make the inspector consistent", and it costs nothing extra: the same drawn cells, a different grouping.' },
+
+{ id: 'CD34', title: 'How a finding is shown', scope: 'D',
+  context: `<p>Today: a section "Against Apple's guidance" with a paragraph and a link, below ten look rows, and a separate "Why, from Apple" with dates.</p>`,
+  visual: () => `<div style="max-width:300px"><div class="callout"><span class="ic">!</span><div><b>Glass in content</b><br>Apple keeps Liquid Glass for controls and navigation; rows and cards use standard materials.<div style="margin-top:6px;display:flex;gap:6px;align-items:center"><span class="btn small primary">Use Filled Instead</span><a>Materials</a></div></div></div><div class="cap">The callout at the top of the inspector, with a fix when there is one.</div></div>`,
+  options: [
+    { k: 'A', t: 'A callout at the top, with a fix', d: 'One sentence, a fix button when there is a clear one ("Use Filled Instead"), the page link. On the canvas, the affected places get a small mark. Sources become one row of links at the bottom; the date they were read goes in the tooltip.' },
+    { k: 'B', t: 'Keep the section, styled better', d: '' },
+  ], rec: 'A',
+  why: 'A finding with a one-click fix gets acted on; a paragraph under ten rows doesn\'t. The sources are reference, so they move down.' },
+
+{ id: 'CD35', title: 'Which findings are shown, and how', scope: 'D core',
+  context: `<p>Hatch has five kinds of finding (table above). Three of Hatch's six are "redundant": <i>style automatic is what macOS does anyway; leave it out</i>.</p>`,
+  options: [
+    { k: 'A', t: 'Clean up quietly, warn only on real problems', d: 'Redundant: removed from the recipe on save, no message. A role in a place macOS draws (context menu, alert): look settings hidden, "macOS draws this here; only order and wording are yours". Glass in content, a wrong default, a switcher in content: the callout with its fix.' },
+    { k: 'B', t: 'Show every finding as a callout', d: '' },
+  ], rec: 'A',
+  why: 'Telling someone that "automatic" is automatic teaches nothing; fixing it is free. Callouts keep their weight when they only appear for real problems.' },
+
+{ id: 'CD36', title: '"Make it a setting"', scope: 'D core',
+  context: `<p>The words and when it's offered.</p>`,
+  visual: () => settingsTable(),
+  options: [
+    { k: 'A', t: '"Let people choose in Settings", with a recommendation per element', d: 'Renamed, with a help line: "Keeps this look as the default and drafts a ticket for a setting in your app." Where the table says No, it lives in the ⋯ menu only. Where it says Offer, it is a checkbox under Answer with the reason.' },
+    { k: 'B', t: 'Rename only', d: 'Offered everywhere as today.' },
+  ], rec: 'A',
+  why: 'Rule 3: every suggestion carries a recommendation. People expect a Mac app\'s buttons, menus and sheets to look like macOS; a setting there doubles the testing for no one\'s benefit.' },
+
+{ id: 'CD37', title: 'The Rules page', scope: 'D',
+  context: `<p>Today: ten cards, each with a pop-up and its own Make It a Setting button, plus notes. The same editor is also on Hatch's Components page.</p>`,
+  options: [
+    { k: 'A', t: 'A grouped form with examples', d: 'Groups: Menus (icons, dividers, destructive last), Context menus (length, shortcuts), Words (capitalization, ellipsis), Placement (toolbar commands in the menu bar), Values (bar backgrounds, system colours, standard spacing). One row per rule: its pop-up with Apple\'s choice marked, and a tiny example of what it means ("Open Recent" / "Open recent"). Settings and links in a ⋯ menu per row. Your own notes at the end. "checked" becomes a small check mark with a tooltip.' },
+    { k: 'B', t: 'Keep the cards, without the repeated button', d: '' },
+  ], rec: 'A',
+  why: 'A grouped form is how macOS Settings reads, and an example says more than the rule text. The ten repeated buttons are most of today\'s clutter.' },
+
+{ id: 'CD38', title: 'The Foundations pages', scope: 'D',
+  context: `<p>Today: a read-only list per kind. Surface and Content are two white boxes you can't tell apart.</p>`,
+  options: [
+    { k: 'A', t: 'Light and dark, in use, changeable', d: 'Each value drawn in light and dark side by side, with a sample in use (Surface behind a card, a radius on a card, a material behind a toolbar). Changed with the same pick and preview as roles; the canvas shows every role that uses it. Values macOS owns (accent, system colours) say "Follows macOS" and are not changeable, with the reason.' },
+    { k: 'B', t: 'Light and dark, read-only', d: '' },
+  ], rec: 'A',
+  why: 'Foundations are what templates and roles stand on; they need the same "see it in place" as roles to be judged at all.' },
+
+{ id: 'CD39', title: 'The keyboard', scope: 'D',
+  context: ``,
+  visual: () => `<table class="t" style="max-width:640px"><tr><th>Keys</th><th>Does</th></tr>
+    <tr><td class="mono">⌘1 / ⌘2</td><td>In Place / Matrix</td></tr>
+    <tr><td class="mono">⌘] / ⌘[</td><td>Next / previous question, anywhere</td></tr>
+    <tr><td class="mono">↑ ↓</td><td>Previous / next look in the picks (previews)</td></tr>
+    <tr><td class="mono">← →</td><td>Step a focused Fine-tune setting</td></tr>
+    <tr><td class="mono">Return</td><td>Keep / Answer</td></tr>
+    <tr><td class="mono">Esc</td><td>Discard the preview; again: back to the element</td></tr>
+    <tr><td class="mono">⌥ (hold)</td><td>Show Today</td></tr>
+    <tr><td class="mono">⌘D</td><td>Light / Dark / Both</td></tr>
+    <tr><td class="mono">⌘F</td><td>Filter roles</td></tr>
+    <tr><td class="mono">⌘Z</td><td>Undo the last kept change</td></tr></table>`,
+  options: [
+    { k: 'A', t: 'This set, shown in the menus', d: 'Every shortcut also has a menu item (View, Go, Role), so it can be found.' },
+    { k: 'B', t: 'Only Return, Esc and ⌘Z', d: '' },
+  ], rec: 'A',
+  why: 'Going through 19 questions is fastest with ⌘], ↑ ↓ and Return. Menu items are how a Mac app makes shortcuts discoverable.' },
+
+{ id: 'CD40', title: 'Text and density', scope: 'D',
+  context: `<p>Today: monospace role ids on every place card, a summary line under each place title, captions in three greys.</p>`,
+  options: [
+    { k: 'A', t: 'Calm: titles only, one grey', d: 'Place cards show only the place\'s title (the summary in the tooltip). Monospace only in the Code row. Text styles from DESIGN.md: headline for titles, body for text, caption for counts, one secondary grey. No boxes around boxes: the canvas draws the samples straight on the window background.' },
+    { k: 'B', t: 'As today, without the role ids', d: '' },
+  ], rec: 'A',
+  why: 'The samples are what you judge; every line of metadata around them competes. It also follows DESIGN.md and your "calm screens" feedback.' },
+
+{ id: 'CD41', title: 'Status words', scope: 'D core',
+  context: `<p>A role is <b>provisional</b> (a guess), <b>agreed</b> (you confirmed it) or <b>in redesign</b> (an agreed role with a draft).</p>`,
+  options: [
+    { k: 'A', t: 'Keep the words, show them only where they matter', d: 'Provisional is the quiet normal: no dot. Agreed gets a check mark; In redesign an amber "Draft" chip on the role and on the canvas. The sidebar checks an element when all of it is agreed.' },
+    { k: 'B', t: 'Rename provisional to "Proposed"', d: '' },
+  ], rec: 'A',
+  why: 'Today every role shows the same grey dot, because everything is provisional; marking only what differs makes the marks mean something.' },
+
+{ id: 'CD42', title: 'Where each part lives', scope: 'D core',
+  context: `<p>Today Hatch's Components page has its own role inspector and rules editor, the Designer has another, and Decide asks component questions too.</p>`,
+  options: [
+    { k: 'A', t: 'Hatch shows and sends; the Designer changes', d: '<b>Components page</b>: how the app looks, by place, coverage, and the open questions, read-only; every item opens the Designer at that item. <b>Designer</b>: every change, including rules and foundations. <b>Decide</b>: component questions with their drawn options and "Open in the Designer". This changes CP3\'s note that rules and named values are changed on the page.' },
+    { k: 'B', t: 'Keep editing in both', d: 'Rules and values stay editable on the page too.' },
+  ], rec: 'A',
+  why: 'Two editors for the same thing drift apart and confuse ("which one did I change?"). Decide stays the quick path for one question at a time.' },
+
+{ id: 'CD43', title: 'History', scope: 'D core',
+  context: `<p>Every change is a notebook commit, but the Designer can't show them.</p>`,
+  options: [
+    { k: 'A', t: 'A history list on the title menu', d: '"v1 ▾" lists kept changes with the time, the role, before and after drawn, and a Revert per change. Revert is a new change (one commit), never a rewrite.' },
+    { k: 'B', t: 'Undo only (CD23)', d: '' },
+  ], rec: 'A',
+  why: 'A design system is built over weeks; "what did I change on Monday, and why does the inspector look different" needs an answer inside the Designer.' },
+
+{ id: 'CD44', title: 'Confirming the layout in the real app', scope: 'D',
+  context: `<p>Your feedback on Decide was that sketches are hard to judge and you'd rather pick between real variants in the app.</p>`,
+  options: [
+    { k: 'A', t: 'Build the layout choices as switchable variants first', d: 'After your answers, the Designer gets a hidden Lab menu (like the Decide Lab) that switches between the variants of CD7, CD8, CD17, CD19, CD32 and CD40 on your own system, with hard cases. You confirm there; then the variants that lost are removed.' },
+    { k: 'B', t: 'Build the answers directly', d: '' },
+  ], rec: 'A',
+  why: 'Layout is the part a sketch shows worst. Variants cost a little more to build but avoid a round of rework.' },
+
+{ id: 'CD45', title: 'The order of building', scope: 'D',
+  context: ``,
+  options: [
+    { k: 'A', t: 'Bugs, then deciding, then layout, then the rest', d: '1 Bugs B1 to B12 and the renderer fixes (CD21). 2 Preview and save (CD13, CD23), questions in the inspector (CD27), Look picks and Fine-tune (CD18, CD19, CD20), the recommendation rule (CD28). 3 Two levels, places, sidebar, toolbar, hard cases (CD8 to CD15) as Lab variants (CD44). 4 Batch changes and templates (CD3 to CD5, CD24 to CD26). 5 Matrix, Apple, settings, rules, foundations, keyboard, history. Each step: tests, snapshots light and dark, and a run on Hatch\'s own notebook.' },
+    { k: 'B', t: 'Layout first', d: 'Steps 3 and 4 before 2.' },
+  ], rec: 'A',
+  why: 'Step 2 fixes what feels broken today (nothing previews, every click commits) and makes the Designer usable for Hatch\'s 19 questions while the layout is confirmed.' },
+];
+
+// ---------------------------------------------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------------------------------------------
+const IMG = 'components-round2/img/';
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const has = k => !!DATA.sizes[k];
+function shot(k, opts = {}) {
+  if (!has(k)) return opts.empty === false ? '' : `<div class="empty">${esc(opts.emptyText || 'not in this system')}</div>`;
+  const [w, h] = DATA.sizes[k];
+  const scale = opts.scale || 1;
+  return `<img class="shot${opts.cls ? ' ' + opts.cls : ''}" data-k="${k}" width="${Math.round(w * scale)}" height="${Math.round(h * scale)}" alt="" loading="lazy"${opts.style ? ` style="${opts.style}"` : ''}>`;
+}
+function mode() {
+  const t = document.documentElement.dataset.theme;
+  if (t === 'light' || t === 'dark') return t;
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function paintShots(root = document) {
+  const m = mode();
+  root.querySelectorAll('img.shot[data-k]').forEach(i => { const src = `${IMG}${i.dataset.k}-${m}.webp`; if (i.getAttribute('src') !== src) i.src = src; });
+}
+const ELEMENT = id => DATA.elements.find(e => e.id === id);
+const PLACE = id => DATA.places.find(p => p.id === id) || { id, title: id };
+const SYS = DATA.systems;
+const IMPORTANCE = ['main', 'other', 'quiet', 'destructive'];
+const IMP_TITLE = { main: 'Main', other: 'Other', quiet: 'Quiet', destructive: 'Destructive' };
+function vname(el, p, v) {
+  const e = ELEMENT(el); const par = e && e.params.find(x => x.id === p);
+  const val = par && par.values.find(x => x.id === v);
+  return val ? val.name : v;
+}
+function recipeWords(el, recipe) {
+  const e = ELEMENT(el); if (!e) return '';
+  const parts = Object.entries(recipe || {}).filter(([p]) => (e.params.find(x => x.id === p) || {}).look !== false)
+    .map(([p, v]) => `${(e.params.find(x => x.id === p) || { title: p }).title} ${vname(el, p, v)}`);
+  return parts.length ? parts.join(' · ') : 'macOS default';
+}
+function roleIn(sys, element, place) {
+  for (const imp of IMPORTANCE) { const r = SYS[sys].roles.find(r => r.element === element && r.importance === imp && r.places.includes(place)); if (r) return r; }
+  return null;
+}
+const questionFor = role => DATA.questions.find(q => q.role === role);
+// CD2: the names the sketch uses for roles Hatch named after what it found.
+const NAMES = { 'button.primaryInRow': 'Main action in a row', 'button.destructiveInRow': 'Destructive in a row', 'button.linkOther': 'Quiet action, floating',
+  'menu.toolbar': 'Menu button', 'picker.menuItem': 'Picker in a menu', 'toggle.menuItem': 'Toggle in a menu', 'field.inPage': 'Field in a page' };
+const rname = r => NAMES[r.id] || r.title;
+
+// ---------------------------------------------------------------------------------------------------------------
+// Answers
+// ---------------------------------------------------------------------------------------------------------------
+const KEY = 'hatch.components-designer.round2';
+let saved = {};
+try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+function store() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} summary(); progress(); }
+
+function renderQuestion(q) {
+  const host = document.querySelector(`[data-q="${q.id}"]`); if (!host) return;
+  const pick = (saved[q.id] && saved[q.id].k) || q.rec;
+  host.innerHTML = `<div class="q${saved[q.id] ? ' answered' : ''}" id="${q.id}">
+    <div class="qh"><span class="qid">${q.id}</span><span class="qt">${q.title}</span>${(q.scope || '').split(' ').map(s => `<span class="scope">${s}</span>`).join('')}</div>
+    <div class="qctx">${q.context || ''}</div>
+    ${q.visual ? `<div class="qvis">${q.visual()}</div>` : ''}
+    <div class="opts">${q.options.map(o => `<label class="opt${o.k === pick ? ' on' : ''}"><input type="radio" name="${q.id}" value="${o.k}"${o.k === pick ? ' checked' : ''}>
+      <span><b>${o.k} · ${o.t}</b>${o.k === q.rec ? ' <span class="star">★</span>' : ''}${o.d ? `<span class="d">${o.d}</span>` : ''}</span></label>`).join('')}</div>
+    <div class="why"><b>My recommendation and reason:</b> ${q.rec}. ${q.why}</div>
+    <details class="qnote"${saved[q.id] && saved[q.id].note ? ' open' : ''}><summary>Add a note</summary><textarea placeholder="Anything to add or change">${esc(saved[q.id] && saved[q.id].note || '')}</textarea></details>
+  </div>`;
+  host.querySelectorAll('input[type=radio]').forEach(r => r.addEventListener('change', () => {
+    saved[q.id] = Object.assign(saved[q.id] || {}, { k: r.value });
+    host.querySelectorAll('.opt').forEach(o => o.classList.toggle('on', o.querySelector('input').checked));
+    host.querySelector('.q').classList.add('answered'); store();
+  }));
+  host.querySelector('textarea').addEventListener('input', e => {
+    saved[q.id] = Object.assign(saved[q.id] || { k: pick }, { note: e.target.value }); host.querySelector('.q').classList.add('answered'); store();
+  });
+}
+
+function summary() {
+  const lines = ['Components Designer, round two: answers', ''];
+  for (const q of Q) {
+    const a = saved[q.id] || {}; const k = a.k || q.rec; const o = q.options.find(o => o.k === k);
+    lines.push(`${q.id} ${q.title}: ${k}${k === q.rec ? ' ★' : ' (not the recommendation)'} · ${o ? o.t : ''}${saved[q.id] ? '' : ' [default]'}`);
+    if (a.note) lines.push(`    note: ${a.note.replace(/\n/g, ' ')}`);
+  }
+  const hq = DATA.questions.filter(h => saved['HQ:' + h.role] !== undefined);
+  if (hq.length) {
+    lines.push('', 'Hatch\'s own questions (answered here):');
+    for (const h of hq) {
+      const i = saved['HQ:' + h.role]; const o = h.options[i];
+      lines.push(`HQ ${h.role}: option ${i + 1} · ${o ? o.title : ''}${i === h.my ? ' ★' : ''}${i === h.rec ? ' (Hatch\'s current recommendation)' : ''}`);
+    }
+  }
+  const t = $('#summary'); if (t) t.value = lines.join('\n');
+  return lines.join('\n');
+}
+function progress() {
+  const n = Q.filter(q => saved[q.id]).length;
+  $('#prog').style.width = `${Math.round(100 * n / Q.length)}%`;
+  $('#progtext').textContent = `${n} of ${Q.length} looked at · the rest stay on ★`;
+  document.querySelectorAll('#tocitems a[data-sec]').forEach(a => {
+    const ids = [...document.querySelectorAll(`#${a.dataset.sec} [data-q]`)].map(x => x.dataset.q);
+    if (!ids.length) return;
+    const done = ids.filter(id => saved[id]).length;
+    const n = a.querySelector('.n'); n.textContent = `${done}/${ids.length}`; n.classList.toggle('done', done === ids.length);
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Static pieces: bugs, vocabulary, flows
+// ---------------------------------------------------------------------------------------------------------------
+const BUGS = [
+  ['B1', 'Hard cases, Dark', 'Dark doesn\'t go back to light.', '<span class="mono">.preferredColorScheme(dark ? .dark : nil)</span>: on macOS, going back to nil doesn\'t reset the window.', 'D'],
+  ['B2', 'Inspector ‹ ›', 'From "–", › skips the first value and ‹ jumps to the last; "–" can\'t be reached again; the list wraps silently.', '<span class="mono">step</span> treats a missing value as index 0 and wraps with %.', 'D'],
+  ['B3', 'Inspector ‹ ›', 'Every click is a write and a git commit in the notebook; this is the lag.', '<span class="mono">run("look")</span> → <span class="mono">StageServer.changeComponents</span> → <span class="mono">commitNotebook</span>.', 'D'],
+  ['B4', 'Question bar', 'Choosing an option draws nothing.', 'The choice is local state; the canvas reads draft or recipe.', 'D'],
+  ['B5', 'Rules, Foundations', 'The view switch stays (showing Today vs Draft) and the inspector shows a role from another element.', 'Mode and selected role aren\'t cleared outside elements.', 'D'],
+  ['B6', 'List rows', 'Each sample row draws a whole list; titles wrap one letter per line.', '<span class="mono">RecipeRow</span> draws a list and the place frame puts it in each row of its own list.', 'K D'],
+  ['B7', 'Badges', 'The badge is a row-sized box; the toolbar title collapses to "…".', '<span class="mono">RecipeBadge</span> draws a List row.', 'K D'],
+  ['B8', 'Toggles', 'The recommended option reads "–" and contradicts the role\'s own text (a mini switch).', 'An empty recipe has no words; the recommendation only counts uses (CD28).', 'D core'],
+  ['B9', 'Menus', '<span class="mono">menu.toolbar</span> is the role in List row, Card, Inspector and Form.', 'Named after the first place it was found in (CD2).', 'core'],
+  ['B10', 'Question bar', 'The fourth card is cut off, cards 5 and 6 are off screen, a scroll knob shows.', 'A fixed horizontal strip.', 'D'],
+  ['B11', 'Live window', 'The demo links run under the toast.', 'Both pinned to the bottom.', 'D'],
+  ['B12', 'Title bar', 'The subtitle is cut off.', 'Too long for the toolbar.', 'D'],
+  ['B13', 'Inspector place', 'A card in the inspector sample is wider than the inspector it sits in.', 'Seen in the captures for this page: the card sample has no width limit.', 'K'],
+];
+function bugsTable() {
+  return `<table class="t"><tr><th>#</th><th>Where</th><th>What is wrong</th><th>Cause</th><th>Scope</th></tr>${BUGS.map(b => `<tr><td class="mono">${b[0]}</td><td>${b[1]}</td><td>${b[2]}</td><td class="small muted">${b[3]}</td><td>${b[4].split(' ').map(s => `<span class="scope">${s}</span>`).join('')}</td></tr>`).join('')}</table>`;
+}
+const VOCAB = [
+  ['Element', 'A kind of control or block.', 'Buttons, Menus, Pickers, Toggles, Text fields, Section switchers, List rows, Cards, Sheets, Badges, Toasts, Empty states'],
+  ['Place', 'Where a control sits.', 'Toolbar, Sheet footer, Bottom bar, List row, Card, Inspector, Popover, Form, Empty state, Context menu, Alert, Page, Action row, Floating'],
+  ['Role', 'One element doing one job, in the places where it does that job. The thing that has a look and rules.', '"Main action": the one main action of a screen; in Bottom bar, Empty state, Page, Action row, Floating; at most one per screen'],
+  ['Look', 'How a role is drawn: a few settings of the native control. (In code: the recipe.)', 'Main action: Glass, filled · Large · Icon and title'],
+  ['Variant', 'A role drawn differently in one place or area, with a reason.', 'Main action, Popover: Small, because popovers are tight'],
+  ['Starting point', 'Where a system starts: your app as it is, or a template.', 'Your app today · macOS Native · Glass'],
+  ['Foundation', 'A named value roles use.', 'Accent colour, Card title text, Group spacing, Floating radius'],
+  ['Rule', 'What looks can\'t say: grouping, wording, placement, values.', '"Buttons and menu items use title case", "Context menus stay short"'],
+  ['Follow macOS', 'No look of its own: macOS decides, now and in later versions.', 'Cancel, Menu item, Text field'],
+];
+function vocabTable() {
+  return `<table class="t"><tr><th>Word</th><th>Means</th><th>Example in Hatch</th></tr>${VOCAB.map(v => `<tr><td><b>${v[0]}</b></td><td>${v[1]}</td><td class="muted">${v[2]}</td></tr>`).join('')}</table>`;
+}
+function flow(steps) {
+  return steps.map((s, i) => `${i ? '<span class="ar">→</span>' : ''}<div class="fb${s[2] ? ' you' : ''}"><b>${s[0]}</b>${s[1]}</div>`).join('');
+}
+const FLOW_TODAY = [
+  ['Components page', 'Hatch app, project'],
+  ['Start from the App, or a template by name', 'Nothing drawn before you choose', true],
+  ['Open Designer', 'Templates are never shown again'],
+  ['19 questions', 'Bottom bar, no preview; recommendation = most used', true],
+  ['‹ › per setting', 'Each click commits'],
+  ['Agree to This Role', 'One by one', true],
+];
+const FLOW_NEW = [
+  ['Open the Designer', 'From the Components page or Decide'],
+  ['Choose a starting point', 'Drawn gallery: app today, Native, Glass, or a mix per element', true],
+  ['Element overview', 'Places drawn calmly; templates offered as picks everywhere'],
+  ['Accept the clear ones', 'Recommendations that match the template or cover 80%', true],
+  ['Real choices', 'Questions in the inspector, previewed in every place; one save each', true],
+  ['Batch and variants', 'One look for a place, template for an element, "only here"'],
+  ['Agree', 'Per role, per element, or after 3 built tickets (DS8)', true],
+];
+
+// ---------------------------------------------------------------------------------------------------------------
+// Visuals used inside questions
+// ---------------------------------------------------------------------------------------------------------------
+function startGallery() {
+  const cols = [['hatch', 'Your app today', 'Recommended for an app that ships'], ['native', 'macOS Native', 'Apple\'s defaults throughout'], ['glass', 'Glass', 'Hatch\'s own look']];
+  const rows = [['bottomBar', 'button', 'Bottom bar'], ['sheetFooter', 'button', 'Sheet footer'], ['listRow', 'button', 'List row'], ['inspector', 'toggle', 'Inspector']];
+  return `<div class="note" style="padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><b>Choose a starting point</b><span class="small muted">Sketch of the start sheet · pictures are real</span></div>
+    <div class="lineup" style="grid-template-columns:100px repeat(3,minmax(0,1fr))">
+      <div></div>${cols.map((c, i) => `<div class="lh" style="position:static">${c[1]}${i === 0 ? ' <span class="star">★</span>' : ''}<div class="tiny muted" style="font-weight:400">${c[2]}</div></div>`).join('')}
+      ${rows.map(r => `<div class="lp">${r[2]}</div>${cols.map(c => `<div>${shot(`tpl/${c[0]}/${r[0]}-${r[1]}`)}</div>`).join('')}`).join('')}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span class="btn">Mix per Element…</span><span><span class="btn">Cancel</span> <span class="btn primary">Start from Your App</span></span></div>
+  </div>`;
+}
+function sameTable() {
+  const KIND = {
+    'button.style': ['automatic', 'Bordered', 'twin'], 'button.shape': ['automatic', 'Rounded rectangle', 'twin'], 'menu.style': ['automatic', 'Button', 'twin'],
+    'toggle.style': ['automatic', 'Checkbox', 'twin'], 'picker.style': ['', '', 'macos'], 'field.style': ['', '', 'check'], 'field.size': ['', '', 'check'],
+    'toggle.size': ['', '', 'check'], 'badge.tint': ['', '', 'check'], 'card.shadow': ['', '', 'check'], 'card.surface': ['', '', 'check'],
+    'menu.look': ['', '', 'check'], 'toast.position': ['', '', 'window'],
+  };
+  const what = { twin: ['macOS default is this value', 'Merge: "macOS default (…)"'], macos: ['macOS draws them the same', 'Merge on macOS'], check: ['Should differ; renderer or macOS 27?', 'Check against the SDK, fix the renderer'], window: ['Only visible in a real window', 'Show in the Live window'] };
+  const rows = [];
+  for (const e of DATA.elements) for (const p of e.params) for (const g of p.same) {
+    const k = KIND[`${e.id}.${p.id}`] || ['', '', 'check'];
+    rows.push(`<tr><td>${e.plural} · ${p.title}</td><td>${g.map(v => vname(e.id, p.id, v)).join(' = ')}</td><td>${g.map(v => shot(`look/${e.id}-${p.id}-${v}`, { scale: .45, empty: false, style: 'display:inline-block;margin:2px' })).join('')}</td><td class="small">${what[k[2]][0]}</td><td class="small">${what[k[2]][1]}</td></tr>`);
+  }
+  return `<table class="t"><tr><th>Setting</th><th>Same-looking values</th><th>Captured</th><th>Why</th><th>Proposal</th></tr>${rows.join('')}</table>`;
+}
+function batchSheet() {
+  return `<div class="note" style="max-width:640px;padding:16px 18px">
+    <b>One look for every button in Sheet footer</b>
+    <div class="small muted" style="margin:2px 0 10px">Choose a style; Hatch sets it on each role in this place. Nothing is saved until Keep.</div>
+    <div class="irow" style="padding:0 0 8px"><span>Style</span><span class="pop">Bordered</span></div>
+    <table class="t"><tr><th>Role</th><th>Also used in</th><th>Apply</th></tr>
+      <tr><td>Default button</td><td class="muted">Alert</td><td><span class="seg"><span class="on">Everywhere</span><span>Only here</span></span></td></tr>
+      <tr><td>Other action</td><td class="muted">Bottom bar, Empty state, Alert, Page, Action row, Floating</td><td><span class="seg"><span>Everywhere</span><span class="on">Only here</span></span></td></tr>
+      <tr><td>Cancel</td><td class="muted">Alert, Page</td><td><span class="seg"><span class="on">Everywhere</span><span>Only here</span></span></td></tr>
+      <tr><td>Destructive action</td><td class="muted">Context menu, Alert (drawn by macOS)</td><td><span class="seg"><span class="on">Everywhere</span><span>Only here</span></span></td></tr></table>
+    <div class="small muted" style="margin-top:8px">"Only here" makes a variant and asks for the reason. Hatch suggests "Only here" when a role reaches more than three other places.</div>
+    <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:10px"><span class="btn">Cancel</span><span class="btn primary">Preview</span></div></div>`;
+}
+const SETTING_ADVICE = [
+  ['Buttons, Menus, Pickers, Toggles, Text fields', 'No', 'People expect these to look like macOS. A setting doubles what has to be tested and nobody asks for it.'],
+  ['Section switchers, Sheets, Cards, Empty states', 'No', 'Structure, not taste. Changing them per person breaks layouts.'],
+  ['List rows: row size and separators', 'Offer', 'Dense or roomy lists are a common choice in pro apps (Mail, Finder\'s list).'],
+  ['Badges: shown or not', 'Offer', 'Some people find counts stressful; Mail and the Dock let you turn them off. The look stays.'],
+  ['Toasts: how long they stay', 'Offer', 'An accessibility need: slower readers need longer.'],
+  ['Foundations: text size', 'Offer', 'Larger text in content areas is common (Mail, Notes); macOS-wide text size doesn\'t cover every app.'],
+  ['Foundations: accent colour', 'No', 'macOS already lets people choose an accent colour; follow it.'],
+  ['Rules', 'No', 'Rules are about how the app is written, not something users see as a choice.'],
+];
+function settingsTable() {
+  return `<table class="t"><tr><th>What</th><th>Recommend</th><th>Reason</th></tr>${SETTING_ADVICE.map(r => `<tr><td>${r[0]}</td><td><span class="chip ${r[1] === 'Offer' ? 'green' : ''}">${r[1]}</span></td><td class="small">${r[2]}</td></tr>`).join('')}</table>`;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Templates side by side
+// ---------------------------------------------------------------------------------------------------------------
+let lineupEl = 'button';
+function renderLineup() {
+  const els = [...new Set(Object.values(SYS).flatMap(s => s.roles.map(r => r.element)))];
+  const order = DATA.elements.map(e => e.id).filter(id => els.includes(id));
+  $('#lineup-tabs').innerHTML = order.map(e => `<span data-e="${e}" class="${e === lineupEl ? 'on' : ''}">${ELEMENT(e).plural}</span>`).join('');
+  $('#lineup-tabs').querySelectorAll('span').forEach(s => s.onclick = () => { lineupEl = s.dataset.e; renderLineup(); });
+  const places = DATA.places.filter(p => ['hatch', 'native', 'glass'].some(s => has(`tpl/${s}/${p.id}-${lineupEl}`)));
+  const head = `<div class="lh"></div><div class="lh">Hatch today</div><div class="lh">macOS Native</div><div class="lh">Glass</div>`;
+  $('#lineup-grid').innerHTML = head + places.map(p => {
+    const cell = s => {
+      const r = roleIn(s, lineupEl, p.id);
+      return `<div>${shot(`tpl/${s}/${p.id}-${lineupEl}`, { emptyText: 'No role here' })}${r ? `<div class="cap">${esc(r.title)}${r.follows ? ' · follows macOS' : ''}<br><span class="tiny">${esc(recipeWords(r.element, r.recipe))}</span></div>` : ''}</div>`;
+    };
+    return `<div class="lp">${esc(p.title)}<span>${esc(p.summary || '')}</span></div>${cell('hatch')}${cell('native')}${cell('glass')}`;
+  }).join('');
+  paintShots($('#lineup-grid'));
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Every look option
+// ---------------------------------------------------------------------------------------------------------------
+let galEl = 'button';
+function usesOf(sys, el, p, v, def) {
+  return SYS[sys].roles.filter(r => r.element === el && ((r.recipe || {})[p] === v || ((r.recipe || {})[p] === undefined && def && v === def)));
+}
+function renderGallery() {
+  $('#gal-tabs').innerHTML = DATA.elements.map(e => `<span data-e="${e.id}" class="${e.id === galEl ? 'on' : ''}">${e.plural}</span>`).join('');
+  $('#gal-tabs').querySelectorAll('span').forEach(s => s.onclick = () => { galEl = s.dataset.e; renderGallery(); });
+  const e = ELEMENT(galEl);
+  const wide = ['row', 'card', 'sheet', 'toast', 'emptyState', 'switcher'].includes(e.id);
+  $('#gal-body').innerHTML = `${e.tier === 'hatchDrawn' ? '<p class="small muted">Drawn by Hatch: macOS has no toast control, so this is the one element whose look is Hatch\'s own (NF1).</p>' : ''}` + e.params.map(p => {
+    const sameOf = v => (p.same.find(g => g.includes(v)) || []).filter(x => x !== v);
+    if (!p.look) {
+      return `<div class="param"><div class="pt"><b>${p.title}</b><span class="chip">behaviour</span><span class="small muted">Can't be seen in a picture; set in the Behaviour section (CD22).</span></div>
+        <div class="small">${p.values.map(v => `${esc(v.name)}${v.id === p.def ? ' <span class="chip">macOS default</span>' : ''}`).join(' · ')}</div></div>`;
+    }
+    return `<div class="param"><div class="pt"><b>${p.title}</b><span class="small muted">${p.values.length} values${p.def ? ` · macOS default: ${esc(vname(e.id, p.id, p.def))}` : ''}</span></div>
+      <div class="vals${wide ? ' wide' : ''}">${p.values.map(v => {
+        const marks = [['native', 'Native', ''], ['glass', 'Glass', 'blue'], ['hatch', 'Hatch', 'green']].map(([s, t, c]) => {
+          const u = usesOf(s, e.id, p.id, v.id, p.def); return u.length ? `<span class="chip ${c}" title="${esc(u.map(r => r.title).join(', '))}">${t} ${u.length}</span>` : '';
+        }).join('');
+        const same = sameOf(v.id);
+        return `<div class="val${same.length ? ' same' : ''}">${shot(`look/${e.id}-${p.id}-${v.id}`, { scale: wide ? .62 : .7 })}
+          <div class="vn">${esc(v.name)}${v.id === p.def && !v.name.startsWith('macOS default') ? ' <span class="chip">macOS default</span>' : ''}</div>
+          <div class="vc mono">${esc(v.id)}</div>${same.length ? `<div class="vc" style="color:var(--amber)">same as ${same.map(x => esc(vname(e.id, p.id, x))).join(', ')}</div>` : ''}
+          <div class="marks">${marks}</div></div>`;
+      }).join('')}</div></div>`;
+  }).join('');
+  paintShots($('#gal-body'));
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Hatch's questions
+// ---------------------------------------------------------------------------------------------------------------
+function renderHQ() {
+  const differ = DATA.questions.filter(h => h.my !== null && h.my !== h.rec).length;
+  $('#hq-list').innerHTML = `<p class="small muted">Under CD28 the recommendation changes for <b>${differ} of ${DATA.questions.length}</b>.</p>` + DATA.questions.map(h => {
+    const cur = saved['HQ:' + h.role];
+    return `<div class="hq" data-role="${h.role}">
+      <div class="qh"><span class="qid">${esc(h.role)}</span><span class="qt">${esc(h.roleTitle)}</span></div>
+      <div class="small muted">${esc(h.detail)} · places: ${h.places.map(p => esc(PLACE(p).title)).join(', ')}</div>
+      <div class="ho">${h.options.map((o, i) => `<div class="hopt${cur === i ? ' on' : ''}" data-i="${i}">
+        ${o.img ? shot(o.img, { scale: .5 }) : `<div class="empty" style="padding:10px">${o.follow ? 'macOS draws it' : 'keep the most used for now'}</div>`}
+        <div class="ht"><b>${i + 1}</b> · ${esc(o.recipe ? recipeWords(h.element, o.recipe) : o.title)} ${i === h.my ? '<span class="star">★</span>' : ''} ${i === h.rec ? '<span class="chip green">Hatch</span>' : ''}</div>
+        ${o.count ? `<div class="hc">${o.count} uses</div>` : ''}</div>`).join('')}</div>
+      <div class="why"><b>Hatch today:</b> ${esc(h.reason)}<br><b>Mine${h.my === h.rec ? ' (same)' : ''}:</b> ${esc(h.myReason)}</div>
+    </div>`;
+  }).join('');
+  $('#hq-list').querySelectorAll('.hq').forEach(box => box.querySelectorAll('.hopt').forEach(o => o.onclick = () => {
+    const k = 'HQ:' + box.dataset.role; const i = +o.dataset.i;
+    if (saved[k] === i) delete saved[k]; else saved[k] = i;
+    box.querySelectorAll('.hopt').forEach(x => x.classList.toggle('on', saved[k] === +x.dataset.i)); store();
+  }));
+  paintShots($('#hq-list'));
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Matrices
+// ---------------------------------------------------------------------------------------------------------------
+function matrixButtons(sys = 'hatch', el = 'button', onPick) {
+  const roles = SYS[sys].roles.filter(r => r.element === el);
+  const places = DATA.places.filter(p => roles.some(r => r.places.includes(p.id)));
+  const imps = IMPORTANCE.filter(i => roles.some(r => r.importance === i));
+  let html = `<div class="mx" style="grid-template-columns:110px repeat(${imps.length}, minmax(0,1fr))"><div></div>${imps.map(i => {
+    const looks = new Set(roles.filter(r => r.importance === i).map(r => JSON.stringify(r.recipe))).size;
+    return `<div class="mh">${IMP_TITLE[i]}${looks > 2 ? ` <span class="chip amber">${looks} looks</span>` : ''}</div>`;
+  }).join('')}`;
+  for (const p of places) {
+    html += `<div class="mp">${esc(p.title)}</div>`;
+    for (const i of imps) {
+      const r = roles.find(r => r.importance === i && r.places.includes(p.id));
+      html += r ? `<div class="mc" data-role="${r.id}" title="${esc(r.title)} · ${esc(recipeWords(r.element, r.recipe))}">${shot(`role/${sys}/${r.id}`, { scale: .42, empty: false })}<span class="mn">${esc(rname(r))}${questionFor(r.id) ? ' ●' : ''}</span></div>`
+               : `<div class="mc none">Decide…</div>`;
+    }
+  }
+  return html + '</div>';
+}
+function wireMatrix(root, onPick) {
+  root.querySelectorAll('.mc[data-role]').forEach(c => {
+    c.onmouseenter = () => root.querySelectorAll(`.mc[data-role="${c.dataset.role}"]`).forEach(x => x.classList.add('hl'));
+    c.onmouseleave = () => root.querySelectorAll('.mc.hl').forEach(x => x.classList.remove('hl'));
+    if (onPick) c.onclick = () => onPick(c.dataset.role);
+  });
+}
+function matrixSystem(sys = 'hatch') {
+  const els = DATA.elements.map(e => e.id).filter(e => SYS[sys].roles.some(r => r.element === e));
+  const places = DATA.places.filter(p => SYS[sys].roles.some(r => r.places.includes(p.id)));
+  let html = `<div style="overflow:auto"><div class="mx" style="grid-template-columns:100px repeat(${els.length}, minmax(86px,1fr));min-width:${100 + els.length * 90}px"><div></div>${els.map(e => `<div class="mh">${ELEMENT(e).plural}</div>`).join('')}`;
+  for (const p of places) {
+    html += `<div class="mp">${esc(p.title)}</div>`;
+    for (const e of els) {
+      const r = roleIn(sys, e, p.id);
+      html += r ? `<div class="mc" data-role="${r.id}" title="${esc(r.title)} · ${esc(recipeWords(r.element, r.recipe))}">${shot(`role/${sys}/${r.id}`, { scale: .34, empty: false })}<span class="mn">${esc(rname(r))}</span></div>` : `<div class="mc none">–</div>`;
+    }
+  }
+  return html + '</div></div>';
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Apple findings
+// ---------------------------------------------------------------------------------------------------------------
+const ADVICE_KIND = {
+  redundant: ['Redundant', 'A setting macOS uses anyway.', 'Removed on save, no message.'],
+  systemPlace: ['Drawn by macOS', 'A role styles a place macOS draws (context menu, alert).', 'Look settings hidden; one line says macOS draws it.'],
+  glassInContent: ['Glass in content', 'Liquid Glass in rows, cards or forms.', 'Callout with "Use Filled Instead".'],
+  wrongDefault: ['Wrong default', 'A destructive or Cancel button as the default button.', 'Callout with "Make Cancel the default".'],
+  switcherInContent: ['Switcher in content', 'A segmented view switcher in the main area.', 'Callout with "Move to the toolbar".'],
+};
+function adviceTable() {
+  const a = SYS.hatch.advice;
+  const kinds = Object.keys(ADVICE_KIND);
+  return `<table class="t"><tr><th>Kind</th><th>Means</th><th>In Hatch now</th><th>Proposed handling (CD35)</th></tr>${kinds.map(k => {
+    const list = a.filter(x => x.kind === k);
+    return `<tr><td><b>${ADVICE_KIND[k][0]}</b></td><td class="small">${ADVICE_KIND[k][1]}</td><td class="small">${list.length ? list.map(x => esc(x.role)).join(', ') : '<span class="muted">none</span>'}</td><td class="small">${ADVICE_KIND[k][2]}</td></tr>`;
+  }).join('')}</table>`;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The proposed window (a working sketch)
+// ---------------------------------------------------------------------------------------------------------------
+const W = { sel: { kind: 'element', id: 'button' }, role: null, view: 'inplace', preview: {}, theme: 'Light' };
+const SIDEBAR = [
+  ['Actions', ['button', 'menu']], ['Choices', ['picker', 'toggle', 'switcher']], ['Text', ['field']],
+  ['Lists and containers', ['row', 'card', 'sheet']], ['Feedback', ['badge', 'toast', 'emptyState']],
+];
+const openCount = el => DATA.questions.filter(q => q.element === el).length;
+const totalOpen = () => DATA.questions.length;
+function placesOf(el) { return DATA.places.filter(p => has(`tpl/hatch/${p.id}-${el}`)); }
+function wSidebar() {
+  const els = new Set(SYS.hatch.roles.map(r => r.element));
+  let h = `<div class="lights"><i></i><i></i><i></i></div>`;
+  for (const [g, list] of SIDEBAR) {
+    const shown = list.filter(e => els.has(e)); if (!shown.length) continue;
+    h += `<div class="sg">${g}</div>` + shown.map(e => {
+      const on = W.sel.kind === 'element' && W.sel.id === e; const n = openCount(e);
+      return `<div class="si${on ? ' on' : ''}" data-k="element" data-id="${e}"><span>${ELEMENT(e).plural}</span>${n ? `<span class="b">${n}</span>` : ''}</div>`;
+    }).join('');
+  }
+  h += `<div class="sg">Places</div>` + ['toolbar', 'sheetFooter', 'bottomBar', 'listRow', 'inspector', 'popover', 'form', 'floating'].map(p =>
+    `<div class="si${W.sel.kind === 'place' && W.sel.id === p ? ' on' : ''}" data-k="place" data-id="${p}"><span>${esc(PLACE(p).title)}</span></div>`).join('');
+  h += `<div class="sg">System</div><div class="si"><span>Rules</span></div><div class="si"><span>Foundations</span></div>`;
+  return h;
+}
+function previewKey(roleId) {
+  const q = questionFor(roleId); const i = W.preview[roleId];
+  if (q && i !== undefined && q.options[i] && q.options[i].img) return q.options[i].img;
+  return null;
+}
+function wCanvas() {
+  const hard = `<div class="hard">Hard cases <span class="seg" data-hard>${['Light', 'Dark', 'Both'].map(t => `<span class="${W.theme === t ? 'on' : ''}">${t}</span>`).join('')}</span><label><input type="checkbox">Long label</label><label><input type="checkbox">Disabled</label><label><input type="checkbox">Larger text</label><label><input type="checkbox">Inactive</label></div>`;
+  if (W.role) {
+    const r = SYS.hatch.roles.find(x => x.id === W.role);
+    const pk = previewKey(r.id);
+    const rows = r.places.map(p => {
+      const today = shot(`tpl/hatch/${p}-${r.element}`, { scale: .62, emptyText: 'drawn live in the Designer' });
+      const draft = pk && p === r.places[0] ? shot(pk, { scale: .62 }) : (pk ? `<div class="empty">drawn live in the Designer</div>` : today);
+      return `<div class="frow"><div class="pl">${esc(PLACE(p).title)}<div class="tiny muted" style="font-weight:400"><a>Only here…</a></div></div><div>${today}</div><div>${draft}</div></div>`;
+    }).join('');
+    return hard + `<div class="wcanvas"><div class="frow" style="padding-top:0"><div></div><div class="hd">TODAY</div><div class="hd">${pk ? 'PREVIEW <span class="chip amber">not saved</span>' : 'DRAFT (same as today)'}</div></div>${rows}</div>`;
+  }
+  if (W.sel.kind === 'place') {
+    const p = W.sel.id;
+    const els = DATA.elements.map(e => e.id).filter(e => has(`tpl/hatch/${p}-${e}`));
+    return hard + `<div class="wcanvas"><div class="small muted" style="margin-bottom:10px">Everything in ${esc(PLACE(p).title)}. Click a control to open its role.</div><div class="wgrid">${els.map(e => {
+      const r = roleIn('hatch', e, p);
+      return `<div class="pcard"><div class="ph">${ELEMENT(e).plural}${r && questionFor(r.id) ? '<span class="dot" title="to decide"></span>' : ''}</div><div class="pb" data-role="${r ? r.id : ''}">${shot(`tpl/hatch/${p}-${e}`, { scale: .6 })}</div></div>`;
+    }).join('')}</div></div>`;
+  }
+  const el = W.sel.id;
+  if (W.view === 'matrix') return hard + `<div class="wcanvas">${matrixButtons('hatch', el)}</div>`;
+  return hard + `<div class="wcanvas"><div class="wgrid">${placesOf(el).map(p => {
+    const r = roleIn('hatch', el, p.id);
+    const roles = SYS.hatch.roles.filter(x => x.element === el && x.places.includes(p.id));
+    const dot = roles.some(x => questionFor(x.id));
+    const pk = r && previewKey(r.id) && r.places[0] === p.id ? previewKey(r.id) : null;
+    return `<div class="pcard"><div class="ph">${esc(p.title)}${dot ? '<span class="dot" title="to decide"></span>' : ''}</div><div class="pb" data-role="${r ? r.id : ''}" title="${esc(p.summary || '')}">${shot(pk || `tpl/hatch/${p.id}-${el}`, { scale: .6 })}</div></div>`;
+  }).join('')}</div></div>`;
+}
+function wInspector() {
+  if (W.role) {
+    const r = SYS.hatch.roles.find(x => x.id === W.role);
+    const q = questionFor(r.id);
+    const adv = SYS.hatch.advice.filter(a => a.role === r.id && a.kind !== 'redundant');
+    const e = ELEMENT(r.element);
+    let h = `<div class="ih" title="${esc(r.title)}">${esc(rname(r))}</div><div class="small muted" style="margin:2px 0 6px">Provisional · ${r.places.length} place${r.places.length === 1 ? '' : 's'}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">${r.places.map(p => `<span class="chip">${esc(PLACE(p).title)}</span>`).join('')}</div>`;
+    if (adv.length) h += `<div class="isec"></div><div class="callout"><span class="ic">!</span><div>${adv[0].kind === 'glassInContent' ? '<b>Glass in content.</b> Apple keeps Liquid Glass for controls and navigation; rows and cards use standard materials.<div style="margin-top:6px"><span class="btn small primary">Use Filled Instead</span></div>' : '<b>Drawn by macOS here.</b> Only order and wording are yours in this place.'}</div></div>`;
+    if (q) {
+      const cur = W.preview[r.id];
+      h += `<div class="isec">TO DECIDE · ${esc(q.detail.split('(')[0])}</div><div class="ibox">${q.options.map((o, i) => o.img ? `<div class="pick${cur === i ? ' on' : ''}" data-i="${i}"><span class="rd"></span><div class="pi">${shot(o.img, { scale: .32, empty: false })}<div class="src">${i === q.my ? '<span class="star">★</span> ' : ''}${o.count} uses${i === q.rec ? ' · most used' : ''}</div></div></div>` : '').join('')}
+        ${q.options.map((o, i) => !o.img ? `<div class="pick${cur === i ? ' on' : ''}" data-i="${i}"><span class="rd"></span><div class="pi small">${esc(o.title)}${i === q.my ? ' <span class="star">★</span>' : ''}<div class="src">${o.follow ? 'No look of its own: macOS decides' : 'Keep the most used for now'}</div></div></div>` : '').join('')}</div>
+        <div class="small muted" style="margin:6px 2px"><span class="star">★</span> ${esc(q.myReason)}</div>`;
+    } else {
+      h += `<div class="isec">LOOK</div><div class="ibox"><div class="pick on"><span class="rd"></span><div class="pi">${shot(`role/hatch/${r.id}`, { scale: .5, empty: false, cls: 'ctl' })}<div class="src">Current</div></div></div>
+        ${has(`role/glass/${r.id}`) ? `<div class="pick"><span class="rd"></span><div class="pi">${shot(`role/glass/${r.id}`, { scale: .5, empty: false, cls: 'ctl' })}<div class="src">Glass</div></div></div>` : ''}
+        ${has(`role/native/${r.id}`) ? `<div class="pick"><span class="rd"></span><div class="pi">${shot(`role/native/${r.id}`, { scale: .5, empty: false, cls: 'ctl' })}<div class="src">macOS Native</div></div></div>` : ''}</div>`;
+    }
+    const look = e.params.filter(p => p.look), beh = e.params.filter(p => !p.look);
+    h += `<details><summary class="isec" style="cursor:pointer">FINE-TUNE</summary><div class="ibox">${look.map(p => `<div class="irow"><span>${p.title}</span><span class="pop">${esc(r.recipe[p.id] ? vname(r.element, p.id, r.recipe[p.id]) : `macOS default${p.def ? ` (${vname(r.element, p.id, p.def)})` : ''}`)}</span></div>`).join('')}</div></details>`;
+    if (beh.length) h += `<details><summary class="isec" style="cursor:pointer">BEHAVIOUR</summary><div class="ibox">${beh.map(p => `<div class="irow"><span>${p.title}</span><span class="pop">${esc(r.recipe[p.id] ? vname(r.element, p.id, r.recipe[p.id]) : vname(r.element, p.id, p.def) || 'None')}</span></div>`).join('')}</div></details>`;
+    h += `<div class="isec">USE WHEN</div><div class="small">${esc(r.use || '')}${r.avoid ? `<div class="muted" style="margin-top:4px">Not when: ${esc(r.avoid)}</div>` : ''}</div>
+      <div class="isec">CODE</div><div class="small mono muted">${esc(r.id)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><span class="btn small" title="Follow macOS · Ask an agent for looks… · Let people choose in Settings… · Copy code name">⋯</span><span class="btn primary">${q ? 'Answer' : 'Agree'}</span></div>`;
+    return h;
+  }
+  if (W.sel.kind === 'place') {
+    const p = W.sel.id; const roles = SYS.hatch.roles.filter(r => r.places.includes(p));
+    return `<div class="ih">${esc(PLACE(p).title)}</div><div class="small muted" style="margin:2px 0 8px">${esc(PLACE(p).summary || '')}</div>
+      <div class="isec">ROLES HERE</div><div class="ibox">${roles.map(r => `<div class="irow" data-role="${r.id}" style="cursor:pointer"><span>${esc(rname(r))}</span><span class="small muted">${esc(ELEMENT(r.element).title)}</span></div>`).join('')}</div>
+      <div class="isec">FOR THE WHOLE PLACE</div><div style="display:grid;gap:6px"><span class="btn">One Look for Every Control Here…</span><span class="btn">Use macOS Native Here…</span><span class="btn">Follow macOS Here</span></div>`;
+  }
+  const el = W.sel.id; const roles = SYS.hatch.roles.filter(r => r.element === el); const n = openCount(el);
+  return `<div class="ih">${ELEMENT(el).plural}</div><div class="small muted" style="margin:2px 0 8px">${roles.length} roles · ${n} to decide</div>
+    <div class="isec">ROLES</div><div class="ibox">${roles.map(r => `<div class="irow" data-role="${r.id}" style="cursor:pointer"><span>${esc(rname(r))}</span>${questionFor(r.id) ? '<span class="chip amber">decide</span>' : '<span class="small muted">provisional</span>'}</div>`).join('')}</div>
+    <div class="isec">START FROM</div><div class="ibox"><div class="pick on"><span class="rd"></span><div class="pi small">Your app today <span class="star">★</span><div class="src">The most used look per role</div></div></div><div class="pick"><span class="rd"></span><div class="pi small">macOS Native</div></div><div class="pick"><span class="rd"></span><div class="pi small">Glass</div></div></div>
+    ${n ? `<div style="margin-top:12px;display:grid;gap:6px"><span class="btn">Accept the Clear Ones…</span></div>` : ''}`;
+}
+function renderWindow() {
+  const title = W.role ? `<span class="crumb" data-back>‹ ${W.sel.kind === 'place' ? esc(PLACE(W.sel.id).title) : ELEMENT(W.sel.id).plural}</span> · ${esc(rname(SYS.hatch.roles.find(r => r.id === W.role)))}`
+    : (W.sel.kind === 'place' ? esc(PLACE(W.sel.id).title) : ELEMENT(W.sel.id).plural);
+  const views = !W.role && W.sel.kind === 'element' ? `<span class="seg" data-views><span data-v="inplace" class="${W.view === 'inplace' ? 'on' : ''}">In Place</span><span data-v="matrix" class="${W.view === 'matrix' ? 'on' : ''}">Matrix</span></span>` : '';
+  $('#mockwin').innerHTML = `<div class="win"><div class="wside">${wSidebar()}</div>
+    <div class="wmain"><div class="wbar"><div><div class="wtitle">${title}</div><div class="wsub">Hatch · v1 ▾ · ${totalOpen()} to decide · 30 provisional</div></div><div style="flex:1"></div>${views}<span class="tbtn amber">${totalOpen()} to decide ›</span><span class="tbtn">Live Window</span></div>${wCanvas()}</div>
+    <div class="winsp">${wInspector()}</div></div>`;
+  const root = $('#mockwin');
+  root.querySelectorAll('.si[data-k]').forEach(s => s.onclick = () => { W.sel = { kind: s.dataset.k, id: s.dataset.id }; W.role = null; renderWindow(); });
+  root.querySelectorAll('[data-role]').forEach(c => { if (c.dataset.role) c.onclick = () => { W.role = c.dataset.role; renderWindow(); }; });
+  root.querySelectorAll('[data-back]').forEach(c => c.onclick = () => { W.role = null; renderWindow(); });
+  root.querySelectorAll('[data-views] span').forEach(s => s.onclick = () => { W.view = s.dataset.v; renderWindow(); });
+  root.querySelectorAll('.pick[data-i]').forEach(p => p.onclick = () => { W.preview[W.role] = +p.dataset.i; renderWindow(); });
+  root.querySelectorAll('[data-hard] span').forEach(s => s.onclick = () => { W.theme = s.textContent; renderWindow(); });
+  wireMatrix(root, id => { W.role = id; renderWindow(); });
+  paintShots(root);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Page setup
+// ---------------------------------------------------------------------------------------------------------------
+function buildToc() {
+  let h = '', grp = '';
+  document.querySelectorAll('main section[data-toc]').forEach(s => {
+    const g = s.dataset.grp === 'Reference' ? 'Decisions' : s.dataset.grp;
+    if (g !== grp) { grp = g; h += `<div class="grp">${grp}</div>`; }
+    h += `<a href="#${s.id}" data-sec="${s.id}"${s.dataset.grp === 'Reference' ? ' class="ref"' : ''}><span>${s.dataset.toc}</span><span class="n"></span></a>`;
+  });
+  $('#tocitems').innerHTML = h;
+  const links = [...document.querySelectorAll('#tocitems a')];
+  const obs = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) links.forEach(a => a.classList.toggle('on', a.dataset.sec === e.target.id));
+  }), { rootMargin: '-20% 0px -70% 0px' });
+  document.querySelectorAll('main section[data-toc]').forEach(s => obs.observe(s));
+}
+function setTheme(t) {
+  if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  try { localStorage.setItem(KEY + '.theme', t); } catch (e) {}
+  document.querySelectorAll('#theme button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  paintShots();
+}
+function init() {
+  $('#bugs').innerHTML = bugsTable();
+  $('#vocab').innerHTML = vocabTable();
+  $('#flow-today').innerHTML = flow(FLOW_TODAY);
+  $('#flow-new').innerHTML = flow(FLOW_NEW);
+  $('#advice').innerHTML = adviceTable();
+  Q.forEach(renderQuestion);
+  renderLineup(); renderGallery(); renderHQ(); renderWindow();
+  $('#mx-buttons').innerHTML = matrixButtons(); wireMatrix($('#mx-buttons'));
+  $('#mx-system').innerHTML = matrixSystem(); wireMatrix($('#mx-system'));
+  buildToc(); summary(); progress();
+  let t = 'auto'; try { t = localStorage.getItem(KEY + '.theme') || 'auto'; } catch (e) {}
+  document.querySelectorAll('#theme button').forEach(b => b.onclick = () => setTheme(b.dataset.t));
+  setTheme(t);
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => paintShots());
+  $('#copy').onclick = async () => {
+    try { await navigator.clipboard.writeText(summary()); $('#copystatus').textContent = 'Copied. Paste it in chat.'; }
+    catch (e) { $('#summary').select(); $('#copystatus').textContent = 'Copy is blocked here: the text is selected, press ⌘C.'; }
+  };
+  $('#download').onclick = () => {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([summary()], { type: 'text/plain' }));
+    a.download = 'components-designer-round2-answers.txt'; a.click();
+  };
+  $('#reset').onclick = () => { if (confirm('Go back to the recommendations and remove your notes?')) { saved = {}; store(); Q.forEach(renderQuestion); renderHQ(); } };
+}
+init();
+</script>
+</body></html>
