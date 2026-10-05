@@ -141,8 +141,23 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
         w.makeKeyAndOrderFront(nil)
         window = w
         model.openLiveWindow = { [weak self] in self?.openLiveWindow() }
+        installMouseBack()
         NSApp.activate(ignoringOtherApps: true)
         if snapshotDirectory != nil { Task { @MainActor in await snapshots() } }
+    }
+
+    /// The mouse's back button (3) does what the role's Back link does: from a role to its element. There is no forward.
+    private func installMouseBack() {
+        NSEvent.addLocalMonitorForEvents(matching: .otherMouseDown) { [weak self] event in
+            guard event.buttonNumber == 3 else { return event }
+            let window = event.window
+            let handled = MainActor.assumeIsolated {
+                guard let self, window === self.window, self.model.focused else { return false }
+                self.model.back()
+                return true
+            }
+            return handled ? nil : event
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

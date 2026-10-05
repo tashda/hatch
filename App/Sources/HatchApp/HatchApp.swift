@@ -28,7 +28,7 @@ struct HatchApp: App {
                 .environmentObject(state)
                 .background(WindowTag(identifier: HatchWindows.mainIdentifier))
                 .background(MenuBarInstaller())
-                .focusedSceneValue(\.windowNavigation, WindowNavigation(
+                .windowNavigation(WindowNavigation(
                     canGoBack: state.canGoBack, canGoForward: state.canGoForward,
                     goBack: { state.goBack() }, goForward: { state.goForward() }))
                 .focusedSceneValue(\.currentTicketId, state.currentTicketId)

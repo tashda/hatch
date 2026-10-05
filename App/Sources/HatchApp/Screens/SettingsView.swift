@@ -67,7 +67,7 @@ struct SettingsView: View {
                 .controlGroupStyle(.navigation)
             }
         }
-        .focusedSceneValue(\.windowNavigation, WindowNavigation(
+        .windowNavigation(WindowNavigation(
             canGoBack: history.canGoBack, canGoForward: history.canGoForward,
             goBack: { go(history.goBack()) }, goForward: { go(history.goForward()) }))
     }

@@ -37,7 +37,7 @@ struct TicketWindowView: View {
                         .help("Show this ticket in the main window")
                 }
             }
-            .focusedSceneValue(\.windowNavigation, WindowNavigation(
+            .windowNavigation(WindowNavigation(
                 canGoBack: history.canGoBack, canGoForward: history.canGoForward,
                 goBack: { history.goBack() }, goForward: { history.goForward() }))
             .focusedSceneValue(\.currentTicketId, history.current)

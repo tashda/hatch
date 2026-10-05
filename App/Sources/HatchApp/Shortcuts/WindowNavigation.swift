@@ -10,6 +10,61 @@ struct WindowNavigation {
     var goForward: () -> Void
 }
 
+extension View {
+    /// Publishes the window's Back and Forward to the menu items and ⌘[ ⌘], and to the mouse's side buttons.
+    func windowNavigation(_ navigation: WindowNavigation) -> some View {
+        focusedSceneValue(\.windowNavigation, navigation)
+            .background(MouseNavigationTag(navigation: navigation))
+    }
+}
+
+/// The mouse's back and forward buttons (3 and 4) act on the window under the pointer, like in Finder and Safari.
+/// One local monitor for the app; each window with history registers its `WindowNavigation` through a tag view.
+@MainActor
+final class MouseNavigation {
+    static let shared = MouseNavigation()
+    private let tags = NSHashTable<MouseNavigationTag.TagView>.weakObjects()
+    private var monitor: Any?
+
+    func register(_ tag: MouseNavigationTag.TagView) {
+        tags.add(tag)
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .otherMouseDown) { event in
+            guard event.buttonNumber == 3 || event.buttonNumber == 4 else { return event }
+            let back = event.buttonNumber == 3, window = event.window
+            let handled = MainActor.assumeIsolated { MouseNavigation.shared.handle(back: back, in: window) }
+            return handled ? nil : event
+        }
+    }
+
+    private func handle(back: Bool, in window: NSWindow?) -> Bool {
+        guard let window, let navigation = tags.allObjects.first(where: { $0.window === window })?.navigation else { return false }
+        if back {
+            if navigation.canGoBack { navigation.goBack() }
+        } else if navigation.canGoForward {
+            navigation.goForward()
+        }
+        return true
+    }
+}
+
+struct MouseNavigationTag: NSViewRepresentable {
+    let navigation: WindowNavigation
+
+    final class TagView: NSView {
+        var navigation: WindowNavigation?
+    }
+
+    func makeNSView(context: Context) -> TagView {
+        let view = TagView()
+        view.navigation = navigation
+        MouseNavigation.shared.register(view)
+        return view
+    }
+
+    func updateNSView(_ view: TagView, context: Context) { view.navigation = navigation }
+}
+
 extension FocusedValues {
     @Entry var windowNavigation: WindowNavigation?
     /// The ticket the window in front is about: the open page, or the selected row of a list. Nil elsewhere.
