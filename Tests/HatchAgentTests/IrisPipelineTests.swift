@@ -32,7 +32,7 @@ final class IrisPipelineTests: XCTestCase {
         let cases = try IrisEval.loadCorpus(Self.corpusURL)
         XCTAssertEqual(Set(cases.map(\.gold.path)), Set(WorkPath.allCases), "every path Iris can file has a prompt")
         XCTAssertEqual(Set(cases.map(\.gold.outcome)), Set([.ready, .asks, .split, .duplicate]))
-        XCTAssertEqual(Set(cases.map(\.project)), ["echo", "web", "docs"])
+        XCTAssertEqual(Set(cases.map(\.project)), ["echo", "web", "docs", "app"])
     }
 
     /// Made-up prompts from a seed, so every run is a new set of scenarios and a failure can be repeated:
