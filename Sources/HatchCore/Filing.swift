@@ -157,6 +157,11 @@ public enum IrisChoices {
     public static let duplicateYes = "Same thing: add it there"
     public static let duplicateNo = "Different: keep both"
     public static let keepProject = "Keep it here"
+    /// The two answers to a clash with an earlier decision (WF-T6). Hatch writes them itself, so what each one does does not
+    /// depend on how a model words a suggestion: keep closes the ticket, replace lets it go ahead.
+    public static let keepDecision = "Keep the decision (this ticket is not done)"
+    public static let replaceDecision = "Replace the decision (go ahead)"
+    public static func isDecisionClash(_ about: String?) -> Bool { about?.lowercased().hasPrefix("decision") == true }
 }
 
 /// One child of a split, as Iris proposes it.
@@ -477,6 +482,16 @@ public extension HatchStore {
             if text == IrisChoices.duplicateYes, let of = q.payload?["of"]?.intValue {
                 try closeAsDuplicate(t.id, of: of, by: "Iris")
                 return false
+            }
+        case QuestionPurpose.conflict where IrisChoices.isDecisionClash(q.payload?["about"]?.stringValue):
+            let which = q.payload?["about"]?.stringValue ?? "the decision"
+            if text == IrisChoices.keepDecision {
+                _ = try addNote(t.id, kind: .note, author: "Hatch", body: "You kept \(which), so this ticket would have undone it and was not done. Reopen it to ask again.")
+                try move(t.id, to: .dropped, actor: .hatch, reason: "kept \(which)")
+                return false
+            }
+            if text == IrisChoices.replaceDecision {
+                _ = try addNote(t.id, kind: .note, author: "Hatch", body: "You chose to replace \(which). This ticket supersedes it: say so in the change.")
             }
         case QuestionPurpose.split:
             if text == IrisChoices.splitYes, let list = q.payload?["children"]?.arrayValue {

@@ -55,6 +55,9 @@ Proposal and Sweep are *explore first* (a Question or Sketch ends at Your call, 
    - **A question** (first one only; none after two rounds) → Checking → **Needs answers**. *Low stakes* with suggestions: carries
      her first suggestion as a default and is answered with it when the wait lapses (`answerLapsedAssumptions`). *High stakes* and
      every clash with a decision or component: the ticket waits for the owner, never answered for them.
+   - **A clash with an earlier decision** (WF-T6) is always asked, with two fixed answers that Hatch writes itself: *Keep the decision* →
+     the ticket is closed (Dropped) with a note, and nobody builds it; *Replace the decision* → it goes ahead (Ready) with a note that it
+     supersedes the decision. A free-text answer goes ahead, and the agent reads it in its brief.
    - **No question** → **Ready**.
 3. **The owner answers** → the ticket leaves Needs answers when no question is open: back to **Checking** if the answer could change
    the kind of work (`rerun`), else **Ready**. A second check sees the answers and a third round asks nothing.
@@ -98,7 +101,9 @@ blocker ticket. Order: priority, then oldest update.
   - Preparing → **Your call**, after `ProposalValidator` passes (every suggestion carries one recommendation and its reason).
     A rejected hand-in changes nothing and tells the agent why.
   - Building/Fixing → **To verify**, only when `hatch ready` passes: build, the area's tests (never the whole suite), the match
-    check, and component roles in the diff.
+    check, component roles in the diff, and the screens (CM24): when the app follows the marks contract, Hatch draws the
+    workspace with its capture command and every view the ticket changed must be marked, on a captured screen, and free of
+    measured problems (overlap, reaching out, cut words). The pictures stay in `evidence/<n>` and the ticket's history.
 - **Needs the owner** (`hatch ask`, one `--suggest` per answer, recommendation first) → **Needs answers**; the answer returns the
   ticket to where it was (Preparing, Revising, Building, Fixing).
 - **Stops without handing in**: started once more; a second stop runs once on the "Second try" model; every run failing →
@@ -126,6 +131,7 @@ blocker ticket. Order: priority, then oldest update.
 | Duplicates (sure, unsure, uncorroborated), splits and undo, related links | `IrisTests` |
 | Clash with a decision or component | `IrisTests` (`testAClashWith…`) |
 | Hand-ins and the gate | `ServiceTests`, `ValidatorTests`, `ManifestTests` |
+| Screens before To verify: marked, drawn, measured | `ComponentEvidenceTests`, `ComponentTruthTests` |
 | Launch, retry, stop, blocked, paused, no `hatch` command | `AgentLauncherTests` |
 | Which workspaces per kind of work, branch and base, main checkout untouched | `AgentWorkspaces` in `LauncherTests`, `WorkspaceTests` |
 | **Prompt to planned agent, 98 written prompts** (all paths, outcomes, three projects, odd inputs, other languages, text that tries to steer Iris, near-miss and closed-ticket repeats, a decision nearby but not contradicted, seven things in one prompt) | `IrisPipelineTests.testTheCorpusOfWrittenPrompts` |

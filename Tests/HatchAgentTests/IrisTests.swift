@@ -442,6 +442,37 @@ final class IrisApplierTests: XCTestCase {
         XCTAssertEqual(try status(), .needsAnswers)
     }
 
+    func testAClashWithADecisionOffersFixedChoicesAndKeepClosesTheTicket() throws {
+        try IrisApplier.apply(VettingResult(questions: [.init(text: "Undo decision #4?", suggestions: ["Whatever the model says", "Another"], about: "decision #4", stakes: QuestionStakes.high)]), to: t.id, store: store)
+        let q = try XCTUnwrap(store.questions(ticketId: t.id).first)
+        XCTAssertEqual(q.suggestions, [IrisChoices.keepDecision, IrisChoices.replaceDecision], "Hatch writes these two itself, so what they do does not depend on a model's wording")
+        try store.answer(questionId: q.id, text: IrisChoices.keepDecision)
+        XCTAssertEqual(try status(), .dropped, "keeping the decision means this ticket would have undone it")
+        XCTAssertTrue(try store.notes(ticketId: t.id).contains { $0.body.contains("kept decision #4") || $0.body.contains("kept") })
+        XCTAssertTrue(try store.agentWork().allSatisfy { $0.ticket.id != t.id }, "nobody builds it")
+    }
+
+    func testReplacingTheDecisionLetsTheTicketGoAheadAndSaysSo() throws {
+        try IrisApplier.apply(VettingResult(questions: [.init(text: "Undo decision #4?", about: "decision #4", stakes: QuestionStakes.high)]), to: t.id, store: store)
+        let q = try XCTUnwrap(store.questions(ticketId: t.id).first)
+        try store.answer(questionId: q.id, text: IrisChoices.replaceDecision)
+        XCTAssertEqual(try status(), .ready)
+        XCTAssertTrue(try store.notes(ticketId: t.id).contains { $0.body.contains("supersedes") })
+    }
+
+    func testAFreeTextAnswerToAClashLetsTheTicketGoAheadWithTheAnswerInTheBrief() throws {
+        try IrisApplier.apply(VettingResult(questions: [.init(text: "Undo decision #4?", about: "decision #4", stakes: QuestionStakes.high)]), to: t.id, store: store)
+        let q = try XCTUnwrap(store.questions(ticketId: t.id).first)
+        try store.answer(questionId: q.id, text: "Only on the web version")
+        XCTAssertEqual(try status(), .ready, "an answer Hatch cannot act on is left to the agent, which reads it")
+        XCTAssertTrue(try BriefBuilder.brief(store: store, ticketId: t.id, agent: "A").contains("Only on the web version"))
+    }
+
+    func testAComponentClashStillKeepsItsOwnSuggestions() throws {
+        try IrisApplier.apply(VettingResult(questions: [.init(text: "Change it everywhere?", suggestions: ["Change it everywhere", "Add a variant here"], about: "component PrimaryButton", stakes: QuestionStakes.high)]), to: t.id, store: store)
+        XCTAssertEqual(try store.questions(ticketId: t.id).first?.suggestions, ["Change it everywhere", "Add a variant here"])
+    }
+
     func testOpenQuestionsKeepTheTicketWaitingAndTheReadingIsApplied() throws {
         try IrisApplier.apply(VettingResult(questions: [.init(text: "Q?")], rewrite: .init(title: "N", body: "B")), to: t.id, store: store)
         let after = try store.ticket(id: t.id)!

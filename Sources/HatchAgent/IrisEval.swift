@@ -49,14 +49,16 @@ public struct IrisEvalCase: Codable, Sendable {
     public var seeds: [Seed]?
     /// Earlier decisions (title and why) the ticket may clash with.
     public var decisions: [Seed]?
+    /// For a clash with a decision: what the owner answers next, "keep" or "replace". Keep must close the ticket; replace lets it go ahead.
+    public var followUp: String?
     public var gold: Gold
     /// How the scripted answer is dressed: "plain", "fence", "prose" or "snake". Only the scripted run reads these.
     public var style: String?
     /// Extra things a scripted answer may carry that Hatch must cope with: "urgent", "unknownArea", "ghostRelated", "twoQuestions", "lowConfidence".
     public var quirks: [String]?
 
-    public init(id: String, project: String, title: String, body: String, seeds: [Seed]? = nil, decisions: [Seed]? = nil, gold: Gold, style: String? = nil, quirks: [String]? = nil) {
-        self.id = id; self.project = project; self.title = title; self.body = body; self.seeds = seeds; self.decisions = decisions; self.gold = gold
+    public init(id: String, project: String, title: String, body: String, seeds: [Seed]? = nil, decisions: [Seed]? = nil, followUp: String? = nil, gold: Gold, style: String? = nil, quirks: [String]? = nil) {
+        self.id = id; self.project = project; self.title = title; self.body = body; self.seeds = seeds; self.decisions = decisions; self.followUp = followUp; self.gold = gold
         self.style = style; self.quirks = quirks
     }
 }
@@ -148,13 +150,34 @@ public final class IrisEvalWorld {
 final class RecordingRunner: AgentRunner, @unchecked Sendable {
     let inner: AgentRunner
     private let lock = NSLock()
-    private var text = ""
+    private var text = "", prompt = ""
     init(_ inner: AgentRunner) { self.inner = inner }
     var last: String { lock.lock(); defer { lock.unlock() }; return text }
+    var lastPrompt: String { lock.lock(); defer { lock.unlock() }; return prompt }
     func run(prompt: String, options: AgentOptions) throws -> AgentOutput {
         let out = try inner.run(prompt: prompt, options: options)
-        lock.lock(); text = out.text; lock.unlock()
+        lock.lock(); text = out.text; self.prompt = prompt; lock.unlock()
         return out
+    }
+}
+
+/// Tries a provider again when it fails for a reason that is not about the prompt (a busy model, a timeout), so a long live run
+/// is not spoiled by one bad moment. Waits longer each time.
+public struct RetryingRunner: AgentRunner {
+    public var inner: AgentRunner
+    public var attempts: Int
+    public var pause: TimeInterval
+    public init(_ inner: AgentRunner, attempts: Int = 4, pause: TimeInterval = 20) { self.inner = inner; self.attempts = attempts; self.pause = pause }
+    public func run(prompt: String, options: AgentOptions) throws -> AgentOutput {
+        var last: Error = AgentRunnerError.scriptExhausted
+        for i in 0..<attempts {
+            do { return try inner.run(prompt: prompt, options: options) }
+            catch {
+                last = error
+                if i < attempts - 1 { Thread.sleep(forTimeInterval: pause * Double(i + 1)) }
+            }
+        }
+        throw last
     }
 }
 
@@ -193,7 +216,7 @@ public enum IrisEval {
             check(.invariant, "an unusable answer leaves the ticket in Checking with an event", t.status == .checking, "status \(t.status)")
             return IrisEvalResult(id: c.id, checks: checks, tokensIn: 0, tokensOut: 0, reply: recorder.last)
         }
-        let t = try store.ticket(id: ticket.id)!
+        var t = try store.ticket(id: ticket.id)!
         let open = try store.questions(ticketId: t.id, openOnly: true)
 
         // Invariants: true whatever Iris said.
@@ -237,6 +260,32 @@ public enum IrisEval {
             check(.gold, "area is \(accepted.joined(separator: " or "))", accepted.contains(t.area ?? "none"), "area \(t.area ?? "none")")
         }
 
+        // The owner's answer to a clash with a decision (WF-T6): keep closes the ticket, replace lets it go ahead.
+        if let f = c.followUp, t.status == .needsAnswers, let q = open.first, IrisChoices.isDecisionClash(q.payload?["about"]?.stringValue) {
+            let choice = q.suggestions.first { $0.lowercased().hasPrefix(f) }
+            check(.invariant, "a clash with a decision offers keep and replace", choice != nil, "\(q.suggestions)")
+            if let choice {
+                t = try store.answer(questionId: q.id, text: choice, by: "owner")
+                if f == "keep" {
+                    check(.invariant, "keeping the decision closes the ticket", t.status == .dropped, "status \(t.status)")
+                    check(.invariant, "a closed ticket waits for no agent", try store.agentWork(projectId: project.id).allSatisfy { $0.ticket.id != t.id })
+                } else {
+                    // She may have marked the question as one that changes what the work is (IR13): then Iris checks again.
+                    if t.status == .checking {
+                        var again = c
+                        again.gold.outcome = .ready; again.decisions = nil; again.followUp = nil
+                        let second = RecordingRunner(runner(again, seedNumbers))
+                        let outcome2 = try VettingService(store: store, runner: second, label: "eval", provider: "eval", model: "eval").vet(ticketId: t.id)
+                        if case .vetted = outcome2 {} else { check(.invariant, "the second check works", false, "\(outcome2)") }
+                        check(.invariant, "the second check sees the owner's answer", second.lastPrompt.contains(choice), "the answer is not in her prompt")
+                        t = try store.ticket(id: t.id)!
+                        check(.invariant, "the second check does not ask again", try store.questions(ticketId: t.id, openOnly: true).isEmpty, "a question is open")
+                        check(.gold, "the second check files it ready", t.status == .ready, "status \(t.status)")
+                    }
+                    check(.invariant, "replacing the decision lets the ticket go ahead", t.status == .ready, "status \(t.status)")
+                }
+            }
+        }
         // Downstream: what would start once the ticket is ready. Nothing is built and no program runs.
         if t.status == .ready { checks += try planReady(t, project: project, world: world, next: g.alsoPaths == nil ? g.next : nil) }
         // Decisions seeded for this case must not clash with the next case's ticket.
@@ -323,6 +372,7 @@ public enum IrisEval {
         switch g.outcome {
         case .asks:
             var qs: [[String: Any]] = [["text": g.question ?? "Which one do you mean?", "suggestions": ["The first", "The second"], "stakes": "high"]]
+            if c.decisions != nil { qs[0]["about"] = "decision #1" }
             if quirks.contains("twoQuestions") { qs.append(["text": "And another thing?", "suggestions": ["Yes"], "stakes": "high"]) }
             d["questions"] = qs
         case .split:

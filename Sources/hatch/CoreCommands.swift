@@ -169,23 +169,30 @@ enum CoreCommands {
         } else {
             guard let app else { throw CLIError("Give the folder the app wrote its snapshots to: hatch components capture --from <folder>.") }
             guard let command = ComponentCaptures.command(appRoot: app, configured: project?.config?.repo(.app)?.captureCommand) else {
-                throw CLIError("The app has no capture command. Add hatch-capture.sh to the app (hatch components draw files the ticket), or give --from <folder>.")
+                throw CLIError("The app has no capture command. Add hatch-capture.sh to the app (Draw Them… in the Components Designer files the ticket for it), or give --from <folder>.")
             }
             if !c.out.json { print("Running \(command)…") }
-            let run = ComponentCaptures.run(command: command, appRoot: app)
+            let run = ComponentCaptures.run(command: command, appRoot: app, notebook: notebook)
             guard let out = run.folder else { throw CLIError("The capture failed:\n\(run.log)") }
             folder = out
         }
         let kept = try ComponentCaptures.keep(from: folder, notebook: notebook)
+        // The measured checks, kept for the Designer (reading text on every screen takes a minute; done once here).
+        if !c.out.json { print("Measuring the screens…") }
+        let findings = ComponentTruth.measure(kept, appRoot: app, excluding: app.map { componentsExclusion(project, folder: $0) } ?? [])
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(findings).write(to: kept.folder.appendingPathComponent(ComponentTruth.findingsFile))
         if FileManager.default.fileExists(atPath: (notebook as NSString).appendingPathComponent(".git")) {
-            _ = try NotebookWriter.commit("Components: the app's screens, \(kept.drawn.count) of its own views drawn", in: notebook)
+            _ = try NotebookWriter.commit("Components: the app's screens, drawn and measured", in: notebook)
         }
-        var lines = ["Kept \(Set(kept.screens.map(\.name)).count) screens; \(kept.drawn.count) of the app's own views are drawn."]
+        var lines = ["Kept \(Set(kept.screens.map(\.name)).count) screens.",
+                     "Measured: \(findings.filter(\.problem).count) problems, \(findings.filter { !$0.problem }.count) notes (hatch components truth)."]
         if let app {
             let model = AppViewScanner.scan(appRoot: app, excluding: componentsExclusion(project, folder: app), measured: kept.heights)
             let owned = model.views.filter { [.component, .wrapper, .unknown].contains($0.kind) }
             let missing = owned.filter { !kept.drawn.contains($0.id) }
-            lines.append(missing.isEmpty ? "Every view of its own is drawn." : "Not drawn yet (\(missing.count) of \(owned.count)): " + missing.prefix(30).map(\.id).joined(separator: ", ") + (missing.count > 30 ? "…" : ""))
+            lines.append("\(owned.count - missing.count) of the app's \(owned.count) own views are drawn.")
+            if !missing.isEmpty { lines.append("Not drawn yet: " + missing.prefix(30).map(\.id).joined(separator: ", ") + (missing.count > 30 ? "…" : "")) }
         }
         c.out.emit(["screens": .int(Set(kept.screens.map(\.name)).count), "drawn": .int(kept.drawn.count)], text: lines.joined(separator: "\n"))
     }

@@ -358,7 +358,7 @@ enum AgentCommands {
         defer { world.tearDown() }
         var results: [IrisEvalResult] = []
         for (i, one) in cases.enumerated() {
-            let r = try IrisEval.run(one, in: world) { _, _ in iris.runner }
+            let r = try IrisEval.run(one, in: world) { _, _ in RetryingRunner(iris.runner) }
             results.append(r)
             print(String(format: "%3d/%d  %@  %@", i + 1, cases.count, r.failures.isEmpty ? "ok  " : "FAIL", one.id))
             for f in r.failures { print("        [\(f.kind.rawValue)] \(f.name)\(f.detail.isEmpty ? "" : ": " + f.detail)") }

@@ -145,7 +145,7 @@ public enum IrisApplier {
                     payload["stakes"] = .string(QuestionStakes.high)
                     text += " I will wait for your answer."
                 }
-                asks.append(Ask(text: text, suggestions: q.suggestions, purpose: q.about == nil ? nil : QuestionPurpose.conflict, payload: .object(payload)))
+                asks.append(Ask(text: text, suggestions: IrisChoices.isDecisionClash(q.about) ? [IrisChoices.keepDecision, IrisChoices.replaceDecision] : q.suggestions, purpose: q.about == nil ? nil : QuestionPurpose.conflict, payload: .object(payload)))
             }
             // The first question moves the ticket to Needs answers, by the agent.
             for a in asks { try store.ask(ticketId, text: a.text, suggestions: a.suggestions, by: name, actor: .agent, purpose: a.purpose, payload: a.payload) }

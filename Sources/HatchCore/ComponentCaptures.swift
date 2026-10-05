@@ -290,9 +290,15 @@ public enum ComponentMarks {
                 let y = root.isFlipped ? r.minY : root.bounds.height - r.maxY
                 return [r.minX, y, r.width, r.height].map { (Double($0) * 100).rounded() / 100 }
             }
+            // SwiftUI's opacity reaches the probe's own view: a view faded out (a card waiting to slide in) isn't drawn.
+            func opacity(_ v: NSView) -> CGFloat {
+                var a: CGFloat = 1, x: NSView? = v
+                while let c = x, c !== root.superview { a *= c.alphaValue * CGFloat(c.layer?.opacity ?? 1); x = c.superview }
+                return a
+            }
             func walk(_ view: NSView, parent: Int?) {
                 var inside = parent
-                if let mark = view as? HatchMarkView, !mark.isHiddenOrHasHiddenAncestor, !mark.visibleRect.isEmpty {
+                if let mark = view as? HatchMarkView, !mark.isHiddenOrHasHiddenAncestor, !mark.visibleRect.isEmpty, opacity(mark) > 0.05 {
                     var entry: [String: Any] = ["name": mark.name, "instance": mark.instance, "frame": rect(mark.convert(mark.bounds, to: root)),
                                                 "visible": rect(mark.convert(mark.visibleRect, to: root))]
                     if let parent { entry["parent"] = parent }
@@ -388,6 +394,11 @@ public extension ComponentCaptures {
             if fm.fileExists(atPath: json.path) { try fm.copyItem(at: json, to: dir.appendingPathComponent(base + ".json")) }
             if fm.fileExists(atPath: s.picture.path) { try fm.copyItem(at: s.picture, to: dir.appendingPathComponent(base + ".png")) }
         }
+        // The canvas measured against macOS (CM25), when the run made it.
+        for extra in [ComponentTruth.canvasFile] where fm.fileExists(atPath: folder.appendingPathComponent(extra).path) {
+            try? fm.removeItem(at: target.appendingPathComponent(extra))
+            try fm.copyItem(at: folder.appendingPathComponent(extra), to: target.appendingPathComponent(extra))
+        }
         if run.screens.contains(where: { $0.isGallery && $0.file.version == 1 }) {
             try? fm.copyItem(at: folder.appendingPathComponent("component-gallery.json"), to: target.appendingPathComponent("component-gallery.json"))
         }
@@ -405,7 +416,8 @@ public extension ComponentCaptures {
     }
 
     /// Runs the capture command in `appRoot` into a new folder and returns it, or the tail of its output on failure.
-    static func run(command: String, appRoot: String, timeout: TimeInterval = 900) -> (folder: URL?, log: String) {
+    /// `notebook` is passed as `$HATCH_NOTEBOOK`, so the run can draw the project's own design system.
+    static func run(command: String, appRoot: String, notebook: String? = nil, timeout: TimeInterval = 1200) -> (folder: URL?, log: String) {
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("hatch-captures-\(UUID().uuidString.prefix(8))", isDirectory: true)
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         let p = Process()
@@ -414,6 +426,7 @@ public extension ComponentCaptures {
         p.currentDirectoryURL = URL(fileURLWithPath: appRoot, isDirectory: true)
         var env = ProcessInfo.processInfo.environment
         env["HATCH_CAPTURES"] = out.path
+        if let notebook { env["HATCH_NOTEBOOK"] = notebook }
         p.environment = env
         let pipe = Pipe()
         p.standardOutput = pipe; p.standardError = pipe

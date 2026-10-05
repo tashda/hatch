@@ -445,11 +445,13 @@ public final class StageServer: @unchecked Sendable {
         captureLock.unlock()
         let commit = commitNotebook
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let run = ComponentCaptures.run(command: command, appRoot: app)
+            let run = ComponentCaptures.run(command: command, appRoot: app, notebook: notebook)
             var message: String
             if let out = run.folder, let kept = try? ComponentCaptures.keep(from: out, notebook: notebook) {
-                message = "\(Set(kept.screens.map(\.name)).count) screens; \(kept.drawn.count) views drawn."
-                commit?(notebook, "Components: the app's screens, \(kept.drawn.count) of its own views drawn")
+                let findings = ComponentTruth.measure(kept, appRoot: app)
+                try? JSONEncoder().encode(findings).write(to: kept.folder.appendingPathComponent(ComponentTruth.findingsFile))
+                message = "\(Set(kept.screens.map(\.name)).count) screens; \(kept.drawn.count) views drawn; \(findings.filter(\.problem).count) problems found."
+                commit?(notebook, "Components: the app's screens, drawn and measured")
                 try? FileManager.default.removeItem(at: out)
             } else {
                 message = "The capture failed: " + run.log

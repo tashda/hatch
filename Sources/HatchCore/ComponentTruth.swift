@@ -1,7 +1,12 @@
 import Foundation
 #if canImport(Vision) && canImport(ImageIO)
 import Vision
+#endif
+#if canImport(ImageIO)
 import ImageIO
+#endif
+#if canImport(CoreGraphics)
+import CoreGraphics
 #endif
 
 // Measured checks of the app's real screens (decision CM23): what can be measured is never left to judgement, the
@@ -19,6 +24,8 @@ public struct TruthFinding: Codable, Equatable, Hashable, Sendable {
         case drift
         /// Text cut off with an ellipsis.
         case cutText
+        /// The Designer's canvas draws a role unlike macOS draws it in the real container.
+        case canvas
 
         public var title: String {
             switch self {
@@ -26,6 +33,7 @@ public struct TruthFinding: Codable, Equatable, Hashable, Sendable {
             case .outside: "Outside its container"
             case .drift: "Sizes drift"
             case .cutText: "Text cut off"
+            case .canvas: "Canvas differs from macOS"
             }
         }
     }
@@ -45,6 +53,18 @@ public struct TruthFinding: Codable, Equatable, Hashable, Sendable {
 }
 
 public enum ComponentTruth {
+    /// What the capture run measured of the Designer's canvas against macOS (CM25), beside the screens.
+    public static let canvasFile = "canvas-truth.json"
+    /// Every finding of the last capture, written by `hatch components capture` for the Designer to read.
+    public static let findingsFile = "truth.json"
+
+    /// The screens that show the app (not the canvas measurements, which are compared, not checked).
+    static func isAppScreen(_ s: CapturedScreen) -> Bool { !s.name.contains("canvas-") && !s.name.contains("real-") }
+
+    /// The findings kept beside the captures, if any.
+    public static func kept(in folder: URL) -> [TruthFinding] {
+        (try? JSONDecoder().decode([TruthFinding].self, from: Data(contentsOf: folder.appendingPathComponent(findingsFile)))) ?? []
+    }
     /// Every measured check: the frames, and on a Mac the text, with the app's code read for the views' families and
     /// its own strings. `only`: a ticket's changed views.
     public static func measure(_ captures: ComponentCaptures, appRoot: String?, excluding: [String] = [], only: Set<String>? = nil) -> [TruthFinding] {
@@ -63,6 +83,10 @@ public enum ComponentTruth {
         #if canImport(Vision) && canImport(ImageIO)
         out += cutText(captures, literals: literals, only: only)
         #endif
+        if only == nil, let data = try? Data(contentsOf: captures.folder.appendingPathComponent(canvasFile)),
+           let canvas = try? JSONDecoder().decode([TruthFinding].self, from: data) {
+            out += canvas
+        }
         return out
     }
 
@@ -73,7 +97,7 @@ public enum ComponentTruth {
     /// the drift check. `only`: report only findings that touch these views (a ticket's changed views).
     public static func check(_ captures: ComponentCaptures, families: [String: String] = [:], only: Set<String>? = nil) -> [TruthFinding] {
         var out: [TruthFinding] = []
-        for screen in captures.screens where !screen.dark && !screen.isGallery {
+        for screen in captures.screens where !screen.dark && !screen.isGallery && isAppScreen(screen) {
             out += frameFindings(screen)
         }
         out += drift(captures, families: families)
@@ -87,7 +111,7 @@ public enum ComponentTruth {
     static func frameFindings(_ screen: CapturedScreen) -> [TruthFinding] {
         let marks = screen.file.marks
         let frames = marks.indices.map { screen.frame($0) ?? CaptureRect(x: 0, y: 0, width: 0, height: 0) }
-        let checked = marks.indices.filter { frames[$0].area > 4 && marks[$0].layered != true }
+        let checked = marks.indices.filter { frames[$0].area > 4 && marks[$0].layered != true && !marks[$0].name.hasPrefix("role:") }
         func holder(_ i: Int) -> Int? {
             checked.filter { $0 != i && frames[$0].area > frames[i].area && frames[$0].contains(frames[i], slack: 1) }.min { frames[$0].area < frames[$1].area }
         }
@@ -147,7 +171,7 @@ public enum ComponentTruth {
         // The words before the app's own ellipses ("Draw Them…" → "Draw Them"); a lone "…" says nothing.
         let own = literals.filter { $0.hasSuffix("…") || $0.hasSuffix("...") }
             .map { $0.replacingOccurrences(of: "...", with: "…").dropLast().trimmingCharacters(in: .whitespaces) }.filter { $0.count >= 3 }
-        for screen in captures.screens where !screen.dark {
+        for screen in captures.screens where !screen.dark && isAppScreen(screen) {
             guard let source = CGImageSourceCreateWithURL(screen.picture as CFURL, nil),
                   let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { continue }
             let request = VNRecognizeTextRequest()
@@ -178,4 +202,113 @@ public enum ComponentTruth {
         return out
     }
     #endif
+}
+
+public extension ComponentTruth {
+    /// The Designer's canvas against macOS (CM25): a place drawn on the canvas and the same roles in the real container
+    /// (a real toolbar, List, grouped Form…), both captured with each role marked `role:<id>`. A role drawn at another
+    /// size, or looking different, is a problem: the canvas must show what macOS shows. `pixels` compares two cut-outs
+    /// (0 the same, 1 opposite); nil leaves the look out.
+    /// `centered`: the container draws chrome around the control (a toolbar's glass), so the real view's frame is smaller
+    /// than what is seen; sizes are not compared, and the look is compared in a box the canvas control's size centred on
+    /// the real one.
+    static func compareCanvas(place: String, canvas: CapturedScreen, real: CapturedScreen, centered: Bool = false,
+                              pixels: ((CapturedScreen, CaptureRect, CapturedScreen, CaptureRect) -> Double?)? = nil) -> [TruthFinding] {
+        func roles(_ s: CapturedScreen) -> [String: CaptureRect] {
+            var out: [String: CaptureRect] = [:]
+            for (i, m) in s.file.marks.enumerated() where m.name.hasPrefix("role:") && out[m.name] == nil { out[m.name] = s.frame(i) }
+            return out
+        }
+        let c = roles(canvas), r = roles(real)
+        var out: [TruthFinding] = []
+        for (name, rf) in r.sorted(by: { $0.key < $1.key }) {
+            let role = String(name.dropFirst(5))
+            guard let cf = c[name] else {
+                out.append(TruthFinding(kind: .canvas, screen: real.name, dark: canvas.dark, views: [role], frame: rf,
+                                        words: "In the \(place), macOS draws \(role) but the canvas doesn't.", problem: false))
+                continue
+            }
+            let w = abs(cf.width - rf.width) > max(4, 0.15 * rf.width), h = abs(cf.height - rf.height) > max(3, 0.15 * rf.height)
+            let seen = centered ? CaptureRect(x: rf.x + rf.width / 2 - cf.width / 2, y: rf.y + rf.height / 2 - cf.height / 2, width: cf.width, height: cf.height) : rf
+            if !centered && (w || h) {
+                out.append(TruthFinding(kind: .canvas, screen: canvas.name, dark: canvas.dark, views: [role], frame: cf,
+                                        words: "In the \(place), the canvas draws \(role) \(Int(cf.width.rounded()))×\(Int(cf.height.rounded())) pt; macOS draws it \(Int(rf.width.rounded()))×\(Int(rf.height.rounded())) pt.",
+                                        problem: true))
+            } else if let d = pixels?(canvas, cf, real, seen), d > 0.12 {
+                out.append(TruthFinding(kind: .canvas, screen: canvas.name, dark: canvas.dark, views: [role], frame: cf,
+                                        words: "In the \(place), the canvas draws \(role) the right size but it looks different from macOS (\(Int((d * 100).rounded()))% apart).",
+                                        problem: true))
+            }
+        }
+        for (name, cf) in c where r[name] == nil {
+            out.append(TruthFinding(kind: .canvas, screen: canvas.name, dark: canvas.dark, views: [String(name.dropFirst(5))], frame: cf,
+                                    words: "In the \(place), the canvas draws \(name.dropFirst(5)), which the real \(place) doesn't show.", problem: false))
+        }
+        return out
+    }
+
+    #if canImport(CoreGraphics) && canImport(ImageIO)
+    /// How far apart two cut-outs look: both scaled to the same small size, the mean difference of their colours (0…1).
+    static func pictureDistance(_ a: CapturedScreen, _ ar: CaptureRect, _ b: CapturedScreen, _ br: CaptureRect) -> Double? {
+        func pixels(_ s: CapturedScreen, _ r: CaptureRect, w: Int, h: Int) -> [UInt8]? {
+            guard let src = CGImageSourceCreateWithURL(s.picture as CFURL, nil), let image = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return nil }
+            let k = s.file.scale
+            guard let cut = image.cropping(to: CGRect(x: r.x * k, y: r.y * k, width: r.width * k, height: r.height * k)) else { return nil }
+            var data = [UInt8](repeating: 0, count: w * h * 4)
+            guard let ctx = CGContext(data: &data, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+            ctx.interpolationQuality = .medium
+            ctx.draw(cut, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return data
+        }
+        let w = 32, h = max(4, min(32, Int((32 * ar.height / max(1, ar.width)).rounded())))
+        guard let p = pixels(a, ar, w: w, h: h), let q = pixels(b, br, w: w, h: h) else { return nil }
+        var sum = 0.0
+        for i in stride(from: 0, to: p.count, by: 4) { for c in 0..<3 { sum += abs(Double(p[i + c]) - Double(q[i + c])) } }
+        return sum / Double(w * h * 3) / 255
+    }
+    #endif
+}
+
+/// Evidence before a UI ticket is done (CM24): `hatch ready` draws the ticket's workspace with the app's capture command,
+/// and the views the ticket changed must be marked, drawn on a screen, and pass the measured checks there. The agent
+/// can't say it looked; Hatch looks. Required once the app follows the marks contract; before that, a note.
+public enum ComponentEvidence {
+    public struct Step: Equatable, Sendable {
+        public var kind: String
+        public var ok: Bool
+        public var detail: String
+    }
+
+    /// The app's own views declared in the files a ticket changed.
+    public static func changedViews(_ model: AppViewModel, changedFiles: Set<String>) -> [AppView] {
+        model.views.filter { v in [.component, .wrapper, .unknown].contains(v.kind) && changedFiles.contains { $0 == v.file || v.file.hasSuffix("/" + $0) || $0.hasSuffix("/" + v.file) } }
+    }
+
+    /// The steps `hatch ready` records, from what it found. `captures` is nil when the run failed or there is no command.
+    public static func judge(changed: [AppView], unmarked: Set<String>, optedIn: Bool, captureLog: String?,
+                             captures: ComponentCaptures?, findings: [TruthFinding]) -> [Step] {
+        guard !changed.isEmpty else { return [] }
+        let names = changed.map(\.id)
+        guard optedIn else {
+            return [Step(kind: "screens", ok: true, detail: "note: \(names.count) view(s) changed, but the app doesn't draw its screens for Hatch yet, so nobody checked them (Components Designer, Draw Them).")]
+        }
+        var steps: [Step] = []
+        let missingMarks = names.filter(unmarked.contains)
+        steps.append(Step(kind: "marks", ok: missingMarks.isEmpty, detail: missingMarks.isEmpty ? "the \(names.count) changed view(s) are marked"
+                          : "end the body of " + missingMarks.joined(separator: ", ") + " with .hatchMark(\"<its name>\") so Hatch can find it on screen"))
+        guard let captures else {
+            steps.append(Step(kind: "captures", ok: false, detail: "the app's screens could not be drawn" + (captureLog.map { ":\n\($0)" } ?? ": it has no capture command (hatch-capture.sh).")))
+            return steps
+        }
+        let off = names.filter { !captures.drawn.contains($0) && !missingMarks.contains($0) }
+        steps.append(Step(kind: "captures", ok: off.isEmpty, detail: off.isEmpty
+                          ? "drawn on " + Set(names.flatMap { captures.screens(of: $0).map(\.name) }).sorted().prefix(8).joined(separator: ", ")
+                          : off.joined(separator: ", ") + " is on no screen the snapshot run draws: add the screen to the run, or the view to the gallery"))
+        let problems = findings.filter(\.problem)
+        steps.append(Step(kind: "screens", ok: problems.isEmpty, detail: problems.isEmpty
+                          ? "no overlap, nothing reaching out, no cut words" + (findings.isEmpty ? "" : " (\(findings.count) note(s))")
+                          : problems.prefix(8).map(\.words).joined(separator: "\n")))
+        return steps
+    }
 }

@@ -700,7 +700,8 @@
     "title": "The sidebar stays on the left edge in every window",
     "body": "Left sidebar matches macOS apps; decided in the layout round, the owner chose left everywhere."
    }
-  ]
+  ],
+  "followUp": "keep"
  },
  {
   "id": "ask-clash-confirm",
@@ -721,7 +722,8 @@
     "title": "Deletes use Undo instead of confirmation dialogs",
     "body": "The owner chose Undo for every delete across the app: dialogs interrupt and are clicked through."
    }
-  ]
+  ],
+  "followUp": "replace"
  },
  {
   "id": "ask-clash-icons",
@@ -744,7 +746,8 @@
     "title": "Settings icons are monochrome and use the secondary colour",
     "body": "Colour is kept for state; the owner decided every list icon is monochrome."
    }
-  ]
+  ],
+  "followUp": "keep"
  },
  {
   "id": "contradiction-decides",
