@@ -280,9 +280,28 @@ final class DesignerModel: ObservableObject {
     func drawn(_ element: String, _ recipe: [String: String]) -> [String: String] {
         guard let e = ComponentElement.named(element) else { return recipe }
         var look = e.withoutDefaults(e.look(recipe))
+        // A Return-key button with no style of its own is drawn filled by macOS, the same as a filled style.
+        if element == "button", look["style"] == nil, recipe["key"] == "defaultAction" { look["style"] = "borderedProminent" }
         if element == "button", look["label"] == "titleOnly" { look["label"] = nil }
         if element == "menu", look["label"] == "titleAndIcon" { look["label"] = nil }
         return look
+    }
+
+    /// How a look is drawn in the role's places: in a toolbar a button is its icon in glass whatever its style or
+    /// label, so only a prominent style or a title-only label changes it there.
+    func drawnHere(_ role: ComponentRole, _ recipe: [String: String]) -> [String: String] {
+        if role.element == "button", !role.places.isEmpty, role.places.allSatisfy({ $0 == "toolbar" }) {
+            return ["prominent": ToolbarGlass.prominent(recipe) ? "yes" : "no", "title": recipe["label"] == "titleOnly" ? "only" : "no"]
+        }
+        return drawn(role.element, recipe)
+    }
+
+    /// The earlier option of a question that draws the same as option `i` in the role's places, if any, so two
+    /// identical tiles are explained instead of looking like a mistake.
+    func drawsLikeEarlier(_ role: ComponentRole, _ q: ComponentQuestion, _ i: Int) -> Int? {
+        guard let r = q.options[i].recipe else { return nil }
+        let here = drawnHere(role, r)
+        return (0..<i).first { j in q.options[j].recipe.map { drawnHere(role, $0) == here } ?? false }
     }
 
     /// The role would be drawn differently from today by the look being tried.

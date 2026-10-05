@@ -11,6 +11,20 @@ struct DesignerView: View {
     @State private var showInspector = true
 
     var body: some View {
+        content.onAppear(perform: Self.sizeForReview)
+    }
+
+    /// `HATCH_DESIGNER_SIZE=1600x2600`: a window that shows whole pages, for reviewing snapshot runs.
+    static func sizeForReview() {
+        guard let v = ProcessInfo.processInfo.environment["HATCH_DESIGNER_SIZE"], case let parts = v.split(separator: "x").compactMap({ Double($0) }),
+              parts.count == 2 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            guard let w = NSApp.keyWindow ?? NSApp.windows.first(where: \.isVisible) else { return }
+            w.setFrame(NSRect(x: 0, y: 0, width: parts[0], height: parts[1]), display: true)
+        }
+    }
+
+    @ViewBuilder private var content: some View {
         NavigationSplitView {
             DesignerSidebar(model: model)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
@@ -364,7 +378,7 @@ struct RoleInPlaceView: View {
                 if members.count > 1 {
                     Text(ComponentElement.named(e)?.plural ?? e).font(.title3.weight(.semibold))
                 }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: model.appearance == .both ? 560 : 340), spacing: 24, alignment: .top)], alignment: .leading, spacing: 28) {
+                TileGrid(minWidth: model.appearance == .both ? 620 : 360) {
                     ForEach(places) { place in
                         PlaceFrame(place: place, element: e, model: model)
                     }
@@ -379,6 +393,8 @@ struct RoleInPlaceView: View {
 struct RoleView: View {
     @ObservedObject var model: DesignerModel
     let role: ComponentRole
+    /// The place row under the pointer: its "Only Here…" shows there, not on every row.
+    @State private var hoveredPlace: String?
 
     /// Where Esc goes back to: the element, the place or All it was opened from.
     private var backTitle: String {
@@ -409,6 +425,12 @@ struct RoleView: View {
             let comparing = model.isPreviewing(role) || role.draft != nil
             if !comparing {
                 Text("Choose a look on the right to see it here beside today's.").font(.callout).foregroundStyle(.secondary)
+            } else if model.isPreviewing(role) && !model.isChanged(role) {
+                // Said in words, so two identical columns don't look like a broken preview.
+                Label(model.preview?.follow == true
+                      ? "Draws the same as today. What changes: macOS decides this look from now on, so it follows macOS in later versions."
+                      : "Draws the same as today in every place.", systemImage: "equal.circle")
+                    .font(.callout).foregroundStyle(.secondary)
             }
             Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 20) {
                 if comparing {
@@ -434,18 +456,23 @@ struct RoleView: View {
                                 Button("Only Here…") { model.request = .onlyHere(role: role.id, place: id) }
                                     .buttonStyle(.link).font(.caption)
                                     .help("Keep this look for \(place.title) only: a variant, with a reason (CD26)")
+                                    .opacity(hoveredPlace == id ? 1 : 0)
                             }
                         }
                         .frame(width: 140, alignment: .leading).help(place.summary)
+                        .onHover { if $0 { hoveredPlace = id } }
+                        // The same tiles as the element's page, window and all, without their headings.
                         ThenNow(now: false, comparing: comparing) {
-                            Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, today: true, framed: false) }
+                            Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, today: true, header: false) }
                         }
+                        .onHover { if $0 { hoveredPlace = id } }
                         if comparing {
                             Image(systemName: "arrow.right").font(.title3.weight(.semibold)).foregroundStyle(.tertiary)
                                 .frame(maxHeight: .infinity)
                             ThenNow(now: true, comparing: true) {
-                                Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, framed: false) }
+                                Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, header: false) }
                             }
+                            .onHover { if $0 { hoveredPlace = id } }
                         }
                     }
                 }
@@ -597,20 +624,21 @@ struct DecideList: View {
                     RecipeControl(element: role.element, recipe: r, system: model.system, importance: role.importance,
                                   sample: SampleWords.content(role.importance, place: role.places.first ?? "page", base: SampleContent()))
                         .allowsHitTesting(false)
-                        .fixedSize()
-                        .scaleEffect(0.85, anchor: .leading)
+                        .fitted(0.85, maxHeight: 40)
                 } else {
                     Image(systemName: o.follow == true ? "apple.logo" : "questionmark.circle").font(.title3).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                 }
             }
             .frame(width: 150, alignment: .leading)
-            .frame(minHeight: 34, alignment: .leading)
-            .clipped()
             Text(o.recipe.map { ComponentWords.look(element: role.element, recipe: ComponentElement.named(role.element)?.look($0) ?? $0) } ?? o.title)
                 .font(.caption).lineLimit(2)
+            if let j = model.drawsLikeEarlier(role, q, i) {
+                Text(sameNote(role, q, j)).font(.caption2).foregroundStyle(.orange).lineLimit(3)
+            }
             HStack(spacing: 4) {
                 if recommended { Text("Recommended").font(.caption2.weight(.semibold)).foregroundStyle(Color.accentColor) }
-                if o.count > 0 { Text("\(o.count) uses").font(.caption2).foregroundStyle(.secondary) }
+                if o.count > 0 { Text("\(o.count) use\(o.count == 1 ? "" : "s")").font(.caption2).foregroundStyle(.secondary) }
             }
         }
         .padding(10)
@@ -640,8 +668,8 @@ struct ThenNowLabel: View {
     }
 }
 
-/// Today drawn as the past: on a muted band, a little faded. The preview as what comes: on a tinted band, outlined in
-/// the accent colour, so the two never read as duplicates.
+/// Today on a neutral band, the preview on a tinted band outlined in the accent colour, so the two never read as
+/// duplicates. Both are drawn exactly as they look: fading today would bias the comparison.
 struct ThenNow<Content: View>: View {
     let now: Bool
     let comparing: Bool
@@ -656,10 +684,8 @@ struct ThenNow<Content: View>: View {
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 2))
         } else {
             content()
-                .saturation(0.55)
-                .opacity(0.8)
                 .padding(8)
-                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 }
@@ -676,17 +702,26 @@ struct MatrixCell: View {
     var body: some View {
         Button { model.open(role.id) } label: {
             VStack(spacing: 5) {
-                RecipeControl(element: role.element, recipe: model.onCanvas(role, model.look(of: role)), system: model.system, importance: role.importance,
-                              sample: SampleWords.content(role.importance, place: place, base: model.sample))
-                    .allowsHitTesting(false)
-                    .frame(minHeight: 28)
+                Group {
+                    if SystemDrawnSample.applies(role, place) {
+                        SystemDrawnSample(role: role, place: place, sample: model.sample)
+                            .help("\(role.title): drawn by macOS here; the role sets its wording and order, not its look")
+                    } else {
+                        RecipeControl(element: role.element, recipe: model.onCanvas(role, model.look(of: role)), system: model.system, importance: role.importance,
+                                      sample: SampleWords.content(role.importance, place: place, base: model.sample))
+                    }
+                }
+                .allowsHitTesting(false)
+                // Every cell the same size: a large control (a form, a list) is drawn smaller, never over its neighbours.
+                .fitted(1, maxHeight: 54)
                 HStack(spacing: 4) {
                     if model.question(for: role) != nil { Circle().fill(.orange).frame(width: 6, height: 6) }
                     Text(role.title).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             .padding(8)
-            .frame(maxWidth: .infinity, minHeight: 64)
+            // One width for every cell: a column, never the page (a stepper is not 1,600 points wide).
+            .frame(minWidth: 180, maxWidth: 240, minHeight: 64)
             .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(hovered == role.id ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: hovered == role.id ? 2 : 0.5))
@@ -702,7 +737,7 @@ struct MatrixCell: View {
 struct EmptyCell: View {
     var body: some View {
         Text("Not decided").font(.caption2).foregroundStyle(.tertiary)
-            .frame(maxWidth: .infinity, minHeight: 64)
+            .frame(minWidth: 180, maxWidth: 240, minHeight: 64)
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(style: StrokeStyle(lineWidth: 0.5, dash: [4])).foregroundStyle(.tertiary))
             .help("Not decided yet: the first ticket that needs it asks")
     }
@@ -767,34 +802,40 @@ struct SystemMatrixView: View {
             .sorted { (order.firstIndex(of: $0) ?? 99) < (order.firstIndex(of: $1) ?? 99) }
     }
 
+    /// One row per place (or per importance, for one place): only the elements that are there, as cells that wrap
+    /// within the page, each named. No empty cells to read past, nothing off the edge of the window.
     var body: some View {
-        ScrollView(.horizontal) {
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
-                GridRow {
-                    Text("")
-                    ForEach(elements, id: \.self) { e in
-                        Text(ComponentElement.named(e)?.plural ?? e).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    }
-                }
-                if let only {
-                    ForEach(ComponentRole.Importance.allCases, id: \.self) { i in
-                        if elements.contains(where: { model.system.role(element: $0, place: only, importance: i) != nil }) {
-                            GridRow {
-                                Text(i.title).font(.callout).frame(width: 100, alignment: .leading)
-                                ForEach(elements, id: \.self) { e in cell(model.system.role(element: e, place: only, importance: i), only) }
-                            }
-                        }
-                    }
-                } else {
-                    ForEach(model.placesUsed) { place in
-                        GridRow {
-                            Text(place.title).font(.callout).frame(width: 100, alignment: .leading).help(place.summary)
-                            ForEach(elements, id: \.self) { e in cell(main(e, place.id), place.id) }
-                        }
-                    }
+        let rows: [(id: String, title: String, help: String, cells: [(element: String, role: ComponentRole)], place: (String) -> String)] = {
+            if let only {
+                return ComponentRole.Importance.allCases.compactMap { i in
+                    let cells = elements.compactMap { e in model.system.role(element: e, place: only, importance: i).map { (e, $0) } }
+                    return cells.isEmpty ? nil : (i.rawValue, i.title, "", cells, { _ in only })
                 }
             }
-            .padding(.bottom, 8)
+            return model.placesUsed.compactMap { place in
+                let cells = elements.compactMap { e in main(e, place.id).map { (e, $0) } }
+                return cells.isEmpty ? nil : (place.id, place.title, place.summary, cells, { _ in place.id })
+            }
+        }()
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(rows, id: \.id) { row in
+                HStack(alignment: .top, spacing: 18) {
+                    Text(row.title).font(.headline).frame(width: 120, alignment: .leading).padding(.top, 10).help(row.help)
+                    FlowRow(spacing: 10, top: true) {
+                        ForEach(row.cells, id: \.role.id) { c in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(ComponentElement.named(c.element)?.plural ?? c.element)
+                                    .font(.caption2.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+                                MatrixCell(model: model, role: c.role, place: row.place(c.element), hovered: $hovered)
+                            }
+                            .frame(width: 190, alignment: .leading)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.vertical, 14)
+                Divider()
+            }
         }
     }
 
@@ -803,9 +844,6 @@ struct SystemMatrixView: View {
         ComponentRole.Importance.allCases.lazy.compactMap { model.system.role(element: element, place: place, importance: $0) }.first
     }
 
-    @ViewBuilder private func cell(_ role: ComponentRole?, _ place: String) -> some View {
-        if let role { MatrixCell(model: model, role: role, place: place, hovered: $hovered).frame(minWidth: 120) } else { Color.clear.frame(minWidth: 120, minHeight: 64) }
-    }
 }
 
 // MARK: - A place (CD9)
@@ -821,7 +859,7 @@ struct PlaceOverview: View {
             .filter { e in model.system.roles(of: e).contains { $0.places.contains(place) } }
         VStack(alignment: .leading, spacing: 14) {
             Text(p.summary).foregroundStyle(.secondary)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: model.appearance == .both ? 560 : 340), spacing: 24, alignment: .top)], alignment: .leading, spacing: 28) {
+            TileGrid(minWidth: model.appearance == .both ? 620 : 360) {
                 ForEach(elements, id: \.self) { e in
                     PlaceFrame(place: p, element: e, model: model, title: ComponentElement.named(e)?.plural ?? e)
                 }
@@ -1266,6 +1304,9 @@ struct QuestionPicks: View {
                         if i == question.recommended { Text("Recommended").font(.caption2.weight(.semibold)).foregroundStyle(Color.accentColor) }
                     }
                     Text(o.count > 0 ? "\(o.count) use\(o.count == 1 ? "" : "s") today" : "Not used in the app yet").font(.caption2).foregroundStyle(.secondary)
+                    if let j = model.drawsLikeEarlier(role, question, i) {
+                        Text(sameNote(role, question, j)).font(.caption2).foregroundStyle(.orange)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -1338,8 +1379,11 @@ struct LookPicks: View {
 
 /// How wide a choice tile is for an element: wide controls (a segmented picker, a list) need room to be seen whole.
 enum ChoiceTile {
+    /// Wide enough that the sample is drawn near its real size, so options can be told apart.
     static func width(_ element: String) -> CGFloat {
-        ["picker": 150, "switcher": 160, "row": 220, "card": 220, "sheet": 220, "toast": 180, "emptyState": 220][element] ?? 84
+        ["picker": 150, "switcher": 160, "row": 220, "card": 220, "sheet": 220, "toast": 180, "emptyState": 220, "field": 150, "textEditor": 200,
+         "table": 220, "datePicker": 150, "slider": 150, "progress": 150, "gauge": 150, "stepper": 110, "controlGroup": 120, "menu": 100,
+         "toggle": 96][element] ?? 84
     }
 }
 
@@ -1383,10 +1427,7 @@ struct LookChoices: View {
                 RecipeControl(element: element.id, recipe: tried, system: model.system, importance: role.importance,
                               sample: SampleWords.content(role.importance, place: role.places.first ?? "page", base: SampleContent()))
                     .allowsHitTesting(false)
-                    .fixedSize()
-                    .scaleEffect(0.8)
-                    .frame(maxWidth: .infinity, minHeight: 34)
-                    .clipped()
+                    .fitted()
                 Text(name).font(.caption2).lineLimit(2).multilineTextAlignment(.center).foregroundStyle(current ? .primary : .secondary)
             }
             .padding(5)
@@ -1445,16 +1486,24 @@ struct ElementChoices: View {
 
     var body: some View {
         InspectorSection(title: "Look for All \(element.plural)", footer: "Applies to every \(element.title.lowercased()) where it fits; menus and alerts that macOS draws are left alone. Previewed first.") {
-            ForEach(element.keyParameters, id: \.id) { p in
+            // Only settings some role can use (a toggle's "button look" needs a toggle drawn as a button), each drawn on
+            // a role where it applies, so no option is drawn identical to the next.
+            let roles = model.system.roles(of: element.id)
+            ForEach(element.keyParameters.filter { p in roles.contains { p.applies(to: model.look(of: $0)) } }, id: \.id) { p in
+                // Only what the setting needs from a role (a toggle's style for its button look), never the role's own
+                // key or style, so "macOS default" is drawn as macOS draws it.
+                let needs = Set(p.requires.keys)
+                let base = (roles.map { model.look(of: $0) }.first { p.applies(to: $0) } ?? [:]).filter { needs.contains($0.key) }
                 VStack(alignment: .leading, spacing: 6) {
                     Text(p.title).font(.callout.weight(.semibold))
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: ChoiceTile.width(element.id)), spacing: 6, alignment: .top)], alignment: .leading, spacing: 6) {
                         ForEach(model.choices(of: p), id: \.self) { value in
                             Button { model.tryBatch(model.batchSetting(p, value, element: element.id, place: nil)) } label: {
                                 VStack(spacing: 4) {
-                                    RecipeControl(element: element.id, recipe: value.map { [p.id: $0] } ?? [:], system: model.system, importance: .other,
+                                    RecipeControl(element: element.id, recipe: base.merging([p.id: value ?? p.systemDefault ?? ""]) { $1 }.filter { !$0.value.isEmpty },
+                                                  system: model.system, importance: .other,
                                                   sample: SampleWords.content(.other, place: "page", base: SampleContent()))
-                                        .allowsHitTesting(false).fixedSize().scaleEffect(0.8).frame(maxWidth: .infinity, minHeight: 34).clipped()
+                                        .allowsHitTesting(false).fitted()
                                     Text(value.map { ComponentWords.value(element: element.id, parameter: p.id, value: $0) } ?? "macOS default")
                                         .font(.caption2).lineLimit(2).multilineTextAlignment(.center).foregroundStyle(.secondary)
                                 }
@@ -1602,6 +1651,8 @@ struct FoundationsView: View {
         switch f.kind {
         case .color:
             RoundedRectangle(cornerRadius: 6).fill(RecipeColor.color(f.id, system: model.system)).frame(width: 60, height: 32)
+                // An edge, so a white or window-coloured swatch is seen on the page.
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator, lineWidth: 0.5))
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator, lineWidth: 0.5))
         case .text:
             Text("Aa Title").font(font(f))
@@ -1632,6 +1683,8 @@ struct FoundationsView: View {
 struct RulesView: View {
     @ObservedObject var model: DesignerModel
     @State private var note = ""
+    /// The rule under the pointer: its "Make It a Setting" shows there, not on every rule.
+    @State private var hovered: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1654,6 +1707,7 @@ struct RulesView: View {
                         .labelsHidden().fixedSize()
                         if rule?.configurable != true, rule.map({ !$0.isOff }) == true {
                             Button("Make It a Setting") { model.makeSetting(kind.id) }.controlSize(.small)
+                                .opacity(hovered == kind.id ? 1 : 0)
                         }
                     }
                     Text(kind.says(rule?.value ?? kind.appleDefault ?? "off")).font(.callout)
@@ -1667,6 +1721,7 @@ struct RulesView: View {
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+                .onHover { if $0 { hovered = kind.id } else if hovered == kind.id { hovered = nil } }
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("Notes").font(.headline)
@@ -1688,4 +1743,42 @@ struct RulesView: View {
             }
         }
     }
+}
+
+/// A sample drawn whole: at most `maxScale`, smaller when it is wider than its tile (or taller than `maxHeight`),
+/// never cropped and never spilling over its neighbours.
+struct FittedPreview<C: View>: View {
+    var maxScale: CGFloat = 0.8
+    var maxHeight: CGFloat? = nil
+    @ViewBuilder var content: () -> C
+    @State private var natural = CGSize(width: 1, height: 30)
+    @State private var available: CGFloat = 80
+
+    var body: some View {
+        let scale = min(maxScale, available / max(natural.width, 1), maxHeight.map { $0 / max(natural.height, 1) } ?? .infinity)
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: maxHeight ?? max(34, natural.height * scale))
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
+            .overlay {
+                content().fixedSize()
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { natural = $0 }
+                    .scaleEffect(scale)
+            }
+    }
+}
+
+extension View {
+    func fitted(_ maxScale: CGFloat = 0.8, maxHeight: CGFloat? = nil) -> some View { FittedPreview(maxScale: maxScale, maxHeight: maxHeight) { self } }
+}
+
+/// Why two options draw alike: "Looks the same as “Standard button, icon and text” in the toolbar, which draws a
+/// button as its icon only."
+func sameNote(_ role: ComponentRole, _ q: ComponentQuestion, _ j: Int) -> String {
+    let other = q.options[j].recipe.map { ComponentWords.look(element: role.element, recipe: ComponentElement.named(role.element)?.look($0) ?? $0) } ?? q.options[j].title
+    if role.element == "button", role.places.allSatisfy({ $0 == "toolbar" }) {
+        // Measured on a real macOS 27 toolbar: a button shows its icon only, whatever its label style.
+        return "Looks the same as “\(other)” in the toolbar, which draws a button as its icon only."
+    }
+    return "Draws the same as “\(other)” here."
 }

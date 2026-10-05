@@ -37,11 +37,18 @@ public struct RecipeControl: View {
 
     public var body: some View {
         content
+            // A sample takes its looks from its recipe only: a style set around it (a plain button that makes it
+            // clickable on the canvas) must not change how it draws. What the recipe sets inside wins over these.
+            .buttonStyle(.automatic)
             .disabled(sample.disabled)
     }
 
     @ViewBuilder private var content: some View {
         switch element {
+        // In a window's toolbar a button or menu is drawn as the toolbar draws it, not as it looks alone.
+        case "button" where sample.place == "toolbar", "menu" where sample.place == "toolbar", "picker" where sample.place == "toolbar",
+             "controlGroup" where sample.place == "toolbar", "field" where sample.place == "toolbar":
+            ToolbarFace(element: element, recipe: recipe, sample: sample)
         case "button": RecipeButton(recipe: recipe, importance: importance, sample: sample)
         case "menu": RecipeMenu(recipe: recipe, sample: sample)
         case "picker": RecipePicker(recipe: recipe)
@@ -766,6 +773,9 @@ public enum SampleWords {
         var s = base
         s.place = place
         switch (importance, place) {
+        case (.main, "toolbar"): s.title = "New Ticket"; s.symbol = "plus"
+        case (.destructive, "toolbar"): s.title = "Delete"; s.symbol = "trash"
+        case (.quiet, "toolbar"): s.title = "Filter"; s.symbol = "line.3.horizontal.decrease"
         case (_, "toolbar"): s.title = "Refresh"; s.symbol = "arrow.clockwise"
         case (.main, _): s.title = base.longLabel ? base.title : "Save"; s.symbol = "checkmark"
         case (.quiet, "sheetFooter"), (.quiet, "alert"): s.title = "Cancel"; s.symbol = "xmark"

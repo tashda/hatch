@@ -11,6 +11,8 @@ struct TemplatesView: View {
     @State private var left = "app"
     @State private var right = ""
     @State private var onlyDifferences = true
+    /// The row under the pointer: its Use This Look shows there, not on every row.
+    @State private var hoveredRow: String?
 
     /// "app" is this app's system; anything else is a template id.
     private func system(_ id: String) -> ComponentSystem? {
@@ -77,14 +79,16 @@ struct TemplatesView: View {
                             Text(row.importance.title).font(.caption).foregroundStyle(.secondary)
                         }
                         .frame(width: 120, alignment: .leading)
-                        cell(row.left, a, place)
-                        cell(row.right, b, place)
+                        .onHover { if $0 { hoveredRow = row.id } }
+                        cell(row.left, a, place).onHover { if $0 { hoveredRow = row.id } }
+                        cell(row.right, b, place).onHover { if $0 { hoveredRow = row.id } }
                         if left == "app", row.differs, let mine = row.left, let theirs = row.right {
                             Button("Use This Look") {
                                 model.tryLook(DesignerPreview(role: mine.id, recipe: theirs.draft ?? theirs.recipe, follow: theirs.followsMacOS,
                                                               label: "\(name(rightId))'s look"))
                             }
                             .help("Try \(name(rightId))'s look on \(mine.title) everywhere it sits; Keep saves it")
+                            .opacity(hoveredRow == row.id ? 1 : 0)
                         } else {
                             Text("")
                         }
