@@ -238,4 +238,14 @@ final class SweepTests: XCTestCase {
         let bug = try Fixture.ticket(store, project, type: .bug, title: "A bug", body: "x", status: .ready)
         XCTAssertEqual(try store.planClaim(for: bug, declared: ["a.swift"]), ["a.swift"], "any other ticket claims what it declares")
     }
+
+    func testLooksRightVerifiesEveryBuiltItemAndLeavesTheRest() throws {
+        let t = try Fixture.ticket(store, project, type: .sweep, title: "All cards", body: "x", status: .ready)
+        try store.saveSweepItems(ticketId: t.id, items: items().map(\.input) + [SweepItemInput(key: "late", title: "Late", name: "LateCard", file: "Views/LateCard.swift")])
+        try store.setSweepItem(ticketId: t.id, key: "decide-card", to: .built, commit: "a", by: "agent")
+        try store.setSweepItem(ticketId: t.id, key: "agent-card", to: .built, commit: "b", by: "agent")
+        XCTAssertEqual(try store.verifyAllSweepItems(ticketId: t.id), 2)
+        XCTAssertEqual(try store.sweepItems(ticketId: t.id).map(\.state), [.verified, .verified, .todo])
+        XCTAssertEqual(try store.verifyAllSweepItems(ticketId: t.id), 0, "nothing left to verify")
+    }
 }

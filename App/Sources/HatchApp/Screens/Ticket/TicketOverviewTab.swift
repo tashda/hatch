@@ -499,6 +499,8 @@ struct DescriptionBody: View {
 /// leaves items out before the build, and marks them verified or sends one back once they are built (SW8).
 struct SweepItemsSection: View {
     let ticket: Ticket
+    /// In its own card on the ticket page; without one where a card already holds it (the Preview's verify card).
+    var framed = true
     @EnvironmentObject var state: AppState
     @State private var items: [SweepItem] = []
     @State private var progress: (settled: Int, total: Int) = (0, 0)
@@ -509,7 +511,13 @@ struct SweepItemsSection: View {
     private var verifying: Bool { ticket.status == .toVerify }
 
     var body: some View {
-        SectionCard("Items") {
+        Group {
+            if framed { SectionCard("Items") { content } } else { content }
+        }
+        .autoReload(every: 4) { load() }
+    }
+
+    private var content: some View {
             VStack(alignment: .leading, spacing: 10) {
                 if items.isEmpty {
                     Text("The survey has not listed the items yet. The agent preparing this finds them first.")
@@ -537,8 +545,6 @@ struct SweepItemsSection: View {
                     }
                 }
             }
-        }
-        .autoReload(every: 4) { load() }
     }
 
     /// Kinds in the order the survey first named them; items without a kind last.

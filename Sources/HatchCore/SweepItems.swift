@@ -120,6 +120,18 @@ public extension HatchStore {
         return try setSweepItem(ticketId: ticketId, key: key, to: .verified, by: by)
     }
 
+    /// "Looks right" on the whole Sweep: every built item is verified in one go. Returns how many. Items still to do stay as they are.
+    @discardableResult
+    func verifyAllSweepItems(ticketId: Int, by: String = "owner") throws -> Int {
+        try db.transaction {
+            var count = 0
+            for item in try sweepItems(ticketId: ticketId) where item.state == .built {
+                try setSweepItem(ticketId: ticketId, key: item.key, to: .verified, by: by); count += 1
+            }
+            return count
+        }
+    }
+
     /// One item is not right: it goes back to To do with the owner's note, and the ticket goes to Fixing so an agent takes it up.
     /// The other items stay as they are.
     @discardableResult

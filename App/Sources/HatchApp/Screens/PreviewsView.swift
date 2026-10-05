@@ -351,8 +351,13 @@ struct PreviewsView: View {
                     Spacer()
                     verdictChip(pt.verdict)
                 }
-                Text("Look at").font(.caption).foregroundStyle(.secondary)
-                ForEach(lookAt(t), id: \.self) { item in checklistRow(t, item) }
+                if t.type == .sweep {
+                    // A Sweep: its items, each with Verified and Send back; Looks right settles the rest (decision SW8).
+                    SweepItemsSection(ticket: t, framed: false)
+                } else {
+                    Text("Look at").font(.caption).foregroundStyle(.secondary)
+                    ForEach(lookAt(t), id: \.self) { item in checklistRow(t, item) }
+                }
                 if t.status == .toVerify {
                     verdictButtons(t, preview)
                 }
@@ -427,6 +432,7 @@ struct PreviewsView: View {
 
     private func markRight(_ t: Ticket, _ preview: HatchCore.Preview) {
         state.perform("Record verdict") {
+            if t.type == .sweep { try state.store.verifyAllSweepItems(ticketId: t.id) }
             try state.store.setVerdict(previewId: preview.id, ticketId: t.id, verdict: "looks-right", note: nil)
             try state.store.record(t.id, actor: "owner", kind: "verified", payload: ["preview": .string(preview.name), "verdict": "looks-right"])
         }
