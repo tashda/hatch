@@ -205,7 +205,19 @@ public enum BriefBuilder {
     /// The components to use, by name (decision CO5), so an agent reuses them instead of reading views to copy their
     /// values. Only for work that draws something; names only, capped, a few hundred tokens at most.
     static func componentLines(_ config: ProjectConfig?, _ t: Ticket, _ kind: AgentTaskKind?) -> [String] {
-        guard let kind, kind != .vet, t.type != .question, t.type != .theme, let config, let label = config.componentsLabel else { return [] }
+        guard let kind, kind != .vet, t.type != .question, t.type != .theme, let config else { return [] }
+        // The design system's roles (decisions DS2, DS7): which control in which place, by code name.
+        if let notebook = config.repo(.notebook)?.localPath, let system = try? ComponentSystem.load(notebook: notebook) {
+            var out = ["\n## Components: roles (\(ComponentSystem.readmePath) in the notebook has the rules in full)"]
+            out += system.briefLines(looks: t.type == .sketch)
+            out.append(t.type == .sketch
+                       ? "Draw the variants with these looks."
+                       : "Style every control through its role (`.buttonRole(.inRow)`), and use the named values (`Space`, `Radius`, `Palette`, `Typography`); never a style, colour, font size or spacing number in a view. "
+                         + "Pick the role by element, place and importance. If none fits, or the ticket asks for a look a role does not have, do not invent one: hatch ask, suggesting use the role (first), add a variant here, or change the role everywhere. hatch ready checks the lines you add.")
+            if let c = config.components, let product = c.product { out.append("Import \(product) (\(c.path)).") }
+            return out
+        }
+        guard let label = config.componentsLabel else { return [] }
         var out = ["\n## Components (\(label)" + (config.components?.product.map { ", import \($0)" } ?? "") + ")"]
         if let folder = config.componentsFolder, FileManager.default.fileExists(atPath: folder) {
             let catalog = ComponentsScanner.catalog(at: folder, isPackage: config.components.map { $0.product != nil } ?? true)

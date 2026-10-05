@@ -195,6 +195,21 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         return out
     }
 
+    // MARK: For agents
+
+    /// The role table in a few hundred tokens (DS, workflow D): one line per role with its code, purpose and places.
+    /// `looks` adds each role's look, for Iris (to spot a clash) and for drawings made in HTML.
+    public func briefLines(looks: Bool = false) -> [String] {
+        roles.map { r in
+            let places = r.places.map { place($0)?.title ?? $0 }.joined(separator: ", ")
+            var line = "- `\(r.codeName)` \(r.title)" + (r.perScreen.map { ", at most \($0) per screen" } ?? "") + ": \(places)"
+            if looks { line += " — " + r.lookSummary }
+            if !r.variants.isEmpty { line += "; variants " + r.variants.map { "`\(r.name)\($0.id.prefix(1).uppercased() + $0.id.dropFirst())` (\($0.use))" }.joined(separator: ", ") }
+            if r.status == .inRedesign { line += " (in redesign)" }
+            return line
+        }
+    }
+
     // MARK: The readable copy
 
     /// `components/README.md`: what agents read without Hatch (DS2). Generated, never edited by hand.

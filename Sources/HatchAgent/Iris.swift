@@ -99,7 +99,10 @@ public struct VettingRequest: Codable, Equatable, Sendable {
             request.otherProjects = try store.projects().filter { $0.id != project.id && (try? store.canMoveProject(t, to: $0.id)) == true }
                 .map { .init(key: $0.key, name: $0.name) }
         }
-        if let config, let folder = config.componentsFolder, FileManager.default.fileExists(atPath: folder) {
+        if let notebook = config?.repo(.notebook)?.localPath, let system = try? ComponentSystem.load(notebook: notebook) {
+            // The role table, with looks, so a visual ticket can be checked against it (WF-T8, DS).
+            request.components = ["Roles (element in a place for a purpose):"] + system.briefLines(looks: true)
+        } else if let config, let folder = config.componentsFolder, FileManager.default.fileExists(atPath: folder) {
             let catalog = ComponentsScanner.catalog(at: folder, isPackage: config.components.map { $0.product != nil } ?? true)
             if !catalog.isEmpty { request.components = catalog.briefLines(cap: 24, values: true) }
         }
@@ -237,6 +240,7 @@ public enum IrisPrompt {
         - questions: usually none. Each has "text", 2 to \(maxSuggestions) short "suggestions" with your best answer first, "stakes" ("low" if a wrong guess is cheap and your first suggestion is fine to go ahead with, "high" if not), and "rerun": true only if the answer could change what kind of work this is.
         - If the ticket would undo or contradict an earlier decision below, ask about it, naming the decision ("about": "decision #12"), stakes high, with suggestions to keep the decision or replace it.
         - If a visual change would alter a component listed below for everyone who uses it, ask once ("about": "component NAME"), stakes high. Do not ask about a colour, font or size the list lacks; the builder adds those.
+        - When the components are roles: if the ticket asks for a look that contradicts a role in its place (a big blue Save where Save is the main action), needs a role the list lacks, or would put a second main action on a screen, ask once ("about": "component ROLE"), stakes high, with suggestions in this order: use the role as it is, add a variant for this place, change the role everywhere.
         - Do not list related tickets: Hatch links tickets that name the same screen or file by itself.
         - duplicateOf: a ticket number from the list below if it may be the same request. duplicateSure: true only if this ticket names the same screen and the same problem as that ticket; then duplicateWhy says which screen and which problem in one line.
         - split: only for path split, the separate parts as [{"title","body","path"}], 2 to 6 of them, each part's path never split.\(r.noSplit == true ? " The owner undid a split of this ticket: do not use path split." : "")
