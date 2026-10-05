@@ -58,6 +58,38 @@ final class StageLauncher {
         try? state.store.upsertStageSession(ticketId: ticket.id, revision: ticket.revision, pid: Int(process.processIdentifier), state: "building")
     }
 
+    private var designers: [Int: Process] = [:]
+
+    /// Opens the Components Designer for a project (decision DS1): the Stage in its components mode, reading and
+    /// changing the design system through Hatch's local API, with the app's clone for "today".
+    func openDesigner(project: Project, state: AppState) {
+        if let running = designers[project.id], running.isRunning {
+            focus(pid: running.processIdentifier)
+            return
+        }
+        guard let executable = resolveExecutable(setting: state.hxSetting("stage_executable")) ?? bundledStage() else {
+            state.errorMessage = "The Components Designer comes with the Stage, which is not built. Build Hatch in Xcode, or set the Stage in Settings › Tools."
+            return
+        }
+        let home = state.paths.root.path
+        var arguments = ["--components", project.key, "--home", home]
+        if let app = project.config?.repo(.app)?.localPath { arguments += ["--app", app] }
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = arguments
+        var env = ProcessInfo.processInfo.environment
+        env["HATCH_HOME"] = home
+        process.environment = env
+        let id = project.id
+        process.terminationHandler = { _ in Task { @MainActor in StageLauncher.shared.designers[id] = nil } }
+        do {
+            try process.run()
+            designers[project.id] = process
+        } catch {
+            state.errorMessage = "Could not open the Components Designer: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: Helpers
 
     private func bundledStage() -> URL? {

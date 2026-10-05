@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import HatchCore
+import HatchGit
 
 /// Components (decisions CO1 to CO8): the selected project's named colors, type, sizes and shared views, read from the
 /// app's code on this Mac, and the values still typed straight into views. Hatch draws the tokens itself; views are
@@ -24,6 +25,12 @@ struct ComponentsView: View {
         var folderExists: Bool
         var catalog: ComponentCatalog?
         var scan: ComponentsScan?
+        /// The design system in the notebook (decisions DS1 to DS12), where it is on this Mac.
+        var system: ComponentSystem?
+        var notebook: String?
+        /// How much of the app already follows it.
+        var coverage: (usingRole: Int, matching: Int, total: Int)?
+        var findings = 0
     }
 
     /// The selected project, or the only one when "All projects" is selected and there is just one.
@@ -83,6 +90,7 @@ struct ComponentsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     if let message { Text(message).font(.callout).foregroundStyle(.secondary).padding(.horizontal, 4) }
+                    systemCard(project, loaded)
                     if !loaded.hasClone {
                         noClone
                     } else if loaded.label == nil {
@@ -111,6 +119,105 @@ struct ComponentsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .floatingCard()
         }
+    }
+
+    // MARK: Design system
+
+    /// The design system (DS1 to DS12): where it stands and the way into the Components Designer, or how to start one.
+    @ViewBuilder private func systemCard(_ project: Project, _ loaded: Loaded) -> some View {
+        HXCard {
+            VStack(alignment: .leading, spacing: 10) {
+                if let system = loaded.system {
+                    HStack(alignment: .firstTextBaseline) {
+                        Label("Design system", systemImage: "square.grid.3x3.square").font(.headline)
+                        Spacer()
+                        Button { StageLauncher.shared.openDesigner(project: project, state: state) } label: {
+                            Label("Open Designer", systemImage: "paintbrush.pointed")
+                        }
+                        .buttonStyle(.glassProminent)
+                        .help("Judge and decide the roles with the real controls, in their places")
+                    }
+                    let c = system.counts
+                    Text("Baseline v\(system.version), macOS \(system.minimumMacOS) and later. \(system.roles.count) roles: \(c.agreed) agreed, \(c.provisional) provisional"
+                         + (c.inRedesign > 0 ? ", \(c.inRedesign) in redesign" : "") + ".")
+                        .foregroundStyle(.secondary)
+                    if !system.questions.isEmpty {
+                        Label("\(system.questions.count) to decide in the Designer", systemImage: "questionmark.circle").foregroundStyle(.orange)
+                    }
+                    if let cov = loaded.coverage, cov.total > 0 {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ProgressView(value: Double(cov.usingRole), total: Double(cov.total))
+                            Text("\(cov.usingRole) of \(cov.total) controls use a role; \(cov.matching) more already have their role's look. \(loaded.findings) to look at (hatch components check).")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    if let components = loaded.components ?? Optional(ComponentsConfig.suggested(appName: project.name)) {
+                        Button { addSystemTickets(project, system, components, loaded) } label: { Label("Add Tickets to Put It in Place", systemImage: "plus") }
+                            .buttonStyle(.glass)
+                            .help("Draft tickets: generate the role code, then move the screens onto the roles")
+                    }
+                } else if loaded.notebook == nil {
+                    Label("Design system", systemImage: "square.grid.3x3.square").font(.headline)
+                    Text("The design system lives in the project's notebook, which is not on this Mac yet.").foregroundStyle(.secondary)
+                } else {
+                    Label("No design system yet", systemImage: "square.grid.3x3.square").font(.headline)
+                    Text("Roles say which control to use in which place: the main action of a sheet, an action in a row, a toolbar item. "
+                         + "Hatch starts them from \(project.name)'s own most-used looks, or from a template, and asks where looks compete.")
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        if loaded.hasClone {
+                            Button { startSystem(project, template: nil) } label: { Label("Start from the App", systemImage: "wand.and.stars") }
+                                .buttonStyle(.glassProminent)
+                                .help("Read the app's controls and propose a role for each kind, the most-used look first")
+                        }
+                        Menu {
+                            ForEach(ComponentTemplates.all) { t in
+                                Button(t.title) { startSystem(project, template: t) }
+                            }
+                        } label: { Label("Start from a Template", systemImage: "square.on.square") }
+                            .menuStyle(.button).menuIndicator(.hidden).buttonStyle(.glass).fixedSize()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Writes a new system into the notebook and commits it there (Hatch is the only writer, DS2).
+    private func startSystem(_ project: Project, template: ComponentTemplate?) {
+        guard let notebook = loaded?.notebook else { return }
+        let config = project.config
+        message = "Reading \(project.name)'s controls…"
+        Task {
+            let result = await Task.detached { () -> Result<ComponentSystem, Error> in
+                Result {
+                    let system: ComponentSystem
+                    if let template {
+                        system = template.system(name: project.name)
+                    } else {
+                        guard let app = config?.repo(.app)?.localPath else { throw StoreError.invalid("No clone of the app.") }
+                        let inv = ComponentInventoryScanner.scan(appRoot: app, excluding: [config?.components?.path].compactMap { $0 })
+                        system = ComponentDraft.fromApp(name: project.name, inventory: inv,
+                                                        minimumMacOS: ComponentInventoryScanner.minimumMacOS(appRoot: app) ?? ComponentSystem.referenceMacOS)
+                    }
+                    try system.write(notebook: notebook)
+                    _ = try NotebookWriter.commit("Components: start the design system" + (template.map { " from the \($0.title) template" } ?? " from the app"), in: notebook)
+                    return system
+                }
+            }.value
+            switch result {
+            case .success(let system):
+                message = "Started: \(system.roles.count) roles" + (system.questions.isEmpty ? "." : ", \(system.questions.count) to decide in the Designer.")
+            case .failure(let error):
+                message = "Could not start the design system: \(error)"
+            }
+            await load()
+        }
+    }
+
+    private func addSystemTickets(_ project: Project, _ system: ComponentSystem, _ components: ComponentsConfig, _ loaded: Loaded) {
+        let drafts = ComponentsSetup.systemDrafts(system, config: components, coverage: loaded.coverage)
+        guard let count = state.addComponentTickets(projectId: project.id, drafts: drafts) else { return }
+        message = "Added \(count) draft tickets. Submit \"Generate the role code\" first."
     }
 
     private var noClone: some View {
@@ -400,6 +507,13 @@ struct ComponentsView: View {
                 l.folderExists = true
                 l.catalog = ComponentsScanner.catalog(at: folder, isPackage: config?.components.map { $0.product != nil } ?? true)
             }
+            l.notebook = config?.repo(.notebook)?.localPath.flatMap { FileManager.default.fileExists(atPath: $0) ? $0 : nil }
+            if let notebook = l.notebook { l.system = try? ComponentSystem.load(notebook: notebook) }
+            if let system = l.system, let app {
+                let inv = ComponentInventoryScanner.scan(appRoot: app, excluding: [config?.components?.path].compactMap { $0 })
+                l.coverage = ComponentCheck.coverage(inv.uses, system: system)
+                l.findings = ComponentCheck.findings(inv.uses, system: system).count
+            }
             return l
         }.value
         guard self.project?.id == project.id else { return }
@@ -464,8 +578,19 @@ struct ComponentsView: View {
         catalog.sizes += [SizeToken(name: "Spacing.m", value: 12, file: "Tokens.swift"), SizeToken(name: "Spacing.l", value: 20, file: "Tokens.swift")]
         let scan = ComponentsScan(candidates: [], typed: [.color: 3, .size: 41], typedFiles: [(path: "Sources/Editor/EditorToolbar.swift", count: 14),
                                                                                        (path: "Sources/Connections/ConnectionRow.swift", count: 9)], swiftFiles: 412)
-        return Loaded(projectId: project.id, components: project.config?.components, label: project.config?.componentsLabel,
-                      hasClone: true, folderExists: true, catalog: catalog, scan: scan)
+        var loaded = Loaded(projectId: project.id, components: project.config?.components, label: project.config?.componentsLabel,
+                            hasClone: true, folderExists: true, catalog: catalog, scan: scan)
+        // A design system started from the app: a few roles agreed, the rest provisional, questions open.
+        var system = ComponentTemplates.glass.system(name: project.name)
+        try? system.agree("button.primary"); try? system.agree("button.cancel"); try? system.agree("button.toolbar")
+        system.questions = [ComponentQuestion(id: "look.button.inRow", kind: .look, role: "button.inRow", title: "Row action: 3 looks in use",
+                                              options: [.init(title: "bordered small", recipe: ["style": "bordered", "size": "small"], count: 29, effect: ""),
+                                                        .init(title: "Not sure yet", effect: "")], reason: "Most used.")]
+        loaded.system = system
+        loaded.notebook = "/tmp/demo-notebook"
+        loaded.coverage = (usingRole: 12, matching: 164, total: 412)
+        loaded.findings = 236
+        return loaded
     }
 }
 

@@ -361,3 +361,39 @@ public extension ComponentSystem {
         roles[i].variants.append(ComponentVariant(id, use: use, recipe: differs, places: places))
     }
 }
+
+// MARK: - Putting a system in place
+
+public extension ComponentsSetup {
+    static let systemThemeTitle = "Put the design system in place"
+
+    /// Draft tickets after a system is started (workflow A step 3, B step 5): a Theme with the generated code first, then
+    /// the mechanical swaps (nothing visible changes), then the controls whose look differs from their role. Drafts only:
+    /// the owner submits them (CO3).
+    static func systemDrafts(_ system: ComponentSystem, config: ComponentsConfig, coverage: (usingRole: Int, matching: Int, total: Int)?) -> [Draft] {
+        let product = config.product ?? (config.path as NSString).lastPathComponent
+        var drafts = [
+            Draft(type: .theme, title: systemThemeTitle,
+                  body: "\(system.name)'s design system is in the notebook (`\(ComponentSystem.notebookPath)`, rules in `\(ComponentSystem.readmePath)`). These tickets put it into the code one step at a time: the generated roles first, then the swaps that change nothing visible, then the controls that look different from their role. Submit the first; the others build on it.\n"),
+            Draft(type: .tweak, title: "Generate the role code",
+                  body: """
+                    Run `hatch components generate --package` in the app's clone. It writes `Roles.swift` and `Foundations.swift` into `\(config.path)` (library `\(product)`), with `.buttonRole(...)` and the other role modifiers and the named values (`Palette`, `Typography`, `Space`, `Radius`).
+
+                    Add the package to the app if it is not there yet, import `\(product)` where views need it, and build. Do not change any screen in this ticket. Never edit the generated files: they are written again from the system.
+
+                    """),
+        ]
+        let matching = coverage.map { " (\($0.matching) today)" } ?? ""
+        drafts.append(Draft(type: .tweak, title: "Use the roles where the look already matches",
+                            body: """
+                                `hatch components check` lists controls styled by hand whose look is already their role's\(matching) ("Could use its role"). Replace their style modifiers with the role (`.buttonRole(.inRow)` and so on). Nothing visible changes, so screenshots before and after must match.
+
+                                """))
+        drafts.append(Draft(type: .tweak, title: "Move the controls that differ onto their roles",
+                            body: """
+                                `hatch components check` lists controls whose look differs from their role ("Differs from its role") and places with no role yet. For each group: use the role, or ask with `hatch ask` and suggest use the role (first), add a variant, or allow it here. Never invent a look. Split this ticket by area if it touches more than a few screens.
+
+                                """))
+        return drafts
+    }
+}
