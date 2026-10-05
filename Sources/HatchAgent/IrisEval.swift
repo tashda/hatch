@@ -101,9 +101,19 @@ public final class IrisEvalWorld {
     static let layout: [String: [RepoRole]] = ["echo": [.app, .designSystem, .notebook, .specimens], "web": [.app, .notebook], "docs": [.notebook]]
     static let roleFolder: [RepoRole: String] = [.app: "app", .designSystem: "design", .notebook: "notebook", .specimens: "specimens"]
 
-    public init() throws {
+    /// The folder a `hatch` command run against this world uses as HATCH_HOME (set `fileBacked` to share the database with it).
+    public var home: URL { root.appendingPathComponent("home") }
+
+    /// `buildCommand` is what `hatch ready` runs in the app workspace. `fileBacked` keeps the database in `home`, so the
+    /// real `hatch` command and the launcher see the same tickets.
+    public init(fileBacked: Bool = false, buildCommand: String? = nil) throws {
         root = URL(fileURLWithPath: NSTemporaryDirectory()).resolvingSymlinksInPath().appendingPathComponent("iris-eval-\(UUID().uuidString)")
-        store = try HatchStore.inMemory()
+        if fileBacked {
+            try FileManager.default.createDirectory(at: root.appendingPathComponent("home"), withIntermediateDirectories: true)
+            store = try HatchStore(path: root.appendingPathComponent("home/hatch.sqlite").path)
+        } else {
+            store = try HatchStore.inMemory()
+        }
         for (key, roles) in Self.layout {
             var repos: [RepoConfig] = []
             for role in roles {
@@ -114,7 +124,7 @@ public final class IrisEvalWorld {
                 try git.git(["add", "."], in: dir); try git.git(["commit", "-qm", "start"], in: dir)
                 tips[dir] = try git.git(["rev-parse", "HEAD"], in: dir).trimmingCharacters(in: .whitespacesAndNewlines)
                 repos.append(RepoConfig(role: role, remote: "acme/\(key)-\(Self.roleFolder[role]!)", branch: "dev", localPath: dir,
-                                        buildCommand: role == .app ? "swift build -c \(key)" : nil))
+                                        buildCommand: role == .app ? (buildCommand ?? "swift build -c \(key)") : nil))
             }
             let areas = (Self.areas[key] ?? []).map { AreaConfig(name: $0, paths: ["\($0)/**"], specPrefix: String($0.prefix(4)).uppercased()) }
             projects[key] = try store.upsertProject(key: key, name: key.capitalized, config: ProjectConfig(

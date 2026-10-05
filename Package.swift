@@ -29,6 +29,8 @@ let package = Package(
         .testTarget(name: "HatchGitTests", dependencies: ["HatchGit", "HatchCore"]),
         .testTarget(name: "HatchSyncTests", dependencies: ["HatchSync", "HatchCore"]),
         .testTarget(name: "HatchAgentTests", dependencies: ["HatchAgent", "HatchCore", "HatchGit"]),
+        // The real `hatch` command driven by a stand-in agent through the real launcher (see WORKFLOW.md).
+        .testTarget(name: "HatchWorkflowTests", dependencies: ["HatchAgent", "HatchCore", "HatchGit", "hatch"]),
         .testTarget(name: "HatchAPITests", dependencies: ["HatchAPI", "HatchCore"]),
         .testTarget(name: "HatchImportTests", dependencies: ["HatchImport", "HatchCore"], exclude: ["Fixtures"]),
     ],
