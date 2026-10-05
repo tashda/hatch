@@ -188,6 +188,8 @@ public struct StageState: Codable, Equatable {
     public var overlayOpacity: Double = 0.5
     public var wipePosition: Double = 0.5
     public var showLiveMix: Bool = false
+    /// A Sweep shows one row per kind unless the owner turned that off (nil is on). Optional so older saved states still load.
+    public var showAllKinds: Bool? = nil
     public var pinnedMixes: [StageMixColumn] = []
     public var foldedPanels: Set<StagePanel> = [.playground]
     /// The panels are folded once from the window width on first launch, then the owner decides.

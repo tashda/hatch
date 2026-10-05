@@ -21,11 +21,15 @@ public struct StageManifest: Codable, Equatable {
     public var mixSpecimen: String?
     /// What Accept would change; shown in the Accept sheet.
     public var plan: StageAcceptPlan?
+    /// A Sweep's kinds of look-alikes (decision SW6): the id of the control whose choices are the kinds. Every specimen draws itself
+    /// for that control's value, and the Stage can show one row per kind.
+    public var matrixControl: String?
 
     public init(title: String = "", revision: Int = 1, specs: [String] = [], summary: String = "", asked: String = "",
                 controls: [StageControl] = [], specimens: [StageSpecimen] = [], questions: [StageQuestion] = [],
                 exhibitTopic: StageTopic? = nil, presets: [StagePreset] = [], scenarios: [StageScenario] = [],
-                conformance: StageConformance? = nil, mixSpecimen: String? = nil, plan: StageAcceptPlan? = nil) {
+                conformance: StageConformance? = nil, mixSpecimen: String? = nil, plan: StageAcceptPlan? = nil, matrixControl: String? = nil) {
+        self.matrixControl = matrixControl
         self.title = title; self.revision = revision; self.specs = specs; self.summary = summary; self.asked = asked
         self.controls = controls; self.specimens = specimens; self.questions = questions
         self.exhibitTopic = exhibitTopic; self.presets = presets; self.scenarios = scenarios
@@ -34,7 +38,7 @@ public struct StageManifest: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case title, revision, specs, summary, asked, controls, specimens, exhibits, questions, exhibitTopic
-        case presets, scenarios, conformance, mixSpecimen, plan
+        case presets, scenarios, conformance, mixSpecimen, plan, matrixControl
     }
 
     public init(from decoder: Decoder) throws {
@@ -58,6 +62,7 @@ public struct StageManifest: Codable, Equatable {
         conformance = try c.decodeIfPresent(StageConformance.self, forKey: .conformance)
         mixSpecimen = try c.decodeIfPresent(String.self, forKey: .mixSpecimen)
         plan = try c.decodeIfPresent(StageAcceptPlan.self, forKey: .plan)
+        matrixControl = try c.decodeIfPresent(String.self, forKey: .matrixControl)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -76,6 +81,12 @@ public struct StageManifest: Codable, Equatable {
         try c.encodeIfPresent(conformance, forKey: .conformance)
         try c.encodeIfPresent(mixSpecimen, forKey: .mixSpecimen)
         try c.encodeIfPresent(plan, forKey: .plan)
+        try c.encodeIfPresent(matrixControl, forKey: .matrixControl)
+    }
+
+    /// The kinds a Sweep's design is shown for, from the matrix control. Empty when the Proposal has none.
+    public var kindChoices: [StageChoice] {
+        matrixControl.flatMap { id in controls.first(where: { $0.id == id })?.choices } ?? []
     }
 
     public static func parse(data: Data) throws -> StageManifest {

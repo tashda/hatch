@@ -11,6 +11,46 @@ final class ColumnsTests: XCTestCase {
         XCTAssertTrue(cols[1].takesVerdict)
     }
 
+    func sweepManifest() throws -> StageManifest {
+        var m = try Fixtures.toast()
+        m.controls.append(StageControl(id: "kind", title: "Kind", choices: [StageChoice(id: "actions", name: "With actions"), StageChoice(id: "readonly", name: "Read only")], defaultChoice: "actions"))
+        m.matrixControl = "kind"
+        return m
+    }
+
+    func testASweepShowsTheSameColumnsOnceForEachKind() throws {
+        let m = try sweepManifest()
+        let state = Fixtures.state(for: m)
+        let rows = StageColumns.kindRows(manifest: m, state: state)
+        XCTAssertEqual(rows.map { $0.kind.id }, ["actions", "readonly"])
+        for row in rows {
+            XCTAssertEqual(row.columns.map(\.id), ["today", "a", "b"], "Today and every option in every row")
+            XCTAssertTrue(row.columns.allSatisfy { $0.controls["kind"] == row.kind.id }, "each column is drawn for the row's kind, Today too")
+        }
+        XCTAssertEqual(StageColumns.columns(manifest: m, state: state).first?.controls["kind"], "actions", "the plain columns use the kind chosen in the controls")
+    }
+
+    func testTheRowsAreOffWithoutAMatrixControlWithTwoKindsOrWhenTheOwnerTurnsThemOff() throws {
+        let plain = try Fixtures.toast()
+        XCTAssertTrue(StageColumns.kindRows(manifest: plain, state: Fixtures.state(for: plain)).isEmpty)
+        var oneKind = try sweepManifest()
+        oneKind.controls[oneKind.controls.count - 1].choices = [StageChoice(id: "actions", name: "With actions")]
+        XCTAssertTrue(StageColumns.kindRows(manifest: oneKind, state: Fixtures.state(for: oneKind)).isEmpty, "one kind is just the Proposal")
+        let m = try sweepManifest()
+        var state = Fixtures.state(for: m)
+        _ = StageReducer.reduce(&state, .setAllKinds(false), manifest: m)
+        XCTAssertTrue(StageColumns.kindRows(manifest: m, state: state).isEmpty)
+        _ = StageReducer.reduce(&state, .setAllKinds(true), manifest: m)
+        XCTAssertEqual(StageColumns.kindRows(manifest: m, state: state).count, 2)
+    }
+
+    func testTheMatrixControlSurvivesTheManifestRoundTrip() throws {
+        let m = try sweepManifest()
+        let again = try StageManifest.parse(data: try JSONEncoder().encode(m))
+        XCTAssertEqual(again.matrixControl, "kind")
+        XCTAssertEqual(again.kindChoices.map(\.id), ["actions", "readonly"])
+    }
+
     func testFilmstripFromFourOptions() {
         XCTAssertFalse(StageColumns.usesFilmstrip(optionCount: 3))
         XCTAssertTrue(StageColumns.usesFilmstrip(optionCount: 4))

@@ -20,18 +20,21 @@ public struct ProposalManifest: Codable, Equatable, Sendable {
     public var conformance: ManifestConformance?
     /// The several similar things a Sweep changes, as the survey found them (decision SW5). Empty for any other Proposal.
     public var items: [ManifestItem]
+    /// The control whose choices are the Sweep's kinds (decision SW6); every specimen draws itself for its value, and the Stage
+    /// shows one row per kind. Required when the items fall in two or more kinds.
+    public var matrixControl: String?
 
     public init(revision: Int = 1, specs: [String] = [], summary: String = "", asked: String = "",
                 controls: [ManifestControl] = [], specimens: [ManifestSpecimen] = [], questions: [ManifestQuestion] = [],
                 exhibitTopic: ManifestTopic? = nil, presets: [ManifestPreset] = [], scenarios: [ManifestScenario] = [],
-                conformance: ManifestConformance? = nil, items: [ManifestItem] = []) {
-        self.items = items
+                conformance: ManifestConformance? = nil, items: [ManifestItem] = [], matrixControl: String? = nil) {
+        self.items = items; self.matrixControl = matrixControl
         self.revision = revision; self.specs = specs; self.summary = summary; self.asked = asked
         self.controls = controls; self.specimens = specimens; self.questions = questions
         self.exhibitTopic = exhibitTopic; self.presets = presets; self.scenarios = scenarios; self.conformance = conformance
     }
 
-    private enum CodingKeys: String, CodingKey { case revision, specs, summary, asked, controls, specimens, exhibits, questions, exhibitTopic, presets, scenarios, conformance, items }
+    private enum CodingKeys: String, CodingKey { case revision, specs, summary, asked, controls, specimens, exhibits, questions, exhibitTopic, presets, scenarios, conformance, items, matrixControl }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -49,6 +52,7 @@ public struct ProposalManifest: Codable, Equatable, Sendable {
         scenarios = try c.decodeIfPresent([ManifestScenario].self, forKey: .scenarios) ?? []
         conformance = try c.decodeIfPresent(ManifestConformance.self, forKey: .conformance)
         items = try c.decodeIfPresent([ManifestItem].self, forKey: .items) ?? []
+        matrixControl = try c.decodeIfPresent(String.self, forKey: .matrixControl)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -65,6 +69,7 @@ public struct ProposalManifest: Codable, Equatable, Sendable {
         try c.encode(scenarios, forKey: .scenarios)
         try c.encodeIfPresent(conformance, forKey: .conformance)
         if !items.isEmpty { try c.encode(items, forKey: .items) }
+        try c.encodeIfPresent(matrixControl, forKey: .matrixControl)
     }
 
     /// Parses the JSON an agent hands in. Errors say where the JSON is wrong, in words an agent can act on.

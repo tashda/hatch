@@ -31,6 +31,8 @@ public enum ProposalValidator {
         return rules.flatMap { $0(input) }
     }
 
+    static func slug(_ s: String) -> String { s.lowercased().filter { $0.isLetter || $0.isNumber } }
+
     // MARK: Sweep items
 
     /// A Sweep lists the several similar things it changes. The code check (file exists, name is in it) needs the app and is
@@ -52,6 +54,27 @@ public enum ProposalValidator {
                 || item.file.trimmingCharacters(in: .whitespaces).isEmpty {
                 out.append(.error("items.incomplete", "Item '\(item.id)' needs a title, a name and a file.",
                                   "name is the type or view as the code spells it, file is its path relative to the app."))
+            }
+        }
+        // The design must be drawn for every kind (decision SW6): two or more kinds need a control that names them all.
+        let kinds = items.compactMap { $0.kind?.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        var distinct: [String] = []
+        for k in kinds where !distinct.contains(where: { slug($0) == slug(k) }) { distinct.append(k) }
+        if distinct.count > 1 {
+            if let id = i.manifest.matrixControl {
+                if let control = i.manifest.controls.first(where: { $0.id == id }) {
+                    let drawn = Set(control.choices.flatMap { [slug($0.id), slug($0.name)] })
+                    let missing = distinct.filter { !drawn.contains(slug($0)) }
+                    if !missing.isEmpty {
+                        out.append(.error("matrix.kind-not-drawn", "The kinds \(missing.joined(separator: ", ")) are not choices of the control '\(id)', so the design is not shown for them.",
+                                          "Add a choice for each kind (its id or name is the kind), and draw every specimen for it."))
+                    }
+                } else {
+                    out.append(.error("matrix.control-unknown", "matrixControl names '\(id)', which is not a control.", "Add a control with that id whose choices are the kinds."))
+                }
+            } else {
+                out.append(.error("matrix.missing", "The items fall in \(distinct.count) kinds (\(distinct.joined(separator: ", "))) but no control names them.",
+                                  "Add a control whose choices are the kinds, set `matrixControl` to its id, and draw every specimen, Today too, for the control's value."))
             }
         }
         if let previous = i.previous {

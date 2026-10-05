@@ -198,7 +198,7 @@ struct HelpSheet: View {
     @ObservedObject var model: StageModel
 
     private let rows: [(String, String)] = [
-        ("Space", "Flip between Echo today and the option"),
+        ("Space", "Flip between Today and the option"),
         ("← →", "Switch the option in focus"),
         ("1 to 5", "Side by side, Overlay, Flip, Wipe, Matrix"),
         ("L / D", "Light or Dark"),

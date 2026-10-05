@@ -41,10 +41,20 @@ public enum StageColumns {
         return values
     }
 
+    /// A Sweep's rows (decision SW6): one per kind, each with the same columns drawn for that kind. Empty unless the Proposal has a
+    /// matrix control with at least two kinds and the owner has not switched the rows off.
+    public static func kindRows(manifest: StageManifest, state: StageState) -> [(kind: StageChoice, columns: [StageColumn])] {
+        let kinds = manifest.kindChoices
+        guard kinds.count > 1, state.showAllKinds != false else { return [] }
+        return kinds.map { ($0, columns(manifest: manifest, state: state, kind: $0.id)) }
+    }
+
     /// All columns in drawing order: Echo today first, the options (all or the shown ones), the live Mix, the pinned Mixes.
-    public static func columns(manifest: StageManifest, state: StageState) -> [StageColumn] {
+    /// `kind` draws them all for one kind of a Sweep (the matrix control's value).
+    public static func columns(manifest: StageManifest, state: StageState, kind: String? = nil) -> [StageColumn] {
         var out: [StageColumn] = []
-        let preview = previewControls(manifest: manifest, state: state)
+        var preview = previewControls(manifest: manifest, state: state)
+        if let kind, let control = manifest.matrixControl { preview[control] = kind }
         if let t = manifest.echoToday {
             out.append(make(t, id: t.id, kind: .today, title: t.title, controls: preview))
         }
@@ -53,11 +63,14 @@ public enum StageColumns {
         }
         if let base = manifest.mixSpecimenID.flatMap({ manifest.specimen($0) }) {
             if state.showLiveMix {
-                out.append(make(base, id: liveMixID, kind: .liveMix, title: "Mix · your answers",
-                                controls: mixControls(manifest: manifest, state: state)))
+                var mix = mixControls(manifest: manifest, state: state)
+                if let kind, let control = manifest.matrixControl { mix[control] = kind }
+                out.append(make(base, id: liveMixID, kind: .liveMix, title: "Mix · your answers", controls: mix))
             }
             for m in state.pinnedMixes {
-                out.append(make(base, id: m.id, kind: .pinnedMix, title: m.title, controls: m.controls))
+                var pinned = m.controls
+                if let kind, let control = manifest.matrixControl { pinned[control] = kind }
+                out.append(make(base, id: m.id, kind: .pinnedMix, title: m.title, controls: pinned))
             }
         }
         return out

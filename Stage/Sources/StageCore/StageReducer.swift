@@ -38,6 +38,7 @@ public enum StageAction: Equatable {
     case resetControls
     // Mix
     case toggleLiveMix
+    case setAllKinds(Bool)
     case pinMix
     case removeMix(String)
     // Decision
@@ -156,6 +157,7 @@ public enum StageReducer {
         case .resetControls: s.controlValues = m.defaultControlValues
 
         case .toggleLiveMix: s.showLiveMix.toggle()
+        case .setAllKinds(let on): s.showAllKinds = on
         case .pinMix: pinMix(&s, m)
         case .removeMix(let id): s.pinnedMixes.removeAll(where: { $0.id == id })
 

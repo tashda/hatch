@@ -13,8 +13,15 @@ final class SweepTests: XCTestCase {
          ManifestItem(id: "agent-card", title: "Agent card", name: "AgentCard", file: "Views/AgentCard.swift", kind: "read only")]
     }
 
-    func sweepManifest(_ items: [ManifestItem]) -> ProposalManifest {
-        var m = Fixture.manifest(); m.items = items; return m
+    /// A Proposal manifest for a Sweep. With `matrix`, a control names the items' kinds, as the gate wants for two or more.
+    func sweepManifest(_ items: [ManifestItem], matrix: Bool = true) -> ProposalManifest {
+        var m = Fixture.manifest(); m.items = items
+        let kinds = Array(Set(items.compactMap(\.kind))).sorted()
+        if matrix, kinds.count > 1 {
+            m.controls.append(ManifestControl(id: "kind", title: "Kind", choices: kinds.map { ManifestChoice(id: ProposalValidator.slug($0), name: $0) }, defaultChoice: ProposalValidator.slug(kinds[0])))
+            m.matrixControl = "kind"
+        }
+        return m
     }
 
     func testASweepGoesTheWayOfAProposal() {
@@ -113,6 +120,7 @@ final class SweepTests: XCTestCase {
         XCTAssertTrue(prepare.contains("This is a Sweep"))
         XCTAssertTrue(prepare.contains("Hatch checks both against the code"))
         XCTAssertTrue(prepare.contains("One unified design for all of them"))
+        XCTAssertTrue(prepare.contains("`matrixControl`"), "the design is drawn for every kind")
         try store.saveSweepItems(ticketId: t.id, items: items().map(\.input))
         try store.setSweepItem(ticketId: t.id, key: "decide-card", to: .built, commit: "abc", by: "agent")
         let build = try BriefBuilder.brief(store: store, ticketId: t.id, agent: "Agent on #151", kind: .build)
@@ -175,5 +183,22 @@ final class SweepTests: XCTestCase {
         XCTAssertTrue(own.title.hasPrefix("DecideCard"))
         XCTAssertEqual(try store.sweepItems(ticketId: t.id).first?.state, .dropped, "the Sweep leaves it out")
         XCTAssertTrue(try store.notes(ticketId: t.id).contains { $0.body.contains("split off to") })
+    }
+
+    func testASweepWithSeveralKindsMustDrawTheDesignForEachOfThem() {
+        func codesFor(_ m: ProposalManifest) -> [String] { codes(ProposalValidator.validate(m, isSweep: true)) }
+        var m = sweepManifest(items(), matrix: false)   // kinds: "with actions", "read only"
+        XCTAssertTrue(codesFor(m).contains("matrix.missing"), "two kinds and no control that names them")
+        m.matrixControl = "nope"
+        XCTAssertTrue(codesFor(m).contains("matrix.control-unknown"))
+        m.controls.append(ManifestControl(id: "kind", title: "Kind", choices: [ManifestChoice(id: "with-actions", name: "With actions")], defaultChoice: "with-actions"))
+        m.matrixControl = "kind"
+        XCTAssertTrue(codesFor(m).contains("matrix.kind-not-drawn"), "Read only has no choice, so nothing draws it")
+        m.controls[m.controls.count - 1].choices.append(ManifestChoice(id: "readonly", name: "Read only"))
+        XCTAssertFalse(codesFor(m).contains { $0.hasPrefix("matrix.") }, "every kind is a choice (by id or name, ignoring case and spaces)")
+        var one = items(); one[1].kind = "With Actions"
+        XCTAssertFalse(codesFor(sweepManifest(one)).contains { $0.hasPrefix("matrix.") }, "one kind needs no matrix")
+        let json = try? sweepManifest(items()).jsonString()
+        XCTAssertNotNil(json)
     }
 }

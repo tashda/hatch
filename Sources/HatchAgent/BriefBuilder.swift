@@ -346,7 +346,7 @@ public enum BriefBuilder {
             default:
                 let sweep = t.type == .sweep ? [
                     "This is a Sweep: one change to several similar things. First survey the code once and list every instance in the manifest `items`: {id, title, name, file, kind, note}. `name` is the type or view as the code spells it and `file` is its path relative to the app. Hatch checks both against the code, so list only what exists. Start from Candidates below (a name scan): confirm, remove and add.",
-                    "Group the items into `kind`s of look-alikes. Draw Today and the proposals on the most typical kind, and say in the summary how each other kind will look. One unified design for all of them, not one per item.",
+                    "Group the items into `kind`s of look-alikes. Add one control whose choices are the kinds and set `matrixControl` to its id; every specimen, Today too, draws itself for that control's value, so the Stage shows the design against every kind at once. One unified design for all of them, not one per item.",
                 ] : []
                 return sweep + [
                     "Look up the area in the Spec and note the Spec IDs you change; put them in the manifest `specs` and in the summary.",

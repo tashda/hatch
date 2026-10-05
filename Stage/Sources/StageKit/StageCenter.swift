@@ -93,6 +93,15 @@ struct ScenarioStrip: View {
                 .fixedSize()
             }
             Spacer(minLength: 0)
+            if !model.manifest.kindChoices.isEmpty {
+                Button {
+                    model.send(.setAllKinds(model.state.showAllKinds == false))
+                } label: {
+                    chip(model.state.showAllKinds == false ? "One kind" : "All kinds", selected: model.state.showAllKinds != false, palette: palette)
+                }
+                .buttonStyle(.plain)
+                .help("A Sweep changes several kinds of the same thing. Show every kind as a row, or only the kind chosen in the controls.")
+            }
         }
     }
 
@@ -115,7 +124,25 @@ struct SideBySideView: View {
 
     var body: some View {
         let all = model.columns
-        if StageColumns.usesFilmstrip(columns: all) {
+        let rows = StageColumns.kindRows(manifest: model.manifest, state: model.state)
+        if !rows.isEmpty {
+            // A Sweep: the same columns once per kind, so the design is judged against every kind at once (decision SW6).
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(rows, id: \.kind.id) { row in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(row.kind.name)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(model.palette.muted)
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(row.columns, id: \.id) { column in
+                                ColumnView(model: model, column: column)
+                                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                            }
+                        }
+                    }
+                }
+            }
+        } else if StageColumns.usesFilmstrip(columns: all) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top, spacing: 12) {
                     ForEach(model.visibleColumns, id: \.id) { column in
@@ -124,7 +151,7 @@ struct SideBySideView: View {
                     }
                 }
                 FilmstripView(model: model, columns: all, width: width)
-                Text("Four or more options: two are shown large, the rest sit in the filmstrip. Arrow keys move through it, Space flips with Echo today.")
+                Text("Four or more options: two are shown large, the rest sit in the filmstrip. Arrow keys move through it, Space flips with Today.")
                     .font(.caption)
                     .foregroundStyle(model.palette.muted)
             }
@@ -329,7 +356,7 @@ struct CompareView: View {
                     layeredBody(t, o, wipe: true)
                 }
             } else {
-                Text("Comparing needs Echo today and at least one option.")
+                Text("Comparing needs Today and at least one option.")
                     .font(.callout)
                     .foregroundStyle(model.palette.muted)
             }
@@ -340,7 +367,7 @@ struct CompareView: View {
         let items = StageColumns.navigable(model.columns)
         return HStack(spacing: 8) {
             Text(model.state.mode.title).font(.system(size: 11, weight: .semibold))
-            Text("Echo today vs")
+            Text("Today vs")
                 .font(.system(size: 10))
                 .foregroundStyle(model.palette.muted)
             Picker("Compare with", selection: model.binding({ $0.selected ?? "" }, { StageAction.selectOption($0) })) {
@@ -485,7 +512,7 @@ struct MatrixView: View {
                     }
                 }
             }
-            Text("Outlined: height differs from Echo today by more than \(Int(StageMatrix.threshold))pt in that scenario.")
+            Text("Outlined: height differs from Today by more than \(Int(StageMatrix.threshold))pt in that scenario.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(palette.muted)
             ForEach(model.manifest.effectiveScenarios.filter { !$0.applicable }, id: \.id) { sc in
