@@ -21,7 +21,8 @@ public extension HatchStore {
             let body = t.originalBody ?? ""
 
             // The parts of a split are dropped with it: they were made from a reading the reset throws away.
-            for part in try tickets(TicketFilter(parentId: id)) where part.status != .dropped {
+            let parts = try tickets(TicketFilter(parentId: id)) + (try splitParts(of: id).compactMap { try ticket(id: $0) })
+            for part in parts where part.status != .dropped {
                 try db.execute("UPDATE ticket SET status = ?, turn = ?, prev_status = NULL, taken_by = NULL, updated_at = ? WHERE id = ?",
                                [.text(Status.dropped.rawValue), .text(Status.dropped.turn.rawValue), .date(now()), .int(part.id)])
                 try record(part.id, actor: by, kind: "status", payload: ["from": .string(part.status.rawValue), "to": .string(Status.dropped.rawValue), "reason": .string("parent \(t.displayNumber) was reset")])

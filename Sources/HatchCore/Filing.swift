@@ -20,7 +20,9 @@ public enum WorkPath: String, CaseIterable, Codable, Sendable {
     case small
     /// Maintenance: a dependency, CI, docs, Spec text.
     case chore
-    /// Several things in one prompt: a Theme with one child per part.
+    /// One change to several similar things ("how all cards in the Inspector look"): one Sweep ticket whose items are the things.
+    case sweep
+    /// Several unrelated things in one prompt: each becomes its own ticket, and the prompt's own ticket closes.
     case split
 
     public var displayName: String {
@@ -32,7 +34,8 @@ public enum WorkPath: String, CaseIterable, Codable, Sendable {
         case .investigate: "Problem, cause unknown"
         case .small: "Small change"
         case .chore: "Chore"
-        case .split: "Several things"
+        case .sweep: "Several similar things"
+        case .split: "Several unrelated things"
         }
     }
 
@@ -42,7 +45,9 @@ public enum WorkPath: String, CaseIterable, Codable, Sendable {
         case .visual, .approaches: .proposal
         case .bug, .investigate: .bug
         case .small, .chore: .tweak
-        case .split: .theme
+        case .sweep: .sweep
+        // The prompt's own ticket never does the work; it keeps the placeholder type until it closes.
+        case .split: .question
         }
     }
 
@@ -50,7 +55,7 @@ public enum WorkPath: String, CaseIterable, Codable, Sendable {
     /// Preview, speed is checked by numbers, and the rest by its tests and CI.
     public var defaultVerify: VerifyKind {
         switch self {
-        case .visual, .small, .bug: .preview
+        case .visual, .small, .bug, .sweep: .preview
         case .investigate: .numbers
         case .question, .approaches, .chore, .split: .ci
         }
@@ -67,7 +72,8 @@ public enum WorkPath: String, CaseIterable, Codable, Sendable {
         case "design", "ui", "look": return .visual
         case "architecture", "structure", "proposal", "written": return .approaches
         case "tweak": return .small
-        case "theme", "several", "epic": return .split
+        case "sweep", "family", "epic", "all", "several-similar", "similar": return .sweep
+        case "theme", "several", "unrelated", "several-unrelated": return .split
         default: return nil
         }
     }
@@ -365,22 +371,22 @@ public extension HatchStore {
         }
     }
 
-    /// One prompt with several things in it becomes a Theme with one child per part (decision WF-T4, IR5). The parts keep
-    /// what the split gave them (title, text, path) and are not vetted again (decision IR6): a part with a path is filed
-    /// and Ready at once, its area from the Theme. A part without a path goes to Iris like a new ticket.
+    /// One prompt with several unrelated things becomes one ticket per thing (decisions WF-T4, SW3, IR5). The prompt's own
+    /// ticket keeps the owner's words and closes. The parts keep what the split gave them (title, text, path) and are not
+    /// vetted again (IR6): a part with a path is filed and Ready at once, its area from the prompt's ticket. A part without
+    /// a path goes to Iris like a new ticket. Each part links back with "split from the same prompt".
     @discardableResult
-    func splitIntoTheme(_ id: Int, children: [FilingChild], by: String) throws -> [Ticket] {
+    func splitIntoTickets(_ id: Int, parts: [FilingChild], by: String) throws -> [Ticket] {
         try db.transaction {
             guard let t = try ticket(id: id) else { throw StoreError.notFound("ticket \(id)") }
-            guard children.count >= 2 else { throw StoreError.invalid("A split needs at least two parts.") }
+            guard parts.count >= 2 else { throw StoreError.invalid("A split needs at least two parts.") }
             try db.execute("UPDATE ticket SET path = ?, verify = ? WHERE id = ?", [.text(WorkPath.split.rawValue), .text(VerifyKind.ci.rawValue), .int(id)])
-            if t.type != .theme { try changeType(id, to: .theme, actor: .hatch, reason: "split by \(by)") }
-            if try ticket(id: id)!.status != .draft { try move(id, to: .draft, actor: .hatch, reason: "split into \(children.count) tickets") }
             var made: [Ticket] = []
-            for c in children {
+            for c in parts {
                 let body = c.body.isEmpty ? "From \(t.displayNumber)." : c.body + "\n\nFrom \(t.displayNumber), where the owner's own words are."
                 let child = try createTicket(projectId: t.projectId, type: c.path?.type ?? .question, title: c.title, body: body,
-                                             area: t.area, parentId: id, status: .draft, actor: .hatch)
+                                             area: t.area, status: .draft, actor: .hatch)
+                try link(from: child.id, to: id, kind: .related, by: by, why: "split from the same prompt as \(t.displayNumber)")
                 var moved = try move(child.id, to: .checking, actor: .hatch, reason: "part of \(t.displayNumber)")
                 if let path = c.path, path != .split {
                     try file(child.id, Filing(path: path), by: by)
@@ -388,27 +394,45 @@ public extension HatchStore {
                 }
                 made.append(moved)
             }
-            try record(id, actor: by, kind: "split", payload: ["children": .array(made.map { .int($0.id) })])
             let numbers = made.map(\.displayNumber).joined(separator: ", ")
-            _ = try addNote(id, kind: .note, author: by, body: "Split into \(numbers). Undo split puts it back as one ticket.")
+            try record(id, actor: by, kind: "split", payload: ["children": .array(made.map { .int($0.id) })])
+            _ = try addNote(id, kind: .note, author: by, body: "Split into \(numbers), one ticket each. Undo split puts it back as one ticket.")
+            try move(id, to: .dropped, actor: .hatch, reason: "split into \(numbers)")
             return made
         }
     }
 
-    /// Puts a split back as one ticket (decision IR5): the parts are dropped, the Theme is checked again and Iris is told
-    /// not to split it this time. Refused once a part has started.
+    /// The parts of the latest split of a ticket, from its history.
+    func splitParts(of id: Int) throws -> [Int] {
+        try events(ticketId: id, kinds: ["split"]).last?.payload["children"]?.arrayValue?.compactMap(\.intValue) ?? []
+    }
+
+    /// The parts of a split that a ticket belongs to, itself included, so a part is never compared with its siblings.
+    func splitFamily(of id: Int) throws -> Set<Int> {
+        let splits = try db.query("SELECT ticket_id, payload FROM event WHERE kind = 'split'", []) { ($0.int("ticket_id")!, JSONValue.parse($0.string("payload") ?? "{}")) }
+        var family = Set<Int>()
+        for (parent, payload) in splits {
+            let parts = payload["children"]?.arrayValue?.compactMap(\.intValue) ?? []
+            if parts.contains(id) { family.formUnion(parts); family.insert(parent) }
+            if parent == id { family.formUnion(parts) }
+        }
+        family.remove(id)
+        return family
+    }
+
+    /// Puts a split back as one ticket (decision IR5): the parts are dropped, the prompt's ticket is checked again and Iris
+    /// is told not to split it this time. Refused once a part has started.
     @discardableResult
     func undoSplit(_ id: Int, by: String = "owner") throws -> Ticket {
         try db.transaction {
-            guard let t = try ticket(id: id), t.type == .theme else { throw StoreError.invalid("That ticket is not a split.") }
-            let parts = try tickets(TicketFilter(parentId: id)).filter { $0.status != .dropped }
+            guard let t = try ticket(id: id), t.path == .split, t.status == .dropped else { throw StoreError.invalid("That ticket was not split.") }
+            let parts = try splitParts(of: id).compactMap { try ticket(id: $0) }.filter { $0.status != .dropped }
             let started: Set<Status> = [.preparing, .building, .revising, .fixing, .toVerify, .done, .merged]
             if let busy = parts.first(where: { started.contains($0.status) || $0.takenBy != nil }) {
                 throw StoreError.invalid("\(busy.displayNumber) has started, so the split cannot be undone.")
             }
             for p in parts { try move(p.id, to: .dropped, actor: .hatch, reason: "split undone on \(t.displayNumber)") }
             try db.execute("UPDATE ticket SET path = NULL, updated_at = ? WHERE id = ?", [.date(now()), .int(id)])
-            try changeType(id, to: .question, actor: .hatch, reason: "split undone")
             try record(id, actor: by, kind: "split-undone", payload: ["parts": .array(parts.map { .int($0.id) })])
             return try move(id, to: .checking, actor: .hatch, reason: "split undone; Iris checks it as one ticket")
         }
@@ -461,7 +485,7 @@ public extension HatchStore {
                     return FilingChild(title: title, body: c["body"]?.stringValue ?? "", path: c["path"]?.stringValue.flatMap(WorkPath.parse))
                 }
                 if children.count >= 2 {
-                    try splitIntoTheme(t.id, children: children, by: "Iris")
+                    try splitIntoTickets(t.id, parts: children, by: "Iris")
                     return false
                 }
             }

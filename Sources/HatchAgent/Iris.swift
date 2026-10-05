@@ -77,6 +77,7 @@ public struct VettingRequest: Codable, Equatable, Sendable {
         var family: Set<Int> = Set(t.parentId.map { [$0] } ?? [])
         if let parent = t.parentId { family.formUnion(try store.tickets(TicketFilter(parentId: parent)).map(\.id)) }
         family.formUnion(try store.tickets(TicketFilter(parentId: t.id)).map(\.id))
+        family.formUnion(try store.splitFamily(of: t.id))
         let similar = try store.similarTickets(projectId: t.projectId, title: t.title, body: words, excluding: t.id, limit: 8 + family.count)
             .filter { $0.ticket.status != .dropped && !family.contains($0.ticket.id) }.prefix(8)
         let hits = try store.searchSpec(projectId: t.projectId, query: text, limit: 8)
@@ -194,6 +195,7 @@ public struct VettingResult: Codable, Equatable, Sendable {
         case .tweak?: return .small
         case .bug?: return .bug
         case .theme?: return .split
+        case .sweep?: return .sweep
         case nil: return nil
         }
     }
@@ -227,13 +229,13 @@ public enum IrisPrompt {
         You are Iris, who files new tickets in Hatch. The owner wrote the ticket below as a plain prompt. File it so the owner does not have to. Reply with ONE JSON object and nothing else (no prose, no code fence).
 
         Rules that outrank everything below:
-        - Use only what the owner wrote, their answers, the screenshots and the lists below. Never invent a fact, a name, a step, a number or a mark on a screenshot. Describe only what you can see. What you read into the ticket that the owner did not say goes in "assumed".
-        - Decide; do not ask. You file the kind of work, the title and the reading yourself, and the owner can change them. Ask only if two readings of the ticket lead to different work, or it would undo a decision listed below. At most one question. Never ask how to build something (the builder decides), what kind of ticket it is, what the owner already said, or what is visible in a screenshot.
+        - Use only what the owner wrote, their answers, the screenshots and the lists below. Never invent a fact, name, step, number or screenshot mark. What you read in that was not said goes in "assumed".
+        - Decide; do not ask. The owner can change what you file. Ask only if two readings lead to different work, or it would undo a decision below. At most one question. Never ask how to build something, what kind of ticket it is, what the owner already said, or what a screenshot shows.
 
         Fields:
-        - path: one of \(paths). question: asks, wonders, compares. visual: how something looks, is laid out or feels. approaches: changes behaviour or structure with more than one sensible way. bug: something wrong with a known cause (steps, an error, a crash log). investigate: something wrong whose cause is unclear (slow, sometimes, after a while). small: one obvious change. chore: maintenance (dependency, CI, docs, Spec text). split: several separate things.
+        - path: one of \(paths). question: asks, wonders, compares. visual: how something looks, is laid out or feels. approaches: changes behaviour or structure with more than one sensible way. bug: something wrong with a known cause (steps, an error, a crash log). investigate: something wrong whose cause is unclear (slow, sometimes, after a while). small: one obvious change. chore: maintenance (dependency, CI, docs, Spec text). sweep: one change to all of a kind of thing (\"all the cards in the Inspector\"); not for one thing or unrelated things; do not list them, Hatch finds them. split: several unrelated things, each becoming its own ticket.
         - title: short and plain, in the owner's own words where you can.
-        - reading: your reading of the ticket in its shape, kept apart from the owner's words. Bug and investigate: Steps, Expected, Actual. small and chore: Element, Change. visual and approaches: What, Why, Scope. question: the question and its context. Only facts from the owner, their answers or the screenshots.
+        - reading: your structured reading, kept apart from the owner's words. Bug and investigate: Steps, Expected, Actual. small and chore: Element, Change. visual and approaches: What, Why, Scope. sweep: What (the one change), Why, Family (the kind of thing, in the owner's words). question: the question and its context. Only facts from the owner, their answers or the screenshots.
         - assumed: a list of what you read into the ticket that was not said. [] if nothing.
         - area: one of the areas below, or "" if none fits. priority: low or normal; never high or urgent, the owner sets those. verify: preview (it can be seen), numbers (speed), or ci (tests cover it).
         - confidence: how sure you are, 0 to 1, of "path". It only marks a weak guess for the owner to check.
@@ -243,7 +245,7 @@ public enum IrisPrompt {
         - When the components are roles: if the ticket asks for a look that contradicts a role in its place (a big blue Save where Save is the main action), needs a role the list lacks, or would put a second main action on a screen, ask once ("about": "component ROLE"), stakes high, with suggestions in this order: use the role as it is, add a variant for this place, change the role everywhere.
         - Do not list related tickets: Hatch links tickets that name the same screen or file by itself.
         - duplicateOf: a ticket number from the list below if it may be the same request. duplicateSure: true only if this ticket names the same screen and the same problem as that ticket; then duplicateWhy says which screen and which problem in one line.
-        - split: only for path split, the separate parts as [{"title","body","path"}], 2 to 6 of them, each part's path never split.\(r.noSplit == true ? " The owner undid a split of this ticket: do not use path split." : "")
+        - split: only for path split, the unrelated parts as [{"title","body","path"}], 2 to 6 of them, each part's path never split.\(r.noSplit == true ? " The owner undid a split of this ticket: do not use path split." : "")
         - specTouches: Spec codes from the list below that this ticket would change.
 
         Shape: {"path":"","title":"","reading":"","assumed":[""],"area":"","priority":"normal","verify":"","confidence":{"path":1},"questions":[{"text":"","suggestions":[""],"stakes":"low","about":"","rerun":false}],"duplicateOf":"","duplicateSure":false,"duplicateWhy":"","split":[],"specTouches":[""]}

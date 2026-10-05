@@ -1,10 +1,11 @@
 import Foundation
 
-/// The six kinds of ticket (decision A1).
+/// The kinds of ticket (decision A1, SW1). A Sweep is one change to several similar things; it goes the way of a Proposal.
 public enum TicketType: String, CaseIterable, Codable, Sendable {
-    case question, sketch, proposal, tweak, bug, theme
+    case question, sketch, proposal, tweak, bug, theme, sweep
 
-    public var displayName: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
+    /// A Theme only groups tickets that a setup made together (the old split too); the owner sees it as a Group (SW2).
+    public var displayName: String { self == .theme ? "Group" : rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
     public var label: String { "type:\(rawValue)" }
 }
 
@@ -114,9 +115,9 @@ public enum Workflow {
     }
 
     private static let all = Set(TicketType.allCases)
-    private static let pipeline: Set<TicketType> = [.question, .sketch, .proposal, .tweak, .bug]
-    private static let explore: Set<TicketType> = [.question, .sketch, .proposal]
-    private static let build: Set<TicketType> = [.proposal, .tweak, .bug]
+    private static let pipeline: Set<TicketType> = [.question, .sketch, .proposal, .tweak, .bug, .sweep]
+    private static let explore: Set<TicketType> = [.question, .sketch, .proposal, .sweep]
+    private static let build: Set<TicketType> = [.proposal, .tweak, .bug, .sweep]
     private static let buildFirst: Set<TicketType> = [.tweak, .bug]
 
     private static let rules: [Rule] = {
@@ -136,7 +137,7 @@ public enum Workflow {
         add(.needsAnswers, .checking, [.owner, .hatch], pipeline)
         // An agent's question answered: the work carries on where it stopped (decision WF-Q4, gap G21).
         add(.needsAnswers, .preparing, [.hatch], explore)
-        add(.needsAnswers, .revising, [.hatch], [.sketch, .proposal])
+        add(.needsAnswers, .revising, [.hatch], [.sketch, .proposal, .sweep])
         add(.needsAnswers, .building, [.hatch], build)
         add(.needsAnswers, .fixing, [.hatch], build)
         add(.ready, .preparing, [.agent, .hatch], explore)
@@ -144,13 +145,13 @@ public enum Workflow {
         // Exploring
         add(.preparing, .yourCall, [.agent, .hatch], explore)
         add(.preparing, .needsAnswers, [.agent, .hatch], explore)
-        add(.yourCall, .revising, [.owner], [.sketch, .proposal])
-        add(.yourCall, .accepted, [.owner], [.proposal])
+        add(.yourCall, .revising, [.owner], [.sketch, .proposal, .sweep])
+        add(.yourCall, .accepted, [.owner], [.proposal, .sweep])
         add(.yourCall, .done, [.owner, .hatch], [.question, .sketch])
-        add(.revising, .yourCall, [.agent, .hatch], [.sketch, .proposal])
-        add(.revising, .needsAnswers, [.agent, .hatch], [.sketch, .proposal])
+        add(.revising, .yourCall, [.agent, .hatch], [.sketch, .proposal, .sweep])
+        add(.revising, .needsAnswers, [.agent, .hatch], [.sketch, .proposal, .sweep])
         // Building
-        add(.accepted, .building, [.agent, .hatch], [.proposal])
+        add(.accepted, .building, [.agent, .hatch], [.proposal, .sweep])
         add(.building, .toVerify, [.hatch], build)
         add(.building, .needsAnswers, [.agent, .hatch], build)
         add(.toVerify, .fixing, [.owner], build)
@@ -162,6 +163,8 @@ public enum Workflow {
         // Done can be reopened by the owner for another pass
         add(.done, .draft, [.owner], all)
         add(.dropped, .draft, [.owner], all)
+        // Undoing a split reopens the ticket that was closed when it was split (SW3).
+        add(.dropped, .checking, [.hatch], all)
         // Anywhere that is not finished: park, drop (owner) and block (Hatch)
         for status in Status.allCases where !status.isTerminal && status != .parked && status != .blocked {
             add(status, .parked, [.owner], all)
@@ -205,7 +208,7 @@ public enum Workflow {
         switch type {
         case .question: [.draft, .checking, .needsAnswers, .ready, .preparing, .yourCall, .done]
         case .sketch: [.draft, .checking, .needsAnswers, .ready, .preparing, .yourCall, .revising, .done]
-        case .proposal: [.draft, .checking, .needsAnswers, .ready, .preparing, .yourCall, .revising, .accepted, .building, .toVerify, .fixing, .merged, .done]
+        case .proposal, .sweep: [.draft, .checking, .needsAnswers, .ready, .preparing, .yourCall, .revising, .accepted, .building, .toVerify, .fixing, .merged, .done]
         case .tweak, .bug: [.draft, .checking, .needsAnswers, .ready, .building, .toVerify, .fixing, .merged, .done]
         case .theme: [.draft, .done]
         }

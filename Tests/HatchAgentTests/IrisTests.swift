@@ -324,7 +324,7 @@ final class IrisApplierTests: XCTestCase {
         XCTAssertEqual(try store.links(ticketId: t.id).map { $0.link.kind }, [.related], "linked, because both name the toast screen")
     }
 
-    func testASplitHappensAtOnceAndThePartsAreNotCheckedAgain() throws {
+    func testASplitHappensAtOnceIntoSeparateTicketsAndThePartsAreNotCheckedAgain() throws {
         try store.update(t.id, actor: .owner, area: .some("Notifications"))
         var r = VettingResult()
         r.path = .split
@@ -332,26 +332,27 @@ final class IrisApplierTests: XCTestCase {
         let out = try IrisApplier.apply(r, to: t.id, store: store)
         XCTAssertEqual(out.questionsAsked, 0, "IR5: no question")
         XCTAssertEqual(out.split.count, 3)
-        let theme = try store.ticket(id: t.id)!
-        XCTAssertEqual(theme.type, .theme)
-        XCTAssertEqual(theme.status, .draft)
+        let original = try store.ticket(id: t.id)!
+        XCTAssertEqual(original.status, .dropped, "SW3: the prompt's ticket closes; each thing is its own ticket")
+        XCTAssertNotEqual(original.type, .theme, "there is no parent Theme any more")
         XCTAssertTrue(try store.notes(ticketId: t.id).contains { $0.author == "Iris" && $0.body.hasPrefix("Split into") }, "one line says so")
-        let children = try store.tickets(TicketFilter(parentId: t.id))
-        XCTAssertEqual(children.map(\.title).sorted(), ["History", "Pinned columns", "Tabs"])
-        XCTAssertTrue(children.allSatisfy { $0.status == .ready && $0.path != nil && $0.area == "Notifications" }, "IR6: filed from the split, area from the Theme, no second vetting")
-        XCTAssertTrue(try store.events(ticketId: children[0].id, kinds: ["question"]).isEmpty)
+        let parts = try out.split.map { try XCTUnwrap(try store.ticket(id: $0)) }
+        XCTAssertEqual(parts.map(\.title).sorted(), ["History", "Pinned columns", "Tabs"])
+        XCTAssertTrue(parts.allSatisfy { $0.status == .ready && $0.path != nil && $0.area == "Notifications" && $0.parentId == nil }, "IR6: filed from the split, area from the prompt's ticket, no second vetting")
+        XCTAssertTrue(try store.links(ticketId: parts[0].id).contains { $0.link.kind == .related }, "each part says where it came from")
+        XCTAssertTrue(try store.events(ticketId: parts[0].id, kinds: ["question"]).isEmpty)
+        XCTAssertEqual(try store.splitFamily(of: parts[0].id), Set(parts.dropFirst().map(\.id)).union([t.id]), "a part is never compared with its siblings")
     }
 
     func testUndoSplitPutsItBackAndIrisIsToldNotToSplitAgain() throws {
         var r = VettingResult()
         r.path = .split
         r.split = [FilingChild(title: "Tabs", path: .visual), FilingChild(title: "History", path: .question)]
-        try IrisApplier.apply(r, to: t.id, store: store)
+        let out = try IrisApplier.apply(r, to: t.id, store: store)
         let back = try store.undoSplit(t.id)
         XCTAssertEqual(back.status, .checking)
-        XCTAssertEqual(back.type, .question)
         XCTAssertNil(back.path)
-        XCTAssertTrue(try store.tickets(TicketFilter(parentId: t.id)).allSatisfy { $0.status == .dropped })
+        XCTAssertTrue(try out.split.allSatisfy { try store.ticket(id: $0)?.status == .dropped })
         let request = try VettingRequest.build(store: store, ticketId: t.id)
         XCTAssertEqual(request.noSplit, true)
         XCTAssertTrue(IrisPrompt.make(request).contains("do not use path split"))
@@ -361,9 +362,8 @@ final class IrisApplierTests: XCTestCase {
         var r = VettingResult()
         r.path = .split
         r.split = [FilingChild(title: "Tabs", path: .visual), FilingChild(title: "History", path: .question)]
-        try IrisApplier.apply(r, to: t.id, store: store)
-        let part = try store.tickets(TicketFilter(parentId: t.id))[0]
-        try store.setTakenBy(part.id, "Agent on \(part.displayNumber)")
+        let out = try IrisApplier.apply(r, to: t.id, store: store)
+        try store.setTakenBy(out.split[0], "Agent on \(out.split[0])")
         XCTAssertThrowsError(try store.undoSplit(t.id))
     }
 

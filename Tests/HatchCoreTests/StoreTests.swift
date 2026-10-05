@@ -201,16 +201,18 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(try store.ticket(id: other.id)?.status, .draft, "other tickets are left alone")
     }
 
-    func testResetDropsThePartsOfASplitAndKeepsAPartsParent() throws {
+    func testResetDropsThePartsOfASplit() throws {
         let t = try store.capture(prompt: "Two things: A and B", projectId: project.id)
         try store.file(t.id, Filing(path: .split), by: "Iris")
-        let parts = try store.splitIntoTheme(t.id, children: [FilingChild(title: "A", path: .visual), FilingChild(title: "B", path: .small)], by: "Iris")
+        let parts = try store.splitIntoTickets(t.id, parts: [FilingChild(title: "A", path: .visual), FilingChild(title: "B", path: .small)], by: "Iris")
+        XCTAssertEqual(try store.ticket(id: t.id)?.status, .dropped, "the prompt's own ticket closes: the parts do the work")
         let reset = try store.resetTicket(t.id)
         XCTAssertEqual(reset.type, .question)
+        XCTAssertEqual(reset.status, .checking)
         XCTAssertTrue(try parts.allSatisfy { try store.ticket(id: $0.id)?.status == .dropped })
         let partReset = try store.resetTicket(parts[0].id)
-        XCTAssertEqual(partReset.parentId, t.id, "a part still belongs to its Theme")
         XCTAssertEqual(partReset.title, "A")
+        XCTAssertNil(partReset.parentId)
     }
 
     func testPlansThatNameTheSameFilesLinkTheirTicketsWithTheFilesAsTheReason() throws {

@@ -119,8 +119,8 @@ public enum IrisApplier {
 
             // Several things in one prompt: split at once, say so in one line, and Undo split puts it back (IR5).
             if path == .split, result.split.count >= 2, result.split.allSatisfy({ $0.path != .split }) {
-                let parts = try store.splitIntoTheme(ticketId, children: result.split, by: name)
-                return IrisOutcome(questionsAsked: 0, suggestionStored: false, status: try store.ticket(id: ticketId)?.status ?? .draft,
+                let parts = try store.splitIntoTickets(ticketId, parts: result.split, by: name)
+                return IrisOutcome(questionsAsked: 0, suggestionStored: false, status: try store.ticket(id: ticketId)?.status ?? .dropped,
                                    split: parts.map(\.id))
             }
 
@@ -152,24 +152,6 @@ public enum IrisApplier {
                 ? try store.move(ticketId, to: .ready, actor: .hatch, reason: "filed by \(name)").status
                 : .needsAnswers
             return IrisOutcome(questionsAsked: asks.count, suggestionStored: false, status: status)
-        }
-    }
-
-    static func fieldQuestion(_ purpose: String, _ text: String, guess: String, others: [String]) -> Ask {
-        Ask(text: text, suggestions: Array(([guess] + others.filter { $0 != guess }).prefix(IrisPrompt.maxSuggestions)), purpose: purpose, payload: nil)
-    }
-
-    /// The paths most often confused with this one, for the choices of a path question.
-    static func alternatives(to path: WorkPath) -> [WorkPath] {
-        switch path {
-        case .bug: [.investigate, .small]
-        case .investigate: [.bug, .question]
-        case .visual: [.approaches, .small]
-        case .approaches: [.visual, .question]
-        case .small: [.visual, .bug]
-        case .chore: [.small]
-        case .question: [.approaches, .visual]
-        case .split: []
         }
     }
 

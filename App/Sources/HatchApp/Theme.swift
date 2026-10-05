@@ -53,6 +53,7 @@ enum Theme {
         case .tweak: "slider.horizontal.3"
         case .bug: "ant"
         case .theme: "folder"
+        case .sweep: "square.grid.2x2"
         }
     }
 
