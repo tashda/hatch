@@ -40,6 +40,13 @@ final class AgentStreamTests: XCTestCase {
         XCTAssertTrue(args.contains("--disable-slash-commands"))
     }
 
+    func testEveryKindOfWorkStartsInTheAppWhenThereIsOne() {
+        for kind in [AgentTaskKind.prepare, .revise, .build, .fix] {
+            XCTAssertEqual(AgentWorkspaces.mainOrder(for: kind).first, .app, "\(kind): the app's CLAUDE.md and rules load from where the agent starts")
+        }
+        XCTAssertTrue(AgentWorkspaces.mainOrder(for: .prepare).contains(.notebook), "a project with no app clone still works")
+    }
+
     func testWorkspacesPerKindOfWork() {
         XCTAssertEqual(AgentWorkspaces.roles(for: .build), [.app, .designSystem, .notebook])
         XCTAssertEqual(AgentWorkspaces.roles(for: .revise), AgentWorkspaces.roles(for: .prepare), "revising works where preparing did")

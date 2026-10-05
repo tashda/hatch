@@ -444,7 +444,7 @@ public enum AgentWorkspaces {
     public struct Result: Sendable {
         public var all: [Space] = []
         public var notes: [String] = []
-        /// Where the program runs: the app for building and fixing, the notebook (specimens) for preparing.
+        /// Where the program runs: the app, for every kind of work that has one; the notebook only when the project has no app clone.
         public var main: Space?
     }
 
@@ -457,6 +457,13 @@ public enum AgentWorkspaces {
         }
     }
 
+    /// Where the program starts, first match wins. Preparing and revising start in the app too (decision AG6): the app's own
+    /// CLAUDE.md and rules load from where the agent starts, and the Today specimen is drawn from the real code. Specimens
+    /// still go to the notebook workspace, which the agent can write to as an added folder.
+    public static func mainOrder(for kind: AgentTaskKind) -> [RepoRole] {
+        kind == .build || kind == .fix ? [.app, .designSystem, .notebook] : [.app, .designSystem, .notebook, .specimens]
+    }
+
     public static func make(store: HatchStore, task: AgentTask, git: GitRunner = ProcessGit()) throws -> Result {
         var r = Result()
         let wanted = roles(for: task.kind)
@@ -465,7 +472,7 @@ public enum AgentWorkspaces {
             guard repo.localPath != nil else { r.notes.append("No local clone configured for the \(repo.role.rawValue) repository, so no workspace was made for it."); continue }
             r.all.append(Space(repo: repo, workspace: try manager.create(ticket: task.ticket, repo: repo)))
         }
-        let order: [RepoRole] = task.kind == .build || task.kind == .fix ? [.app, .designSystem, .notebook] : [.notebook, .specimens]
+        let order = mainOrder(for: task.kind)
         r.main = order.lazy.compactMap { role in r.all.first { $0.repo.role == role } }.first
         return r
     }
