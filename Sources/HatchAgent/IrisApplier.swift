@@ -62,7 +62,9 @@ public enum IrisApplier {
             var filing = Filing()
             let path = result.effectivePath
             if let path, path != .split || result.split.count >= 2 { filing.path = path }
-            if let area = result.area, let known = config?.areas.first(where: { $0.name.caseInsensitiveCompare(area) == .orderedSame }) { filing.area = known.name }
+            // Her prompt shows each area with its Spec code, and models sometimes answer with the code; both name the area.
+            if let area = result.area?.trimmingCharacters(in: .whitespacesAndNewlines),
+               let known = config?.areas.first(where: { $0.name.caseInsensitiveCompare(area) == .orderedSame || ($0.specPrefix?.caseInsensitiveCompare(area) == .orderedSame) }) { filing.area = known.name }
             filing.priority = result.priority.flatMap(TicketPriority.value).map { min($0, TicketPriority.normal) }
             filing.verify = result.verify
 

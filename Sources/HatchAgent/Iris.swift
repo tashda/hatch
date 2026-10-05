@@ -85,7 +85,7 @@ public struct VettingRequest: Codable, Equatable, Sendable {
         let config = project?.config
         let decided = try store.searchDecisions(projectId: t.projectId, query: text, area: t.area, limit: 5)
         var request = VettingRequest(
-            ticket: .init(number: t.displayNumber, type: t.type.rawValue, title: t.title, body: Text.clip(words, 2000), area: t.area),
+            ticket: .init(number: t.displayNumber, type: t.type.rawValue, title: t.title, body: Text.clipMiddle(words, 2000), area: t.area),
             similar: similar.map { .init(number: $0.ticket.displayNumber, type: $0.ticket.type.rawValue, status: $0.ticket.status.rawValue,
                                          title: $0.ticket.title, snippet: Text.clip($0.ticket.body.replacingOccurrences(of: "\n", with: " "), 160)) },
             specHits: hits.map { .init(code: $0.code, text: Text.clip($0.text, 200)) },
@@ -218,6 +218,8 @@ public enum IrisPrompt {
     /// Caps that keep the owner's attention and the token bill small (decision WF-Q1).
     public static let maxQuestions = 3
     public static let maxSuggestions = 4
+    /// A prompt with more things than this is cut here; below it, every thing the owner wrote becomes a ticket.
+    public static let maxSplitParts = 12
     /// Below this confidence a field becomes a question with Iris's guess picked (decision WF-T3).
     public static let sureThreshold = 0.7
 
@@ -233,11 +235,11 @@ public enum IrisPrompt {
         - Decide; do not ask. The owner can change what you file. Ask only if two readings lead to different work, or it would undo a decision below. At most one question. Never ask how to build something, what kind of ticket it is, what the owner already said, or what a screenshot shows.
 
         Fields:
-        - path: one of \(paths). question: asks, wonders, compares. visual: how something looks, is laid out or feels. approaches: changes behaviour or structure with more than one sensible way. bug: something wrong with a known cause (steps, an error, a crash log). investigate: something wrong whose cause is unclear (slow, sometimes, after a while). small: one obvious change. chore: maintenance (dependency, CI, docs, Spec text). sweep: one change, template or standard for all of a kind of thing (\"all the cards in the Inspector\", \"a template for our cards\"); not for one thing or unrelated things; do not list them, Hatch finds them. split: several unrelated things, each becoming its own ticket.
+        - path: one of \(paths). question: wants an answer or an explanation of how things are or why; asking to see options, or how something should look or work, is not a question but visual or approaches. visual: how something looks, is laid out or feels, when the owner wants to see options or gives no exact change. approaches: changes behaviour or structure with more than one sensible way, or asks how it should work. bug: something wrong with a known cause (steps, an error, a crash log). investigate: something wrong whose cause is unclear (slow, sometimes, after a while). small: one obvious change, including a visual one the owner states exactly (a value, a label, a colour, an icon: "add 4pt", "rename X to Y", "use the accent colour" are small, not visual). chore: maintenance (dependency, CI, docs, Spec text). sweep: one change, template or standard for all of a kind of thing (\"all the cards in the Inspector\", \"a template for our cards\"); not for one thing or unrelated things; do not list them, Hatch finds them. split: several unrelated things, each becoming its own ticket; the same change in several places, or one problem with several facets, is one ticket, not a split.
         - title: short and plain, in the owner's own words where you can.
         - reading: your structured reading, kept apart from the owner's words. Bug and investigate: Steps, Expected, Actual. small and chore: Element, Change. visual and approaches: What, Why, Scope. sweep: What (the one change), Why, Family (the kind of thing, in the owner's words). question: the question and its context. Only facts from the owner, their answers or the screenshots.
         - assumed: a list of what you read into the ticket that was not said. [] if nothing.
-        - area: one of the areas below, or "" if none fits. priority: low or normal; never high or urgent, the owner sets those. verify: preview (it can be seen), numbers (speed), or ci (tests cover it).
+        - area: the name of the area below that contains the screen or feature the ticket is about, even when the ticket does not name the area (the invoice table belongs to Billing if Billing is an area); the name, never its code. "" when no listed area plainly contains it: a wrong area is worse than none. priority: low or normal; never high or urgent, the owner sets those. verify: preview (it can be seen), numbers (speed), or ci (tests cover it).
         - confidence: how sure you are, 0 to 1, of "path". It only marks a weak guess for the owner to check.
         - questions: usually none. Each has "text", 2 to \(maxSuggestions) short "suggestions" with your best answer first, "stakes" ("low" if a wrong guess is cheap and your first suggestion is fine to go ahead with, "high" if not), and "rerun": true only if the answer could change what kind of work this is.
         - If the ticket would undo or contradict an earlier decision below, ask about it, naming the decision ("about": "decision #12"), stakes high, with suggestions to keep the decision or replace it.
@@ -245,7 +247,7 @@ public enum IrisPrompt {
         - When the components are roles: if the ticket asks for a look that contradicts a role in its place (a big blue Save where Save is the main action), needs a role the list lacks, or would put a second main action on a screen, ask once ("about": "component ROLE"), stakes high, with suggestions in this order: use the role as it is, add a variant for this place, change the role everywhere.
         - Do not list related tickets: Hatch links tickets that name the same screen or file by itself.
         - duplicateOf: a ticket number from the list below if it may be the same request. duplicateSure: true only if this ticket names the same screen and the same problem as that ticket; then duplicateWhy says which screen and which problem in one line.
-        - split: only for path split, the unrelated parts as [{"title","body","path"}], 2 to 6 of them, each part's path never split.\(r.noSplit == true ? " The owner undid a split of this ticket: do not use path split." : "")
+        - split: only for path split, the unrelated parts as [{"title","body","path"}], one for each thing the owner asked for (2 to \(maxSplitParts)); never leave a thing out or merge two unrelated things; each part's path never split.\(r.noSplit == true ? " The owner undid a split of this ticket: do not use path split." : "")
         - specTouches: Spec codes from the list below that this ticket would change.
 
         Shape: {"path":"","title":"","reading":"","assumed":[""],"area":"","priority":"normal","verify":"","confidence":{"path":1},"questions":[{"text":"","suggestions":[""],"stakes":"low","about":"","rerun":false}],"duplicateOf":"","duplicateSure":false,"duplicateWhy":"","split":[],"specTouches":[""]}
@@ -284,7 +286,7 @@ public enum IrisPrompt {
 public enum IrisResult {
     static let knownKeys: Set<String> = ["questions", "rewrite", "typeSuggestion", "type_suggestion", "related", "specTouches", "spec_touches",
                                          "duplicateOf", "duplicate_of", "path", "area", "priority", "split", "confidence", "reading", "assumed", "title",
-                                         "duplicateWhy"]
+                                         "duplicateWhy", "duplicate_why"]
 
     public static func parse(_ text: String) throws -> VettingResult {
         let objects = jsonObjects(in: text)
@@ -391,7 +393,8 @@ public enum IrisResult {
             }
             result.typeSuggestion = .init(type: type, reason: (d["reason"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
         }
-        if let raw = text(o["path"]) {
+        // For a repeat models sometimes answer path "duplicate"; `duplicateOf` already says it, so the path is left for Hatch.
+        if let raw = text(o["path"]), !["duplicate", "duplicates", "dup", "repeat"].contains(raw.lowercased()) {
             guard let path = WorkPath.parse(raw) else {
                 throw IrisError.invalid("unknown path '\(raw)' (use one of \(WorkPath.allCases.map(\.rawValue).joined(separator: ", ")))")
             }
@@ -414,13 +417,13 @@ public enum IrisResult {
         result.specTouches = strings(o["specTouches"] ?? o["spec_touches"])
         result.duplicateOf = number(o["duplicateOf"] ?? o["duplicate_of"])
         result.duplicateSure = (o["duplicateSure"] as? Bool) ?? (o["duplicate_sure"] as? Bool) ?? false
-        result.duplicateWhy = text(o["duplicateWhy"])
+        result.duplicateWhy = text(o["duplicateWhy"] ?? o["duplicate_why"])
         if let parts = o["split"] as? [Any] {
             result.split = parts.compactMap { item -> FilingChild? in
                 guard let d = item as? [String: Any], let title = text(d["title"]) else { return nil }
                 return FilingChild(title: title, body: text(d["body"]) ?? "", path: text(d["path"]).flatMap(WorkPath.parse))
             }
-            result.split = Array(result.split.prefix(6))
+            result.split = Array(result.split.prefix(IrisPrompt.maxSplitParts))
         }
         if let c = o["confidence"] as? [String: Any] {
             for (k, v) in c { if let n = v as? NSNumber, !(v is Bool) { result.confidence[k] = min(max(n.doubleValue, 0), 1) } }

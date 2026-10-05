@@ -23,6 +23,13 @@ final class IrisParseTests: XCTestCase {
         let r = try IrisResult.parse(#"{"rewrite":{"title":"T","body":"Use {x} and \"} quotes\"","changes":[]}}"#)
         XCTAssertEqual(r.rewrite?.body, #"Use {x} and "} quotes""#)
     }
+    func testASnakeCaseRepeatKeepsItsReasonSoItCanBeClosed() throws {
+        let r = try VettingResult.parse(##"{"duplicate_of":"#12","duplicate_sure":true,"duplicate_why":"Same screen, same crash."}"##)
+        XCTAssertEqual(r.duplicateOf, "#12")
+        XCTAssertTrue(r.duplicateSure)
+        XCTAssertEqual(r.duplicateWhy, "Same screen, same crash.", "without the reason a repeat is never closed")
+    }
+
     func testSnakeCaseKeys() throws {
         let r = try IrisResult.parse(#"{"type_suggestion":{"type":"sketch","reason":"layout"},"spec_touches":["A-1"],"duplicate_of":7}"#)
         XCTAssertEqual(r.typeSuggestion?.type, .sketch)
@@ -148,7 +155,37 @@ final class IrisPromptTests: XCTestCase {
         let t = try Fixture.ticket(store, p, body: String(repeating: "word ", count: 1000))
         let prompt = IrisPrompt.make(try VettingRequest.build(store: store, ticketId: t.id))
         XCTAssertTrue(prompt.contains("characters cut"))
-        XCTAssertLessThan(prompt.count, 6500)
+        XCTAssertLessThan(prompt.count, 7800, "about 1.9k tokens; every check pays it, so a rule added to the prompt is a cost")
+    }
+
+    func testAPathCalledDuplicateIsNotAnUnusableAnswer() throws {
+        let r = try VettingResult.parse(##"{"path":"duplicate","duplicateOf":"#12","duplicateSure":true,"duplicateWhy":"Same screen, same crash."}"##)
+        XCTAssertNil(r.path, "duplicateOf already says it; the answer must not be thrown away")
+        XCTAssertEqual(r.duplicateOf, "#12")
+        XCTAssertThrowsError(try VettingResult.parse(#"{"path":"banana"}"#), "other unknown paths are still refused")
+    }
+
+    func testASplitOfSevenThingsKeepsAllSeven() throws {
+        let parts = (1...7).map { #"{"title":"Part \#($0)","path":"small"}"# }.joined(separator: ",")
+        let r = try VettingResult.parse(#"{"path":"split","split":[\#(parts)]}"#)
+        XCTAssertEqual(r.split.count, 7, "a thing the owner asked for must not be dropped silently")
+        XCTAssertTrue(IrisPrompt.make(VettingRequest(ticket: .init(number: "#1", type: "question", title: "t", body: "b", area: nil))).contains("never leave a thing out"))
+    }
+
+    func testALongBodyKeepsItsEndWhereTheAskUsuallyIs() throws {
+        let (store, p) = try Fixture.store()
+        let t = try Fixture.ticket(store, p, body: "It starts here. " + String(repeating: "Long story. ", count: 400) + "Please decide the expiry policy.")
+        let prompt = IrisPrompt.make(try VettingRequest.build(store: store, ticketId: t.id))
+        XCTAssertTrue(prompt.contains("It starts here."))
+        XCTAssertTrue(prompt.contains("Please decide the expiry policy."), "the last sentence must reach Iris")
+        XCTAssertTrue(prompt.contains("characters cut from the middle"))
+    }
+
+    func testAnAreaGivenByItsSpecCodeIsStillTheArea() throws {
+        let (store, p) = try Fixture.store()
+        let t = try Fixture.ticket(store, p, area: nil, status: .checking)
+        _ = try IrisApplier.apply(try VettingResult.parse(#"{"path":"small","area":"NOTIF"}"#), to: t.id, store: store)
+        XCTAssertEqual(try store.ticket(id: t.id)?.area, "Notifications", "the prompt shows the code next to the name, and models copy it")
     }
 }
 

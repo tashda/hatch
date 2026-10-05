@@ -241,7 +241,8 @@ public final class AgentLauncher: @unchecked Sendable {
         public var logPath: String
     }
 
-    static func plan(store: HatchStore, task: AgentTask, role: AgentRole, provider: AgentProvider, model: String?, effort: String?,
+    /// Public so the Iris pipeline test can see what would start (workspaces, brief, arguments) without starting it.
+    public static func plan(store: HatchStore, task: AgentTask, role: AgentRole, provider: AgentProvider, model: String?, effort: String?,
                      thinking: Bool?, agent: String, hatch: String, config: Configuration) throws -> Plan {
         let t = task.ticket
         let spaces = try AgentWorkspaces.make(store: store, task: task)

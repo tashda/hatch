@@ -9,7 +9,7 @@ import HatchImport
 /// Commands that use the other modules. Agents run take, offer, ready; people run vet, sync, serve and the imports.
 enum AgentCommands {
     static let all: [String: Handler] = [
-        "take": take, "offer": offer, "ready": ready, "vet": vet,
+        "take": take, "offer": offer, "ready": ready, "vet": vet, "iris-eval": irisEval,
         "sync": sync, "serve": serve, "import-labs": importLabs, "spec": spec, "workspace": workspace, "preview": preview,
         "options": options, "notebook": notebook, "item": item,
     ]
@@ -285,6 +285,46 @@ enum AgentCommands {
             c.out.emit(["ready": false, "failures": .array(failures.map { .string($0) })], text: lines.joined(separator: "\n") + "\nNot ready. Fix the failures above in your workspace, commit, and run hatch ready again.")
             if !c.out.json { exit(2) }
         }
+    }
+
+    // hatch iris-eval [corpus.json] [--only id,id] [--limit n] [--random n --seed s] [--model m] [--min 0.9]
+    // Sends the corpus of prompts to the real Iris, in a throwaway world, and scores her answers against the gold ones. It costs
+    // tokens (about 6 s and a few thousand tokens a prompt on Haiku) and builds nothing. Exit 1 if Hatch broke an invariant, 2 if
+    // the gold score is under --min. tools/iris-eval.sh runs it.
+    static func irisEval(_ c: Context) throws {
+        let path = c.args.pos(1) ?? "tools/iris-eval/corpus.json"
+        var cases = try IrisEval.loadCorpus(URL(fileURLWithPath: path))
+        if let n = c.args.option("random").flatMap(Int.init) {
+            if c.args.flag("random-only") { cases = [] }
+            cases += IrisEval.generate(seed: c.args.option("seed").flatMap(UInt64.init) ?? UInt64(Date().timeIntervalSince1970) / 86_400, count: n)
+        }
+        if let only = c.args.option("only") { let ids = Set(only.split(separator: ",").map(String.init)); cases = cases.filter { ids.contains($0.id) } }
+        if let n = c.args.option("limit").flatMap(Int.init) { cases = Array(cases.prefix(n)) }
+        guard !cases.isEmpty else { throw CLIError("No prompts selected.") }
+
+        let ctx = AgentSetupCommands.context()
+        let settings = AgentSettings.load(from: c.store)
+        var iris = try AgentFactory.resolve(.iris, settings: settings, context: ctx)
+        if let m = c.args.option("model") {
+            iris = try AgentFactory.make(iris.provider, model: m, effort: iris.effort, thinking: iris.thinking, context: ctx, timeout: AgentRole.iris.timeout)
+        }
+        print("Iris on \(iris.label), \(cases.count) prompts. Nothing is built.")
+        let world = try IrisEvalWorld()
+        defer { world.tearDown() }
+        var results: [IrisEvalResult] = []
+        for (i, one) in cases.enumerated() {
+            let r = try IrisEval.run(one, in: world) { _, _ in iris.runner }
+            results.append(r)
+            print(String(format: "%3d/%d  %@  %@", i + 1, cases.count, r.failures.isEmpty ? "ok  " : "FAIL", one.id))
+            for f in r.failures { print("        [\(f.kind.rawValue)] \(f.name)\(f.detail.isEmpty ? "" : ": " + f.detail)") }
+            if c.args.flag("verbose"), !r.failures.isEmpty { print("        reply: " + r.reply.replacingOccurrences(of: "\n", with: " ").prefix(700)) }
+        }
+        let s = IrisEval.summarize(results)
+        let score = s.goldChecks == 0 ? 1 : Double(s.goldPassed) / Double(s.goldChecks)
+        print("\n\(s.casesPassed) of \(s.cases) prompts fully right · gold checks \(s.goldPassed)/\(s.goldChecks) (\(Int((score * 100).rounded()))%) · Hatch invariant failures \(s.invariantFailures) · tokens \(s.tokensIn) in, \(s.tokensOut) out")
+        if !world.disturbedSources().isEmpty { print("A source clone was changed: \(world.disturbedSources())"); exit(1) }
+        if s.invariantFailures > 0 { exit(1) }
+        if let min = c.args.option("min").flatMap(Double.init), score < min { exit(2) }
     }
 
     // hatch vet #151 [--model m]  -> Iris checks a ticket in Checking with the provider chosen in Settings (it costs tokens)

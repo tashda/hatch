@@ -9,6 +9,16 @@ enum Text {
         return String(t.prefix(max)).trimmingCharacters(in: .whitespacesAndNewlines) + " ... [+\(t.count - max) characters cut]"
     }
 
+    /// Keeps the start and the end of a long text, cutting the middle. What a person asks for often comes last ("Please decide
+    /// the expiry policy"), so cutting only the end would drop it.
+    static func clipMiddle(_ s: String, _ max: Int) -> String {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard t.count > max else { return t }
+        let tail = max / 3, head = max - tail
+        return String(t.prefix(head)).trimmingCharacters(in: .whitespacesAndNewlines) + " ... [+\(t.count - max) characters cut from the middle] ... "
+            + String(t.suffix(tail)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func oneLine(_ s: String, _ max: Int) -> String {
         clip(s.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " "), max)
     }

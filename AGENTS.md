@@ -1,6 +1,6 @@
 # Hatch
 
-Hatch is a macOS app and a `hatch` command-line tool for tickets, AI agents and visual design decisions. It replaces Echo Labs. Read `DESIGN.md` before changing any UI. Read `SUMMARY.md` for what it is, `DECISIONS.md` for every decision (with the reason; section R changes project setup and adds the notebook), `STATUS.md` for what is built and verified, `NEXT.md` for how to continue.
+Hatch is a macOS app and a `hatch` command-line tool for tickets, AI agents and visual design decisions. It replaces Echo Labs. Read `DESIGN.md` before changing any UI. Read `WORKFLOW.md` before changing statuses, Iris, the agent queue or the launcher (every step and branch, and the test for each). Read `SUMMARY.md` for what it is, `DECISIONS.md` for every decision (with the reason; section R changes project setup and adds the notebook), `STATUS.md` for what is built and verified, `NEXT.md` for how to continue.
 
 ## Layout
 
@@ -20,7 +20,7 @@ Hatch is a macOS app and a `hatch` command-line tool for tickets, AI agents and 
 
 ## Working on it
 
-- Local Mac: `swift test` at the root and in `Stage/`; the app with `xcodebuild -project Hatch.xcodeproj -scheme Hatch -destination 'platform=macOS' build`. `tools/smoke.sh` checks the CLI end to end. Run the app and look at it. Ignore the CI mirror (`tools/mirror-to-echo.sh`) until the repo is public.
+- Local Mac: `swift test` at the root and in `Stage/`; the app with `xcodebuild -project Hatch.xcodeproj -scheme Hatch -destination 'platform=macOS' build`. `tools/smoke.sh` checks the CLI end to end. `swift test --filter IrisPipelineTests` runs 98 written and random prompts from filing to a planned agent with no model and no build; `tools/iris-eval.sh` sends the same prompts to the real Iris (costs tokens). Run the app and look at it. Ignore the CI mirror (`tools/mirror-to-echo.sh`) until the repo is public.
 - Public API gets short comments that say why. Plain, direct style. Tests are XCTest. Commit often with focused messages.
 - The design system (decisions DS1 to DS12, `design-review/components-designer.md`): roles in places, stored in the notebook (`components/system.json`), written only by Hatch. Core in `HatchCore/Component*.swift` (system, templates, inventory, draft, check, codegen); the Components Designer is a mode of the Stage (`Stage/Sources/StageKit/Designer/`). macOS 27 is the reference look. Change an inventory place rule only if `tools/components-corpus/bench.sh` does not lower the held-out score.
 - Model calls go through `AgentFactory.resolve(role, settings:context:)` (`HatchAgent/AgentFactory.swift`), never a runner built by hand. The owner picks a provider and model per task in Settings, Agents; the choice is the `agent_settings` setting (`AgentSettings`), API keys are in the Keychain (`app.hatch.agents`) or an environment variable. A subscription (Claude Max, ChatGPT) is used only by running the vendor's own program, never by reading its login. `hatch agents` shows and tests the setup; it does not change it.
