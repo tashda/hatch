@@ -297,11 +297,24 @@ public enum ComponentMarks {
                 while let c = x, c !== root.superview { a *= c.alphaValue * CGFloat(c.layer?.opacity ?? 1); x = c.superview }
                 return a
             }
+            // What is left of it inside every view that clips (a scroll view, a clipped frame): SwiftUI clips by layer,
+            // so `visibleRect` doesn't know (measured: it is larger than the view, and set for a row scrolled away).
+            func shown(_ v: NSView) -> NSRect {
+                var r = v.convert(v.bounds, to: root), x = v.superview
+                while let c = x, c !== root.superview {
+                    var clips = c.layer?.masksToBounds ?? false
+                    if #available(macOS 14.0, *) { clips = clips || c.clipsToBounds }
+                    if clips { r = r.intersection(c.convert(c.bounds, to: root)) }
+                    x = c.superview
+                }
+                return r.intersection(root.bounds)
+            }
             func walk(_ view: NSView, parent: Int?) {
                 var inside = parent
-                if let mark = view as? HatchMarkView, !mark.isHiddenOrHasHiddenAncestor, !mark.visibleRect.isEmpty, opacity(mark) > 0.05 {
+                if let mark = view as? HatchMarkView, !mark.isHiddenOrHasHiddenAncestor, opacity(mark) > 0.05,
+                   case let seen = shown(mark), seen.width >= 1, seen.height >= 1 {
                     var entry: [String: Any] = ["name": mark.name, "instance": mark.instance, "frame": rect(mark.convert(mark.bounds, to: root)),
-                                                "visible": rect(mark.convert(mark.visibleRect, to: root))]
+                                                "visible": rect(seen)]
                     if let parent { entry["parent"] = parent }
                     if let scroll = mark.enclosingScrollView { entry["scroll"] = ObjectIdentifier(scroll).hashValue & 0x7fff_ffff }
                     if mark.layered { entry["layered"] = true }
