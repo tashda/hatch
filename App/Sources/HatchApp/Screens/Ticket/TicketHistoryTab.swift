@@ -75,5 +75,6 @@ struct HistoryRow: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+        .hatchMark("HistoryRow")
     }
 }

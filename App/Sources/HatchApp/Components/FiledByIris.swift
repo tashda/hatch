@@ -20,6 +20,7 @@ struct FiledByIrisTokens: View {
             }
         }
         .autoReload(every: 4) { load() }
+        .hatchMark("FiledByIrisTokens")
     }
 
     private var canChange: Bool {

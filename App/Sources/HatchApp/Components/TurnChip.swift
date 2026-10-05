@@ -17,6 +17,7 @@ struct StatusChip: View {
         }
         .labelStyle(.titleAndIcon)
         .fixedSize()
+        .hatchMark("StatusChip")
     }
 }
 
@@ -34,6 +35,7 @@ struct TurnLabel: View {
                 .foregroundStyle(.secondary)
         }
         .fixedSize()
+        .hatchMark("TurnLabel")
     }
 }
 
@@ -52,6 +54,7 @@ struct TypeBadge: View {
         }
         .foregroundStyle(.secondary)
         .fixedSize()
+        .hatchMark("TypeBadge")
     }
 }
 
@@ -72,6 +75,7 @@ struct PlainChip: View {
         .padding(.vertical, 2)
         .background(Color.secondary.opacity(0.12), in: Capsule())
         .fixedSize()
+        .hatchMark("PlainChip")
     }
 }
 
@@ -114,6 +118,7 @@ struct TurnBanner: View {
         .background(Theme.background(for: turn), in: RoundedRectangle(cornerRadius: 8))
         .overlay(alignment: .leading) { Rectangle().fill(Theme.color(for: turn)).frame(width: 4) }
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .hatchMark("TurnBanner")
     }
 }
 
@@ -179,5 +184,6 @@ struct SectionCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+        .hatchMark("SectionCard")
     }
 }

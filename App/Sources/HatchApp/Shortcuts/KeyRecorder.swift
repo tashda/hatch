@@ -100,5 +100,6 @@ struct ShortcutKeyCaps: View {
                     .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.primary.opacity(0.12)))
             }
         }
+        .hatchMark("ShortcutKeyCaps")
     }
 }

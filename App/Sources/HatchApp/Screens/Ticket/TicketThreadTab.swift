@@ -192,12 +192,15 @@ struct ThreadRow: View {
     let item: ThreadItem
 
     var body: some View {
-        switch item.content {
-        case .note(let note): NoteBubble(note: note)
-        case .question(let q): QuestionBubble(question: q)
-        case .answer(let q): AnswerBubble(question: q)
-        case .event(let e): EventLine(event: e)
+        Group {
+            switch item.content {
+            case .note(let note): NoteBubble(note: note)
+            case .question(let q): QuestionBubble(question: q)
+            case .answer(let q): AnswerBubble(question: q)
+            case .event(let e): EventLine(event: e)
+            }
         }
+        .hatchMark("ThreadRow")
     }
 }
 
@@ -215,6 +218,7 @@ struct ThreadFilterChip: View {
         .background(isOn ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08), in: Capsule())
         .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
         .animation(.easeOut(duration: 0.12), value: isOn)
+        .hatchMark("ThreadFilterChip")
     }
 }
 
@@ -232,6 +236,7 @@ struct ThreadKindChip: View {
         .background(selected ? Color.primary.opacity(0.1) : Color.clear, in: Capsule())
         .foregroundStyle(selected ? Color.primary : Color.secondary)
         .animation(.easeOut(duration: 0.12), value: selected)
+        .hatchMark("ThreadKindChip")
     }
 }
 
@@ -255,6 +260,7 @@ struct ThreadAvatar: View {
             .foregroundStyle(fromOwner ? Theme.you : (isIris ? Color.primary : Theme.agent))
             .frame(width: 28, height: 28)
             .background((fromOwner ? Theme.youBackground : (isIris ? Color.secondary.opacity(0.12) : Theme.agentBackground)), in: Circle())
+            .hatchMark("ThreadAvatar")
     }
 }
 
@@ -287,6 +293,7 @@ private struct ThreadBubble<Body: View>: View {
             .frame(maxWidth: 560, alignment: fromOwner ? .trailing : .leading)
             if fromOwner { ThreadAvatar(fromOwner: true) } else { Spacer(minLength: 60) }
         }
+        .hatchMark("ThreadBubble")
     }
 
     private var bubbleFill: AnyShapeStyle {
@@ -316,6 +323,7 @@ struct NoteBubble: View {
         ThreadBubble(fromOwner: fromOwner, name: fromOwner ? "You" : note.author, detail: kindLabel, at: note.at) {
             Text(note.body).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }
+        .hatchMark("NoteBubble")
     }
 }
 
@@ -327,6 +335,7 @@ struct QuestionBubble: View {
                      at: question.at, symbol: "questionmark", tinted: true) {
             Text(question.text).fixedSize(horizontal: false, vertical: true)
         }
+        .hatchMark("QuestionBubble")
     }
 }
 
@@ -337,6 +346,7 @@ struct AnswerBubble: View {
         ThreadBubble(fromOwner: true, name: "You answered", detail: nil, at: question.answeredAt) {
             Text(question.answer ?? "").textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
         }
+        .hatchMark("AnswerBubble")
     }
 }
 
@@ -355,5 +365,6 @@ struct EventLine: View {
         .padding(.horizontal, 10).padding(.vertical, 4)
         .background(Color.secondary.opacity(0.07), in: Capsule())
         .frame(maxWidth: .infinity)
+        .hatchMark("EventLine")
     }
 }

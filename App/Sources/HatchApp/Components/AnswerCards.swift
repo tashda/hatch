@@ -72,6 +72,7 @@ struct QuestionMessage: View {
                     .background(HX.bubble, in: RoundedRectangle(cornerRadius: HX.bubbleRadius, style: .continuous))
             }
         }
+        .hatchMark("QuestionMessage")
     }
 
     @ViewBuilder private var glyph: some View {
@@ -104,6 +105,7 @@ struct AnswerList: View {
         }
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .hatchMark("AnswerList")
     }
 
     private func row(_ o: AnswerOption, index i: Int) -> some View {
@@ -233,6 +235,7 @@ struct AnswerCard: View {
             }
             .padding(.leading, QuestionMessage.indent)
         }
+        .hatchMark("AnswerCard")
     }
 
     private var answerText: String? {

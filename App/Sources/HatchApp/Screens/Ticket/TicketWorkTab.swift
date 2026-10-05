@@ -298,5 +298,6 @@ private struct LiveAgentSection: View {
                 if next != lines { lines = next }
             }
         }
+        .hatchMark("LiveAgentSection")
     }
 }

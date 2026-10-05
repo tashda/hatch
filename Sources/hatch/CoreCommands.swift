@@ -67,6 +67,8 @@ enum CoreCommands {
         case "inventory": try componentInventory(c); return
         case "views": try componentViews(c); return
         case "capture": try componentCapture(c); return
+        case "marks-file": try componentMarksFile(c); return
+        case "truth": try componentTruth(c); return
         case "start": try componentStart(c); return
         case "questions": try componentQuestions(c); return
         case "answer": try componentAnswer(c); return
@@ -154,29 +156,74 @@ enum CoreCommands {
         c.out.line(lines.joined(separator: "\n"))
     }
 
-    /// hatch components capture --from <folder>: keeps the pictures the app drew of its own components (its
-    /// `--only component-gallery` snapshot) in the notebook, so the Components Designer shows each view as it is.
+    /// hatch components capture [--from <folder>]: runs the app's snapshots (its capture command, CM21) or takes a
+    /// folder they were written to, and keeps every screen's picture and marked views in the notebook, so the Components
+    /// Designer shows each view as the app draws it and where it is used. Says which views are still not drawn.
     static func componentCapture(_ c: Context) throws {
-        guard let from = c.args.option("from").map({ URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }) else {
-            throw CLIError("Give the folder the app wrote its gallery to: hatch components capture --from <folder>.")
-        }
-        guard let captures = ComponentCaptures.load(from: from) else {
-            throw CLIError("No component-gallery.json in \(from.path): run the app with --snapshots <folder> --only component-gallery first.")
-        }
         let notebook = try notebookFolder(c)
-        let target = URL(fileURLWithPath: notebook).appendingPathComponent(ComponentCaptures.notebookPath, isDirectory: true)
-        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
-        for name in ComponentCaptures.files {
-            let src = from.appendingPathComponent(name), dst = target.appendingPathComponent(name)
-            guard FileManager.default.fileExists(atPath: src.path) else { continue }
-            try? FileManager.default.removeItem(at: dst)
-            try FileManager.default.copyItem(at: src, to: dst)
+        let project = try? c.project()
+        let app = c.args.option("app").map { ($0 as NSString).expandingTildeInPath } ?? project?.config?.repo(.app)?.localPath
+        let folder: URL
+        if let from = c.args.option("from") {
+            folder = URL(fileURLWithPath: (from as NSString).expandingTildeInPath, isDirectory: true)
+        } else {
+            guard let app else { throw CLIError("Give the folder the app wrote its snapshots to: hatch components capture --from <folder>.") }
+            guard let command = ComponentCaptures.command(appRoot: app, configured: project?.config?.repo(.app)?.captureCommand) else {
+                throw CLIError("The app has no capture command. Add hatch-capture.sh to the app (hatch components draw files the ticket), or give --from <folder>.")
+            }
+            if !c.out.json { print("Running \(command)…") }
+            let run = ComponentCaptures.run(command: command, appRoot: app)
+            guard let out = run.folder else { throw CLIError("The capture failed:\n\(run.log)") }
+            folder = out
         }
+        let kept = try ComponentCaptures.keep(from: folder, notebook: notebook)
         if FileManager.default.fileExists(atPath: (notebook as NSString).appendingPathComponent(".git")) {
-            _ = try NotebookWriter.commit("Components: pictures of \(captures.items.count) of the app's own components", in: notebook)
+            _ = try NotebookWriter.commit("Components: the app's screens, \(kept.drawn.count) of its own views drawn", in: notebook)
         }
-        c.out.emit(["views": .int(captures.items.count), "folder": .string(target.path)],
-                   text: "Kept pictures of \(captures.items.count) views in \(ComponentCaptures.notebookPath).")
+        var lines = ["Kept \(Set(kept.screens.map(\.name)).count) screens; \(kept.drawn.count) of the app's own views are drawn."]
+        if let app {
+            let model = AppViewScanner.scan(appRoot: app, excluding: componentsExclusion(project, folder: app), measured: kept.heights)
+            let owned = model.views.filter { [.component, .wrapper, .unknown].contains($0.kind) }
+            let missing = owned.filter { !kept.drawn.contains($0.id) }
+            lines.append(missing.isEmpty ? "Every view of its own is drawn." : "Not drawn yet (\(missing.count) of \(owned.count)): " + missing.prefix(30).map(\.id).joined(separator: ", ") + (missing.count > 30 ? "…" : ""))
+        }
+        c.out.emit(["screens": .int(Set(kept.screens.map(\.name)).count), "drawn": .int(kept.drawn.count)], text: lines.joined(separator: "\n"))
+    }
+
+    /// hatch components truth [--json]: the measured checks on the app's captured screens (CM23): views drawing over
+    /// each other, reaching out of their container, drawn at drifting heights, and text cut off. Free: no model.
+    static func componentTruth(_ c: Context) throws {
+        let notebook = try notebookFolder(c)
+        let project = try? c.project()
+        guard let captures = ComponentCaptures.load(from: URL(fileURLWithPath: notebook).appendingPathComponent(ComponentCaptures.notebookPath)) else {
+            throw CLIError("No captures yet: run hatch components capture first.")
+        }
+        let app = c.args.option("app").map { ($0 as NSString).expandingTildeInPath } ?? project?.config?.repo(.app)?.localPath
+        let findings = ComponentTruth.measure(captures, appRoot: app, excluding: app.map { componentsExclusion(project, folder: $0) } ?? [])
+        if c.out.json {
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            print(String(decoding: try encoder.encode(findings), as: UTF8.self)); return
+        }
+        var lines = ["\(findings.filter(\.problem).count) problems and \(findings.filter { !$0.problem }.count) notes on \(Set(captures.screens.map(\.name)).count) screens."]
+        for kind in TruthFinding.Kind.allCases {
+            let fs = findings.filter { $0.kind == kind }
+            guard !fs.isEmpty else { continue }
+            lines.append("\n\(kind.title) (\(fs.count))")
+            for f in fs.prefix(c.args.flag("all") ? 10_000 : 25) { lines.append("  \(f.problem ? "problem" : "note   ")  \(f.words)") }
+            if fs.count > 25 && !c.args.flag("all") { lines.append("  … \(fs.count - 25) more (--all)") }
+        }
+        c.out.line(lines.joined(separator: "\n"))
+    }
+
+    /// hatch components marks-file [--write <path>]: the one file an app adds so Hatch can find its views on screen.
+    static func componentMarksFile(_ c: Context) throws {
+        if let path = c.args.option("write") {
+            let p = (path as NSString).expandingTildeInPath
+            try ComponentMarks.appFile.write(toFile: p, atomically: true, encoding: .utf8)
+            c.out.emit(["path": .string(p)], text: "Wrote \(p).")
+        } else {
+            print(ComponentMarks.appFile, terminator: "")
+        }
     }
 
     static func componentInventory(_ c: Context) throws {

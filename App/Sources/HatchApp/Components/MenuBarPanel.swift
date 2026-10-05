@@ -15,6 +15,7 @@ struct MenuBarLabel: View {
     var body: some View {
         Image(nsImage: Self.glyph(waiting: waiting))
             .accessibilityLabel(waiting ? "Hatch, tickets wait for you" : "Hatch")
+            .hatchMark("MenuBarLabel")
     }
 
     /// Drawn in code on the 18 pt canvas, the tile 16.5 pt so it matches the solid icons beside it. At rest it is a template
@@ -268,6 +269,7 @@ private struct MenuBarAgentRow: View {
                     .font(.caption.monospacedDigit()).foregroundStyle(.tertiary)
             }
         }
+        .hatchMark("MenuBarAgentRow")
     }
 
     static func elapsed(since start: Date, now: Date) -> String {
@@ -290,6 +292,7 @@ private struct MenuBarActionLabel: View {
             if let shortcut { Text(shortcut).foregroundStyle(.tertiary) }
         }
         .font(.callout)
+        .hatchMark("MenuBarActionLabel")
     }
 }
 
@@ -313,6 +316,7 @@ private struct MenuBarRowStyle: ButtonStyle {
                         .fill(Color.primary.opacity(configuration.isPressed ? 0.12 : hovering ? 0.07 : 0))
                 )
                 .onHover { hovering = $0 }
+                .hatchMark("Row")
         }
     }
 }

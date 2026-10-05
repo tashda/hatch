@@ -158,6 +158,7 @@ struct ToastSpecimen: View {
         }
         .padding(.top, CGFloat(ToastProvider.topInset))
         .modifier(ToastMotion(timeout: timeout))
+        .hatchMark("ToastSpecimen", layered: true)
     }
 }
 
@@ -224,6 +225,7 @@ struct ToastCard: View {
         .background(RoundedRectangle(cornerRadius: radius).fill(palette.card))
         .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(palette.line, lineWidth: 1))
         .shadow(color: Color.black.opacity(0.12), radius: 7, x: 0, y: 4)
+        .hatchMark("ToastCard")
     }
 
     private var textColumn: some View {

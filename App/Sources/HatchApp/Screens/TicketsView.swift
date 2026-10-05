@@ -483,5 +483,6 @@ struct TicketLine: View {
         .task(id: ticket.updatedAt) {
             sweep = ticket.type == .sweep ? try? state.store.sweepProgress(ticketId: ticket.id) : nil
         }
+        .hatchMark("TicketLine")
     }
 }

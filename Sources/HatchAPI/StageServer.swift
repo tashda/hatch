@@ -359,6 +359,14 @@ public final class StageServer: @unchecked Sendable {
             let key = rest[1], action = rest[3]
             return try mutate(req) { try self.changeComponents(key, action, Body(req)) }
         }
+        // The app's pictures (CM21): GET says whether a capture runs and what the last one kept; POST starts one. It runs
+        // the app's capture command in the background (minutes), then keeps the result in the notebook.
+        if rest.count == 3, rest[0] == "projects", rest[2] == "captures" {
+            let key = rest[1]
+            if req.method == "POST" { return (200, try startCapture(key), false) }
+            try need("GET")
+            return (200, captureStatus(key), false)
+        }
         // The owner's templates (CD46, CD47): one library for every project, written only by Hatch.
         if rest == ["component-templates"] {
             try need("GET")
@@ -410,6 +418,49 @@ public final class StageServer: @unchecked Sendable {
     }
 
     // MARK: Endpoints
+
+    /// One capture run per project at a time: running, or how the last one ended.
+    private struct CaptureRun { var running: Bool; var message: String; var finished: Date? }
+    private var captureRuns: [String: CaptureRun] = [:]
+    private let captureLock = NSLock()
+
+    private func captureStatus(_ key: String) -> JSONValue {
+        captureLock.lock(); defer { captureLock.unlock() }
+        let run = captureRuns[key]
+        return ["running": .bool(run?.running ?? false), "message": .string(run?.message ?? ""),
+                "finished": run?.finished.map { .string(ISO8601DateFormatter().string(from: $0)) } ?? .null]
+    }
+
+    private func startCapture(_ key: String) throws -> JSONValue {
+        guard let project = try store.project(key: key) else { throw APIError(status: 404, code: "not_found", message: "No project \(key).") }
+        guard let notebook = project.config?.repo(.notebook)?.localPath, let app = project.config?.repo(.app)?.localPath else {
+            throw APIError(status: 409, code: "no_app", message: "\(project.name) needs its app and notebook on this Mac.")
+        }
+        guard let command = ComponentCaptures.command(appRoot: app, configured: project.config?.repo(.app)?.captureCommand) else {
+            throw APIError(status: 409, code: "no_command", message: "The app has no capture command yet. Draw Them files the ticket that adds one.")
+        }
+        captureLock.lock()
+        if captureRuns[key]?.running == true { captureLock.unlock(); return captureStatus(key) }
+        captureRuns[key] = CaptureRun(running: true, message: "Drawing the app's screens…", finished: nil)
+        captureLock.unlock()
+        let commit = commitNotebook
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let run = ComponentCaptures.run(command: command, appRoot: app)
+            var message: String
+            if let out = run.folder, let kept = try? ComponentCaptures.keep(from: out, notebook: notebook) {
+                message = "\(Set(kept.screens.map(\.name)).count) screens; \(kept.drawn.count) views drawn."
+                commit?(notebook, "Components: the app's screens, \(kept.drawn.count) of its own views drawn")
+                try? FileManager.default.removeItem(at: out)
+            } else {
+                message = "The capture failed: " + run.log
+            }
+            guard let self else { return }
+            self.captureLock.lock()
+            self.captureRuns[key] = CaptureRun(running: false, message: message, finished: Date())
+            self.captureLock.unlock()
+        }
+        return captureStatus(key)
+    }
 
     private func componentSystem(_ key: String) throws -> (ComponentSystem, String) {
         guard let project = try store.project(key: key) else { throw APIError(status: 404, code: "not_found", message: "No project \(key).") }
@@ -545,6 +596,18 @@ public final class StageServer: @unchecked Sendable {
                 settingDraft = try system.decideOwn(component: component, title: try body.string("title", max: 80), codeName: try body.string("codeName", max: 80),
                                                     look: try body.optionalString("look", max: 120))
                 message = "Components: decide \(component)"
+            case "ownDraw":
+                // The views Hatch can't show yet (CM21): a ticket for an agent to make the app draw them.
+                guard let app = try store.project(key: key)?.config?.repo(.app)?.localPath else {
+                    throw APIError(status: 409, code: "no_app", message: "The app is not on this Mac.")
+                }
+                let config = try store.project(key: key)?.config
+                let captures = ComponentCaptures.load(from: URL(fileURLWithPath: folder).appendingPathComponent(ComponentCaptures.notebookPath))
+                let coverage = ComponentMarks.coverage(AppViewScanner.scan(appRoot: app), root: app, captures: captures)
+                guard !coverage.complete else { throw APIError(status: 409, code: "complete", message: "Every view of the app's own is drawn.") }
+                settingDraft = ComponentMarks.drawDraft(coverage, hasMarksFile: ComponentMarks.hasFile(appRoot: app),
+                                                        hasCommand: ComponentCaptures.command(appRoot: app, configured: config?.repo(.app)?.captureCommand) != nil)
+                message = "Components: draw the app's own views"
             case "ownRedesign":
                 // A redesign (CM18): a Proposal for an agent to build options as specimens.
                 let component = try body.string("component", max: 120)

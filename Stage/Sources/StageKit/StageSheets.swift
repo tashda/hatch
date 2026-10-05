@@ -6,18 +6,21 @@ struct StageSheets: View {
     @ObservedObject var model: StageModel
 
     var body: some View {
-        switch model.state.sheet {
-        case .accept:
-            AcceptSheet(model: model)
-        case .sendBack:
-            SendBackSheet(model: model)
-        case .ask:
-            AskSheet(model: model)
-        case .help:
-            HelpSheet(model: model)
-        case .none:
-            EmptyView()
+        Group {
+            switch model.state.sheet {
+            case .accept:
+                AcceptSheet(model: model)
+            case .sendBack:
+                SendBackSheet(model: model)
+            case .ask:
+                AskSheet(model: model)
+            case .help:
+                HelpSheet(model: model)
+            case .none:
+                EmptyView()
+            }
         }
+        .hatchMark("StageSheets")
     }
 }
 

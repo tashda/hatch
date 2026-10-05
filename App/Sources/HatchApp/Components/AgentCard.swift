@@ -40,6 +40,7 @@ struct AgentSlotCircle: View {
             }
             .help(run == nil ? (busy ? "An agent is working. Open Agents" : "A free agent slot. Open Agents") : "")
             .accessibilityLabel(run.map { "Agent on \($0.ticketNumber): \($0.step)" } ?? (busy ? "Agent working" : "Free agent slot"))
+            .hatchMark("AgentSlotCircle")
     }
 
     /// Shows the card while the pointer is on the circle or the card, or while it is pinned. Leaving waits a moment, so
@@ -121,6 +122,7 @@ struct AgentCard: View {
         }
         .padding(18)
         .frame(width: 360)
+        .hatchMark("AgentCard")
     }
 
     @ViewBuilder private func fact(_ label: String, _ value: String, symbol: String) -> some View {

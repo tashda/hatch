@@ -84,6 +84,11 @@ public struct AppView: Codable, Identifiable, Hashable, Sendable {
     public var shows: [String] = []
     /// The screens it is used on, with how many times: the screen a use sits in, by its plain name.
     public var usedOn: [Screen] = []
+    /// What it is for, read from what it is given and its name (CM22): `state`, `label`, `choice`, `count`, `action`,
+    /// `sample`, `model:Ticket`… Views for the same purpose are one component even when drawn differently.
+    public var purpose: String?
+    /// The data it is given, as declared: `turn: Turn`, `text: String`.
+    public var takes: [String] = []
 
     public struct Screen: Codable, Hashable, Sendable {
         public var name: String
@@ -122,6 +127,8 @@ public struct AppComponentProposal: Codable, Identifiable, Hashable, Sendable {
     public var uses: Int
     /// What Hatch proposes and why, in a sentence.
     public var why: String
+    /// What the views are for, in words ("show a state"), when Hatch could read it (CM22).
+    public var purpose: String? = nil
 }
 
 /// The whole answer for an app: every view, the components proposed, and how much is accounted for.
@@ -219,6 +226,7 @@ public enum AppViewScanner {
         _ = first
         // Brand names the word splitter cuts in two.
         return out.joined(separator: " ").replacingOccurrences(of: "Git hub", with: "GitHub").replacingOccurrences(of: "git hub", with: "GitHub")
+            .replacingOccurrences(of: "Mac os", with: "macOS").replacingOccurrences(of: "mac os", with: "macOS")
     }
 
     /// The views of the app at a folder, read with the inventory's own file rules (tests, other platforms and samples
@@ -238,6 +246,8 @@ public enum AppViewScanner {
         var body: String
         var bodyLines: Int
         var sample: Bool
+        /// The stored properties it is given, `name: Type`, leaving out its own state and the environment.
+        var properties: [(name: String, type: String)] = []
     }
 
     /// `struct Name: View { … }` and `struct Name<Content: View>: View { … }`, with the body of `var body`.
@@ -262,9 +272,74 @@ public enum AppViewScanner {
                 if start < s.partner.count, s.partner[start] > start { body = s.text(start + 1, s.partner[start]) }
             }
             out.append(Declaration(name: String(text[nameR]), header: header, open: open, close: close, line: s.line(of: open),
-                                   body: body, bodyLines: body.split(separator: "\n").count, sample: sample))
+                                   body: body, bodyLines: body.split(separator: "\n").count, sample: sample, properties: properties(inside)))
         }
         return out
+    }
+
+    /// The stored properties declared at the top level of a view's body of declarations: what it is given.
+    static func properties(_ inside: String) -> [(name: String, type: String)] {
+        // Its own state, the environment and the app's shared models (an observed model is where data comes from, not what is shown).
+        let own = ["@State", "@StateObject", "@Environment", "@EnvironmentObject", "@FocusState", "@AppStorage", "@SceneStorage", "@Namespace",
+                   "@GestureState", "@FetchRequest", "@Query", "@ObservedObject", "@Bindable"]
+        let re = ComponentReader.re(#"^\s*((?:@\w+(?:\([^)]*\))?\s+)*)(?:(?:public|private|fileprivate|internal)\s+)?(?:let|var)\s+(\w+)\s*:\s*([^={]+?)\s*(=.*)?$"#)
+        var out: [(String, String)] = [], depth = 0
+        for line in inside.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            if depth == 0, !line.contains("var body"), let m = re.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+               let a = Range(m.range(at: 1), in: line), let n = Range(m.range(at: 2), in: line), let t = Range(m.range(at: 3), in: line) {
+                let attrs = String(line[a])
+                let type = String(line[t]).trimmingCharacters(in: .whitespaces)
+                let base = String(type.prefix { $0.isLetter || $0.isNumber })
+                if !own.contains(where: attrs.contains), !["Model", "Store", "Configuration"].contains(where: base.hasSuffix) {
+                    out.append((String(line[n]), type))
+                }
+            }
+            if line.contains("var body") && depth == 0 { break }
+            depth += line.filter { $0 == "{" }.count - line.filter { $0 == "}" }.count
+        }
+        return out
+    }
+
+    /// Words for a purpose: "show a state", "show a ticket".
+    public static func purposeWords(_ p: String) -> String {
+        let fixed = ["state": "show a state", "label": "name something", "choice": "pick or filter", "count": "show a count",
+                     "action": "do something when clicked", "sample": "show a sample of something else", "shortcut": "show a shortcut"]
+        if let w = fixed[p] { return w }
+        guard p.hasPrefix("model:") else { return p }
+        let words = SwiftStructure.words(String(p.dropFirst(6))).joined(separator: " ")
+        return "show " + (["a", "e", "i", "o", "u"].contains(words.prefix(1)) ? "an " : "a ") + words
+    }
+
+    static let stateWords = ["status", "state", "turn", "phase", "result", "severity", "level", "outcome", "verdict", "health", "problem", "error",
+                             "warning", "failure", "progress"]
+    static let plainTypes = ["String", "LocalizedStringKey", "Text", "Int", "Double", "CGFloat", "Float", "Bool", "Color", "Image", "Date", "URL",
+                             "UUID", "Font", "Content", "Label", "Icon", "Trailing", "Leading", "Detail", "Value", "ID", "Data", "Edge", "Alignment",
+                             "AnyView", "CGSize", "CGPoint", "TimeInterval", "Character", "NSImage", "Any"]
+
+    /// What a view is for, from what it is given and its name (CM22). Nil when nothing says it: then only the look groups it.
+    static func purpose(name: String, properties: [(name: String, type: String)], interactive: Bool) -> String? {
+        let words = SwiftStructure.words(name)
+        let types = properties.map { $0.type.replacingOccurrences(of: "?", with: "") }
+        let names = properties.map { $0.name.lowercased() }
+        if words.contains(where: { ["sample", "example", "preview", "demo", "specimen"].contains($0) }) { return "sample" }
+        let selection = zip(names, types).contains { n, t in
+            t.hasPrefix("Binding<Bool") || (t == "Bool" && ["selected", "isselected", "ison", "on", "active", "isactive", "current", "iscurrent", "checked"].contains(n))
+        }
+        if interactive, selection { return "choice" }
+        let typeWords = types.flatMap { SwiftStructure.words(String($0.prefix { $0.isLetter || $0.isNumber })) }
+        if typeWords.contains(where: stateWords.contains) || words.contains(where: stateWords.contains) { return "state" }
+        if words.contains(where: { ["key", "keys", "caps", "keycap", "shortcut"].contains($0) }) { return "shortcut" }
+        let data = zip(names, types).filter { _, t in !t.contains("->") && !t.hasPrefix("Binding") }
+        if let model = data.map(\.1).first(where: { t in
+            let base = String(t.prefix { $0.isLetter || $0.isNumber })
+            return base.first?.isUppercase == true && !plainTypes.contains(base) && !t.hasPrefix("[")
+        }) {
+            return "model:" + String(model.prefix { $0.isLetter || $0.isNumber })
+        }
+        if data.contains(where: { n, t in t == "Int" && ["count", "number", "total", "n"].contains(n) }), !types.contains("String") { return "count" }
+        if !data.isEmpty, data.allSatisfy({ _, t in ["String", "LocalizedStringKey", "Text"].contains(t) || t == "String?" }) { return "label" }
+        if interactive, types.contains(where: { $0.contains("->") }) { return "action" }
+        return nil
     }
 
     // MARK: The answer for one view
@@ -288,6 +363,8 @@ public enum AppViewScanner {
         let family = familyWords.first { $0.1.contains(last) }?.0 ?? (screenWords.contains(last) ? nil : familyByLook(style))
         var view = AppView(id: d.name, file: file, line: d.line, kind: .unknown, reason: "", family: family,
                            style: style, interactive: interactive, wraps: nil, uses: uses, usedIn: usedIn, bodyLines: d.bodyLines)
+        view.takes = d.properties.map { "\($0.name): \($0.type)" }
+        view.purpose = purpose(name: d.name, properties: d.properties, interactive: interactive)
 
         if d.sample || words.first == "lab" || file.contains("/Labs/") {
             view.kind = .sample; view.reason = "Drawn in a design lab or a sample file."; view.family = nil
@@ -398,9 +475,10 @@ public enum AppViewScanner {
             && abs((a.paddingH ?? 0) - (b.paddingH ?? 0)) <= 1 && abs((a.paddingV ?? 0) - (b.paddingV ?? 0)) <= 1
     }
 
-    /// The app's own components, as groups of views drawn alike within a family (chips, cards, rows…), interactive
-    /// ones apart. Each group is one proposal: these views look like one thing. The owner names it, merges groups,
-    /// moves a view out or keeps them apart; Hatch never decides.
+    /// The app's own components, grouped by what they are for within a family (chips, cards, rows…), interactive ones
+    /// apart (CM22): views given the same kind of thing (a state, a label, a ticket) are one component even when drawn
+    /// differently, and the owner then picks the look it keeps. Views whose purpose Hatch can't read are grouped by
+    /// look. Each group is one proposal; the owner names it, merges groups, moves a view out or keeps them apart.
     static func propose(_ views: [AppView], measured: [String: Double] = [:]) -> [AppComponentProposal] {
         let components = views.filter { $0.kind == .component }
         let wrappersOf = Dictionary(grouping: views.filter { $0.kind == .wrapper }, by: { $0.wraps ?? "" })
@@ -409,24 +487,54 @@ public enum AppViewScanner {
         for (key, members) in families {
             let family = key.replacingOccurrences(of: "+interactive", with: "")
             let interactive = key.hasSuffix("+interactive")
+            // Plain text says what a chip or label is for, but not what a header, row or card is for: those go by look.
+            func grouping(_ v: AppView) -> String? { v.purpose == "label" && !["chip", "badge", "label"].contains(family) ? nil : v.purpose }
             var groups: [[AppView]] = []
             for v in members.sorted(by: { ($0.uses, $1.id) > ($1.uses, $0.id) }) {
-                if let i = groups.firstIndex(where: { drawnAlike($0[0].style, v.style) }) { groups[i].append(v) } else { groups.append([v]) }
+                let i = groups.firstIndex { g in
+                    if let p = grouping(v) { return grouping(g[0]) == p }
+                    return grouping(g[0]) == nil && drawnAlike(g[0].style, v.style)
+                }
+                if let i { groups[i].append(v) } else { groups.append([v]) }
             }
             for group in groups {
                 let lead = group[0]
                 let all = group.map(\.id) + group.flatMap { wrappersOf[$0.id]?.map(\.id) ?? [] }
-                let title = lead.title
-                let why = group.count > 1
-                    ? "These \(group.count) views are drawn alike: one \(family)?"
-                    : "A \(family) of its own."
-                out.append(AppComponentProposal(id: family + (interactive ? ".interactive" : "") + "." + lead.id, title: title, family: family,
-                                                interactive: interactive, members: all,
+                let purpose = lead.purpose.map(purposeWords)
+                let looks = group.reduce(into: [AppView]()) { ls, v in if !ls.contains(where: { drawnAlike($0.style, v.style) }) { ls.append(v) } }.count
+                let why: String
+                if group.count > 1, let purpose {
+                    why = "These \(group.count) views all \(purpose)" + (looks > 1 ? ", drawn \(looks) ways: one \(family)?" : ": one \(family)?")
+                } else if group.count > 1 {
+                    why = "These \(group.count) views are drawn alike: one \(family)?"
+                } else {
+                    why = (["a", "e", "i", "o", "u"].contains(family.prefix(1)) ? "An " : "A ") + "\(family) of its own" + (purpose.map { ": it \(Self.thirdPerson($0))." } ?? ".")
+                }
+                out.append(AppComponentProposal(id: family + (interactive ? ".interactive" : "") + "." + lead.id, title: title(family: family, purpose: lead.purpose, lead: lead),
+                                                family: family, interactive: interactive, members: all,
                                                 variants: [.init(name: "", members: group.map(\.id), style: lead.style)], sizes: [],
-                                                uses: group.reduce(0) { $0 + $1.uses }, why: why))
+                                                uses: group.reduce(0) { $0 + $1.uses }, why: why, purpose: purpose))
             }
         }
         return out.sorted { ($0.uses, $1.id) > ($1.uses, $0.id) }
+    }
+
+    /// "show a state" → "shows a state".
+    public static func thirdPerson(_ words: String) -> String {
+        guard let space = words.firstIndex(of: " ") else { return words }
+        let verb = String(words[..<space])
+        return (verb == "do" ? "does" : verb + "s") + words[space...]
+    }
+
+    /// A group's name from its purpose where that says more than one view's name: a chip for a state is a "Status chip".
+    static func title(family: String, purpose: String?, lead: AppView) -> String {
+        switch (purpose, family) {
+        case ("state"?, _): return "Status " + family
+        case ("label"?, "chip"): return "Tag"
+        case ("choice"?, "chip"): return "Filter chip"
+        case ("count"?, _): return "Count " + family
+        default: return lead.title
+        }
     }
 
     /// How a group's views compare, in a sentence, and whether their looks are the same (then nothing is chosen).
@@ -518,38 +626,4 @@ public enum AppViewScanner {
         if l.contains("secondary") || l.contains("gray") || l.contains("primary") || l.isEmpty { return "neutral" }
         return "own colour"
     }
-}
-
-
-/// Pictures of the app's own components, drawn by the app (CM5): `component-gallery-light.png`, `-dark.png` and
-/// `component-gallery.json` with each view's frames, kept in the notebook under `components/captures`.
-public struct ComponentCaptures: Sendable {
-    public static let notebookPath = "components/captures"
-    public static let files = ["component-gallery-light.png", "component-gallery-dark.png", "component-gallery.json"]
-
-    public var folder: URL
-    /// Points to pixels.
-    public var scale: Double
-    /// Each view's frames in points, by type name.
-    public var items: [String: [[Double]]]
-
-    public func picture(dark: Bool) -> URL { folder.appendingPathComponent(dark ? "component-gallery-dark.png" : "component-gallery-light.png") }
-
-    /// The first frame of a view, in pixels of the picture.
-    public func frame(of id: String) -> (x: Double, y: Double, width: Double, height: Double)? {
-        guard let f = items[id]?.first, f.count == 4 else { return nil }
-        return (f[0] * scale, f[1] * scale, f[2] * scale, f[3] * scale)
-    }
-
-    public static func load(from folder: URL) -> ComponentCaptures? {
-        guard let data = try? Data(contentsOf: folder.appendingPathComponent("component-gallery.json")),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let items = json["items"] as? [String: [[Double]]] else { return nil }
-        return ComponentCaptures(folder: folder, scale: json["scale"] as? Double ?? 2, items: items)
-    }
-}
-
-public extension ComponentCaptures {
-    /// Each view's height in points as the app drew it.
-    var heights: [String: Double] { items.compactMapValues { $0.first.map { $0[3] } } }
 }

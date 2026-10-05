@@ -480,6 +480,7 @@ struct DeskSelectable<Content: View>: View {
             .onTapGesture(perform: select)
             .animation(.easeOut(duration: 0.12), value: selected)
             .animation(.easeOut(duration: 0.1), value: hovering)
+            .hatchMark("DeskSelectable")
     }
 }
 
@@ -542,6 +543,7 @@ struct DeskRow: View {
             .frame(width: 86, alignment: .trailing)
         }
         .frame(height: 54)
+        .hatchMark("DeskRow")
     }
 }
 
@@ -565,6 +567,7 @@ struct DeskWaitingRow: View {
             }
         }
         .frame(height: 46)
+        .hatchMark("DeskWaitingRow")
     }
 }
 

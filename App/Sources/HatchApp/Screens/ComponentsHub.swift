@@ -32,6 +32,7 @@ struct ComponentRoleSample: View {
         RecipeControl(element: role.element, recipe: recipe ?? role.recipe, system: system, importance: role.importance,
                       sample: SampleWords.content(role.importance, place: place ?? role.places.first ?? "page", base: SampleContent()))
             .fixedSize()
+            .hatchMark("ComponentRoleSample")
     }
 }
 
@@ -85,6 +86,7 @@ struct ComponentsStartCard: View {
                 }
             }
         }
+        .hatchMark("ComponentsStartCard")
     }
 
     private func tile(_ t: ComponentTemplate, selected: Bool, recommended: Bool) -> some View {
@@ -237,6 +239,7 @@ struct ComponentPlaceCard: View {
                     .font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
         }
+        .hatchMark("ComponentPlaceCard")
     }
 
     @ViewBuilder private var surface: some View {
@@ -335,6 +338,7 @@ struct ComponentsRolesTable: View {
         }
         .alternatingRowBackgrounds(.disabled)
         .scrollContentBackground(.hidden)
+        .hatchMark("ComponentsRolesTable")
     }
 }
 

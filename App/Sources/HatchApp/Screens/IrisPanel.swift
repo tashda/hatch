@@ -147,6 +147,7 @@ private struct NoteField: View {
                 .controlSize(.small)
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
+        .hatchMark("NoteField")
     }
 
     private func save() {

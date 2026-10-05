@@ -417,6 +417,7 @@ private struct ModelMenu: View {
                 onChange(RoleChoice(providerId: p.id, model: id))
             }
         }
+        .hatchMark("ModelMenu")
     }
 
     private var defaultTitle: String {
@@ -511,21 +512,24 @@ private struct ModelOptionRows: View {
     private var model: ModelInfo? { provider?.model(choice?.model ?? provider?.defaultModel) }
 
     var body: some View {
-        if let choice, !choice.isOff, let provider {
-            if let efforts = model?.efforts, !efforts.isEmpty {
-                Picker("Effort", selection: Binding(get: { choice.effort ?? "" }, set: { e in
-                    var c = choice; c.effort = e.isEmpty ? nil : e; onChange(c)
-                })) {
-                    Text(model?.defaultEffort.map { "Default (\($0.capitalized))" } ?? "Default").tag("")
-                    ForEach(efforts, id: \.self) { Text($0.capitalized).tag($0) }
+        Group {
+            if let choice, !choice.isOff, let provider {
+                if let efforts = model?.efforts, !efforts.isEmpty {
+                    Picker("Effort", selection: Binding(get: { choice.effort ?? "" }, set: { e in
+                        var c = choice; c.effort = e.isEmpty ? nil : e; onChange(c)
+                    })) {
+                        Text(model?.defaultEffort.map { "Default (\($0.capitalized))" } ?? "Default").tag("")
+                        ForEach(efforts, id: \.self) { Text($0.capitalized).tag($0) }
+                    }
+                } else if provider.kind == .claudeCode, model != nil {
+                    Toggle("Thinking", isOn: Binding(get: { choice.thinking ?? true }, set: { on in
+                        var c = choice; c.thinking = on ? nil : false; onChange(c)
+                    }))
+                    .help("Off sends MAX_THINKING_TOKENS=0 to Claude Code: faster and far fewer tokens for short, structured work")
                 }
-            } else if provider.kind == .claudeCode, model != nil {
-                Toggle("Thinking", isOn: Binding(get: { choice.thinking ?? true }, set: { on in
-                    var c = choice; c.thinking = on ? nil : false; onChange(c)
-                }))
-                .help("Off sends MAX_THINKING_TOKENS=0 to Claude Code: faster and far fewer tokens for short, structured work")
             }
         }
+        .hatchMark("ModelOptionRows")
     }
 }
 
@@ -538,6 +542,7 @@ private struct TaskTile: View {
             .frame(width: 24, height: 24)
             .background(role.isCoding ? Color.orange : role == .iris ? Color.indigo : Color.blue,
                         in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .hatchMark("TaskTile")
     }
 }
 
@@ -564,6 +569,7 @@ private struct TaskListRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens the settings for \(role.taskTitle)")
+        .hatchMark("TaskListRow")
     }
 
     private var value: String {
@@ -675,6 +681,7 @@ private struct ProviderListRow: View {
                 .help("Details for \(provider.name)")
                 .accessibilityLabel("Details for \(provider.name)")
         }
+        .hatchMark("ProviderListRow")
     }
 
     private var subtitle: String {
@@ -691,6 +698,7 @@ private struct ProviderTile: View {
             .foregroundStyle(.white)
             .frame(width: 26, height: 26)
             .background(tint, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .hatchMark("ProviderTile")
     }
     private var tint: Color {
         switch way {
@@ -1219,5 +1227,6 @@ private struct ChoiceRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .hatchMark("ChoiceRow")
     }
 }

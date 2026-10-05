@@ -1062,6 +1062,7 @@ struct HXSetupHeader: View {
                 Text(detail).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
+        .hatchMark("HXSetupHeader")
     }
 }
 
@@ -1077,6 +1078,7 @@ struct HXIconTile: View {
             .foregroundStyle(tint == .primary ? Color(nsColor: .windowBackgroundColor) : .white)
             .frame(width: size, height: size)
             .background(tint, in: RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
+            .hatchMark("HXIconTile")
     }
 }
 
@@ -1093,6 +1095,7 @@ struct HXSetupGroup<Content: View>: View {
             // A grouped Form keeps a 20pt margin around its section that content margins do not remove; take it
             // back so the section lines up with the text above and below it.
             .padding(-20)
+            .hatchMark("HXSetupGroup")
     }
 }
 
@@ -1104,6 +1107,7 @@ struct HXSetupRow<Value: View>: View {
 
     var body: some View {
         LabeledContent(title) { value }
+        .hatchMark("HXSetupRow")
     }
 }
 
@@ -1138,6 +1142,7 @@ struct HXRadioRow<Trailing: View>: View {
             trailing
         }
         .padding(.vertical, 3)
+        .hatchMark("HXRadioRow")
     }
 }
 
@@ -1160,6 +1165,7 @@ struct HXSetupExample<Content: View>: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+        .hatchMark("HXSetupExample")
     }
 }
 
@@ -1178,6 +1184,7 @@ struct HXIssueSample: View {
             }
         }
         .lineLimit(1)
+        .hatchMark("HXIssueSample")
     }
 }
 
@@ -1190,6 +1197,7 @@ private struct HXPathLine: View {
             Text(note).font(.callout).foregroundStyle(.secondary)
         }
         .lineLimit(1)
+        .hatchMark("HXPathLine")
     }
 }
 
@@ -1206,6 +1214,7 @@ private struct HXReviewRow: View {
             Spacer()
         }
         .padding(.horizontal, 12).frame(minHeight: 38)
+        .hatchMark("HXReviewRow")
     }
 }
 
@@ -1224,6 +1233,7 @@ struct HXBranchFlow: View {
             node(base, tint: .accentColor)
         }
         .font(.callout.monospaced())
+        .hatchMark("HXBranchFlow")
     }
 
     private func node(_ text: String, tint: Color) -> some View {
@@ -1250,13 +1260,16 @@ struct HXPromotionChoice: View {
     let base: String
 
     var body: some View {
-        HXRadioRow(selected: promotion == .pullRequest, title: "Hatch opens a pull request, you merge it",
-                   detail: "One pull request per batch on GitHub. Works with branch protection on \(base).",
-                   recommended: true) { promotion = .pullRequest }
-        HXRadioRow(selected: promotion == .automatic, title: "Hatch merges automatically",
-                   detail: "Fastest. Good once you trust the CI.") { promotion = .automatic }
-        HXRadioRow(selected: promotion == .manual, title: "Leave it on the branch",
-                   detail: "You merge it into \(base) yourself, whenever you like.") { promotion = .manual }
+        Group {
+            HXRadioRow(selected: promotion == .pullRequest, title: "Hatch opens a pull request, you merge it",
+                       detail: "One pull request per batch on GitHub. Works with branch protection on \(base).",
+                       recommended: true) { promotion = .pullRequest }
+            HXRadioRow(selected: promotion == .automatic, title: "Hatch merges automatically",
+                       detail: "Fastest. Good once you trust the CI.") { promotion = .automatic }
+            HXRadioRow(selected: promotion == .manual, title: "Leave it on the branch",
+                       detail: "You merge it into \(base) yourself, whenever you like.") { promotion = .manual }
+        }
+        .hatchMark("HXPromotionChoice")
     }
 }
 

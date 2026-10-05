@@ -545,6 +545,7 @@ private struct DecideCard: View {
             if !session.note.contains("screenshot") { session.note += (session.note.isEmpty ? "" : " ") + "See the screenshot." }
         }
         .autoReload(every: 3) { checkStillWaiting() }
+        .hatchMark("DecideCard")
     }
 
     private var content: some View {
@@ -1013,6 +1014,7 @@ private struct DecidePill: View {
                 }
                 .padding(12).frame(width: 280, alignment: .leading)
             }
+        .hatchMark("DecidePill")
     }
 }
 
@@ -1056,6 +1058,7 @@ private struct DecideQueueCard: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
         .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
         .onAppear { appeared = true }
+        .hatchMark("DecideQueueCard")
     }
 
     /// The rows follow the card in, one after another, sliding from the arrow's side; at once with Reduce Motion.
@@ -1117,6 +1120,7 @@ private struct QueueRow<Label: View>: View {
         .buttonStyle(.plain)
         .allowsHitTesting(clickable || current)
         .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hovering = h && clickable } }
+        .hatchMark("QueueRow")
     }
 
     private var fill: Color {
@@ -1165,6 +1169,7 @@ struct DecideCountBadge: View {
             .background(Color(nsColor: .systemRed), in: Capsule())
             .padding(.top, -2).padding(.trailing, -4)
             .accessibilityHidden(true)
+            .hatchMark("DecideCountBadge")
     }
 }
 
@@ -1188,6 +1193,7 @@ struct DecideIrisCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .hatchMark("DecideIrisCard")
     }
 
     private var kinds: String {

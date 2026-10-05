@@ -76,10 +76,14 @@ public struct RepoConfig: Codable, Equatable, Sendable {
     public var testCommand: String?
     /// Compares the built result with the accepted reference (the Match check, CONFORMANCE.md). Optional.
     public var matchCommand: String?
+    /// Runs the app's snapshots into `$HATCH_CAPTURES`: every screen's picture and its marked views (CM21). Optional; a
+    /// `hatch-capture.sh` in the app's root or `tools/` is used when it is not set.
+    public var captureCommand: String?
     public init(role: RepoRole, remote: String, branch: String, localPath: String? = nil, buildCommand: String? = nil, testPlans: [String]? = nil,
-                testCommand: String? = nil, matchCommand: String? = nil) {
+                testCommand: String? = nil, matchCommand: String? = nil, captureCommand: String? = nil) {
         self.role = role; self.remote = remote; self.branch = branch; self.localPath = localPath
         self.buildCommand = buildCommand; self.testPlans = testPlans; self.testCommand = testCommand; self.matchCommand = matchCommand
+        self.captureCommand = captureCommand
     }
 }
 

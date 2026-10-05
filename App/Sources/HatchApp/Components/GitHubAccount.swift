@@ -312,6 +312,7 @@ struct HXRepoPickerMenu: View {
         .menuIndicator(.hidden)
         .disabled(account.user == nil)
         .task { if !Snapshots.demoMode && account.user == nil && !account.busy { account.refresh() } }
+        .hatchMark("HXRepoPickerMenu")
     }
 }
 

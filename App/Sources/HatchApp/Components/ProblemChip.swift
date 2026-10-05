@@ -12,5 +12,6 @@ struct HXProblemChip: View {
             .padding(.vertical, 2)
             .foregroundStyle(Theme.critical)
             .background(Theme.criticalBackground, in: Capsule())
+            .hatchMark("HXProblemChip")
     }
 }

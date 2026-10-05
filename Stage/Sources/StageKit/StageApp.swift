@@ -125,6 +125,8 @@ public enum StageApp {
         delegate = d
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
+        // A snapshot run stays out of the owner's way: never forward, its windows hidden but drawn (CM21).
+        if options.snapshotDirectory != nil { HatchMarks.quiet() }
         app.delegate = d
         app.run()
     }
@@ -160,7 +162,7 @@ final class StageAppDelegate: NSObject, NSApplicationDelegate {
         installMenu()
         // The Dock icon carries this Proposal's ticket number, so two open Stages can be told apart. Drawn locally, lasts until quit.
         if ticketNumber != nil, let icon = StageIcon.image(number: ticketNumber) { NSApp.applicationIconImage = icon }
-        let hosting = NSHostingView(rootView: StageView(model: model))
+        let hosting = NSHostingView(rootView: StageView(model: model).hatchMarksRoot())
         let w = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1320, height: 820),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -174,7 +176,7 @@ final class StageAppDelegate: NSObject, NSApplicationDelegate {
         w.center()
         w.makeKeyAndOrderFront(nil)
         window = w
-        NSApp.activate(ignoringOtherApps: true)
+        if snapshotDirectory == nil { NSApp.activate(ignoringOtherApps: true) }
         if snapshotDirectory != nil {
             Task { @MainActor in await captureSnapshots() }
         }
@@ -239,8 +241,9 @@ final class StageAppDelegate: NSObject, NSApplicationDelegate {
 
     private func capture(_ name: String, into directory: URL) async throws {
         try await Task.sleep(nanoseconds: 350_000_000)
-        guard let view = window?.contentView else { return }
-        save(view, name: name, into: directory)
+        guard let window else { return }
+        // The window server's picture where allowed (split views and glass draw right), with the marks beside it.
+        HatchMarks.capture(window, as: name, into: directory)
     }
 
     private func save(_ view: NSView, name: String, into directory: URL) {
@@ -249,6 +252,7 @@ final class StageAppDelegate: NSObject, NSApplicationDelegate {
         view.cacheDisplay(in: view.bounds, to: rep)
         guard let png = rep.representation(using: .png, properties: [:]) else { return }
         try? png.write(to: directory.appendingPathComponent("\(name).png"))
+        HatchMarks.writeMarks(of: view, scale: view.window?.backingScaleFactor ?? 2, to: directory.appendingPathComponent("\(name).json"))
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

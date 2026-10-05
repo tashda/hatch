@@ -39,6 +39,7 @@ struct HXChip: View {
             .padding(.vertical, 2)
             .foregroundStyle(Theme.color(for: turn))
             .background(Theme.background(for: turn), in: Capsule())
+            .hatchMark("HXChip")
     }
 }
 
@@ -47,6 +48,7 @@ struct HXStatusChip: View {
 
     var body: some View {
         StatusChip(status: status)
+        .hatchMark("HXStatusChip")
     }
 }
 
@@ -61,6 +63,7 @@ struct HXHeader: View {
                 Text(subtitle).font(.callout).foregroundStyle(.secondary)
             }
         }
+        .hatchMark("HXHeader")
     }
 }
 
@@ -77,6 +80,7 @@ struct HXEmpty: View {
         }
         .padding(32)
         .frame(maxWidth: .infinity)
+        .hatchMark("HXEmpty")
     }
 }
 
@@ -88,19 +92,22 @@ struct HXCard<Content: View>: View {
     init(@ViewBuilder content: () -> Content) { self.content = content() }
 
     var body: some View {
-        if onGray {
-            // The page sits straight on the window background, so its cards float like the panels do.
-            content
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .floatingCard()
-        } else {
-            content
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor), lineWidth: 0.5))
+        Group {
+            if onGray {
+                // The page sits straight on the window background, so its cards float like the panels do.
+                content
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .floatingCard()
+            } else {
+                content
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor), lineWidth: 0.5))
+            }
         }
+        .hatchMark("HXCard")
     }
 }
 

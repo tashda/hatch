@@ -493,6 +493,7 @@ struct ComponentSwatch: View {
             Text(caption).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
         }
         .help(token.file)
+        .hatchMark("ComponentSwatch")
     }
 
     private var caption: String {

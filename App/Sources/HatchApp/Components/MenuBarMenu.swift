@@ -103,6 +103,7 @@ struct MenuBarInstaller: View {
     var body: some View {
         Color.clear.frame(width: 0, height: 0)
             .onAppear { MenuBarMenu.shared.openWindow = openWindow }
+            .hatchMark("MenuBarInstaller")
     }
 }
 

@@ -234,6 +234,7 @@ struct HardCasesBar: View {
         .toggleStyle(.checkbox)
         .controlSize(.small)
         .padding(.horizontal, 16).padding(.vertical, 7)
+        .hatchMark("HardCasesBar")
     }
 }
 
@@ -252,15 +253,18 @@ struct Appearances<Content: View>: View {
     @ObservedObject var model: DesignerModel
     @ViewBuilder var content: () -> Content
     var body: some View {
-        if model.appearance == .both {
-            // Each side is its own tile in its own appearance; no band around them (a box around a box).
-            HStack(alignment: .top, spacing: 12) {
-                content().environment(\.colorScheme, .light)
-                content().environment(\.colorScheme, .dark)
+        Group {
+            if model.appearance == .both {
+                // Each side is its own tile in its own appearance; no band around them (a box around a box).
+                HStack(alignment: .top, spacing: 12) {
+                    content().environment(\.colorScheme, .light)
+                    content().environment(\.colorScheme, .dark)
+                }
+            } else {
+                content()
             }
-        } else {
-            content()
         }
+        .hatchMark("Appearances")
     }
 }
 
@@ -591,6 +595,7 @@ struct ActionRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
+        .hatchMark("ActionRow")
     }
 }
 
@@ -602,6 +607,7 @@ struct ActionRows: View {
             if i > 0 { Divider().padding(.leading, 40) }
             ActionRow(title: a.title, detail: a.detail, symbol: a.symbol) { model.request = a.request }
         }
+        .hatchMark("ActionRows")
     }
 }
 
@@ -624,6 +630,7 @@ struct DecideList: View {
                 }
             }
         }
+        .hatchMark("DecideList")
     }
 
     @ViewBuilder private func card(_ q: ComponentQuestion) -> some View {
@@ -709,6 +716,7 @@ struct ThenNowLabel: View {
             }
         }
         .foregroundStyle(now ? Color.accentColor : .secondary)
+        .hatchMark("ThenNowLabel")
     }
 }
 
@@ -719,18 +727,21 @@ struct ThenNow<Content: View>: View {
     let comparing: Bool
     @ViewBuilder var content: () -> Content
     var body: some View {
-        if !comparing {
-            content()
-        } else if now {
-            content()
-                .padding(8)
-                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 2))
-        } else {
-            content()
-                .padding(8)
-                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        Group {
+            if !comparing {
+                content()
+            } else if now {
+                content()
+                    .padding(8)
+                    .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 2))
+            } else {
+                content()
+                    .padding(8)
+                    .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
         }
+        .hatchMark("ThenNow")
     }
 }
 
@@ -774,6 +785,7 @@ struct MatrixCell: View {
         .buttonStyle(.plain)
         .onHover { hovered = $0 ? role.id : (hovered == role.id ? nil : hovered) }
         .help("\(role.title): \(role.use)")
+        .hatchMark("MatrixCell")
     }
 }
 
@@ -784,6 +796,7 @@ struct EmptyCell: View {
             .frame(minWidth: 180, maxWidth: 240, minHeight: 64)
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(style: StrokeStyle(lineWidth: 0.5, dash: [4])).foregroundStyle(.tertiary))
             .help("Not decided yet: the first ticket that needs it asks")
+            .hatchMark("EmptyCell")
     }
 }
 
@@ -830,6 +843,7 @@ struct ElementMatrix: View {
                 }
             }
         }
+        .hatchMark("ElementMatrix")
     }
 }
 
@@ -1026,6 +1040,7 @@ struct InspectorSection<Content: View>: View {
                 .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             if let footer { Text(footer).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4) }
         }
+        .hatchMark("InspectorSection")
     }
 }
 
@@ -1267,6 +1282,7 @@ struct WhereSection: View {
                 }
             }
         }
+        .hatchMark("WhereSection")
     }
 }
 
@@ -1285,6 +1301,7 @@ struct AppleCallout: View {
                 if let ref = ComponentNative.reference(advice.source), let url = URL(string: ref.url) { Link(ref.title, destination: url).font(.caption) }
             }
         }
+        .hatchMark("AppleCallout")
     }
 
     private var heading: String {
@@ -1336,6 +1353,7 @@ struct QuestionPicks: View {
                 if o.recipe == nil { quiet(i, o) }
             }
         }
+        .hatchMark("QuestionPicks")
     }
 
     /// The look in plain words, worked out now so questions written by an older Hatch read the same (CD20).
@@ -1435,6 +1453,7 @@ struct LookPicks: View {
                 .buttonStyle(.plain)
             }
         }
+        .hatchMark("LookPicks")
     }
 }
 
@@ -1467,6 +1486,7 @@ struct LookChoices: View {
                 }
             }
         }
+        .hatchMark("LookChoices")
     }
 
     /// "Also draws like: Glass, Bordered" for a value with twins.
@@ -1536,6 +1556,7 @@ struct OlderMacOSSection: View {
                 .pickerStyle(.menu)
             }
         }
+        .hatchMark("OlderMacOSSection")
     }
 }
 
@@ -1578,6 +1599,7 @@ struct ElementChoices: View {
                 }
             }
         }
+        .hatchMark("ElementChoices")
     }
 }
 
@@ -1610,6 +1632,7 @@ struct FineTune: View {
                 }
             }
         }
+        .hatchMark("FineTune")
     }
 
     private func row(_ p: ComponentParameter, _ recipe: [String: String]) -> some View {
@@ -1826,6 +1849,7 @@ struct FittedPreview<C: View>: View {
                     .onGeometryChange(for: CGSize.self) { $0.size } action: { natural = $0 }
                     .scaleEffect(scale)
             }
+        .hatchMark("FittedPreview")
     }
 }
 

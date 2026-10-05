@@ -267,6 +267,7 @@ private struct FoundToolRow<Subtitle: View>: View {
             }
         }
         .accessibilityElement(children: .combine)
+        .hatchMark("FoundToolRow")
     }
 }
 
@@ -354,6 +355,7 @@ private struct OpenWithPicker: View {
         .onChange(of: selection) { _, value in
             if loaded, value != (state.hxSetting(kind.settingKey) ?? "") { state.hxSaveSetting(kind.settingKey, value) }
         }
+        .hatchMark("OpenWithPicker")
     }
 
     private func load() {
@@ -439,5 +441,6 @@ private struct ProjectAppRow: View {
                 Button("Clear", action: onClear)
             }
         }
+        .hatchMark("ProjectAppRow")
     }
 }

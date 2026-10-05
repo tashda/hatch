@@ -450,6 +450,7 @@ struct MetaRow<Content: View>: View {
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .hatchMark("MetaRow")
     }
 }
 
@@ -471,26 +472,29 @@ struct DescriptionBody: View {
     }
 
     var body: some View {
-        if let rows {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text(row.label.uppercased())
-                            .font(.caption2.weight(.semibold))
-                            .tracking(0.6)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 72, alignment: .leading)
-                        Text(row.text)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if let rows {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(row.label.uppercased())
+                                .font(.caption2.weight(.semibold))
+                                .tracking(0.6)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 72, alignment: .leading)
+                            Text(row.text)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
+            } else {
+                Text(text)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-        } else {
-            Text(text)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
         }
+        .hatchMark("DescriptionBody")
     }
 }
 
@@ -515,6 +519,7 @@ struct SweepItemsSection: View {
             if framed { SectionCard("Items") { content } } else { content }
         }
         .autoReload(every: 4) { load() }
+        .hatchMark("SweepItemsSection")
     }
 
     private var content: some View {

@@ -126,6 +126,7 @@ struct BoardColumn: View {
         }
         .padding(8)
         .frame(maxHeight: .infinity, alignment: .top)
+        .hatchMark("BoardColumn")
     }
 }
 
@@ -179,6 +180,7 @@ struct BoardCard: View {
             Button("Open") { state.open(ticket) }
             Button("Open in New Window") { openWindow(id: "ticket", value: ticket.id) }
         }
+        .hatchMark("BoardCard")
     }
 }
 
@@ -202,5 +204,6 @@ struct ThemeHeader: View {
             ProgressView(value: Double(done), total: Double(max(total, 1)))
                 .tint(Theme.finished)
         }
+        .hatchMark("ThemeHeader")
     }
 }

@@ -45,6 +45,7 @@ struct AttachmentThumb: View {
                 }
             }
         }
+        .hatchMark("AttachmentThumb")
     }
 
     /// Whether the screenshot is in the tickets repository yet (decision M3). A failure is the only red one.

@@ -19,6 +19,16 @@ protocol ComponentsSource {
     func templates() throws -> (defaultId: String?, saved: [SavedTemplate])
     /// save, default, remove: through Hatch only.
     func changeTemplates(_ action: String, _ body: JSONValue) throws -> (defaultId: String?, saved: [SavedTemplate])
+    /// Draw the app's screens again (CM21); only Hatch can, since it runs the app's capture command.
+    func startCapture() throws -> (running: Bool, message: String)
+    func captureStatus() throws -> (running: Bool, message: String)
+}
+
+extension ComponentsSource {
+    func startCapture() throws -> (running: Bool, message: String) {
+        throw StoreError.invalid("Open the Designer from Hatch to draw the app's screens again.")
+    }
+    func captureStatus() throws -> (running: Bool, message: String) { (false, "") }
 }
 
 /// Changes kept in memory: the demo, tests, and a notebook opened read-only.
@@ -107,6 +117,8 @@ final class HatchComponentsSource: ComponentsSource {
     func change(_ action: String, _ body: JSONValue) throws -> ComponentSystem {
         try client.changeComponents(project: project, action: action, body: body)
     }
+    func startCapture() throws -> (running: Bool, message: String) { try client.startCapture(project: project) }
+    func captureStatus() throws -> (running: Bool, message: String) { try client.captureStatus(project: project) }
 }
 
 /// What the main area shows for the selected element (CD10: Today vs Draft lives inside a role).
@@ -230,13 +242,18 @@ final class DesignerModel: ObservableObject {
     /// Every view the app declares, answered, and its own components proposed (CM8, CM9).
     let appViews: AppViewModel?
     /// Pictures of the app's own views, drawn by the app (CM5).
-    let captures: ComponentCaptures?
+    /// The app's pictures of its own views (CM20, CM21), read again after a capture.
+    @Published private(set) var captures: ComponentCaptures?
+    let capturesFolder: URL?
+    /// A capture Hatch is running, or how the last one ended.
+    @Published var captureState: (running: Bool, message: String)?
     private var pictures: [String: NSImage] = [:]
 
-    init(source: ComponentsSource, inventory: ComponentInventory? = nil, appRoot: String? = nil, captures: ComponentCaptures? = nil) throws {
+    init(source: ComponentsSource, inventory: ComponentInventory? = nil, appRoot: String? = nil, captures: ComponentCaptures? = nil, capturesFolder: URL? = nil) throws {
         self.appViews = appRoot.map { AppViewScanner.scan(appRoot: $0, measured: captures?.heights ?? [:]) }
         (source as? LocalComponentsSource)?.proposals = appViews?.proposals ?? []
         self.captures = captures
+        self.capturesFolder = capturesFolder ?? captures?.folder
         self.source = source
         self.appRoot = appRoot
         let s = try source.load()
@@ -337,7 +354,11 @@ final class DesignerModel: ObservableObject {
     enum OwnPick: Hashable { case group(String), view(String) }
     @Published var ownPick: OwnPick?
     /// The last move or merge, with Undo beside it.
-    @Published var ownNotice: String?
+    @Published var ownNotice: String? { didSet { if ownNotice != oldValue { ownNoticeCanUndo = true } } }
+    /// False for a notice about a ticket filed, which Undo can't take back.
+    var ownNoticeCanUndo = true
+    private var screenCache: [(url: URL, image: CGImage)] = []
+    private var coverageCache: ComponentMarks.Coverage?
 
     /// Every group: the components in the system, then what Hatch proposes for the views not in one yet.
     var ownEntries: [OwnEntry] {
@@ -430,17 +451,84 @@ final class DesignerModel: ObservableObject {
     func ownView(_ id: String) -> AppView? { appViews?.views.first { $0.id == id } }
     var ownQuestions: [AppView] { appViews?.views.filter { $0.kind == .unknown } ?? [] }
 
-    /// A view's picture as the app drew it, cut from the capture; nil when the gallery has not drawn it yet.
+    /// Reads the pictures again (after a capture) and forgets the cut-outs.
+    func reloadCaptures() {
+        guard let capturesFolder else { return }
+        captures = ComponentCaptures.load(from: capturesFolder)
+        pictures = [:]; screenCache = []; coverageCache = nil
+    }
+
+    /// Which of the app's own views are drawn, unmarked, or on no screen yet; read once per capture.
+    var ownCoverage: ComponentMarks.Coverage? {
+        if let coverageCache { return coverageCache }
+        guard let appViews, let appRoot else { return nil }
+        let c = ComponentMarks.coverage(appViews, root: appRoot, captures: captures)
+        coverageCache = c
+        return c
+    }
+
+    /// Asks Hatch to draw the app's screens again, then waits for it and reads the new pictures.
+    func captureAgain() {
+        do {
+            let state = try source.startCapture()
+            captureState = state
+            guard state.running else { return }
+            Task { @MainActor in
+                while true {
+                    try? await Task.sleep(nanoseconds: 4_000_000_000)
+                    guard let now = try? source.captureStatus() else { continue }
+                    captureState = now
+                    if !now.running { reloadCaptures(); break }
+                }
+            }
+        } catch {
+            captureState = (false, "\(error)")
+        }
+    }
+
+    /// Files the ticket that makes the app draw the views Hatch can't show yet (CM21).
+    func drawMissing() {
+        run("ownDraw", .object([:]), label: "Ask for the missing pictures")
+        ownNotice = "Hatch filed a ticket for an agent to draw the missing views. Find it in Hatch's Tickets."
+        ownNoticeCanUndo = false
+    }
+
+    /// A part of a screen, in points.
+    func crop(_ screen: CapturedScreen, _ rect: CaptureRect) -> NSImage? {
+        guard let image = screenImage(screen) else { return nil }
+        let s = screen.file.scale
+        let r = CGRect(x: rect.x * s, y: rect.y * s, width: rect.width * s, height: rect.height * s)
+            .intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        guard !r.isEmpty, let cut = image.cropping(to: r) else { return nil }
+        return NSImage(cgImage: cut, size: NSSize(width: r.width / s, height: r.height / s))
+    }
+
+    /// A view's picture as the app drew it (the gallery's, else a whole instance on a screen); nil when the app has not
+    /// drawn it yet (CM21).
     func ownPicture(_ id: String, dark: Bool) -> NSImage? {
         let key = id + (dark ? ".dark" : ".light")
         if let cached = pictures[key] { return cached }
-        guard let captures, let f = captures.frame(of: id), let full = NSImage(contentsOf: captures.picture(dark: dark)),
-              let cg = full.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
-        let pad = 4 * captures.scale
-        let rect = CGRect(x: max(0, f.x - pad), y: max(0, f.y - pad), width: f.width + 2 * pad, height: f.height + 2 * pad)
-        guard let cut = cg.cropping(to: rect) else { return nil }
-        let image = NSImage(cgImage: cut, size: NSSize(width: rect.width / captures.scale, height: rect.height / captures.scale))
+        guard let place = captures?.best(of: id, dark: dark), let image = cut(place) else { return nil }
         pictures[key] = image
+        return image
+    }
+
+    /// One place cut out of its screen, with a little of what is around it.
+    func cut(_ place: ComponentCaptures.Place, pad: Double = 4) -> NSImage? {
+        guard let screen = screenImage(place.screen) else { return nil }
+        let scale = place.screen.file.scale, f = place.pixels
+        let rect = CGRect(x: max(0, f.x - pad * scale), y: max(0, f.y - pad * scale), width: f.width + 2 * pad * scale, height: f.height + 2 * pad * scale)
+            .intersection(CGRect(x: 0, y: 0, width: screen.width, height: screen.height))
+        guard !rect.isEmpty, let cut = screen.cropping(to: rect) else { return nil }
+        return NSImage(cgImage: cut, size: NSSize(width: rect.width / scale, height: rect.height / scale))
+    }
+
+    /// A whole screen's picture; the last few are kept, since each is large.
+    func screenImage(_ screen: CapturedScreen) -> CGImage? {
+        if let hit = screenCache.first(where: { $0.url == screen.picture }) { return hit.image }
+        guard let image = NSImage(contentsOf: screen.picture)?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        screenCache.append((screen.picture, image))
+        if screenCache.count > 6 { screenCache.removeFirst() }
         return image
     }
 

@@ -133,11 +133,14 @@ struct BatchBanner: View {
     @ObservedObject var model: DesignerModel
 
     var body: some View {
-        if let b = model.batch {
-            bar("Preview: \(b.title)", "\(b.items.count) role\(b.items.count == 1 ? "" : "s")" + (b.items.contains(where: \.onlyHere) ? ", some only here" : ""))
-        } else if !model.focused, let p = model.previews.values.first, let role = model.system.role(p.role) {
-            bar("Preview: \(role.title), \(p.label)", "in \(role.places.count) place\(role.places.count == 1 ? "" : "s")")
+        Group {
+            if let b = model.batch {
+                bar("Preview: \(b.title)", "\(b.items.count) role\(b.items.count == 1 ? "" : "s")" + (b.items.contains(where: \.onlyHere) ? ", some only here" : ""))
+            } else if !model.focused, let p = model.previews.values.first, let role = model.system.role(p.role) {
+                bar("Preview: \(role.title), \(p.label)", "in \(role.places.count) place\(role.places.count == 1 ? "" : "s")")
+            }
         }
+        .hatchMark("BatchBanner")
     }
 
     private func bar(_ title: String, _ detail: String) -> some View {
@@ -162,13 +165,16 @@ struct BatchMenuItems: View {
     let place: String?
 
     var body: some View {
-        ForEach(model.actions(element: element, place: place)) { a in
-            Button("\(a.title)… (\(a.detail))") { model.request = a.request }
-        }
-        if let element {
-            Button("One Look for Every \(ComponentElement.named(element)?.title ?? element)\(place == nil ? "" : " Here")…") {
-                model.request = .setting(element: element, place: place)
+        Group {
+            ForEach(model.actions(element: element, place: place)) { a in
+                Button("\(a.title)… (\(a.detail))") { model.request = a.request }
+            }
+            if let element {
+                Button("One Look for Every \(ComponentElement.named(element)?.title ?? element)\(place == nil ? "" : " Here")…") {
+                    model.request = .setting(element: element, place: place)
+                }
             }
         }
+        .hatchMark("BatchMenuItems")
     }
 }

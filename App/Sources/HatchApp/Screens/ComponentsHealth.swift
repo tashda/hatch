@@ -185,6 +185,7 @@ struct ComponentsOldScan: View {
                 }
             }
         }
+        .hatchMark("ComponentsOldScan")
     }
 
     private var summary: String {

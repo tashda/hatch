@@ -146,6 +146,7 @@ struct SidebarRow: View {
     var body: some View {
         Label(route.title, systemImage: route.symbol)
             .tag(route)
+            .hatchMark("SidebarRow")
     }
 }
 
@@ -176,5 +177,6 @@ struct WindowFooter: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 7)
+        .hatchMark("WindowFooter")
     }
 }

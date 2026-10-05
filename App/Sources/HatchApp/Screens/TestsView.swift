@@ -340,6 +340,7 @@ private struct BundleCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .hatchMark("BundleCard")
     }
 
     private var tally: String {
@@ -399,12 +400,15 @@ private struct TestStatusGlyph: View {
     let status: TestStatus?
 
     var body: some View {
-        switch status {
-        case .passed?: Image(systemName: "checkmark.circle").foregroundStyle(.secondary).frame(width: 16)
-        case .failed?: Image(systemName: "xmark.circle.fill").foregroundStyle(.red).frame(width: 16)
-        case .skipped?: Image(systemName: "minus.circle").foregroundStyle(.secondary).frame(width: 16)
-        case .running?: ProgressView().controlSize(.mini).frame(width: 16)
-        case nil: Image(systemName: "circle.dashed").foregroundStyle(.tertiary).frame(width: 16)
+        Group {
+            switch status {
+            case .passed?: Image(systemName: "checkmark.circle").foregroundStyle(.secondary).frame(width: 16)
+            case .failed?: Image(systemName: "xmark.circle.fill").foregroundStyle(.red).frame(width: 16)
+            case .skipped?: Image(systemName: "minus.circle").foregroundStyle(.secondary).frame(width: 16)
+            case .running?: ProgressView().controlSize(.mini).frame(width: 16)
+            case nil: Image(systemName: "circle.dashed").foregroundStyle(.tertiary).frame(width: 16)
+            }
         }
+        .hatchMark("TestStatusGlyph")
     }
 }

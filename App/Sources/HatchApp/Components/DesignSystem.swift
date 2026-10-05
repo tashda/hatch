@@ -50,6 +50,7 @@ struct ProjectTile: View {
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(HX.projectTint(key), in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+            .hatchMark("ProjectTile")
     }
 }
 
@@ -67,28 +68,31 @@ struct HXDock<Value: Hashable>: View {
     static var maximumSlots: Int { 5 }
 
     var body: some View {
-        if items.count > Self.maximumSlots {
-            Picker("Section", selection: $selection) {
-                ForEach(items) { Text($0.title).tag($0.id) }
-            }
-            .pickerStyle(.menu)
-            .controlSize(.large)
-            .labelsHidden()
-            .fixedSize()
-        } else {
-            GlassEffectContainer {
-                HStack(spacing: 0) {
-                    ForEach(items) { item in
-                        HXDockSlot(item: item, isCurrent: item.id == selection) { selection = item.id }
-                    }
+        Group {
+            if items.count > Self.maximumSlots {
+                Picker("Section", selection: $selection) {
+                    ForEach(items) { Text($0.title).tag($0.id) }
                 }
-                .padding(3)
-                .glassEffect(.regular, in: .capsule)
-                .overlay(Capsule().strokeBorder(.separator.opacity(0.6), lineWidth: 0.6))
-                .shadow(color: .black.opacity(0.08), radius: 4, y: 1)
+                .pickerStyle(.menu)
+                .controlSize(.large)
+                .labelsHidden()
+                .fixedSize()
+            } else {
+                GlassEffectContainer {
+                    HStack(spacing: 0) {
+                        ForEach(items) { item in
+                            HXDockSlot(item: item, isCurrent: item.id == selection) { selection = item.id }
+                        }
+                    }
+                    .padding(3)
+                    .glassEffect(.regular, in: .capsule)
+                    .overlay(Capsule().strokeBorder(.separator.opacity(0.6), lineWidth: 0.6))
+                    .shadow(color: .black.opacity(0.08), radius: 4, y: 1)
+                }
+                .fixedSize()
             }
-            .fixedSize()
         }
+        .hatchMark("HXDock")
     }
 }
 
@@ -118,6 +122,7 @@ private struct HXDockSlot<Value: Hashable>: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
+        .hatchMark("HXDockSlot")
     }
 }
 
@@ -133,5 +138,6 @@ struct HXMenuButton<Content: View>: View {
             .menuIndicator(.hidden)
             .buttonStyle(.glass)
             .fixedSize()
+            .hatchMark("HXMenuButton")
     }
 }

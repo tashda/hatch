@@ -543,6 +543,7 @@ struct QuietIconButton: View {
         .buttonStyle(.plain)
         .focusEffectDisabled()
         .onHover { hovering = $0 }
+        .hatchMark("QuietIconButton")
     }
 }
 
@@ -566,6 +567,7 @@ struct SendButton: View {
         .disabled(!enabled)
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.15), value: enabled)
+        .hatchMark("SendButton")
     }
 }
 
@@ -588,6 +590,7 @@ struct DoneButton: View {
         .focusEffectDisabled()
         .keyboardShortcut(.defaultAction)
         .onHover { hovering = $0 }
+        .hatchMark("DoneButton")
     }
 }
 
@@ -610,6 +613,7 @@ struct RemoveBadge: View {
         .focusEffectDisabled()
         .onHover { hovering = $0 }
         .help("Remove")
+        .hatchMark("RemoveBadge")
     }
 }
 

@@ -33,17 +33,13 @@ struct OwnFamilyView: View {
                 HStack {
                     Text(notice)
                     Spacer()
-                    Button("Undo") { model.undo(); model.ownNotice = nil }.buttonStyle(.link)
+                    if model.ownNoticeCanUndo { Button("Undo") { model.undo(); model.ownNotice = nil }.buttonStyle(.link) }
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
             }
-            let missing = groups.flatMap(\.views).filter { model.ownPicture($0, dark: false) == nil }.count
-            Text(missing == 0 ? (views == 1 ? "Drawn by the app's gallery." : "All \(views) views drawn by the app's gallery.")
-                 : missing == views ? (views == 1 ? "Not in the app's gallery yet, so Hatch can't draw it." : "None of these views is in the app's gallery yet, so Hatch can't draw them.")
-                 : "\(missing) of \(views) views \(missing == 1 ? "isn't" : "aren't") in the app's gallery yet, so Hatch can't draw \(missing == 1 ? "it" : "them").")
-                .font(.callout).foregroundStyle(.secondary)
+            OwnPicturesFooter(model: model, ids: groups.flatMap(\.views))
         }
         .onChange(of: family) { _, _ in model.ownPick = nil; model.ownNotice = nil }
         .sheet(item: $naming) { req in
@@ -52,6 +48,42 @@ struct OwnFamilyView: View {
                 naming = nil
             } cancel: { naming = nil }
         }
+    }
+}
+
+/// Whether the app has drawn these views, and the two things that change it: a ticket for an agent to draw the missing
+/// ones, and drawing the app's screens again (CM21).
+struct OwnPicturesFooter: View {
+    @ObservedObject var model: DesignerModel
+    let ids: [String]
+
+    var body: some View {
+        let missing = ids.filter { model.ownPicture($0, dark: false) == nil }.count, n = ids.count
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Text(missing == 0 ? (n == 1 ? "Drawn by the app." : "All \(n) views drawn by the app.")
+                     : missing == n ? (n == 1 ? "The app doesn't draw this view yet, so Hatch can't show it." : "The app doesn't draw these views yet, so Hatch can't show them.")
+                     : "\(missing) of \(n) views aren't drawn by the app yet, so Hatch can't show \(missing == 1 ? "it" : "them").")
+                if missing > 0 { Button("Draw Them…") { model.drawMissing() }.buttonStyle(.link).help("Files a ticket for an agent to make the app draw them") }
+            }
+            HStack(spacing: 10) {
+                if model.captureState?.running == true {
+                    ProgressView().controlSize(.small)
+                    Text(model.captureState?.message ?? "")
+                } else {
+                    Text(model.captureState?.message.isEmpty == false ? model.captureState!.message : capturedWhen)
+                    Button("Capture Again") { model.captureAgain() }.buttonStyle(.link).help("Hatch runs the app's snapshots and keeps the new pictures")
+                }
+            }
+        }
+        .font(.callout).foregroundStyle(.secondary)
+    }
+
+    private var capturedWhen: String {
+        guard let screens = model.captures?.screens, let first = screens.first,
+              let date = try? first.picture.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { return "No pictures of the app yet." }
+        let n = Set(screens.filter { !$0.isGallery }.map(\.name)).count
+        return "Pictures from \(n) screens of the app, drawn \(date.formatted(date: .abbreviated, time: .shortened))."
     }
 }
 
@@ -106,13 +138,17 @@ struct OwnGroupBox: View {
                 return true
             } isTargeted: { targeted = $0 }
         }
+        .hatchMark("OwnGroupBox")
     }
 
     private var subtitle: String {
         if entry.decided, let c = entry.component {
             return (c.codeName.map { "\($0) · " } ?? "") + (c.ticket == nil ? "decided" : "a ticket makes it so in the code")
         }
-        return entry.views.count > 1 ? "Hatch thinks these \(entry.views.count) views are one thing" : "Hatch thinks this is a component of its own"
+        // What they are for, when Hatch could read it (CM22): "…one thing: they show a state".
+        let purpose = entry.proposal?.purpose
+        return entry.views.count > 1 ? "Hatch thinks these \(entry.views.count) views are one thing" + (purpose.map { ": they \($0)" } ?? "")
+            : "Hatch thinks this is a component of its own" + (purpose.map { ": it \(AppViewScanner.thirdPerson($0))" } ?? "")
     }
 
     @ViewBuilder private var groupMenu: some View {
@@ -163,6 +199,7 @@ struct OwnRow: View {
             Divider()
             if let view { Button("Open \((view.file as NSString).lastPathComponent):\(view.line)") { model.openInXcode(view.file, line: view.line) } }
         }
+        .hatchMark("OwnRow")
     }
 
     private func shows(_ v: AppView?) -> String {
@@ -180,18 +217,21 @@ struct OwnThumb: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        if let image = model.ownPicture(id, dark: scheme == .dark) {
-            // Always the same height, so a wide view is cut at the column (and fades) rather than shrunk to nothing.
-            Image(nsImage: image).resizable().interpolation(.high)
-                .frame(width: image.size.height > 0 ? height * image.size.width / image.size.height : height, height: height)
-                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).clipped()
-                // A view wider than the column fades out instead of being cut.
-                .mask(LinearGradient(stops: [.init(color: .black, location: 0.8), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
-                // Last, so the gallery's own background melts into the box behind it (a mask applied after would isolate it).
-                .blendMode(scheme == .dark ? .lighten : .multiply)
-        } else {
-            Text("Not drawn yet").font(.callout).foregroundStyle(.tertiary)
+        Group {
+            if let image = model.ownPicture(id, dark: scheme == .dark) {
+                // Always the same height, so a wide view is cut at the column (and fades) rather than shrunk to nothing.
+                Image(nsImage: image).resizable().interpolation(.high)
+                    .frame(width: image.size.height > 0 ? height * image.size.width / image.size.height : height, height: height)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).clipped()
+                    // A view wider than the column fades out instead of being cut.
+                    .mask(LinearGradient(stops: [.init(color: .black, location: 0.8), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing))
+                    // Last, so the gallery's own background melts into the box behind it (a mask applied after would isolate it).
+                    .blendMode(scheme == .dark ? .lighten : .multiply)
+            } else {
+                Text("Not drawn yet").font(.callout).foregroundStyle(.tertiary)
+            }
         }
+        .hatchMark("OwnThumb")
     }
 }
 
@@ -251,7 +291,7 @@ struct OwnInspector: View {
 private struct InspectorHeading: View {
     let text: String
     init(_ text: String) { self.text = text }
-    var body: some View { Text(text.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.tertiary).padding(.top, 16).padding(.bottom, 6) }
+    var body: some View { Text(text.uppercased()).font(.caption.weight(.semibold)).foregroundStyle(.tertiary).padding(.top, 16).padding(.bottom, 6).hatchMark("InspectorHeading") }
 }
 
 /// The decision for one group: today's views, the one component after, whether the look changes, what happens.
@@ -387,6 +427,7 @@ struct OwnPictureList: View {
         }
         .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
+        .hatchMark("OwnPictureList")
     }
 }
 
@@ -424,7 +465,8 @@ struct OwnViewInspector: View {
                 InspectorHeading("Shows")
                 Text(view.shows.map { "“\($0)”" }.joined(separator: ", ")).fixedSize(horizontal: false, vertical: true)
             }
-            InspectorHeading("Used on")
+            OwnPlacesList(model: model, id: view.id)
+            InspectorHeading("In the code")
             if view.usedOn.isEmpty {
                 Text("Not used outside its file.").foregroundStyle(.secondary)
             } else {
@@ -445,6 +487,106 @@ struct OwnViewInspector: View {
             Button("Open \((view.file as NSString).lastPathComponent):\(view.line)") { model.openInXcode(view.file, line: view.line) }
                 .buttonStyle(.link).padding(.top, 14)
         }
+    }
+}
+
+/// Where the app draws a view: each screen it is on, cut around one use with the view outlined; a click shows the whole
+/// screen with every use outlined (CM21).
+struct OwnPlacesList: View {
+    @ObservedObject var model: DesignerModel
+    let id: String
+    @Environment(\.colorScheme) private var scheme
+    @State private var shown: CapturedScreen?
+
+    var body: some View {
+        let places = model.captures?.places(of: id, dark: scheme == .dark).filter { !$0.screen.isGallery } ?? []
+        let byScreen = Dictionary(grouping: places, by: \.screen.name).sorted { ($1.value.count, $0.key) < ($0.value.count, $1.key) }
+        InspectorHeading("On screen")
+        if byScreen.isEmpty {
+            Text(model.ownPicture(id, dark: scheme == .dark) == nil ? "The app doesn't draw it yet." : "Only in the app's gallery: no screen it draws shows it.")
+                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(byScreen.prefix(8), id: \.key) { name, ps in
+                    Button { shown = ps[0].screen } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            OwnPlaceThumb(model: model, place: ps.first(where: \.whole) ?? ps[0])
+                            Text(ps[0].screen.title + (ps.count > 1 ? " · \(ps.count) times" : "")).font(.callout).foregroundStyle(.secondary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Show the whole screen")
+                }
+                if byScreen.count > 8 { Text("And \(byScreen.count - 8) more screens.").font(.callout).foregroundStyle(.secondary) }
+            }
+            .sheet(item: $shown) { screen in OwnScreenSheet(model: model, screen: screen, id: id) { shown = nil } }
+        }
+    }
+}
+
+extension CapturedScreen: Identifiable { public var id: String { picture.path } }
+
+/// One use cut out with some of the screen around it, the view outlined in the accent colour.
+struct OwnPlaceThumb: View {
+    @ObservedObject var model: DesignerModel
+    let place: ComponentCaptures.Place
+    var height: CGFloat = 96
+
+    var body: some View {
+        let f = place.frame, b = place.screen.bounds
+        let margin = max(24, max(f.width, f.height) * 0.4)
+        let x0 = max(b.x, f.x - margin), y0 = max(b.y, f.y - margin)
+        let around = CaptureRect(x: x0, y: y0, width: min(b.maxX, f.maxX + margin) - x0, height: min(b.maxY, f.maxY + margin) - y0)
+        if let image = model.crop(place.screen, around) {
+            Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+                .overlay {
+                    GeometryReader { g in
+                        let k = g.size.width / around.width
+                        RoundedRectangle(cornerRadius: 3).strokeBorder(Color.accentColor, lineWidth: 2)
+                            .frame(width: f.width * k + 6, height: f.height * k + 6)
+                            .offset(x: (f.x - around.x) * k - 3, y: (f.y - around.y) * k - 3)
+                    }
+                }
+                .frame(maxHeight: height, alignment: .leading)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
+        }
+    }
+}
+
+/// A whole screen as the app drew it, every use of the view outlined.
+struct OwnScreenSheet: View {
+    @ObservedObject var model: DesignerModel
+    let screen: CapturedScreen
+    let id: String
+    let close: () -> Void
+
+    var body: some View {
+        let frames = screen.file.marks.indices.filter { screen.file.marks[$0].name == id }.compactMap { screen.frame($0) }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(screen.title).font(.headline)
+                Text("\(id), \(frames.count == 1 ? "once" : "\(frames.count) times")").foregroundStyle(.secondary)
+                Spacer()
+                Button("Done", action: close).keyboardShortcut(.defaultAction)
+            }
+            if let image = model.crop(screen, screen.bounds) {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+                    .overlay {
+                        GeometryReader { g in
+                            let k = g.size.width / max(1, screen.bounds.width)
+                            ForEach(Array(frames.enumerated()), id: \.offset) { _, f in
+                                RoundedRectangle(cornerRadius: 3).strokeBorder(Color.accentColor, lineWidth: 2)
+                                    .frame(width: f.width * k + 6, height: f.height * k + 6)
+                                    .offset(x: f.x * k - 3, y: f.y * k - 3)
+                            }
+                        }
+                    }
+                    .frame(width: 900)
+            }
+        }
+        .padding(20)
     }
 }
 

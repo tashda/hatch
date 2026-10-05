@@ -116,6 +116,59 @@ final class ComponentModelTests: XCTestCase {
         XCTAssertEqual(AppViewScanner.plainName("GitHubSettingsPage", screen: true), "GitHub settings")
     }
 
+    /// Views for the same purpose are one component even when drawn differently; the same look for another purpose is
+    /// not (CM22). The cases are Hatch's own: two chips that filter, drawn two ways; a sample drawn like a tag.
+    func testViewsAreGroupedByWhatTheyAreFor() {
+        let more = """
+        struct ThreadFilterChip: View {
+            let title: String
+            @Binding var isOn: Bool
+            var body: some View {
+                Button { isOn.toggle() } label: { Text(title).font(.callout).padding(.horizontal, 6).padding(.vertical, 4).background(.quaternary, in: Capsule()) }
+            }
+        }
+        struct ThreadKindChip: View {
+            let title: String
+            let selected: Bool
+            let action: () -> Void
+            var body: some View {
+                Button(action: action) { Text(title).font(.caption).padding(.horizontal, 8).padding(.vertical, 3).background(.quaternary, in: Capsule()) }
+            }
+        }
+        struct HXIssueSample: View {
+            let number: Int
+            let title: String
+            var body: some View {
+                Text(title).font(.caption).padding(.horizontal, 7).padding(.vertical, 2).background(Color.secondary.opacity(0.12), in: Capsule())
+            }
+        }
+        struct PageHeader: View {
+            let title: String
+            var body: some View { Text(title).font(.title2.weight(.semibold)).padding(.horizontal, 4) }
+        }
+        struct SectionHeader: View {
+            let title: String
+            var body: some View { Text(title).font(.caption.weight(.semibold)).padding(.horizontal, 2) }
+        }
+        """
+        let model = AppViewScanner.scan(files: [("Chips.swift", chips), ("More.swift", more)])
+        func purpose(_ id: String) -> String? { model.views.first { $0.id == id }?.purpose }
+        XCTAssertEqual(purpose("HXChip"), "state", "given a Turn")
+        XCTAssertEqual(purpose("HXProblemChip"), "state", "named for a problem")
+        XCTAssertEqual(purpose("PlainChip"), "label", "only text")
+        XCTAssertEqual(purpose("ThreadFilterChip"), "choice")
+        XCTAssertEqual(purpose("HXIssueSample"), "sample")
+        func group(_ id: String) -> AppComponentProposal? { model.proposals.first { $0.members.contains(id) } }
+        XCTAssertEqual(Set(group("ThreadFilterChip")!.members), ["ThreadFilterChip", "ThreadKindChip"], "both pick or filter, drawn two ways")
+        XCTAssertEqual(group("ThreadFilterChip")?.title, "Filter chip")
+        XCTAssertTrue(group("ThreadFilterChip")!.why.contains("drawn 2 ways"), group("ThreadFilterChip")!.why)
+        XCTAssertEqual(group("HXChip")?.title, "Status chip")
+        XCTAssertEqual(group("HXChip")?.purpose, "show a state")
+        XCTAssertEqual(group("HXIssueSample")?.members, ["HXIssueSample"], "drawn like a tag, but a sample of an issue")
+        XCTAssertEqual(group("PlainChip")?.title, "Tag")
+        XCTAssertNotEqual(group("PageHeader")?.id, group("SectionHeader")?.id, "text names any header: headers go by look")
+    }
+
     func testSizesAreProposedWhereTheyJumpNotByThirds() {
         func view(_ id: String, pad: Double, font: String) -> AppView {
             AppView(id: id, file: "f", line: 1, kind: .component, reason: "r", family: "card",

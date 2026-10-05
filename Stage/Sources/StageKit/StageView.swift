@@ -142,6 +142,7 @@ struct NoticeBar: View {
                 bar(text: "\(model.pendingWrites) change\(model.pendingWrites == 1 ? "" : "s") waiting for Hatch.", symbol: "clock", close: nil)
             }
         }
+        .hatchMark("NoticeBar")
     }
 
     private func bar(text: String, symbol: String, close: (() -> Void)?, action: (String, () -> Void)? = nil) -> some View {

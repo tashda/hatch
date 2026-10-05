@@ -16,6 +16,7 @@ struct SpecimenCanvas: View {
         content(design: design)
             .scaleEffect(scale, anchor: .topLeading)
             .frame(width: design.width * scale, height: design.height * scale, alignment: .topLeading)
+            .hatchMark("SpecimenCanvas")
     }
 
     /// The transport time reaches the specimen only when it has motion and the owner has used the transport bar.
@@ -61,6 +62,7 @@ struct CenteredCanvas: View {
             SpecimenCanvas(model: model, column: column, scenario: model.state.scenario, scale: scale, showRedlines: showRedlines)
             Spacer(minLength: 0)
         }
+        .hatchMark("CenteredCanvas")
     }
 }
 
@@ -103,6 +105,7 @@ struct SpecimenSlot: View {
             }
         }
         .frame(height: design.height * CGFloat(zoom) + 24)
+        .hatchMark("SpecimenSlot")
     }
 }
 
@@ -144,6 +147,7 @@ struct PinsLayer: View {
                 }
             }
         }
+        .hatchMark("PinsLayer", layered: true)
     }
 }
 
@@ -157,6 +161,7 @@ struct RedlinesOverlay: View {
                 redline(line)
             }
         }
+        .hatchMark("RedlinesOverlay", layered: true)
     }
 
     @ViewBuilder
@@ -268,6 +273,7 @@ struct PinComposer: View {
         }
         .padding(10)
         .background(Color(nsColor: NSColor.controlBackgroundColor))
+        .hatchMark("PinComposer")
     }
 }
 

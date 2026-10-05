@@ -746,6 +746,7 @@ struct HXSettingsCard<Content: View, Accessory: View>: View {
             }
         }
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .hatchMark("HXSettingsCard")
     }
 }
 

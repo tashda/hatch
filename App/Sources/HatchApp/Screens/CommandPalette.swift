@@ -809,5 +809,6 @@ private struct KeyCaps: View {
                     .background(.quaternary.opacity(0.7), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
             }
         }
+        .hatchMark("KeyCaps")
     }
 }

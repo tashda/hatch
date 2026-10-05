@@ -49,6 +49,7 @@ private struct FooterCard<Content: View>: View {
         }
         .padding(16)
         .frame(width: 330, alignment: .leading)
+        .hatchMark("FooterCard")
     }
 }
 
@@ -73,6 +74,7 @@ private struct CardRow: View {
             }
         }
         .font(.callout)
+        .hatchMark("CardRow")
     }
 }
 
@@ -101,6 +103,7 @@ struct FooterAgentSlots: View {
         }
         .contextMenu { menuItems }
         .autoReload(every: 4) { load() }
+        .hatchMark("FooterAgentSlots")
     }
 
     @ViewBuilder private var menuItems: some View {
@@ -130,6 +133,7 @@ private struct FreeSlot: View {
             .frame(width: 11, height: 11)
             .frame(width: 18, height: 18)
             .contentShape(Rectangle())
+            .hatchMark("FreeSlot")
     }
 }
 
@@ -180,6 +184,7 @@ struct FooterActivityLine: View {
         .onAppear(perform: load)
         .onChange(of: state.revision) { load() }
         .autoReload(every: 10) { load() }
+        .hatchMark("FooterActivityLine")
     }
 
     private func load() {
@@ -208,25 +213,28 @@ struct FooterProjectPill: View {
     @State private var probes: [(repo: Repo, probe: RepoProbe?)] = []
 
     var body: some View {
-        if let text {
-            Button { state.navigate(to: .health) } label: {
-                Label(text, systemImage: "arrow.triangle.branch")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .padding(.horizontal, 9).padding(.vertical, 3)
-                    .background(.quaternary.opacity(0.5), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .hoverCard(enabled: state.hxProject != nil) {
-                FooterCard(title: state.hxProject?.name ?? "Project") {
-                    if probes.isEmpty { ProgressView().controlSize(.small) }
-                    ForEach(probes, id: \.repo.id) { item in
-                        CardRow(label: hxRoleName(item.repo.role), value: describe(item.repo, item.probe),
-                                tint: item.probe?.exists == false ? Theme.critical : .secondary)
-                    }
+        Group {
+            if let text {
+                Button { state.navigate(to: .health) } label: {
+                    Label(text, systemImage: "arrow.triangle.branch")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .padding(.horizontal, 9).padding(.vertical, 3)
+                        .background(.quaternary.opacity(0.5), in: Capsule())
                 }
-                .task { await loadProbes() }
+                .buttonStyle(.plain)
+                .hoverCard(enabled: state.hxProject != nil) {
+                    FooterCard(title: state.hxProject?.name ?? "Project") {
+                        if probes.isEmpty { ProgressView().controlSize(.small) }
+                        ForEach(probes, id: \.repo.id) { item in
+                            CardRow(label: hxRoleName(item.repo.role), value: describe(item.repo, item.probe),
+                                    tint: item.probe?.exists == false ? Theme.critical : .secondary)
+                        }
+                    }
+                    .task { await loadProbes() }
+                }
             }
         }
+        .hatchMark("FooterProjectPill")
     }
 
     private var text: String? {
@@ -315,6 +323,7 @@ struct SaveLevelGlyph: View {
             }
         }
         .contentTransition(.symbolEffect(.replace))
+        .hatchMark("SaveLevelGlyph")
     }
 }
 
@@ -353,6 +362,7 @@ struct FooterStatusGlyph: View {
             }
             .task { await loadCI() }
         }
+        .hatchMark("FooterStatusGlyph")
     }
 
     private var title: String { state.saveTitle }

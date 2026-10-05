@@ -186,6 +186,7 @@ struct PinRow: View {
             .buttonStyle(.plain)
             .help("Delete this pin")
         }
+        .hatchMark("PinRow")
     }
 
     private var subtitle: String {
@@ -203,6 +204,7 @@ struct PinBadge: View {
             .foregroundStyle(Color.white)
             .frame(width: 18, height: 18)
             .background(Circle().fill(Color.red))
+            .hatchMark("PinBadge", layered: true)
     }
 }
 
@@ -256,6 +258,7 @@ struct DecisionCard: View {
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.08)))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(answer == nil ? Color.clear : Color.accentColor.opacity(0.5), lineWidth: 1))
+        .hatchMark("DecisionCard")
     }
 
     private var choices: some View {

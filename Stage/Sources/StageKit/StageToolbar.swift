@@ -12,6 +12,7 @@ struct StageToolbar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .hatchMark("StageToolbar")
     }
 
     // MARK: Row 1

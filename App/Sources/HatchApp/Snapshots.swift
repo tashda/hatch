@@ -27,13 +27,22 @@ enum Snapshots {
         self.priorPendingQuery = nil
     }
 
+    /// The window a step shows: the largest app window, visible ones first (a quiet run's hidden window can be ordered
+    /// out between steps; `save` puts it back below the desktop picture before it is drawn).
+    @MainActor private static var shownWindow: NSWindow? {
+        let windows = NSApp.windows.filter { $0.frame.width > 100 && $0.frame.height > 100 && !$0.className.contains("StatusBar") }
+        func area(_ w: NSWindow) -> CGFloat { w.frame.width * w.frame.height }
+        return windows.filter(\.isVisible).max { area($0) < area($1) } ?? windows.max { area($0) < area($1) }
+    }
+
+    /// The window's picture and, beside it, the frame of every view of the app's own on it (`HatchMarks`, CM21).
     @MainActor private static func save(_ window: NSWindow, name: String, mode: String, into folder: URL) {
-        guard let view = window.contentView?.superview ?? window.contentView,
-              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
-        view.cacheDisplay(in: view.bounds, to: rep)
-        if let png = rep.representation(using: .png, properties: [:]) {
-            try? png.write(to: folder.appendingPathComponent("\(name)-\(mode).png"))
+        if !window.isVisible {
+            window.level = HatchMarks.hiddenLevel
+            window.orderBack(nil)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
         }
+        HatchMarks.capture(window, as: "\(name)-\(mode)", into: folder)
     }
 
     static var folder: URL? {
@@ -236,6 +245,7 @@ enum Snapshots {
     }
 
     @MainActor static func run(state: AppState, into folder: URL) async {
+        HatchMarks.quiet()
         keepWindowStateOut()
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         if let only {
@@ -264,7 +274,7 @@ enum Snapshots {
         }
         try? await Task.sleep(nanoseconds: 2_500_000_000)
         keepWindowStateOut()
-        if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
+        if let w = shownWindow { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         try? await Task.sleep(nanoseconds: 800_000_000)
         let irisTicket = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Results grid loses scroll position after sort" })
         for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
@@ -275,12 +285,8 @@ enum Snapshots {
                 state.showPalette = false
                 state.route = route
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
-                guard let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView?.superview ?? window.contentView,
-                      let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
-                view.cacheDisplay(in: view.bounds, to: rep)
-                if let png = rep.representation(using: .png, properties: [:]) {
-                    try? png.write(to: folder.appendingPathComponent("\(name)-\(mode).png"))
-                }
+                guard let window = shownWindow else { continue }
+                save(window, name: name, mode: mode, into: folder)
             }
             state.snapshotTicketTab = .overview
             state.route = first.map(Route.ticket) ?? .desk
@@ -289,27 +295,23 @@ enum Snapshots {
             try? await Task.sleep(nanoseconds: 500_000_000)
             state.showAskPanel = true
             try? await Task.sleep(nanoseconds: 1_200_000_000)
-            if let window = NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView?.superview ?? window.contentView,
-               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
-                view.cacheDisplay(in: view.bounds, to: rep)
-                if let png = rep.representation(using: .png, properties: [:]) { try? png.write(to: folder.appendingPathComponent("ask-panel-\(mode).png")) }
-            }
+            if let window = shownWindow { save(window, name: "ask-panel", mode: mode, into: folder) }
             state.showAskPanel = false
             state.route = .tickets
             state.showPalette = false
             state.snapshotPresentation = .palette
             try? await Task.sleep(nanoseconds: 700_000_000)
-            if let window = NSApp.windows.first(where: { $0.isVisible }) {
+            if let window = shownWindow {
                 save(window, name: "command-palette", mode: mode, into: folder)
             }
             state.snapshotPresentation = .settings
             try? await Task.sleep(nanoseconds: 800_000_000)
-            if let window = NSApp.windows.first(where: { $0.isVisible }) {
+            if let window = shownWindow {
                 save(window, name: "settings", mode: mode, into: folder)
             }
             state.settingsPage = .agents
             try? await Task.sleep(nanoseconds: 1_200_000_000)
-            if let window = NSApp.windows.first(where: { $0.isVisible }) {
+            if let window = shownWindow {
                 save(window, name: "settings-agents", mode: mode, into: folder)
             }
             state.settingsPage = .general
@@ -321,7 +323,7 @@ enum Snapshots {
                 state.route = .ticket(irisTicket.id)
                 state.snapshotPresentation = nil
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
-                if let window = NSApp.windows.first(where: { $0.isVisible }) {
+                if let window = shownWindow {
                     save(window, name: "iris-review", mode: mode, into: folder)
                 }
             }
@@ -330,18 +332,23 @@ enum Snapshots {
             for step in ProjectSetupModel.Step.allCases {
                 state.snapshotSetupStep = step.rawValue
                 try? await Task.sleep(nanoseconds: 700_000_000)
-                if let window = NSApp.windows.first(where: { $0.isVisible }) {
+                if let window = shownWindow {
                     save(window, name: "add-project-\(step.rawValue + 1)-\(step.title.lowercased().replacingOccurrences(of: " ", with: "-"))", mode: mode, into: folder)
                 }
             }
 
             state.snapshotPresentation = .repositorySelector
             try? await Task.sleep(nanoseconds: 700_000_000)
-            if let window = NSApp.windows.first(where: { $0.isVisible }) {
+            if let window = shownWindow {
                 save(window, name: "repository-selector", mode: mode, into: folder)
             }
             state.snapshotPresentation = nil
             try? await Task.sleep(nanoseconds: 250_000_000)
+            // The views no screen above shows, drawn on purpose with sample data.
+            let gallery = ComponentGallery.window()
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            save(gallery, name: ComponentGallery.name, mode: mode, into: folder)
+            gallery.close()
         }
         restoreDemoPreferences()
         NSApp.terminate(nil)
@@ -353,7 +360,7 @@ enum Snapshots {
         let routes: [String: Route] = ["desk": .desk, "tickets": .tickets, "board": .board, "previews": .previews, "specs": .specs,
                                        "decisions": .decisions, "components": .components, "agents": .agents, "tests": .tests, "reports": .reports, "health": .health, "log": .log, "project": .projects,
                                        "new-ticket": .newTicket]
-        if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
+        if let w = shownWindow { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             NSApp.appearance = NSAppearance(named: appearance)
             if name == "component-gallery" {
@@ -361,7 +368,6 @@ enum Snapshots {
                 let w = ComponentGallery.window()
                 try? await Task.sleep(nanoseconds: 900_000_000)
                 save(w, name: name, mode: mode, into: folder)
-                ComponentGallery.writeFrames(into: folder, scale: w.backingScaleFactor)
                 w.close()
                 continue
             }
@@ -413,7 +419,7 @@ enum Snapshots {
                 state.snapshotSetupStep = n - 1
             }
             try? await Task.sleep(nanoseconds: 900_000_000)
-            if let window = NSApp.windows.first(where: { $0.isVisible }) { save(window, name: name, mode: mode, into: folder) }
+            if let window = shownWindow { save(window, name: name, mode: mode, into: folder) }
         }
     }
 

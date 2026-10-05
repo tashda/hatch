@@ -36,6 +36,7 @@ struct StageCenter: View {
         .background(palette.background)
         .foregroundStyle(palette.text)
         .environment(\.colorScheme, scheme)
+        .hatchMark("StageCenter")
     }
 
     @ViewBuilder
@@ -103,6 +104,7 @@ struct ScenarioStrip: View {
                 .help("A Sweep changes several kinds of the same thing. Show every kind as a row, or only the kind chosen in the controls.")
             }
         }
+        .hatchMark("ScenarioStrip")
     }
 
     private func chip(_ title: String, selected: Bool, palette: StagePalette) -> some View {
@@ -228,6 +230,7 @@ struct ColumnHeader: View {
                 .help("Remove \(column.title)")
             }
         }
+        .hatchMark("ColumnHeader")
     }
 
     private func badge(_ text: String, _ color: Color, _ stroke: Color) -> some View {
@@ -452,6 +455,7 @@ struct LayeredSlot: View {
             }
         }
         .frame(height: designHeight * CGFloat(zoom) + 24)
+        .hatchMark("LayeredSlot")
     }
 
     @ViewBuilder

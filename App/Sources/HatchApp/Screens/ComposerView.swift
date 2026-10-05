@@ -426,6 +426,7 @@ struct ShotThumb: View {
             .buttonStyle(.plain)
             .padding(3)
         }
+        .hatchMark("ShotThumb")
     }
 }
 

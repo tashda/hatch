@@ -162,28 +162,31 @@ private struct ToolbarActions: View {
     @EnvironmentObject var state: AppState
 
     var body: some View {
-        Button { state.openPalette(.tickets) } label: { Label("Command Palette", systemImage: "command") }
-            .labelStyle(.iconOnly)
-            .help("Command palette (\u{2318}K)")
-        // A ticket needs a project to belong to.
-        if !state.projects.isEmpty {
-            Button { state.navigate(to: .newTicket) } label: { Label("New Ticket", systemImage: "plus") }
+        Group {
+            Button { state.openPalette(.tickets) } label: { Label("Command Palette", systemImage: "command") }
                 .labelStyle(.iconOnly)
-                .help("New ticket (\u{2318}N)")
+                .help("Command palette (\u{2318}K)")
+            // A ticket needs a project to belong to.
+            if !state.projects.isEmpty {
+                Button { state.navigate(to: .newTicket) } label: { Label("New Ticket", systemImage: "plus") }
+                    .labelStyle(.iconOnly)
+                    .help("New ticket (\u{2318}N)")
+            }
+            // The icon takes the accent color while the panel is open; no pill behind it. The count of decisions waiting
+            // sits on it, since Iris's panel is where Decide starts.
+            Button { state.showAskPanel.toggle() } label: {
+                Image("IrisIcon")
+                    .foregroundStyle(state.showAskPanel ? Color.accentColor : Color.primary)
+                    .overlay(alignment: .topTrailing) {
+                        if state.decisionCount > 0 { DecideCountBadge(count: state.decisionCount) }
+                    }
+            }
+                .help((state.showAskPanel ? "Hide Iris (\u{2325}\u{2318}A)" : "Show Iris (\u{2325}\u{2318}A)")
+                      + (state.decisionCount > 0 ? ", \(state.decisionCount) decisions waiting" : ""))
+                .accessibilityLabel((state.showAskPanel ? "Hide Iris" : "Show Iris")
+                                    + (state.decisionCount > 0 ? ", \(state.decisionCount) decisions waiting" : ""))
         }
-        // The icon takes the accent color while the panel is open; no pill behind it. The count of decisions waiting
-        // sits on it, since Iris's panel is where Decide starts.
-        Button { state.showAskPanel.toggle() } label: {
-            Image("IrisIcon")
-                .foregroundStyle(state.showAskPanel ? Color.accentColor : Color.primary)
-                .overlay(alignment: .topTrailing) {
-                    if state.decisionCount > 0 { DecideCountBadge(count: state.decisionCount) }
-                }
-        }
-            .help((state.showAskPanel ? "Hide Iris (\u{2325}\u{2318}A)" : "Show Iris (\u{2325}\u{2318}A)")
-                  + (state.decisionCount > 0 ? ", \(state.decisionCount) decisions waiting" : ""))
-            .accessibilityLabel((state.showAskPanel ? "Hide Iris" : "Show Iris")
-                                + (state.decisionCount > 0 ? ", \(state.decisionCount) decisions waiting" : ""))
+        .hatchMark("ToolbarActions")
     }
 }
 
@@ -256,6 +259,7 @@ struct ProjectTitleMenu: View {
 
     var body: some View {
         menu(state.projects)
+        .hatchMark("ProjectTitleMenu")
     }
 
     private func menu(_ projects: [Project]) -> some View {

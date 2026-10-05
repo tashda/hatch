@@ -436,6 +436,7 @@ enum DesignChoiceHarness {
             .padding(36)
             .frame(width: 900, height: 720, alignment: .topLeading)
             .background(Color(nsColor: .textBackgroundColor))
+            .hatchMark("Harness")
         }
     }
 }

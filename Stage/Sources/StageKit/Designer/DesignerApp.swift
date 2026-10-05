@@ -81,12 +81,15 @@ enum DesignerApp {
             let inventory = options.appFolder.map { ComponentInventoryScanner.scan(appRoot: $0) }
             let capturesFolder = options.captures ?? options.notebook.map { ($0 as NSString).appendingPathComponent(ComponentCaptures.notebookPath) }
             let captures = capturesFolder.flatMap { ComponentCaptures.load(from: URL(fileURLWithPath: $0, isDirectory: true)) }
-            let model = try DesignerModel(source: source, inventory: inventory, appRoot: options.appFolder, captures: captures)
+            let model = try DesignerModel(source: source, inventory: inventory, appRoot: options.appFolder, captures: captures,
+                                          capturesFolder: capturesFolder.map { URL(fileURLWithPath: $0, isDirectory: true) })
             let d = DesignerDelegate(model: model, snapshotDirectory: options.snapshotDirectory)
             d.liveOnly = options.liveOnly
             delegate = d
             let app = NSApplication.shared
             app.setActivationPolicy(.regular)
+            // A snapshot run stays out of the owner's way: never forward, its windows hidden but drawn (CM21).
+            if options.snapshotDirectory != nil { HatchMarks.quiet() }
             // Its own icon even when started from a plain Stage (a Stage path set in Settings › Tools).
             app.applicationIconImage = StageIcon.image(.designer)
             app.delegate = d
@@ -115,7 +118,7 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                          backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
         w.title = "\(model.appName) — Live"
-        w.contentView = NSHostingView(rootView: LiveWindowView(model: model, live: model.live))
+        w.contentView = NSHostingView(rootView: LiveWindowView(model: model, live: model.live).hatchMarksRoot())
         w.center()
         w.makeKeyAndOrderFront(nil)
         liveWindow = w
@@ -140,15 +143,14 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                          backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
         w.title = "Components · \(model.appName)"
-        w.contentView = NSHostingView(rootView: DesignerView(model: model))
+        w.contentView = NSHostingView(rootView: DesignerView(model: model).hatchMarksRoot())
         w.contentMinSize = NSSize(width: 980, height: 600)
         w.center()
         w.makeKeyAndOrderFront(nil)
         window = w
         model.openLiveWindow = { [weak self] in self?.openLiveWindow() }
         installMouseBack()
-        NSApp.activate(ignoringOtherApps: true)
-        if snapshotDirectory != nil { Task { @MainActor in await snapshots() } }
+        if snapshotDirectory != nil { Task { @MainActor in await snapshots() } } else { NSApp.activate(ignoringOtherApps: true) }
     }
 
     /// The mouse's back button (3) does what the role's Back link does: from a role to its element. There is no forward.
@@ -250,21 +252,21 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
             // notebook): the page, a group, a view, a group merged into another, a decision, a view made its own.
             func shot(_ name: String) async { try? await Task.sleep(nanoseconds: 700_000_000); save(window, name, dir) }
             model.selection = .own("chip"); model.ownPick = nil
-            await shot("own-1-page")
+            await shot("own-1-page-light")
             let chips = model.ownGroups("chip")
             if let first = chips.first {
-                model.ownPick = .group(first.id); await shot("own-2-group")
-                if let v = first.views.first { model.ownPick = .view(v); await shot("own-3-view") }
+                model.ownPick = .group(first.id); await shot("own-2-group-light")
+                if let v = first.views.first { model.ownPick = .view(v); await shot("own-3-view-light") }
                 if let other = chips.dropFirst().first {
-                    model.merge(other, into: first); await shot("own-4-merged")
+                    model.merge(other, into: first); await shot("own-4-merged-light")
                     model.undo(); model.ownNotice = nil
                 }
                 if let entry = model.ownEntry(first.id) {
                     model.decide(entry, title: "Status chip", codeName: "StatusChip", look: entry.views.first)
-                    model.ownPick = .group(first.id); await shot("own-5-decided")
+                    model.ownPick = .group(first.id); await shot("own-5-decided-light")
                 }
                 if let lone = model.ownGroups("chip").last, let view = lone.views.first, lone.id != first.id {
-                    model.newComponent([view], from: lone, title: "Footer status"); await shot("own-6-new")
+                    model.newComponent([view], from: lone, title: "Footer status"); await shot("own-6-new-light")
                 }
                 // The same page in dark mode, with a group selected.
                 model.appearance = .dark
@@ -274,7 +276,7 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
             if !model.ownQuestions.isEmpty {
                 model.selection = .ownQuestions
                 try? await Task.sleep(nanoseconds: 600_000_000)
-                save(window, "own-questions", dir)
+                save(window, "own-questions-light", dir)
             }
         }
         // The live window: the shell, then its sheet, alert and empty state.
@@ -305,21 +307,11 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
+    /// The window's picture and the frames of Hatch's own views on it (CM21), taken without bringing it forward: the
+    /// window stays hidden below the desktop picture and draws as a front window (`hatchMarksRoot`).
     private func save(_ window: NSWindow, _ name: String, _ dir: URL) {
-        // Capture it as the active window, as the owner sees it (inactive windows draw prominent buttons grey).
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-        let url = dir.appendingPathComponent(name + ".png")
-        // A real window capture draws Liquid Glass; fall back to the view's own bitmap when capture is not allowed.
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        p.arguments = ["-x", "-o", "-l", String(window.windowNumber), url.path]
-        try? p.run()
-        p.waitUntilExit()
-        if p.terminationStatus == 0, FileManager.default.fileExists(atPath: url.path) { return }
-        guard let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
-        view.cacheDisplay(in: view.bounds, to: rep)
-        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        window.displayIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        HatchMarks.capture(window, as: name, into: dir)
     }
 }

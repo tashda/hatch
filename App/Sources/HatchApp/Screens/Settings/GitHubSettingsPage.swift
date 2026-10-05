@@ -541,6 +541,7 @@ private struct PermissionRow: View {
             Text(need.title)
             Text(need.reason)
         }
+        .hatchMark("PermissionRow")
     }
 
     private func value(granted: GitHubAccess, met: Bool) -> String {
@@ -564,6 +565,7 @@ private struct RepoName: View {
             }
             Text(name).lineLimit(1).truncationMode(.middle)
         }
+        .hatchMark("RepoName")
     }
 }
 
@@ -580,6 +582,7 @@ private struct Subtitle: View {
         }
         .font(.callout)
         .foregroundStyle(critical ? Theme.critical : .secondary)
+        .hatchMark("Subtitle")
     }
 }
 
@@ -601,6 +604,7 @@ private struct GitHubAvatar: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .accessibilityHidden(true)
+        .hatchMark("GitHubAvatar")
     }
 
     private var placeholder: some View {

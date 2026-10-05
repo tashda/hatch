@@ -12,19 +12,23 @@ struct HatchApp: App {
         if Snapshots.demoMode {
             UserDefaults.standard.setVolatileDomain(["ApplePersistenceIgnoreState": true], forName: UserDefaults.argumentDomain)
         }
+        // A snapshot run never comes forward or shows a window to the owner, who may be working (CM21).
+        if Snapshots.folder != nil { MainActor.assumeIsolated { HatchMarks.quiet() } }
     }
 
     /// The app's state, and the menu bar item that reads it; the item is added on the next turn of the run loop, once
     /// the app has finished launching.
     @MainActor private static func makeState() -> AppState {
         let state = (Snapshots.folder == nil && !Snapshots.demoMode) ? AppState.live() : Snapshots.demoState()
-        DispatchQueue.main.async { MenuBarMenu.shared.start(state: state) }
+        // Not in a snapshot run: a second Hatch item would appear in the owner's menu bar.
+        if Snapshots.folder == nil || Snapshots.only == "menu-bar" { DispatchQueue.main.async { MenuBarMenu.shared.start(state: state) } }
         return state
     }
 
     var body: some Scene {
         WindowGroup(id: AppState.mainWindowId) {
             RootView()
+                .hatchMarksRoot()
                 .environmentObject(state)
                 .background(WindowTag(identifier: HatchWindows.mainIdentifier))
                 .background(MenuBarInstaller())
@@ -79,7 +83,7 @@ struct HatchApp: App {
 
         // A regular window lets NavigationSplitView place its sidebar toggle in the titlebar.
         Window("Settings", id: "settings") {
-            SettingsView().environmentObject(state)
+            SettingsView().hatchMarksRoot().environmentObject(state)
         }
         .defaultSize(width: 1040, height: 720)
 

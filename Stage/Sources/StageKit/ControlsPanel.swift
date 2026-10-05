@@ -199,6 +199,7 @@ struct ControlRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .hatchMark("ControlRow")
     }
 }
 
@@ -210,6 +211,7 @@ struct SectionLabel: View {
         Text(text.uppercased())
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
+            .hatchMark("SectionLabel")
     }
 }
 
@@ -221,5 +223,6 @@ struct NewBadge: View {
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
             .background(Capsule().fill(Color.accentColor))
+            .hatchMark("NewBadge")
     }
 }

@@ -70,6 +70,18 @@ public final class StageClient: @unchecked Sendable {
         return try Self.system(json)
     }
 
+    /// Starts drawing the app's screens with its capture command (CM21); it runs in Hatch for minutes.
+    public func startCapture(project: String) throws -> (running: Bool, message: String) {
+        let json = try request("POST", "/v1/projects/\(Self.enc(project))/captures", [:], key: UUID().uuidString)
+        return (json["running"]?.boolValue ?? false, json["message"]?.stringValue ?? "")
+    }
+
+    /// Whether a capture runs, and how the last one ended.
+    public func captureStatus(project: String) throws -> (running: Bool, message: String) {
+        let json = try request("GET", "/v1/projects/\(Self.enc(project))/captures", nil, key: nil)
+        return (json["running"]?.boolValue ?? false, json["message"]?.stringValue ?? "")
+    }
+
     /// The owner's templates and the one marked for new projects (CD46, CD47).
     public func componentTemplates() throws -> (defaultId: String?, saved: [SavedTemplate]) {
         try Self.templates(try request("GET", "/v1/component-templates", nil, key: nil))

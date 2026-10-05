@@ -185,6 +185,7 @@ struct MarkupEditor<Trailing: View>: View {
             }
             canvas
         }
+        .hatchMark("MarkupEditor")
     }
 
     private func toolButton(_ t: Tool, _ symbol: String, _ name: String) -> some View {
@@ -343,5 +344,6 @@ struct ShotMarksLayer: View {
         }
         .frame(width: size.width, height: size.height, alignment: .topLeading)
         .allowsHitTesting(false)
+        .hatchMark("ShotMarksLayer")
     }
 }
