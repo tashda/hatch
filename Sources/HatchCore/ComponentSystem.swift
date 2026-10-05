@@ -28,6 +28,8 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
     /// What the owner still has to decide: looks to pick at setup, mismatches found later (DS4, DS7). Answered in the
     /// Components Designer or with `hatch components answer`; each answer changes the system and leaves the list.
     public var questions: [ComponentQuestion]
+    /// Rules beyond roles (NF4): composition, wording, placement and usage.
+    public var rules: [ComponentRule]
     /// Whole groups that follow macOS (NF3): an element in a place ("all context menus"), or an area ("Settings").
     public var follows: [ComponentFollow]
     /// The oldest macOS the app runs on. macOS 27 is the reference (glass styles and the rest); generated code falls
@@ -38,13 +40,13 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
 
     public init(name: String, version: Int = 1, template: String? = nil, foundations: [ComponentFoundation] = [],
                 places: [ComponentPlace] = [], roles: [ComponentRole] = [], questions: [ComponentQuestion] = [],
-                minimumMacOS: String = ComponentSystem.referenceMacOS, follows: [ComponentFollow] = []) {
+                minimumMacOS: String = ComponentSystem.referenceMacOS, follows: [ComponentFollow] = [], rules: [ComponentRule] = []) {
         self.format = Self.currentFormat; self.name = name; self.version = version; self.template = template
         self.foundations = foundations; self.places = places; self.roles = roles; self.questions = questions
-        self.minimumMacOS = minimumMacOS; self.follows = follows
+        self.minimumMacOS = minimumMacOS; self.follows = follows; self.rules = rules
     }
 
-    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS, follows }
+    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS, follows, rules }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -58,6 +60,7 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         questions = try c.decodeIfPresent([ComponentQuestion].self, forKey: .questions) ?? []
         minimumMacOS = try c.decodeIfPresent(String.self, forKey: .minimumMacOS) ?? Self.referenceMacOS
         follows = try c.decodeIfPresent([ComponentFollow].self, forKey: .follows) ?? []
+        rules = try c.decodeIfPresent([ComponentRule].self, forKey: .rules) ?? []
     }
 
     /// True when macOS decides this element's look here: the role follows macOS, or a scope covers the element in this
@@ -164,6 +167,12 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         for id in duplicates(places.map(\.id)) { out.append("Place \(id) is listed twice.") }
         for id in duplicates(roles.map(\.id)) { out.append("Role \(id) is listed twice.") }
         for id in duplicates(questions.map(\.id)) { out.append("Question \(id) is listed twice.") }
+        for id in duplicates(rules.map(\.id)) { out.append("Rule \(id) is listed twice.") }
+        for r in rules {
+            guard let kind = r.info else { out.append("Rule \(r.id): no kind called \(r.kind)."); continue }
+            if kind.id == "note" { if r.text.trimmingCharacters(in: .whitespaces).isEmpty { out.append("Rule \(r.id) is a note without words.") }; continue }
+            if !kind.values.contains(where: { $0.id == r.value }) { out.append("Rule \(r.id): \(r.value) is not a value of \(kind.title.lowercased()).") }
+        }
         for p in places where ComponentPlace.standard.contains(where: { $0.id == p.id }) {
             out.append("Place \(p.id) is already a standard place; remove it from the system's own places.")
         }
@@ -233,6 +242,11 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
     /// The role table in a few hundred tokens (DS, workflow D): one line per role with its code, purpose and places.
     /// `looks` adds each role's look, for Iris (to spot a clash) and for drawings made in HTML.
     public func briefLines(looks: Bool = false) -> [String] {
+        roleLines(looks: looks) + rules.filter { !$0.isOff }.map { "- Rule: \($0.text)" + ($0.configurable ? " (to become a setting)" : "") }
+            + follows.map { "- Follows macOS, write no style: \($0.title)" }
+    }
+
+    func roleLines(looks: Bool) -> [String] {
         roles.map { r in
             let places = r.places.map { place($0)?.title ?? $0 }.joined(separator: ", ")
             var line = "- `\(r.codeName)` \(r.title)" + (r.perScreen.map { ", at most \($0) per screen" } ?? "") + ": \(places)"
@@ -294,6 +308,16 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
             }
         }
 
+        if !rules.isEmpty {
+            s += "\n## Rules\n\n"
+            for r in rules {
+                let kind = r.info
+                let links = (kind?.sources ?? []).compactMap { ComponentNative.reference($0) }.map { "[\($0.title)](\($0.url))" }
+                s += "- **\(kind?.title ?? r.kind)**: \(r.text)" + (r.isApple ? " Apple's choice." : "")
+                    + (r.configurable ? " Will become a setting in the app." : "") + (kind?.caveat.map { " \($0)" } ?? "")
+                    + (links.isEmpty ? "" : " (" + links.joined(separator: ", ") + ")") + "\n"
+            }
+        }
         if !follows.isEmpty {
             s += "\n## Following macOS\n\nmacOS decides the look here; write no style:\n\n" + follows.map { "- \($0.title)\n" }.joined()
         }

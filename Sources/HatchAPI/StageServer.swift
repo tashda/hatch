@@ -451,6 +451,23 @@ public final class StageServer: @unchecked Sendable {
                     try system.followMacOS(scope)
                     message = "Components: \(scope.title) follow macOS"
                 }
+            case "rule":
+                let kind = try body.string("kind", max: 60)
+                guard let info = ComponentRuleKind.named(kind) else { throw APIError(status: 400, code: "bad_request", message: "No rule kind \(kind).") }
+                if kind == "note" {
+                    let text = try body.string("text", max: 500)
+                    system.rules.append(ComponentRule(id: "note-\(system.rules.filter { $0.kind == "note" }.count + 1)", kind: "note", value: "text", text: text, status: .agreed))
+                } else {
+                    let value = try body.string("value", max: 60)
+                    guard info.values.contains(where: { $0.id == value }) else { throw APIError(status: 422, code: "invalid", message: "\(value) is not a value of \(kind).") }
+                    system.rules.removeAll { $0.kind == kind }
+                    system.rules.append(ComponentRule(id: kind, kind: kind, value: value, text: info.says(value), status: .agreed, decision: decision))
+                }
+                message = "Components: rule \(info.title.lowercased())"
+            case "removeRule":
+                let id = try body.string("id", max: 60)
+                system.rules.removeAll { $0.id == id }
+                message = "Components: remove rule \(id)"
             case "unfollow":
                 system.stopFollowing(try body.string("scope", max: 300))
                 message = "Components: stop following macOS"

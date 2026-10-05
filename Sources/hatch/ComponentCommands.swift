@@ -107,6 +107,32 @@ extension CoreCommands {
         c.out.emit(["follows": .array(system.follows.map { .string($0.id) })], text: message.replacingOccurrences(of: "Components: ", with: "") + ".")
     }
 
+    /// hatch components rule <kind> <value>   or   hatch components rule note "text"   [--remove <id>]
+    static func componentRule(_ c: Context) throws {
+        var (system, notebook) = try loadSystem(c)
+        if let id = c.args.option("remove") {
+            system.rules.removeAll { $0.id == id }
+        } else {
+            guard let kind = c.args.pos(2), let info = ComponentRuleKind.named(kind) else {
+                throw CLIError("Usage: hatch components rule <kind> <value>. Kinds: " + ComponentRuleKind.catalog.map(\.id).joined(separator: ", "))
+            }
+            if kind == "note" {
+                let text = c.args.rest(from: 3)
+                guard !text.isEmpty else { throw CLIError("Usage: hatch components rule note \"the rule in words\"") }
+                system.rules.append(ComponentRule(id: "note-\(system.rules.filter { $0.kind == "note" }.count + 1)", kind: "note", value: "text", text: text, status: .agreed))
+            } else {
+                guard let value = c.args.pos(3), info.values.contains(where: { $0.id == value }) else {
+                    throw CLIError("Values for \(kind): " + info.values.map(\.id).joined(separator: ", "))
+                }
+                system.rules.removeAll { $0.kind == kind }
+                system.rules.append(ComponentRule(id: kind, kind: kind, value: value, text: info.says(value), status: .agreed, decision: c.args.option("decision")))
+            }
+        }
+        try save(system, notebook: notebook, message: "Components: rules")
+        c.out.emit(["rules": .array(system.rules.map { .string("\($0.kind)=\($0.value)") })],
+                   text: system.rules.map { "  \($0.info?.title ?? $0.kind): \($0.text)" }.joined(separator: "\n"))
+    }
+
     /// hatch components agree [<role>]
     static func componentAgree(_ c: Context) throws {
         var (system, notebook) = try loadSystem(c)
@@ -162,8 +188,8 @@ extension CoreCommands {
         guard let folder = c.args.pos(2).map({ ($0 as NSString).expandingTildeInPath }) ?? project?.config?.repo(.app)?.localPath else {
             throw CLIError("Give the app's folder: hatch components check <folder>.")
         }
-        let inv = ComponentInventoryScanner.scan(appRoot: folder, excluding: [project?.config?.components?.path].compactMap { $0 })
-        var findings = ComponentCheck.findings(inv.uses, system: system, areaOf: { project?.config?.area(ofFile: $0) })
+        var (inv, findings) = ComponentCheck.all(appRoot: folder, excluding: [project?.config?.components?.path].compactMap { $0 }, system: system,
+                                                 areaOf: { project?.config?.area(ofFile: $0) })
         if let base = c.args.option("diff") {
             let diff = shellOutput(["git", "-C", folder, "diff", "-U0", "\(base)...HEAD", "--", "*.swift"])
             findings = ComponentCheck.inDiff(findings, diff: diff)
@@ -175,7 +201,12 @@ extension CoreCommands {
             let mine = findings.filter { $0.kind == kind }
             guard !mine.isEmpty else { continue }
             lines.append("\n\(kind.title) (\(mine.count))")
-            for f in mine.prefix(cap) { lines.append("  \(f.location)  \(f.message)") }
+            if kind == .rule {
+                // Per rule first: one rule can hold hundreds of lines (spacing typed in).
+                let byRule = Dictionary(grouping: mine, by: { $0.role ?? "" }).sorted { $0.value.count > $1.value.count }
+                lines.append("  " + byRule.map { "\(ComponentRuleKind.named($0.key)?.title ?? $0.key) \($0.value.count)" }.joined(separator: ", "))
+            }
+            for f in mine.prefix(cap) { lines.append("  \(f.location)  \(f.message)" + (kind == .rule ? " [\(f.role ?? "")]" : "")) }
             if mine.count > cap { lines.append("  and \(mine.count - cap) more (--all)") }
         }
         c.out.emit(["findings": .array(findings.map { f in

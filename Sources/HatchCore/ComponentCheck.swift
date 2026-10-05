@@ -18,6 +18,8 @@ public struct ComponentFinding: Equatable, Sendable {
         case unknownRole
         /// More of a role on one screen than it allows (two main actions).
         case tooMany
+        /// A rule of the system is broken (NF4); `role` holds the rule's id.
+        case rule
 
         public var title: String {
             switch self {
@@ -27,6 +29,7 @@ public struct ComponentFinding: Equatable, Sendable {
             case .wrongPlace: "Role used out of place"
             case .unknownRole: "Unknown role"
             case .tooMany: "Too many on one screen"
+            case .rule: "Breaks a rule"
             }
         }
     }
@@ -163,6 +166,15 @@ public enum ComponentCheck {
             }
         }
         return out
+    }
+
+    /// Everything for an app folder: the role findings and the rule findings (NF4).
+    public static func all(appRoot: String, excluding: [String] = [], system: ComponentSystem, areaOf: ((String) -> String?)? = nil)
+        -> (inventory: ComponentInventory, findings: [ComponentFinding]) {
+        let files = ComponentInventoryScanner.appFiles(appRoot: appRoot, excluding: excluding)
+        let inv = ComponentInventoryScanner.inventory(files: files)
+        let found = findings(inv.uses, system: system, areaOf: areaOf) + ComponentRuleCheck.findings(files: files, uses: inv.uses, system: system)
+        return (inv, found.sorted { ($0.file, $0.line) < ($1.file, $1.line) })
     }
 
     /// How much of the app already follows the system: uses through a role, uses whose look already matches their

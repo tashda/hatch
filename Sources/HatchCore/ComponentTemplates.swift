@@ -22,6 +22,13 @@ public enum ComponentTemplates {
     static let page = ComponentPlace.page
     static let actionRow = ComponentPlace.actionRow
 
+    /// Every template starts with Apple's rules (NF4).
+    static func withAppleRules(_ system: ComponentSystem) -> ComponentSystem {
+        var s = system
+        s.rules = ComponentRule.appleDefaults
+        return s
+    }
+
     /// The system's own colors and text styles, named by meaning (HIG Color: system colors, never hard-coded values).
     static let systemFoundations: [ComponentFoundation] = [
         ComponentFoundation("color.accent", .color, use: "The accent: selection, links, the main action. The user's accent color replaces it.", system: "accentColor"),
@@ -44,7 +51,7 @@ public enum ComponentTemplates {
         id: "native", title: "macOS Native",
         summary: "Apple's defaults throughout: every control follows macOS, GroupBox for boxes, a tab view to switch views, standard spacing. The safe start for anything new."
     ) { name in
-        ComponentSystem(name: name, template: "native",
+        withAppleRules(ComponentSystem(name: name, template: "native",
             foundations: systemFoundations,
             places: [page, actionRow],
             roles: [
@@ -130,7 +137,7 @@ public enum ComponentTemplates {
                     use: "A pane with nothing to show: say why and give the next step, ideally a button.",
                     places: ["page", "emptyState"], importance: .other,
                     recipe: ["action": "prominent"], custom: "ContentUnavailableView", sources: ["swiftui-contentunavailable"]),
-            ])
+            ]))
     }
 
     // MARK: Glass
@@ -141,7 +148,7 @@ public enum ComponentTemplates {
         id: "glass", title: "Glass",
         summary: "macOS everywhere it decides, plus Liquid Glass capsules with icon and label for a screen's own actions, one prominent glass action, small bordered buttons in rows and a glass section dock. Hatch's own look."
     ) { name in
-        ComponentSystem(name: name, template: "glass",
+        withAppleRules(ComponentSystem(name: name, template: "glass",
             foundations: systemFoundations + [
                 ComponentFoundation("space.related", .space, use: "Between related controls in Hatch-drawn views.", value: 8),
                 ComponentFoundation("space.group", .space, use: "Between groups, and inside Hatch-drawn panels.", value: 16),
@@ -249,6 +256,6 @@ public enum ComponentTemplates {
                     use: "A pane with nothing to show: say why and give the next step.",
                     places: ["page", "emptyState"], importance: .other,
                     recipe: ["action": "prominent"], custom: "ContentUnavailableView", sources: ["swiftui-contentunavailable"]),
-            ])
+            ]))
     }
 }

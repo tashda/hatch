@@ -275,3 +275,60 @@ final class ComponentFollowTests: XCTestCase {
         XCTAssertTrue(s.role("button.toolbar")!.followsMacOS)
     }
 }
+
+final class ComponentRuleTests: XCTestCase {
+    let source = #"""
+        struct V: View {
+            var body: some View {
+                List { Text("x") }
+                    .contextMenu {
+                        Button("Open", systemImage: "arrow.up.forward") {}
+                        Button("rename item...") {}
+                        Divider()
+                        Button("Delete", role: .destructive) {}.keyboardShortcut(.delete)
+                        Button("Duplicate") {}
+                    }
+                    .toolbar { Button("Refresh", systemImage: "arrow.clockwise") {} }
+                    .toolbarBackground(.red, for: .windowToolbar)
+                    .padding(12)
+            }
+        }
+        struct Cmds: Commands {
+            var body: some Commands { CommandMenu("Go") { Button("Open") {} } }
+        }
+        """#
+
+    func testAppleRulesAreCheckedInTheText() {
+        let system = ComponentTemplates.native.system(name: "Acme")
+        XCTAssertEqual(system.problems(), [])
+        XCTAssertEqual(Set(system.rules.map(\.kind)), Set(ComponentRuleKind.catalog.filter { $0.id != "note" }.map(\.id)))
+        XCTAssertTrue(system.rules.first { $0.kind == "destructiveLast" }!.isOff, "Apple states it only for iOS: off until the owner chooses")
+        let inv = ComponentInventoryScanner.inventory(files: [("V.swift", source)])
+        let f = ComponentRuleCheck.findings(files: [("V.swift", source)], uses: inv.uses, system: system)
+        let rules = Set(f.map { $0.role ?? "" })
+        XCTAssertEqual(rules, ["menuIcons", "ellipsis", "titleCase", "contextMenuShortcuts", "toolbarInMenuBar", "noBarBackgrounds", "standardSpacing"])
+        XCTAssertTrue(f.contains { $0.message.contains("rename item...") && $0.role == "titleCase" })
+        XCTAssertTrue(f.allSatisfy { $0.kind == .rule })
+    }
+
+    func testRulesCanBeChangedAndNotesAreOnlyRead() {
+        var s = ComponentTemplates.glass.system(name: "Acme")
+        let i = s.rules.firstIndex { $0.kind == "menuIcons" }!
+        s.rules[i].value = "never"
+        s.rules.append(ComponentRule(id: "note-1", kind: "note", value: "text", text: "Settings pages open with the most used setting first."))
+        XCTAssertEqual(s.problems(), [])
+        XCTAssertTrue(s.briefLines().contains("- Rule: Settings pages open with the most used setting first."))
+        XCTAssertTrue(s.readme().contains("## Rules"))
+        XCTAssertTrue(s.readme().contains("https://developer.apple.com/design/human-interface-guidelines/menus"))
+        s.rules[i].value = "sometimes"
+        XCTAssertTrue(s.problems().contains { $0.contains("sometimes is not a value") })
+    }
+
+    func testCapitalization() {
+        XCTAssertNil(ComponentRuleCheck.capitalizationProblem("Open in New Window", rule: "titleCase"))
+        XCTAssertNotNil(ComponentRuleCheck.capitalizationProblem("Open in new window", rule: "titleCase"))
+        XCTAssertNil(ComponentRuleCheck.capitalizationProblem("Save", rule: "titleCase"), "one word says nothing")
+        XCTAssertNotNil(ComponentRuleCheck.capitalizationProblem("Open In New Window", rule: "sentenceCase"))
+        XCTAssertNil(ComponentRuleCheck.capitalizationProblem("Run \\(name) now", rule: "titleCase"), "interpolation is skipped")
+    }
+}

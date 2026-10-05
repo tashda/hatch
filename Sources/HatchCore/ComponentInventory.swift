@@ -22,6 +22,8 @@ public struct ComponentInventory: Equatable, Sendable {
         public var line: Int
         /// The view type it is written in.
         public var view: String?
+        /// The literal title, when the code writes one (`Button("Rename…")`), for the wording rules (NF4).
+        public var title: String?
         /// How sure the place is: `structure` (a List, a `.toolbar`, a Form around it, here or where the view is used),
         /// `name` (a view's or helper's name), or `page` (the default for a window's content). Checks trust structure most.
         public var evidence: String = "structure"
@@ -125,6 +127,11 @@ public enum ComponentInventoryScanner {
     /// Every Swift file under `appRoot`, minus tests, build output and the `excluding` folders (the components
     /// themselves: their insides are definitions, not uses).
     public static func scan(appRoot: String, excluding: [String] = []) -> ComponentInventory {
+        inventory(files: appFiles(appRoot: appRoot, excluding: excluding))
+    }
+
+    /// The app's own Swift files for macOS, as path and text (tests, other platforms and `excluding` left out).
+    public static func appFiles(appRoot: String, excluding: [String] = []) -> [(path: String, text: String)] {
         let root = URL(fileURLWithPath: (appRoot as NSString).expandingTildeInPath).resolvingSymlinksInPath()
         let skip = excluding.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
         var texts: [(String, String)] = []
@@ -136,7 +143,7 @@ public enum ComponentInventoryScanner {
             guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
             texts.append((rel, text))
         }
-        return inventory(files: texts)
+        return texts
     }
 
     /// Folders and files for another system: `iOS/`, `TableProMobile/`, `Watch Extension/`, `View+iOS.swift`.
@@ -326,6 +333,8 @@ enum PlatformCondition {
 /// modifier chains without a parser.
 struct SwiftStructure {
     let b: [UInt8]
+    /// The source as written (strings intact), for reading titles.
+    let raw: [UInt8]
     /// For each bracket, the index of its partner; -1 elsewhere.
     var partner: [Int]
     let lineStarts: [Int]
@@ -334,6 +343,7 @@ struct SwiftStructure {
 
     init(_ text: String) {
         var bytes = Array(text.utf8)
+        raw = bytes
         Self.mask(&bytes)
         b = bytes
         partner = Array(repeating: -1, count: bytes.count)
@@ -496,6 +506,7 @@ struct SwiftStructure {
     static func isSpace(_ c: UInt8) -> Bool { c == 32 || c == 9 || c == 13 }
 
     func text(_ from: Int, _ to: Int) -> String { from < to ? String(decoding: b[from..<to], as: UTF8.self) : "" }
+    func rawText(_ from: Int, _ to: Int) -> String { from < to ? String(decoding: raw[from..<to], as: UTF8.self) : "" }
 
     func line(of i: Int) -> Int {
         var lo = 0, hi = lineStarts.count - 1
@@ -849,9 +860,9 @@ struct SwiftStructure {
 
     /// One control: its own call, trailing closures and modifiers, then what the enclosing blocks add.
     func control(_ element: String, nameEnd: Int, start: Int, scope: Scope, corpus: SwiftCorpus?, file: String) -> ComponentInventory.Use? {
-        var p = skipSpace(nameEnd, newlines: false), args = ""
+        var p = skipSpace(nameEnd, newlines: false), args = "", rawArgs = ""
         var closures: [(label: String, open: Int)] = []
-        if p < b.count, b[p] == UInt8(ascii: "("), partner[p] > p { args = text(p + 1, partner[p]); p = partner[p] + 1 }
+        if p < b.count, b[p] == UInt8(ascii: "("), partner[p] > p { args = text(p + 1, partner[p]); rawArgs = rawText(p + 1, partner[p]); p = partner[p] + 1 }
         let trailing = skipSpace(p, newlines: false)
         if trailing < b.count, b[trailing] == UInt8(ascii: "{"), partner[trailing] > trailing {
             closures.append(("", trailing)); p = partner[trailing] + 1
@@ -910,6 +921,8 @@ struct SwiftStructure {
         }
         return ComponentInventory.Use(element: element, place: context.place, recipe: recipe, importance: importance,
                                       role: env.role.map { "\(element).\($0)" }, file: file, line: line(of: start), view: context.view,
+                                      // Only a title written as the first argument (`Button("Rename…")`).
+                                      title: title(rawArgs: rawArgs, closures: closures),
                                       evidence: context.place == nil ? "none" : ["page", "name", "structure"][context.source.rawValue],
                                       branches: branches(of: start),
                                       trail: context.trail + (context.view.map { ["view \($0)"] } ?? []))
@@ -985,6 +998,20 @@ struct SwiftStructure {
         guard !context.preview else { return nil }
         return ComponentInventory.Use(element: "field", place: "toolbar", recipe: ["style": "automatic"], importance: .other,
                                       role: nil, file: file, line: line(of: start), view: context.view)
+    }
+
+    /// The literal title: the first argument (`Button("Rename…")`), or the label's `Label("…")` or `Text("…")`.
+    func title(rawArgs: String, closures: [(label: String, open: Int)]) -> String? {
+        if rawArgs.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("\"") { return Self.firstLiteral(rawArgs) }
+        guard let open = (closures.first { $0.label == "label" } ?? closures.last)?.open, partner[open] > open else { return nil }
+        let body = rawText(open + 1, partner[open])
+        for marker in ["Label(", "Text("] {
+            if let r = body.range(of: marker) {
+                let after = body[r.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                if after.hasPrefix("\"") { return Self.firstLiteral(after) }
+            }
+        }
+        return nil
     }
 
     /// How a button's label is made: from `systemImage:`, a title, or what the label closure draws.

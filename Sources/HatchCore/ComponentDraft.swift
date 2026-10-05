@@ -70,6 +70,7 @@ public enum ComponentDraft {
         let reference = (template ?? ComponentTemplates.glass).system(name: name)
         var system = ComponentSystem(name: name, template: nil, foundations: reference.foundations, places: ComponentPlace.common,
                                      roles: reference.roles, minimumMacOS: minimumMacOS)
+        system.rules = reference.rules.isEmpty ? ComponentRule.appleDefaults : reference.rules
         let placed = inventory.uses.filter { $0.place != nil && ComponentElement.named($0.element) != nil }
 
         // 1. Cells the skeleton lacks: join the same-purpose role whose places are nearest, if no role holds the cell.
