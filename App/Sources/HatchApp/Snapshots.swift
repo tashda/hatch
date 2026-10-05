@@ -172,6 +172,20 @@ enum Snapshots {
         for t in tickets.prefix(4) { try! store.record(t.id, actor: "hatch", kind: "status", payload: ["from": "toVerify", "to": "done"]) }
         try! store.logPull(summary: "17 issues updated", ok: true)
         try! store.logPull(summary: "Preview status unavailable", ok: false, error: "Checks are still running.")
+        // Decide: a design system question with its looks drawn in place (DS4), from a system in the demo notebook.
+        var system = ComponentTemplates.glass.system(name: "Acme")
+        system.questions = [ComponentQuestion(
+            id: "look.button.secondary", kind: .look, role: "button.secondary", title: "", options: [
+                .init(title: "", recipe: ["style": "bordered", "label": "titleOnly"], count: 27, examples: ["ShortcutsSettingsPage.swift:43", "SketchBoard.swift:460"], effect: ""),
+                .init(title: "", recipe: ["style": "glass", "label": "titleAndIcon"], count: 15, examples: ["DecideLab.swift:1713", "SpecsView.swift:174"], effect: ""),
+                .init(title: "", recipe: ["style": "plain", "label": "iconOnly"], count: 8, examples: ["TicketsView.swift:111"], effect: ""),
+                .init(title: "Follow macOS", follow: true, effect: "No look of its own: macOS decides, now and in later versions."),
+                .init(title: "Not sure yet", effect: "Keep the most used look as a provisional guess and decide when a ticket needs it.")],
+            reason: "18 looks are in use in the action row, bottom bar and floating bars. The first is the look most of them have today (27 of 58), so choosing it changes the fewest screens.")]
+        try? system.write(notebook: "/tmp/hatch-demo/app-notebook")
+        let look = ComponentsSetup.questionDraft(system.questions[0], system: system)
+        let lookTicket = try! store.createTicket(projectId: p.id, type: .question, title: look.title, body: look.body, area: "Components")
+        try! store.setQuestionOptions(ticketId: lookTicket.id, look.options)
         // Decide: a Question Hatch prepared about the components, and a plan over the limit (decisions CO11, DC8).
         let clash = try! store.createTicket(projectId: p.id, type: .question, title: "Two values for Color.accent", body: "", area: "Components", ghNumber: 170)
         try! store.setQuestionOptions(ticketId: clash.id, [

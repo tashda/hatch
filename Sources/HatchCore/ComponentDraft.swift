@@ -258,7 +258,7 @@ public enum ComponentDraft {
         let shown = Array(looks.prefix(maxOptions))
         var options = shown.map { l in
             let clean = sanitize(l.recipe.merging(l.look) { $1 }, element: element)
-            return ComponentQuestion.Option(title: ComponentRole.summary(l.look), recipe: clean.recipe, custom: clean.custom, count: l.count,
+            return ComponentQuestion.Option(title: ComponentWords.look(element: role.element, recipe: element.look(clean.recipe)), recipe: clean.recipe, custom: clean.custom, count: l.count,
                                      examples: l.examples,
                                      effect: "Make this the look of \(role.id); the \(total - l.count) uses with other looks move to it when their screens are next touched.")
         }
@@ -268,7 +268,8 @@ public enum ComponentDraft {
                                                 effect: "Keep the most used look as a provisional guess and decide when a ticket needs it."))
         let rest = looks.count - shown.count
         let places = role.places.map { ComponentPlace.title($0).lowercased() }.joined(separator: ", ")
-        var reason = "It is the look most of them have today (\(shown[0].count) of \(total)), so choosing it changes the fewest screens."
+        var reason = "\(looks.count) looks are in use in \(places)" + (rest > 0 ? " (\(rest) rare ones not shown)" : "")
+            + ". The first is the look most of them have today (\(shown[0].count) of \(total)), so choosing it changes the fewest screens."
         // Point at the option nearest the macOS 27 reference: same style, then the most settings in common.
         if let ref = reference?.roles(of: role.element).first(where: { $0.importance == role.importance && overlap($0.places, role.places) > 0 }) {
             let target = element.look(ref.recipe)
@@ -284,7 +285,7 @@ public enum ComponentDraft {
         }
         return ComponentQuestion(
             id: "look.\(role.id)", kind: .look, role: role.id,
-            title: "\(role.title): \(looks.count) looks in use in \(places)" + (rest > 0 ? " (\(rest) rare ones not shown)" : ""),
+            title: ComponentWords.lookQuestion(role),
             options: options, recommended: 0, reason: reason)
     }
 }
@@ -543,12 +544,19 @@ public extension ComponentsSetup {
     /// with the recommendation, and what each gains and costs (DC5).
     static func questionDraft(_ q: ComponentQuestion, system: ComponentSystem) -> Draft {
         let total = q.options.reduce(0) { $0 + $1.count }
+        // Plain words, worked out from the system each time so questions written by an older Hatch read the same.
+        let role = q.role.flatMap { system.role($0) }
+        let element = role.flatMap { ComponentElement.named($0.element) }
+        func words(_ o: ComponentQuestion.Option) -> String {
+            guard let r = o.recipe, let role, let element else { return o.title }
+            return ComponentWords.look(element: role.element, recipe: element.look(r)) + (o.custom.map { " (\($0))" } ?? "")
+        }
         let options = q.options.enumerated().map { i, o -> QuestionOption in
             let gain: String, cost: String
             if o.follow == true { gain = "macOS decides, now and in later versions."; cost = "Hand styling there is flagged." }
             else if o.recipe == nil { gain = "Nothing changes now."; cost = "Stays a guess until a ticket needs it." }
             else { gain = "\(o.count) of \(total) already look like this."; cost = "\(total - o.count) move to it when their screens are touched." }
-            return QuestionOption(key: String(i), title: o.title, detail: o.recipe == nil ? o.effect : (o.examples.isEmpty ? nil : "e.g. " + o.examples.joined(separator: ", ")),
+            return QuestionOption(key: String(i), title: words(o), detail: o.recipe == nil ? o.effect : (o.examples.isEmpty ? nil : "e.g. " + o.examples.joined(separator: ", ")),
                                   recommended: i == q.recommended, why: i == q.recommended ? q.reason : nil, gain: gain, cost: cost)
         }
         let body = """
@@ -559,7 +567,8 @@ public extension ComponentsSetup {
             \(questionMarker(q.id))
 
             """
-        var d = Draft(type: .question, title: q.title, body: body, options: options)
+        let title = q.kind == .look && role != nil ? ComponentWords.lookQuestion(role!) : q.title
+        var d = Draft(type: .question, title: title, body: body, options: options)
         d.area = area
         return d
     }
@@ -567,9 +576,10 @@ public extension ComponentsSetup {
 
 public extension HatchStore {
     /// Keeps Decide in step with the design system: a prepared Question for each open question without one, and drops
-    /// the ones whose question was answered elsewhere (the Designer, the CLI). Returns what changed.
+    /// the ones whose question was answered elsewhere (the Designer, the CLI), and rewords the ones still waiting.
+    /// Returns what changed.
     @discardableResult
-    func syncComponentQuestions(projectId: Int, system: ComponentSystem) throws -> (added: Int, dropped: Int) {
+    func syncComponentQuestions(projectId: Int, system: ComponentSystem) throws -> (added: Int, dropped: Int, updated: Int) {
         var filter = TicketFilter(); filter.projectId = projectId; filter.area = ComponentsSetup.area
         let existing = try tickets(filter).filter { $0.type == .question }
         var byQuestion: [String: Ticket] = [:]
@@ -587,7 +597,17 @@ public extension HatchStore {
             try move(t.id, to: .dropped, actor: .hatch, reason: "answered in the Components Designer")
             dropped += 1
         }
-        return (added, dropped)
+        // Questions still waiting take the current wording (titles and options in plain words).
+        var updated = 0
+        for q in system.questions where q.kind != .change {
+            guard let t = byQuestion[q.id], t.status == .draft else { continue }
+            let d = ComponentsSetup.questionDraft(q, system: system)
+            var changed = false
+            if t.title != d.title || t.body != d.body { try update(t.id, title: d.title, body: d.body, actor: .hatch); changed = true }
+            if try questionOptions(ticketId: t.id) != d.options { try setQuestionOptions(ticketId: t.id, d.options); changed = true }
+            if changed { updated += 1 }
+        }
+        return (added, dropped, updated)
     }
 }
 

@@ -1,0 +1,94 @@
+import Foundation
+
+// A look in plain words (decision CP1's follow-up: decisions are judged by eye, then by words). A recipe such as
+// `style plain, label iconOnly` reads "Icon only, no border"; settings left out are macOS's default and are said that
+// way, so every option names the whole control, not just what differs.
+
+public enum ComponentWords {
+    /// The whole look of a control, in the words a person uses.
+    public static func look(element: String, recipe: [String: String]) -> String {
+        var parts: [String]
+        switch element {
+        case "button": parts = button(recipe)
+        case "menu": parts = menu(recipe)
+        case "picker":
+            parts = [["menu": "Pop-up menu", "segmented": "Segmented control", "inline": "Inline list", "radioGroup": "Radio buttons",
+                      "palette": "Palette"][recipe["style"] ?? ""] ?? "Standard picker (a pop-up menu)"]
+            if recipe["label"] == "hidden" { parts.append("no label") }
+        case "toggle":
+            parts = [["switch": "Switch", "checkbox": "Checkbox", "button": "Toggle button"][recipe["style"] ?? ""] ?? "Standard toggle (a checkbox)"]
+        case "field":
+            parts = [["roundedBorder": "Rounded field", "plain": "Plain field, no border", "squareBorder": "Square field"][recipe["style"] ?? ""] ?? "Standard text field"]
+        case "switcher":
+            parts = [["segmented": "Segmented control", "menu": "Pop-up menu", "tabs": "Tabs", "dock": "Text dock"][recipe["style"] ?? ""] ?? "Segmented control"]
+        case "card":
+            parts = [["groupBox": "Group box", "formSection": "Form section", "custom": "Own surface"][recipe["container"] ?? ""] ?? "Group box"]
+            if let s = recipe["surface"], s != "none" { parts.append(s == "glass" ? "glass" : s) }
+            if recipe["border"] == "hairline" { parts.append("hairline border") }
+            if recipe["shadow"] == "soft" { parts.append("soft shadow") }
+        case "row":
+            parts = ["List row"]
+            if recipe["separators"] == "hidden" { parts.append("no separators") }
+            if let a = recipe["accessory"], a != "none" { parts.append(a == "chevron" ? "chevron" : "badge") }
+        case "badge":
+            parts = [["capsule": "Capsule badge", "plain": "Plain count"][recipe["style"] ?? ""] ?? "System badge"]
+        case "toast":
+            parts = [(recipe["surface"].map { ["glass": "Glass", "material": "Material", "solid": "Solid"][$0] ?? $0 } ?? "Glass") + " toast"]
+            if let p = recipe["position"] { parts.append("at the \(p)") }
+        case "sheet":
+            parts = [["form": "Form-sized sheet", "page": "Page-sized sheet", "fitted": "Sheet fitted to its content"][recipe["sizing"] ?? ""] ?? "Standard sheet"]
+        case "emptyState":
+            parts = [["prominent": "Empty state with a button", "link": "Empty state with a link", "none": "Empty state, no next step"][recipe["action"] ?? ""] ?? "Empty state"]
+        default:
+            parts = [ComponentRole.summary(recipe)]
+        }
+        if let size = recipe["size"], size != "regular" { parts.append(size == "extraLarge" ? "extra large" : size) }
+        if let tint = recipe["tint"], tint != "none" { parts.append(tint == "accent" ? "accent color" : tint == "critical" ? "red" : "\(tint) color") }
+        let text = parts.joined(separator: ", ")
+        return text.prefix(1).uppercased() + text.dropFirst()
+    }
+
+    private static func button(_ r: [String: String]) -> [String] {
+        let label = r["label"]
+        let style = r["style"] ?? "automatic"
+        var parts: [String]
+        switch style {
+        case "bordered": parts = ["Bordered button"]
+        case "borderedProminent": parts = ["Filled button"]
+        case "borderless": parts = ["Borderless button"]
+        case "plain": parts = [label == "iconOnly" ? "Icon" : "Text", "no border"]
+        case "link": parts = ["Link"]
+        case "glass": parts = ["Glass button"]
+        case "glassProminent": parts = ["Filled glass button"]
+        default: parts = ["Standard button"]
+        }
+        switch label {
+        case "iconOnly" where style != "plain": parts.append("icon only")
+        case "titleOnly" where style != "plain" && style != "link": parts.append("text only")
+        case "titleAndIcon": parts.append("icon and text")
+        default: break
+        }
+        if let shape = r["shape"], shape != "automatic" { parts.append(["capsule": "capsule", "roundedRectangle": "rounded corners", "circle": "round"][shape] ?? shape) }
+        return parts
+    }
+
+    private static func menu(_ r: [String: String]) -> [String] {
+        var parts = [["button": "Menu button", "borderlessButton": "Borderless menu"][r["style"] ?? ""] ?? "Standard menu"]
+        if let look = r["look"], look != "automatic" { parts.append(look == "glass" ? "glass" : look) }
+        if r["indicator"] == "hidden" { parts.append("no arrow") }
+        switch r["label"] {
+        case "iconOnly": parts.append("icon only")
+        case "titleOnly": parts.append("text only")
+        default: break
+        }
+        return parts
+    }
+
+    /// The question for a role whose looks compete: "How should main action buttons look?"
+    public static func lookQuestion(_ role: ComponentRole) -> String {
+        let title = role.title.lowercased()
+        guard let element = ComponentElement.named(role.element) else { return "How should \(title) look?" }
+        let noun = title.contains(element.title.lowercased()) ? title + "s" : "\(title) \(element.plural.lowercased())"
+        return "How should \(noun) look?"
+    }
+}

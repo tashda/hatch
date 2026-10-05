@@ -932,6 +932,7 @@ private struct DecideCard: View {
                 let detail = [o.detail, o.why].compactMap { $0 }.map { ".!?".contains($0.last ?? ".") ? $0 : $0 + "." }.joined(separator: " ")
                 return AnswerOption(id: o.key, title: o.title, detail: detail.isEmpty ? nil : detail, gain: o.gain, cost: o.cost, recommended: o.recommended, answer: o.key)
             }
+            choices = ComponentOptionSample.attach(choices, ticket: t, state: state)  // design system answers drawn in place
         case .plan:
             let (rec, why) = planRecommendation()
             choices = [AnswerOption(id: "approve", title: "Approve the plan", detail: rec == "approve" ? why : "The agent goes ahead with these files.", recommended: rec == "approve", answer: "approve"),

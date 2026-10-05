@@ -599,7 +599,7 @@ extension AppState {
     /// Brings Decide in step with the design system's open questions.
     func syncComponentQuestions(project: Project, system: ComponentSystem) {
         guard !Snapshots.demoMode,
-              let changed = try? store.syncComponentQuestions(projectId: project.id, system: system), changed.added + changed.dropped > 0 else { return }
+              let changed = try? store.syncComponentQuestions(projectId: project.id, system: system), changed.added + changed.dropped + changed.updated > 0 else { return }
         refresh()
     }
 
