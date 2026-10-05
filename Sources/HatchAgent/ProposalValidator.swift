@@ -10,6 +10,8 @@ public enum ProposalValidator {
         public var previous: ProposalManifest?
         /// What the owner has already answered: topic id to choice id.
         public var picks: [String: String]
+        /// True for a Sweep, whose survey must list its items (decision SW5).
+        public var isSweep: Bool = false
     }
 
     public typealias Rule = (Input) -> [GateIssue]
@@ -21,12 +23,43 @@ public enum ProposalValidator {
     /// The gate. Add a rule here and write one test for its code.
     public static let rules: [Rule] = [
         todayFirst, enoughProposals, specimenGainCost, specimenSizes, specimenSizeAdvice, duplicateIDs, controlQuestions, controlChoices,
-        questionRules, exhibitTopicRules, standardScenarios, presetRules, revisionRules, specIDAdvice,
+        questionRules, exhibitTopicRules, standardScenarios, presetRules, revisionRules, specIDAdvice, sweepItemRules,
     ]
 
-    public static func validate(_ manifest: ProposalManifest, previous: ProposalManifest? = nil, picks: [String: String] = [:]) -> [GateIssue] {
-        let input = Input(manifest: manifest, previous: previous, picks: picks)
+    public static func validate(_ manifest: ProposalManifest, previous: ProposalManifest? = nil, picks: [String: String] = [:], isSweep: Bool = false) -> [GateIssue] {
+        let input = Input(manifest: manifest, previous: previous, picks: picks, isSweep: isSweep)
         return rules.flatMap { $0(input) }
+    }
+
+    // MARK: Sweep items
+
+    /// A Sweep lists the several similar things it changes. The code check (file exists, name is in it) needs the app and is
+    /// `SweepItemCheck`, run by the offer.
+    static func sweepItemRules(_ i: Input) -> [GateIssue] {
+        guard i.isSweep else { return [] }
+        var out: [GateIssue] = []
+        let items = i.manifest.items
+        if items.count < 2 {
+            out.append(.error("items.too-few", "A Sweep needs its items: \(items.count) listed, at least 2 expected.",
+                              "Survey the code and list every instance in `items`: {id, title, name, file, kind}. If there is only one thing, say so with hatch ask."))
+        }
+        var seen = Set<String>()
+        for item in items {
+            if !seen.insert(item.id).inserted {
+                out.append(.error("items.duplicate-id", "Two items have the id '\(item.id)'.", "Give every item its own id."))
+            }
+            if item.title.trimmingCharacters(in: .whitespaces).isEmpty || item.name.trimmingCharacters(in: .whitespaces).isEmpty
+                || item.file.trimmingCharacters(in: .whitespaces).isEmpty {
+                out.append(.error("items.incomplete", "Item '\(item.id)' needs a title, a name and a file.",
+                                  "name is the type or view as the code spells it, file is its path relative to the app."))
+            }
+        }
+        if let previous = i.previous {
+            for old in previous.items where !items.contains(where: { $0.id == old.id }) {
+                out.append(.error("items.removed", "Item '\(old.id)' from the earlier version is gone.", "Keep earlier items; the owner drops the ones that do not belong."))
+            }
+        }
+        return out
     }
 
     // MARK: Specimens

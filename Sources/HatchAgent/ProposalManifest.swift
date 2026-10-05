@@ -1,4 +1,5 @@
 import Foundation
+import HatchCore
 
 /// What an agent hands in with `hatch offer` for a Swift Proposal. It mirrors the Echo Labs `RoundSpec`
 /// (controls, exhibits, questions, topic, presets, conformance) so the Stage can draw it and the gate can check it.
@@ -17,17 +18,20 @@ public struct ProposalManifest: Codable, Equatable, Sendable {
     public var presets: [ManifestPreset]
     public var scenarios: [ManifestScenario]
     public var conformance: ManifestConformance?
+    /// The several similar things a Sweep changes, as the survey found them (decision SW5). Empty for any other Proposal.
+    public var items: [ManifestItem]
 
     public init(revision: Int = 1, specs: [String] = [], summary: String = "", asked: String = "",
                 controls: [ManifestControl] = [], specimens: [ManifestSpecimen] = [], questions: [ManifestQuestion] = [],
                 exhibitTopic: ManifestTopic? = nil, presets: [ManifestPreset] = [], scenarios: [ManifestScenario] = [],
-                conformance: ManifestConformance? = nil) {
+                conformance: ManifestConformance? = nil, items: [ManifestItem] = []) {
+        self.items = items
         self.revision = revision; self.specs = specs; self.summary = summary; self.asked = asked
         self.controls = controls; self.specimens = specimens; self.questions = questions
         self.exhibitTopic = exhibitTopic; self.presets = presets; self.scenarios = scenarios; self.conformance = conformance
     }
 
-    private enum CodingKeys: String, CodingKey { case revision, specs, summary, asked, controls, specimens, exhibits, questions, exhibitTopic, presets, scenarios, conformance }
+    private enum CodingKeys: String, CodingKey { case revision, specs, summary, asked, controls, specimens, exhibits, questions, exhibitTopic, presets, scenarios, conformance, items }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -44,6 +48,7 @@ public struct ProposalManifest: Codable, Equatable, Sendable {
         presets = try c.decodeIfPresent([ManifestPreset].self, forKey: .presets) ?? []
         scenarios = try c.decodeIfPresent([ManifestScenario].self, forKey: .scenarios) ?? []
         conformance = try c.decodeIfPresent(ManifestConformance.self, forKey: .conformance)
+        items = try c.decodeIfPresent([ManifestItem].self, forKey: .items) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -59,6 +64,7 @@ public struct ProposalManifest: Codable, Equatable, Sendable {
         try c.encode(presets, forKey: .presets)
         try c.encode(scenarios, forKey: .scenarios)
         try c.encodeIfPresent(conformance, forKey: .conformance)
+        if !items.isEmpty { try c.encode(items, forKey: .items) }
     }
 
     /// Parses the JSON an agent hands in. Errors say where the JSON is wrong, in words an agent can act on.
@@ -83,6 +89,21 @@ public struct ProposalManifest: Codable, Equatable, Sendable {
     }
 
     public var proposalSpecimens: [ManifestSpecimen] { specimens.filter { !$0.isEchoToday } }
+}
+
+/// One thing a Sweep changes, found by the survey. `name` is the type or view as the code spells it, `file` is where it is
+/// (relative to the app), `kind` groups look-alikes. Hatch checks that the file exists and holds the name.
+public struct ManifestItem: Codable, Equatable, Sendable {
+    public var id: String
+    public var title: String
+    public var name: String
+    public var file: String
+    public var kind: String?
+    public var note: String?
+    public init(id: String, title: String, name: String, file: String, kind: String? = nil, note: String? = nil) {
+        self.id = id; self.title = title; self.name = name; self.file = file; self.kind = kind; self.note = note
+    }
+    public var input: SweepItemInput { SweepItemInput(key: id, title: title, name: name, file: file, kind: kind, note: note) }
 }
 
 public enum ManifestError: Error, CustomStringConvertible, Equatable {

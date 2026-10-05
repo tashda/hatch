@@ -21,6 +21,8 @@ public struct OfferService {
     /// Extra checks that need more than the manifest, such as building the Stage and running it headless (S6).
     /// They run after the manifest rules pass and may add issues; any error rejects the offer.
     public var stageCheck: (@Sendable (Ticket, ProposalManifest) throws -> [GateIssue])?
+    /// Where a Sweep's items are looked up. Nil means the ticket's own app workspace; tests set it.
+    public var itemRoot: (@Sendable (Ticket) -> String?)?
 
     public init(store: HatchStore, agent: String = "agent", stageCheck: (@Sendable (Ticket, ProposalManifest) throws -> [GateIssue])? = nil) {
         self.store = store; self.agent = agent; self.stageCheck = stageCheck
@@ -35,7 +37,7 @@ public struct OfferService {
     }
 
     public func offer(ticketId: Int, manifest: ProposalManifest) throws -> OfferResult {
-        let t = try offerable(ticketId, types: [.proposal])
+        let t = try offerable(ticketId, types: [.proposal, .sweep])
         let revising = t.status == .revising
         var issues: [GateIssue] = []
 
@@ -47,7 +49,12 @@ public struct OfferService {
         var previous: ProposalManifest?
         if revising, let json = try store.proposalManifest(ticketId: ticketId) { previous = try? ProposalManifest.parse(json: json) }
         let picks = Dictionary(try store.picks(ticketId: ticketId).map { ($0.topic, $0.choice) }, uniquingKeysWith: { _, b in b })
-        issues += ProposalValidator.validate(manifest, previous: previous, picks: picks)
+        issues += ProposalValidator.validate(manifest, previous: previous, picks: picks, isSweep: t.type == .sweep)
+        // A Sweep's items are checked against the code in its own workspace (SW5): the file exists and holds the name.
+        if t.type == .sweep, !issues.hasErrors {
+            if let root = appRoot(for: t) { issues += SweepItemCheck.problems(manifest.items, appRoot: root) }
+            else { issues.append(.warning("items.unchecked", "The items could not be checked against the code: this ticket has no app workspace.", "Run hatch take again to get one.")) }
+        }
         if !issues.hasErrors, let stageCheck { issues += try stageCheck(t, manifest) }
         if issues.hasErrors { return try reject(t, issues) }
 
@@ -55,6 +62,7 @@ public struct OfferService {
         let moved = try store.db.transaction { () -> Ticket in
             if revising { try store.recordRevision(ticketId: ticketId, summary: manifest.summary, added: Self.added(in: manifest, since: previous)) }
             try store.saveProposal(ticketId: ticketId, manifestJSON: json)
+            if t.type == .sweep { try store.saveSweepItems(ticketId: ticketId, items: manifest.items.map(\.input)) }
             return try finish(t, summary: manifest.summary, revision: manifest.revision, warnings: issues.count, issues: issues)
         }
         return .offered(ticket: moved, revision: manifest.revision, warnings: issues)
@@ -133,6 +141,13 @@ public struct OfferService {
             if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
             try fm.copyItem(at: source, to: target)
         }
+    }
+
+    /// The ticket's workspace in the app repository, where the code a Sweep's items name can be read. Nil without one.
+    func appRoot(for t: Ticket) -> String? {
+        if let itemRoot { return itemRoot(t) }
+        guard let app = try? store.repo(projectId: t.projectId, role: .app), let ws = try? store.workspace(ticketId: t.id, repoId: app.id), ws.state == "active" else { return nil }
+        return ws.path
     }
 
     private func offerable(_ id: Int, types: Set<TicketType>) throws -> Ticket {

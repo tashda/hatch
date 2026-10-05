@@ -11,8 +11,42 @@ enum AgentCommands {
     static let all: [String: Handler] = [
         "take": take, "offer": offer, "ready": ready, "vet": vet,
         "sync": sync, "serve": serve, "import-labs": importLabs, "spec": spec, "workspace": workspace, "preview": preview,
-        "options": options, "notebook": notebook,
+        "options": options, "notebook": notebook, "item": item,
     ]
+
+    // hatch item list|building|built #151 [key]: the items of a Sweep (decision SW5). `built` records the commit that holds the
+    // item, one commit per item (SW7): the app workspace must be clean and the commit must not already belong to another item.
+    static func item(_ c: Context) throws {
+        let usage = "Usage: hatch item list '#151'   |   hatch item building '#151' <key>   |   hatch item built '#151' <key>"
+        guard let action = c.args.pos(1) else { throw CLIError(usage) }
+        let t = try c.ticket(c.args.pos(2))
+        guard t.type == .sweep else { throw CLIError("\(t.displayNumber) is a \(t.type.displayName), not a Sweep: it has no items.") }
+        let items = try c.store.sweepItems(ticketId: t.id)
+        if action == "list" {
+            let p = try c.store.sweepProgress(ticketId: t.id)
+            c.out.emit(.array(items.map { ["key": .string($0.key), "name": .string($0.name), "file": .string($0.file), "state": .string($0.state.rawValue)] }),
+                       text: items.isEmpty ? "\(t.displayNumber) has no items yet." : "\(p.settled) of \(p.total) settled\n" + items.map { "  \($0.key)  [\($0.state.displayName)]  \($0.name)  \($0.file)" }.joined(separator: "\n"))
+            return
+        }
+        guard let key = c.args.pos(3), let state = ["building": SweepItemState.building, "built": .built][action] else { throw CLIError(usage) }
+        var commit: String?
+        if state == .built {
+            let manager = WorkspaceManager(store: c.store)
+            guard let app = try c.store.repo(projectId: t.projectId, role: .app), let ws = try manager.list(ticketId: t.id).first(where: { $0.repoId == app.id && $0.state == "active" }) else {
+                throw CLIError("No app workspace for \(t.displayNumber).")
+            }
+            let status = try manager.status(ws)
+            guard status.isClean else { throw CLIError("The workspace has uncommitted files: \(status.dirtyFiles.prefix(5).joined(separator: ", ")). Commit this item's change first, then run hatch item built again.") }
+            if let other = items.first(where: { $0.key != key && $0.commit == status.headSha }) {
+                throw CLIError("This commit already holds item '\(other.key)'. Make a separate commit for '\(key)'.")
+            }
+            commit = status.headSha
+        }
+        let updated = try c.store.setSweepItem(ticketId: t.id, key: key, to: state, commit: commit, by: t.takenBy ?? "agent")
+        let p = try c.store.sweepProgress(ticketId: t.id)
+        c.out.emit(["key": .string(updated.key), "state": .string(updated.state.rawValue), "settled": .int(p.settled), "total": .int(p.total)],
+                   text: "\(updated.key) is \(updated.state.displayName). \(p.settled) of \(p.total) settled.")
+    }
 
     // hatch options #160 --option "A|Use actors|One actor per connection" --option "B|Locks" --recommend A --why "..."
     // An agent preparing a Question offers the owner options, one recommended with its reason (decision PS16).
@@ -152,6 +186,11 @@ enum AgentCommands {
             try c.store.record(t.id, actor: "hatch", kind: kind, payload: ["ok": .bool(ok), "detail": .string(detail), "seconds": .number(seconds)])
             lines.append("\(ok ? "ok  " : "FAIL") \(kind): \(detail)")
             if !ok { failures.append("\(kind): \(detail)") }
+        }
+        // A Sweep is ready when every item is settled (decision SW7).
+        if t.type == .sweep {
+            let open = try c.store.sweepItems(ticketId: t.id).filter { !$0.state.isSettled }
+            try step("items", ok: open.isEmpty, detail: open.isEmpty ? "every item is settled" : "\(open.count) item(s) are not built: \(open.map(\.key).joined(separator: ", ")). Build each, commit, and run hatch item built.")
         }
         for ws in spaces {
             guard let repo = repos.first(where: { $0.id == ws.repoId }) else { continue }

@@ -367,6 +367,25 @@ public enum Schema {
         );
         CREATE INDEX test_result_name ON test_result(bundle, suite, name);
         """,
+        // The items of a Sweep (decision SW5): the several similar things one ticket changes, as rows with a small status.
+        """
+        CREATE TABLE sweep_item(
+            id INTEGER PRIMARY KEY,
+            ticket_id INTEGER NOT NULL REFERENCES ticket(id) ON DELETE CASCADE,
+            key TEXT NOT NULL,
+            title TEXT NOT NULL,
+            name TEXT NOT NULL,
+            file TEXT NOT NULL,
+            kind TEXT,
+            note TEXT,
+            state TEXT NOT NULL DEFAULT 'todo',
+            commit_sha TEXT,
+            position INTEGER NOT NULL DEFAULT 0,
+            at REAL NOT NULL,
+            UNIQUE(ticket_id, key)
+        );
+        CREATE INDEX sweep_item_ticket ON sweep_item(ticket_id, position);
+        """,
     ]
 
     public static func migrate(_ db: Database) throws {

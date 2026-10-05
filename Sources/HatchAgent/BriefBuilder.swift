@@ -64,6 +64,7 @@ public enum BriefBuilder {
         out += try decisionLines(store, t)
         out += areaLines(config, t)
         out += componentLines(config, t, kind)
+        out += try sweepLines(store, t, kind, config)
         out += try repoLines(store, t)
         out += try notebookLines(store, t, config: config)
         if let config, !config.docs.isEmpty {
@@ -269,6 +270,33 @@ public enum BriefBuilder {
         return out
     }
 
+    /// A Sweep's items: the candidates to start the survey from, then the items with where each stands (decision SW5).
+    private static func sweepLines(_ store: HatchStore, _ t: Ticket, _ kind: AgentTaskKind?, _ config: ProjectConfig?) throws -> [String] {
+        guard t.type == .sweep, let kind else { return [] }
+        let items = try store.sweepItems(ticketId: t.id)
+        var out: [String] = []
+        if !items.isEmpty {
+            out.append("\n## Sweep items")
+            for i in items {
+                var line = "- \(i.key) [\(i.state.displayName)] \(i.name) in \(i.file)"
+                if let k = i.kind, !k.isEmpty { line += " · kind: \(k)" }
+                if let n = i.note, !n.isEmpty { line += " · note: \(Text.oneLine(n, 120))" }
+                out.append(line)
+            }
+        }
+        if kind == .prepare || kind == .revise, let folder = config?.componentsFolder, FileManager.default.fileExists(atPath: folder) {
+            let catalog = ComponentsScanner.catalog(at: folder, isPackage: config?.components.map { $0.product != nil } ?? true)
+            let prefix = (config?.components?.path).map { $0.hasSuffix("/") ? $0 : $0 + "/" } ?? ""
+            let words = IrisReading.ownerWords(title: t.originalTitle ?? t.title, body: t.originalBody ?? IrisReading.split(t.body).words)
+            let found = SweepCandidates.scan(text: words + " " + t.title, views: catalog.views, pathPrefix: prefix)
+            if !found.isEmpty {
+                out.append("\n## Candidates (a name scan, not the answer: confirm, remove and add)")
+                out += found.map { "- \($0.name) in \($0.file)" }
+            }
+        }
+        return out
+    }
+
     // MARK: Rules
 
     static func branchName(_ t: Ticket) -> String { "ticket/\(t.ghNumber ?? t.id)-\(HatchStore.slug(t.title).prefix(40))" }
@@ -316,7 +344,11 @@ public enum BriefBuilder {
                     "Give one recommendation and the reason. When the answer is a choice (how to build something, which approach), offer the options with `hatch options` (2 to 4, each with a short title, one line of what it gains and one of what it costs), recommend one and say why. The owner's choice becomes a recorded decision.",
                 ] + common + ["Hand the answer in with `hatch offer`. Never move the status yourself."]
             default:
-                return [
+                let sweep = t.type == .sweep ? [
+                    "This is a Sweep: one change to several similar things. First survey the code once and list every instance in the manifest `items`: {id, title, name, file, kind, note}. `name` is the type or view as the code spells it and `file` is its path relative to the app. Hatch checks both against the code, so list only what exists. Start from Candidates below (a name scan): confirm, remove and add.",
+                    "Group the items into `kind`s of look-alikes. Draw Today and the proposals on the most typical kind, and say in the summary how each other kind will look. One unified design for all of them, not one per item.",
+                ] : []
+                return sweep + [
                     "Look up the area in the Spec and note the Spec IDs you change; put them in the manifest `specs` and in the summary.",
                     "The first specimen is Today (`isToday: true`), drawn from what the app really does now. Read the real view in the app workspace listed under Repos, not from memory.",
                     "Then 2 to 4 proposals as Swift specimens in `specimens/<ticket>/` of the notebook workspace (a separate specimens repo only if Repos lists one), same sample data in all, each with `designWidth` and `designHeight` (340 to 700 wide, up to about 620 tall), and one line each of what it gains (`gain`) and costs (`cost`). No title inside a specimen.",
@@ -337,7 +369,11 @@ public enum BriefBuilder {
             ] + common + ["Hand it in with `hatch offer`. Never move the status yourself."]
         case .build:
             let limit = config?.planApprovalFileThreshold ?? 8
-            return [
+            let sweep = t.type == .sweep ? [
+                "This is a Sweep: work the items under Sweep items in order, in this one worktree and branch. Build the shared component from the owner's accepted choices first (it is the example the rest adopt); then each item adopts it, with no variations unless its note says so.",
+                "One commit per item. After each commit run `hatch item built \(t.displayNumber) <key>`: Hatch records the commit and refuses one that already belongs to another item. `hatch ready` is refused while an item is still To do or Building.",
+            ] : []
+            return sweep + [
                 "Work only in your own worktree on branch `\(branchName(t))`. Never touch the main checkout. Push only that branch.",
                 "Declare the files you will touch with `hatch plan` before you edit. If another ticket holds them you are queued.",
                 "A Bug, or a change over \(limit) files, waits for the owner to approve the plan; Hatch tells you.",
@@ -368,6 +404,7 @@ public enum BriefBuilder {
                     "hatch note \(n) \"...\"    # context for the owner"]
         case .build?, .fix?:
             return (kind == .build ? ["hatch plan \(n) --files <paths>   # before you edit"] : [])
+                + (t.type == .sweep ? ["hatch item list \(n)   # the items and where each stands", "hatch item built \(n) <key>   # after committing that item"] : [])
                 + ["hatch check \(n) --build   # compile; only errors and warnings",
                    "hatch ready \(n)     # when the work is done",
                    "hatch ask \(n) \"...\" --suggest \"your recommendation\" --suggest \"another answer\"     # only if you are blocked",

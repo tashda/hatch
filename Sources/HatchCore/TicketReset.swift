@@ -7,7 +7,7 @@ import Foundation
 public extension HatchStore {
     /// Tables whose rows belong to one ticket and are removed on a reset.
     private static let resetTables = ["question", "question_option", "note", "pinned_note", "proposal", "revision", "pick", "verdict",
-                                      "plan_review", "claim", "preview_ticket", "stage_session"]
+                                      "plan_review", "claim", "preview_ticket", "stage_session", "sweep_item"]
     /// History kept: how the ticket began.
     private static let keptEvents: Set<String> = ["created", "captured", "attachment", "attachment-uploaded"]
 
