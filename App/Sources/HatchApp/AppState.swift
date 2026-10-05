@@ -439,7 +439,7 @@ final class AppState: ObservableObject {
         if n != decisionCount { decisionCount = n }
         let v = store.toVerifyCount(projectId: projectFilterId)
         if v != toVerifyCount { toVerifyCount = v }
-        NSApp?.dockTile.badgeLabel = dockBadgeShown && n + v > 0 ? String(n + v) : nil
+        NSApp?.dockTile.badgeLabel = dockBadgeShown && n > 0 ? String(n) : nil
         refreshMenuBarCount()
     }
 
