@@ -37,6 +37,8 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
     /// The oldest macOS the app runs on. macOS 27 is the reference (glass styles and the rest); generated code falls
     /// back for anything older.
     public var minimumMacOS: String
+    /// The app's own components, as much part of the system as SwiftUI's (CM16).
+    public var own: [OwnComponent] = []
 
     public static let referenceMacOS = "27.0"
 
@@ -48,7 +50,7 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         self.minimumMacOS = minimumMacOS; self.follows = follows; self.rules = rules
     }
 
-    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS, follows, rules, shell }
+    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS, follows, rules, shell, own }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -64,6 +66,7 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         follows = try c.decodeIfPresent([ComponentFollow].self, forKey: .follows) ?? []
         rules = try c.decodeIfPresent([ComponentRule].self, forKey: .rules) ?? []
         shell = try c.decodeIfPresent(ComponentShell.self, forKey: .shell)
+        own = try c.decodeIfPresent([OwnComponent].self, forKey: .own) ?? []
     }
 
     /// True when macOS decides this element's look here: the role follows macOS, or a scope covers the element in this
@@ -175,6 +178,10 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         for id in duplicates(roles.map(\.id)) { out.append("Role \(id) is listed twice.") }
         for id in duplicates(questions.map(\.id)) { out.append("Question \(id) is listed twice.") }
         for id in duplicates(rules.map(\.id)) { out.append("Rule \(id) is listed twice.") }
+        for id in duplicates(own.map(\.id)) { out.append("Component \(id) is listed twice.") }
+        // A view of the app is one variant of one component, or agents can't tell which it is.
+        for v in duplicates(own.flatMap(\.views)) { out.append("The view \(v) is in two components or variants; it can only be one.") }
+        for c in own where c.variants.isEmpty { out.append("Component \(c.id) has no variants.") }
         for r in rules {
             guard let kind = r.info else { out.append("Rule \(r.id): no kind called \(r.kind)."); continue }
             if kind.id == "note" { if r.text.trimmingCharacters(in: .whitespaces).isEmpty { out.append("Rule \(r.id) is a note without words.") }; continue }
@@ -278,6 +285,20 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         s += "**Rules.** Use a role, never a look typed into a view. Find the role by element, place and importance in the tables below. "
         s += "If no role fits, or the request contradicts one, ask (`hatch ask` with suggested answers); never invent a look. "
         s += "A provisional role is the current guess: use it, and say so if it looks wrong.\n"
+
+        // The app's own components (CM16): agents use these views for these jobs, never a hand-styled copy.
+        if !own.isEmpty {
+            s += "\n## The app's own components\n\nUse these views for these jobs; never style a view by hand where one fits. "
+            s += "A component replaced by a native one: use the native element instead of its views.\n\n"
+            s += "| Component | Variant | Use when | Views today | Status |\n|---|---|---|---|---|\n"
+            for c in own {
+                for v in c.variants {
+                    let title = c.native.map { "\(c.title) (use SwiftUI's \($0) instead)" } ?? c.title
+                    let use = v.use.isEmpty ? "–" : v.use
+                    s += "| `\(c.id)` \(Self.cell(title)) | \(v.name)\(v.setting == nil ? "" : " (a setting)") | \(Self.cell(use)) | \(v.views.map { "`\($0)`" }.joined(separator: ", ")) | \(c.status.title) |\n"
+                }
+            }
+        }
 
         for elementId in elementsUsed {
             let element = ComponentElement.named(elementId)

@@ -25,6 +25,9 @@ protocol ComponentsSource {
 final class LocalComponentsSource: ComponentsSource {
     private var system: ComponentSystem
 
+    /// The app's views, for accepting Hatch's proposals locally as the API does.
+    var proposals: [AppComponentProposal] = []
+
     init(system: ComponentSystem) { self.system = system }
     var isLocal: Bool { true }
     func load() throws -> ComponentSystem { system }
@@ -49,6 +52,11 @@ final class LocalComponentsSource: ComponentsSource {
             if body["setting"]?.boolValue == true, let role { try system.makeConfigurable(role) }
             return system
         case "answerLook": try system.answer(body["question"]?.stringValue ?? "", look: recipe())
+        case "own":
+            let proposals = self.proposals
+            try system.change(OwnChange.parse(body.objectValue ?? [:]) { id in proposals.first { $0.id == id } })
+        case "ownSetting": _ = try system.makeOwnSetting(component: body["component"]?.stringValue ?? "", variant: body["variant"]?.stringValue ?? "")
+        case "ownRedesign": _ = try system.redesignOwn(component: body["component"]?.stringValue ?? "", what: body["what"]?.stringValue ?? "")
         case "agree": try system.agree(role)
         case "look": try system.setLook(role ?? "", recipe: recipe())
         case "apply": try system.applyDrafts(role)
@@ -225,6 +233,7 @@ final class DesignerModel: ObservableObject {
 
     init(source: ComponentsSource, inventory: ComponentInventory? = nil, appRoot: String? = nil, captures: ComponentCaptures? = nil) throws {
         self.appViews = appRoot.map { AppViewScanner.scan(appRoot: $0, measured: captures?.heights ?? [:]) }
+        (source as? LocalComponentsSource)?.proposals = appViews?.proposals ?? []
         self.captures = captures
         self.source = source
         self.appRoot = appRoot
@@ -320,9 +329,46 @@ final class DesignerModel: ObservableObject {
         isPreviewing(role) && drawn(role.element, look(of: role)) != drawn(role.element, role.draft ?? role.recipe)
     }
 
-    /// The app's own components Hatch proposes, most used first.
+    /// The app's own components: the agreed ones, then what Hatch proposes for the views not in one yet, most used first.
+    var ownEntries: [OwnEntry] {
+        let claimed = Set(system.own.flatMap(\.views))
+        let agreed = system.own.map { c in
+            OwnEntry(id: c.id, title: c.title, family: c.family, agreed: true, component: c, proposal: appViews?.proposals.first { $0.id == c.id },
+                     sizes: c.variants.map { .init(name: $0.name, views: $0.views, note: weightNote($0.views), use: $0.use, setting: $0.setting) })
+        }
+        let proposed: [OwnEntry] = (appViews?.proposals ?? []).compactMap { p in
+            guard system.own(p.id) == nil else { return nil }
+            let sizes = p.sizes.map { OwnEntry.Size(name: $0.name, views: $0.members.filter { !claimed.contains($0) }, note: $0.note, use: "", setting: nil) }
+                .filter { !$0.views.isEmpty }
+            return sizes.isEmpty ? nil : OwnEntry(id: p.id, title: p.title, family: p.family, agreed: false, component: nil, proposal: p, sizes: sizes)
+        }
+        return agreed + proposed
+    }
+    func ownEntry(_ id: String) -> OwnEntry? { ownEntries.first { $0.id == id } }
+
+    /// What is still to settle in one size of an agreed component: views that differ in weight.
+    private func weightNote(_ views: [String]) -> String? {
+        let weights = Set(views.compactMap { ownView($0) }.filter { $0.style.font != nil }.map { $0.style.weight ?? "regular" })
+        return weights.count > 1 ? "weights differ (" + weights.sorted().joined(separator: ", ") + "): pick one" : nil
+    }
+    /// Kept for the snapshot run: Hatch's proposals.
     var ownProposals: [AppComponentProposal] { appViews?.proposals ?? [] }
-    func ownProposal(_ id: String) -> AppComponentProposal? { ownProposals.first { $0.id == id } }
+
+    /// A change to the app's own components; a proposal is accepted first, so any action works on it (CM17).
+    func changeOwn(_ entry: OwnEntry, _ body: [String: JSONValue], label: String) {
+        if !entry.agreed { run("own", .object(["op": .string("accept"), "component": .string(entry.id)]), label: "Accept \(entry.title)") }
+        guard system.own(entry.id) != nil else { return }
+        guard !body.isEmpty else { return }
+        run("own", .object(body.merging(["component": .string(entry.id)]) { a, _ in a }), label: label)
+    }
+    func ownSetting(_ entry: OwnEntry, variant: String) {
+        changeOwn(entry, [:], label: "")
+        run("ownSetting", .object(["component": .string(entry.id), "variant": .string(variant)]), label: "\(entry.title) \(variant) as a setting")
+    }
+    func ownRedesign(_ entry: OwnEntry, what: String) {
+        changeOwn(entry, [:], label: "")
+        run("ownRedesign", .object(["component": .string(entry.id), "what": .string(what)]), label: "Redesign \(entry.title)")
+    }
     func ownView(_ id: String) -> AppView? { appViews?.views.first { $0.id == id } }
     var ownQuestions: [AppView] { appViews?.views.filter { $0.kind == .unknown } ?? [] }
 
@@ -805,4 +851,23 @@ final class DesignerModel: ObservableObject {
         ["agree": "Agree", "apply": "Apply draft", "discard": "Discard draft", "follow": "Follow macOS", "setting": "Let people choose",
          "rule": "Rule", "removeRule": "Remove rule", "unfollow": "Stop following macOS", "variant": "Variant", "change": "Ask for looks"][action] ?? action
     }
+}
+
+/// One of the app's own components as the Designer shows it: agreed in the system, or proposed by Hatch.
+struct OwnEntry: Identifiable, Equatable {
+    struct Size: Equatable {
+        var name: String
+        var views: [String]
+        var note: String?
+        var use: String
+        var setting: String?
+    }
+    var id: String
+    var title: String
+    var family: String
+    var agreed: Bool
+    var component: OwnComponent?
+    var proposal: AppComponentProposal?
+    var sizes: [Size]
+    var views: [String] { sizes.flatMap(\.views) }
 }

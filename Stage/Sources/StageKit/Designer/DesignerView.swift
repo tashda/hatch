@@ -83,9 +83,9 @@ struct DesignerView: View {
         case .rules?:
             ContentUnavailableView("Rules", systemImage: "checklist", description: Text("Choose a value beside a rule; Hatch checks the ones marked."))
         case .own(let id)?:
-            OwnInspector(model: model, proposal: model.ownProposal(id))
+            OwnInspector(model: model, entry: model.ownEntry(id))
         case .ownQuestions?:
-            OwnInspector(model: model, proposal: nil)
+            OwnInspector(model: model, entry: nil)
         case .foundations(let kind)?:
             ContentUnavailableView(kind.title, systemImage: DesignerSidebar.symbol(kind), description: Text("Named values the roles use."))
         case nil:
@@ -102,7 +102,7 @@ struct DesignerView: View {
         case .decide?: "To Decide"
         case .foundations(let kind)?: kind.title
         case .rules?: "Rules"
-        case .own(let id)?: model.ownProposal(id)?.title ?? id
+        case .own(let id)?: model.ownEntry(id)?.title ?? id
         case .ownQuestions?: "Not Sure Yet"
         case nil: model.appName
         }
@@ -179,7 +179,7 @@ struct DesignerView: View {
         case .rules?:
             RulesView(model: model)
         case .own(let id)?:
-            if let p = model.ownProposal(id) { OwnComponentView(model: model, proposal: p) }
+            if let e = model.ownEntry(id) { OwnComponentView(model: model, entry: e) }
         case .ownQuestions?:
             OwnQuestionsView(model: model)
         case .all?:
@@ -315,13 +315,14 @@ struct DesignerSidebar: View {
             let others = model.system.elementsUsed.filter { e in e != "switcher" && !Self.groups.contains { $0.elements.contains(e) } && shown(e) }
             if !others.isEmpty { Section("Other") { ForEach(others, id: \.self) { e in element(e) } } }
             // The app's own components, as much part of the system as SwiftUI's (CM9).
-            let own = model.ownProposals.filter { shown($0.title) }
+            let own = model.ownEntries.filter { shown($0.title) }
             if !own.isEmpty || !model.ownQuestions.isEmpty {
                 Section("Your Own Components") {
-                    ForEach(own) { p in
-                        Label(p.title, systemImage: "square.on.square.dashed")
-                            .badge(p.members.count).tag(DesignerSelection.own(p.id))
-                            .help(p.why)
+                    ForEach(own) { e in
+                        // Agreed components solid, Hatch's proposals dashed: what is decided reads apart from what is not.
+                        Label(e.title, systemImage: e.agreed ? "square.on.square" : "square.on.square.dashed")
+                            .badge(e.views.count).tag(DesignerSelection.own(e.id))
+                            .help(e.agreed ? "\(e.title): in the system" : (e.proposal?.why ?? ""))
                     }
                     if !model.ownQuestions.isEmpty {
                         Label("Not Sure Yet", systemImage: "questionmark.circle")

@@ -524,6 +524,26 @@ public final class StageServer: @unchecked Sendable {
                 let role = try body.string("role", max: 120)
                 try system.rename(role, title: try body.string("title", max: 80))
                 message = "Components: rename \(role)"
+            case "own":
+                // The app's own components (CM16, CM17): Hatch's proposal comes from the app's code, read here.
+                let project = try store.project(key: key)
+                let change = try OwnChange.parse(body.object) { id in
+                    guard let app = project?.config?.repo(.app)?.localPath else { return nil }
+                    let captures = ComponentCaptures.load(from: URL(fileURLWithPath: folder).appendingPathComponent(ComponentCaptures.notebookPath))
+                    return AppViewScanner.scan(appRoot: app, measured: captures?.heights ?? [:]).proposals.first { $0.id == id }
+                }
+                try system.change(change)
+                message = "Components: " + Self.describe(change)
+            case "ownSetting":
+                // A variant becomes a choice the app's users make: a Proposal drafted for it.
+                let component = try body.string("component", max: 120), variant = try body.string("variant", max: 60)
+                settingDraft = try system.makeOwnSetting(component: component, variant: variant)
+                message = "Components: \(component) \(variant) becomes a setting"
+            case "ownRedesign":
+                // A redesign (CM18): a Proposal for an agent to build options as specimens.
+                let component = try body.string("component", max: 120)
+                settingDraft = try system.redesignOwn(component: component, what: try body.string("what", max: 2000))
+                message = "Components: redesign \(component)"
             case "restore", "replace":
                 // Undo in the Designer (CD23): the system as it was before the last kept change, checked like any other.
                 let restored = try JSONDecoder().decode(ComponentSystem.self, from: Data(try body.string("system", max: 4_000_000).utf8))
@@ -540,7 +560,11 @@ public final class StageServer: @unchecked Sendable {
             }
         } catch let e as ComponentAnswerError {
             throw APIError(status: 422, code: "invalid", message: e.description)
+        } catch let e as OwnChangeError {
+            throw APIError(status: 422, code: "invalid", message: e.description)
         }
+        let problems = system.problems()
+        guard problems.isEmpty else { throw APIError(status: 422, code: "invalid", message: problems.joined(separator: " ")) }
         try system.write(notebook: folder)
         // Decide stays in step: questions answered here leave it, new ones arrive (DC9).
         if let project = try store.project(key: key) { try? store.syncComponentQuestions(projectId: project.id, system: system) }
@@ -551,6 +575,20 @@ public final class StageServer: @unchecked Sendable {
         }
         commitNotebook?(folder, message)
         return (["system": JSONValue.parse(String(decoding: try system.encoded(), as: UTF8.self))], nil)
+    }
+
+    /// A change to the app's own components in a few words, for the notebook's history.
+    static func describe(_ change: OwnChange) -> String {
+        switch change {
+        case .accept(let p): "\(p.title) becomes a component"
+        case .move(let views, let c, let v): "move \(views.joined(separator: ", ")) to \(c) \(v)"
+        case .split(let views, let c, let t): "\(views.joined(separator: ", ")) out of \(c) into \(t)"
+        case .native(let c, let e): e.map { "\(c) uses SwiftUI's \($0)" } ?? "\(c) keeps its own views"
+        case .use(let c, let v, _): "where \(c) \(v) is used"
+        case .rename(let c, let t): "rename \(c) to \(t)"
+        case .agree(let c): "agree \(c)"
+        case .remove(let c): "remove \(c)"
+        }
     }
 
     private func templateLibrary() throws -> ComponentTemplateLibrary {

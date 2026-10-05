@@ -61,6 +61,48 @@ final class ComponentsAPITests: APITestCase {
         XCTAssertTrue(commits.last!.contains("(draft "), commits.last!)
     }
 
+    /// The app's own components (CM16 to CM18): Hatch's proposal is read from the app's code, then changed through Hatch.
+    func testOwnComponents() throws {
+        let app = home.appendingPathComponent("app", isDirectory: true)
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        try """
+        import SwiftUI
+        struct HXChip: View {
+            var body: some View { Text("a").font(.caption.weight(.medium)).padding(.horizontal, 7).padding(.vertical, 2).background(Theme.background, in: Capsule()) }
+        }
+        struct PlainChip: View {
+            var body: some View { Text("b").font(.caption).padding(.horizontal, 7).padding(.vertical, 2).background(Color.secondary.opacity(0.12), in: Capsule()) }
+        }
+        struct BigChip: View {
+            var body: some View { Text("c").font(.title2).padding(.horizontal, 14).padding(.vertical, 8).background(Color.secondary.opacity(0.12), in: Capsule()) }
+        }
+        """.write(to: app.appendingPathComponent("Chips.swift"), atomically: true, encoding: .utf8)
+        var project = try store.project(key: "echo")!
+        var config = project.config!
+        config.repos.append(RepoConfig(role: .app, remote: "o/echo", branch: "main", localPath: app.path))
+        project = try store.upsertProject(key: "echo", name: "Echo", config: config)
+
+        let client = StageClient(paths: paths)
+        var system = try client.changeComponents(project: "echo", action: "own", body: ["op": "accept", "component": "chip"])
+        XCTAssertEqual(Set(system.own("chip")!.views), ["HXChip", "PlainChip", "BigChip"])
+        XCTAssertTrue(commits.last!.contains("Chip becomes a component"), commits.last!)
+
+        system = try client.changeComponents(project: "echo", action: "own", body: ["op": "split", "component": "chip", "title": "Big chip", "views": ["BigChip"]])
+        XCTAssertEqual(system.ownComponent(containing: "BigChip")?.title, "Big chip")
+        system = try client.changeComponents(project: "echo", action: "own", body: ["op": "native", "component": "chip.big-chip", "element": "badge"])
+        XCTAssertEqual(try ComponentSystem.load(notebook: notebook.path)?.own("chip.big-chip")?.native, "badge", "written to the notebook")
+
+        // A redesign is a Proposal ticket for an agent.
+        _ = try client.changeComponents(project: "echo", action: "ownRedesign", body: ["component": "chip", "what": "Calmer chips."])
+        var filter = TicketFilter(); filter.projectId = projectId
+        let redesign = try store.tickets(filter).first { $0.title == "Redesign the chip" }
+        XCTAssertEqual(redesign?.type, .proposal)
+        XCTAssertTrue(redesign!.body.contains("specimens in the Stage"))
+
+        // Only a component Hatch proposes from the app's code can be accepted.
+        XCTAssertThrowsError(try client.changeComponents(project: "echo", action: "own", body: ["op": "accept", "component": "nothing"]))
+    }
+
     /// Open questions are prepared Questions in Decide; answering one anywhere keeps both in step (DC9).
     func testQuestionsAreInDecide() throws {
         var system = try ComponentSystem.load(notebook: notebook.path)!

@@ -252,6 +252,23 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                 try? await Task.sleep(nanoseconds: 600_000_000)
                 save(window, "own-\(p.family.replacingOccurrences(of: " ", with: "-"))\(p.interactive ? "-interactive" : "")", dir)
             }
+            // The actions, applied locally (nothing reaches the notebook): accept Chip, split the problem chip out,
+            // say where the chip is used, then the agreed page and the new component.
+            if let chip = model.ownEntry("chip") {
+                model.changeOwn(chip, [:], label: "")
+                if let agreed = model.ownEntry("chip"), agreed.views.contains("HXProblemChip") {
+                    model.changeOwn(agreed, ["op": .string("split"), "title": .string("Problem chip"), "views": .array([.string("HXProblemChip")])], label: "Split")
+                }
+                if let agreed = model.ownEntry("chip"), let size = agreed.sizes.first {
+                    model.changeOwn(agreed, ["op": .string("use"), "variant": .string(size.name), "text": .string("A status, a project or an area in a row or a header")], label: "Use")
+                }
+                model.selection = .own("chip")
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                save(window, "own-chip-agreed", dir)
+                model.selection = .own("chip.problem-chip")
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                save(window, "own-chip-split", dir)
+            }
             if !model.ownQuestions.isEmpty {
                 model.selection = .ownQuestions
                 try? await Task.sleep(nanoseconds: 600_000_000)
