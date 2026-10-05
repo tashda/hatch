@@ -226,20 +226,25 @@ struct PlaceFrame: View {
         }
     }
 
-    /// A system alert's button: full width, a capsule, red for destructive, accent for the default, grey otherwise.
-    private func alertButton(_ role: ComponentRole) -> some View {
-        let title = SampleWords.content(role.importance, place: "alert", base: model.sample).shownTitle
-        let fill: AnyShapeStyle = role.importance == .destructive ? AnyShapeStyle(Color.red.opacity(0.18))
-            : role.importance == .main ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary)
-        return Text(title).font(.system(size: 13))
-            .foregroundStyle(role.importance == .destructive ? Color.red : role.importance == .main ? .white : .primary)
-            .frame(maxWidth: .infinity).frame(height: 28)
-            .background(fill, in: Capsule())
+    /// A system alert's button: full width, a capsule; the default in the accent colour, a destructive one red,
+    /// the rest grey (captured on macOS 27).
+    private func alertButton(_ role: ComponentRole, isDefault: Bool) -> some View {
+        alertFace(SampleWords.content(role.importance, place: "alert", base: model.sample).shownTitle, role.importance, isDefault: isDefault)
             .opacity(emphasis(role))
             .overlay { if hovered == role.id { Capsule().strokeBorder(Color.accentColor, lineWidth: 1.5) } }
             .contentShape(Capsule())
             .onTapGesture { model.open(role.id) }
             .onHover { hovered = $0 ? role.id : (hovered == role.id ? nil : hovered) }
+    }
+
+    private func alertFace(_ title: String, _ importance: ComponentRole.Importance, isDefault: Bool) -> some View {
+        let fill: AnyShapeStyle = importance == .destructive ? AnyShapeStyle(Color.red.opacity(0.22))
+            : isDefault ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary)
+        return Text(title).font(.system(size: 13))
+            .foregroundStyle(importance == .destructive ? Color.red : isDefault ? .white : .primary)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity).frame(height: 28)
+            .background(fill, in: Capsule())
     }
 
     /// A role's lines in a context menu, as NSMenu draws them: a toggle with its checkmark, a choice as checked items
@@ -352,40 +357,42 @@ struct PlaceFrame: View {
                 .padding(.horizontal, 24).padding(.top, framed ? 60 : 10).padding(.bottom, framed ? 24 : 10)
             }
         case "alert":
-            // A macOS 27 alert is drawn by the system: title and message on the leading side, every button full width,
-            // stacked, destructive in red and Cancel last. The app's button styles don't reach it; a role here sets
-            // the wording and order.
+            // A macOS 27 alert, as captured: title and message on the leading side; two buttons side by side with
+            // Cancel on the left, three or more stacked full width in the written order with Cancel last; the first
+            // plain button is the default (accent), a destructive one red. The app's button styles don't reach it; a
+            // role here sets the wording and order.
+            let order: [ComponentRole.Importance] = [.main, .other, .destructive, .quiet]
+            let buttons = element == "button" ? cells.sorted { (order.firstIndex(of: $0.importance) ?? 0) < (order.firstIndex(of: $1.importance) ?? 0) } : []
             ZStack {
                 if framed { dimmedWindow }
                 raised(radius: 18) {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text("Drop this ticket?").font(.system(size: 13, weight: .bold))
-                        Text("It leaves the queue and its branch is deleted.").font(.system(size: 11))
+                        Text("It leaves the queue and its branch is deleted.").font(.system(size: 13))
                             .fixedSize(horizontal: false, vertical: true)
                         if element != "button" {
                             // A field or other control in an alert sits above its buttons (an accessory view).
                             VStack(alignment: .leading, spacing: 6) { ForEach(cells, id: \.id) { control($0, padded: false) } }
-                                .padding(.top, 6)
+                                .padding(.top, 4)
                         }
-                        VStack(spacing: 6) {
-                            let order: [ComponentRole.Importance] = [.destructive, .main, .other, .quiet]
-                            if element == "button" {
-                                ForEach(cells.sorted { (order.firstIndex(of: $0.importance) ?? 0) < (order.firstIndex(of: $1.importance) ?? 0) }, id: \.id) { role in
-                                    alertButton(role)
-                                }
+                        Group {
+                            if element != "button" {
+                                HStack(spacing: 8) { alertFace("Cancel", .quiet, isDefault: false); alertFace("Rename", .main, isDefault: true) }
+                            } else if buttons.count <= 2 {
+                                HStack(spacing: 8) { ForEach(buttons.reversed(), id: \.id) { alertButton($0, isDefault: $0.id == buttons.first?.id && $0.importance != .quiet) } }
                             } else {
-                                ForEach(["Rename", "Cancel"], id: \.self) { t in
-                                    Text(t).font(.system(size: 13)).foregroundStyle(t == "Rename" ? .white : .primary)
-                                        .frame(maxWidth: .infinity).frame(height: 28)
-                                        .background(t == "Rename" ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary), in: Capsule())
+                                VStack(spacing: 6) {
+                                    ForEach(buttons, id: \.id) { r in
+                                        alertButton(r, isDefault: r.id == buttons.first { $0.importance != .destructive && $0.importance != .quiet }?.id)
+                                    }
                                 }
                             }
                         }
-                        .padding(.top, 8)
+                        .padding(.top, 6)
                     }
-                    .padding(14).frame(width: 240, alignment: .leading)
+                    .padding(18).frame(width: 260, alignment: .leading)
                 }
-                .padding(.top, framed ? 60 : 10).padding(.bottom, framed ? 22 : 10)
+                .padding(.top, framed ? 56 : 10).padding(.bottom, framed ? 22 : 10)
             }
             .help("Alert buttons are drawn by macOS: a role here sets wording and order, not a look.")
         case "popover":
