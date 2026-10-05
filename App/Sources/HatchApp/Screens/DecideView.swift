@@ -233,6 +233,7 @@ struct DecideSessionView: View {
         case .waiting: Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 16, height: 6)
         case .later: Capsule().strokeBorder(Theme.paused, lineWidth: 1.2).frame(width: 16, height: 6)
         case .handled(let startsAgent): Capsule().fill(startsAgent ? Theme.agent : Theme.finished).frame(width: 16, height: 6)
+        case .setAside: Capsule().fill(Theme.paused).frame(width: 16, height: 6)
         }
     }
 
@@ -242,6 +243,7 @@ struct DecideSessionView: View {
         case .waiting: "not reached yet"
         case .later: "left for later"
         case .handled(let startsAgent): startsAgent ? "decided, an agent goes on" : "decided, done"
+        case .setAside: "parked or dropped"
         }
     }
 
@@ -274,13 +276,14 @@ struct DecideSessionView: View {
                 hint("N", "Write a note")
                 hint("R", "Send back to refine")
                 hint("Space", "Later")
+                hint("P", "Park the ticket")
                 hint("Z", "Undo")
                 hint("?", "Show these shortcuts")
                 hint("esc", "Done")
             }
             Divider()
             VStack(alignment: .leading, spacing: 6) {
-                legend(.current); legend(.handled(startsAgent: true)); legend(.handled(startsAgent: false)); legend(.later); legend(.waiting)
+                legend(.current); legend(.handled(startsAgent: true)); legend(.handled(startsAgent: false)); legend(.setAside); legend(.later); legend(.waiting)
             }
         }
         .padding(16)
@@ -309,7 +312,7 @@ struct DecideSessionView: View {
             Text(session.items.isEmpty ? "Nothing waits for you" : clearedAll ? "All decided" : "Done for now")
                 .font(.largeTitle.weight(.bold))
             if !session.items.isEmpty {
-                Text("\(session.run.agreed + session.run.ownCall + session.run.refined) decided\(session.run.later > 0 ? ", \(session.run.later) left for later" : ""). "
+                Text("\(session.run.agreed + session.run.ownCall + session.run.refined) decided\(session.run.later > 0 ? ", \(session.run.later) left for later" : "")\(session.run.setAside > 0 ? ", \(session.run.setAside) parked or dropped" : ""). "
                      + "\(session.run.agentsStarted) agent\(session.run.agentsStarted == 1 ? "" : "s") started; the rest was bookkeeping.")
                     .foregroundStyle(.secondary)
                 HStack(spacing: 10) {
@@ -356,7 +359,7 @@ struct DecideSessionView: View {
         default: break
         }
         let c = press.characters.lowercased()
-        if ["1", "2", "3", "4", "n", "r"].contains(c) { NotificationCenter.default.post(name: .hxDecideKey, object: c); return .handled }
+        if ["1", "2", "3", "4", "n", "r", "p"].contains(c) { NotificationCenter.default.post(name: .hxDecideKey, object: c); return .handled }
         return .ignored
     }
 
@@ -620,6 +623,14 @@ private struct DecideCard: View {
             HStack(spacing: 8) {
                 Button("Later") { later() }.buttonStyle(.glass).help("Leave it for later; it comes back at the end (Space)")
                 Button("Note") { toggleNote() }.buttonStyle(.glass).help("A note on the ticket (N)")
+                // Rare or final actions in a More menu (DESIGN.md, LK10). No confirmation sheet: the undo window covers it (DC4).
+                if canPark || canDrop {
+                    HXMenuButton(title: "More", symbol: "ellipsis") {
+                        if canPark { Button("Park", systemImage: "pause") { setAside(.parked) } }
+                        if canDrop { Button("Drop", systemImage: "xmark.circle", role: .destructive) { setAside(.dropped) } }
+                    }
+                    .help("Park (P) or Drop")
+                }
                 if refineAllowed {
                     Button("Refine") { session.noteOpen ? refine() : toggleNote() }.buttonStyle(.glass).help("Send back to refine with a note (R)")
                 }
@@ -660,7 +671,21 @@ private struct DecideCard: View {
         case "n": toggleNote()
         case "r": if refineAllowed { session.noteOpen ? refine() : toggleNote() }
         case "later": later()
+        case "p": if canPark { setAside(.parked) }
         default: break
+        }
+    }
+
+    private var canPark: Bool { Workflow.isAllowed(type: item.ticket.type, from: item.ticket.status, to: .parked, actor: .owner) }
+    private var canDrop: Bool { Workflow.isAllowed(type: item.ticket.type, from: item.ticket.status, to: .dropped, actor: .owner) }
+
+    /// Parks or drops the ticket instead of deciding it, after the undo window like every decision. Parked comes back
+    /// with Resume on the ticket; dropped can be reopened. Nothing is deleted.
+    private func setAside(_ status: Status) {
+        let state = state, id = item.ticket.id
+        let word = status == .parked ? "parked" : "dropped"
+        session.decide(DecideOutcome(kind: .setAside, startsAgent: false), label: "\(item.ticket.displayNumber) \(word)") {
+            state.perform("Could not set the ticket aside") { _ = try state.store.move(id, to: status, actor: .owner, reason: "\(word) in Decide") }
         }
     }
 

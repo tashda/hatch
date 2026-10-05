@@ -178,7 +178,8 @@ public extension HatchStore {
 /// each, Undo, and the decisions waiting out their undo window. The work itself is a closure the app hands in; it runs
 /// only when `due` returns it, after the window or when the session closes.
 public struct DecideRun {
-    public enum Outcome: Equatable, Sendable { case chose(agreed: Bool), refined, later, opened }
+    /// `setAside`: the owner parked or dropped the ticket instead of deciding it.
+    public enum Outcome: Equatable, Sendable { case chose(agreed: Bool), refined, later, opened, setAside }
 
     public struct Record: Equatable, Sendable {
         public var outcome: Outcome
@@ -250,6 +251,7 @@ public struct DecideRun {
     public var ownCall: Int { records.values.filter { $0.outcome == .chose(agreed: false) }.count }
     public var refined: Int { records.values.filter { $0.outcome == .refined }.count }
     public var later: Int { records.values.filter { $0.outcome == .later || $0.outcome == .opened }.count }
+    public var setAside: Int { records.values.filter { $0.outcome == .setAside }.count }
     public var agentsStarted: Int { records.values.filter { $0.startsAgent && $0.outcome != .later && $0.outcome != .opened }.count }
 }
 

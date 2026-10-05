@@ -11,6 +11,8 @@ extension DecideRun {
         case later
         /// Decided. `startsAgent` says whose turn it is now: an agent's, or nobody's (done, recorded).
         case handled(startsAgent: Bool)
+        /// Parked or dropped instead of decided.
+        case setAside
     }
 
     /// One mark per decision, in the order they first came up. Later puts a decision at the end of the queue again; it
@@ -24,6 +26,7 @@ extension DecideRun {
             switch records[item.id]?.outcome {
             case .none: return (item.id, .waiting)
             case .later?, .opened?: return (item.id, .later)
+            case .setAside?: return (item.id, .setAside)
             case .chose?, .refined?: return (item.id, .handled(startsAgent: records[item.id]?.startsAgent ?? false))
             }
         }

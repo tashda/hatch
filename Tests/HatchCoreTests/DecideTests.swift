@@ -104,6 +104,10 @@ final class DecideRunTests: XCTestCase {
         run.decide(.chose(agreed: false), startsAgent: false, label: "three") {}
         XCTAssertEqual(run.marks.map(\.mark), [.handled(startsAgent: true), .current, .handled(startsAgent: false)],
                        "the decision left for later is current again in its own place")
+        run.decide(.setAside, startsAgent: false, label: "two parked") {}
+        XCTAssertEqual(run.marks.map(\.mark), [.handled(startsAgent: true), .setAside, .handled(startsAgent: false)])
+        XCTAssertEqual(run.setAside, 1)
+        XCTAssertTrue(run.isWaiting, "parking waits out the undo window like any decision")
     }
 
     func testLaterMovesTheCardToTheEndAndClosingRunsEverything() {
