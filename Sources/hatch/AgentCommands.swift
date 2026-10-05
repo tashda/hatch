@@ -270,7 +270,9 @@ enum AgentCommands {
 
     // hatch serve  -> the local API for the Stage app
     static func serve(_ c: Context) throws {
-        let server = StageServer(store: c.store, port: UInt16(c.args.option("port") ?? "0") ?? 0)
+        // Publishes its port and token (as the app does), so a Stage or the Components Designer can reach it.
+        let server = StageServer(store: c.store, paths: HatchPaths.current(), port: UInt16(c.args.option("port") ?? "0") ?? 0)
+        server.commitNotebook = { folder, message in _ = try? NotebookWriter.commit(message, in: folder) }
         try server.start()
         print("Hatch Stage API on http://127.0.0.1:\(server.port)  (token in \(HatchPaths.current().tokenFile.path))")
         RunLoop.main.run()

@@ -2,6 +2,18 @@
 
 Updated 2026-10-04 after a local run on the owner's Mac with Xcode 27. "Verified" means it was compiled and its tests were run. This file is the source of truth for what exists.
 
+## Components: native first, rules, the live window, Decide (2026-10-05, decisions NF1 to NF5)
+
+- **Native first (NF1)**: every setting knows macOS's default and the Apple page behind it (37 pages, read 2026-10-05 against the macOS 27 SDK; `hatch components refs` lists them and flags them when the SDK moves on; the sourced notes are in `tools/components-corpus/native-facts.json`). Recipes keep only what differs. Cards are GroupBox or a Form section, rows are the List's, sheets use presentationSizing, badges `.badge`. Advice with its page: redundant settings, styling where macOS styles (toolbar, menus, alerts), Liquid Glass in content, a destructive or Cancel default button, a segmented view switcher in the main area. Templates follow macOS wherever it decides. Every catalog value compiles against the SDK in the tests.
+- **Follow macOS (NF3)**: a role, an element in a place, or an area (by the project's area folders); behaviour only in generated code; hand styling flagged.
+- **Rules (NF4)**: menu icons, dividers, short context menus without shortcuts, Title Case, the ellipsis character, toolbar commands in the menu bar, no custom bar backgrounds, system colours, standard spacing; Apple's choice and pages for each, checked in `hatch components check` and `hatch ready`; notes for agents and Iris. On Hatch: 616 spacing numbers, 54 capitalization, 9 colours, 3 toolbar commands missing from the menu bar, 2 "...".
+- **Make it a setting (NF5)**: `--setting` on an answer, `hatch components setting`, the API and the Designer; a draft Tweak asks for the app setting.
+- **Live window (NF2)**: the app's shell is read from its code (`ComponentShell`: split view two or three columns, stack, tabs; scenes; inspector, toolbar, search; checked on Hatch, Echo, CodeEdit, Food Truck, Garden, Landmarks and others) and the Designer opens it for real with the roles in place, a real sheet, alert, popover and empty state.
+- **Decide**: open questions are prepared Questions in Decide; answering anywhere keeps both in step and commits the notebook.
+- **DS8**: `hatch ready` records tickets that used a provisional role as it is; at three, Hatch offers to agree it. **DS9**: `hatch components design-md` writes the generated section of a design document between markers.
+- **Verified**: all suites, `tools/smoke.sh`, Stage tests and build, Xcode app build; an end-to-end run on a scratch home: `hatch serve` (now publishing its port and token and committing the notebook), the API answered like the Designer (role changed, notebook committed, setting ticket drafted, Decide tickets in step), and the Designer and its live window opened against it, in snapshots light and dark.
+- **Not verified / not built**: the running Hatch app itself was not used (your instance was open; nothing was written to your database or notebook); the app's own compiled custom views in the live window (recipes only); Hatch's DESIGN.md not regenerated (Hatch has no system yet).
+
 ## Components: the engine end to end (2026-10-05, overnight, decisions DS1 to DS12)
 
 Built on top of step 1 (the system file and templates, below):
@@ -102,7 +114,7 @@ Not checked in the running app: the key recorder on Settings › Shortcuts (the 
 ## Settings pages and Usage (2026-10-04)
 
 Settings has three groups: Hatch (General, Notifications, Agents, Shortcuts), Connections (GitHub), This Mac (Tools, Storage, Usage), per design-review/settings-pages.html.
-- **General**: appearance, open at login, the page and project on opening, the Dock badge (decisions waiting), the menu bar item (on by default, `MenuBarIcon` asset with a waiting dot), how tickets are dropped and their type, and the Decide feedback.
+- **General**: appearance, open at login, the page and project on opening, the Dock badge (decisions waiting), the menu bar item (on by default, an egg drawn in code that cracks when tickets wait), how tickets are dropped and their type, and the Decide feedback.
 - **Notifications**: six "Tell me when" switches, sound, grouping, and Send a Test. The bridge reads new events, never your own moves.
 - **GitHub**: the account, the app's permissions, sync with its interval (`sync_interval`), tickets repositories (default, label repair, Add), and project repositories with CI.
 - **Tools**: Xcode, Git, hatch and Claude Code found on this Mac, and Open with (terminal, editor, git client) plus project apps.
