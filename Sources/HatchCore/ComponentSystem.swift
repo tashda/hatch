@@ -679,11 +679,19 @@ public struct ComponentParameter: Equatable, Sendable {
     public var systemDefault: String?
     /// The Apple page that says so (`ComponentNative.references`).
     public var source: String?
+    /// Other settings it needs to mean anything (a card's surface only with a custom container), so the Designer shows it
+    /// only then (CD21: a setting that changes nothing on screen feels broken).
+    public var requires: [String: [String]]
 
     public init(_ id: String, _ title: String, _ values: [String], foundation: ComponentFoundation.Kind? = nil, isLook: Bool = true,
-                systemDefault: String? = nil, source: String? = nil) {
+                systemDefault: String? = nil, source: String? = nil, requires: [String: [String]] = [:]) {
         self.id = id; self.title = title; self.values = values; self.foundation = foundation; self.isLook = isLook
-        self.systemDefault = systemDefault; self.source = source
+        self.systemDefault = systemDefault; self.source = source; self.requires = requires
+    }
+
+    /// Whether it changes anything for this recipe (its `requires` hold).
+    public func applies(to recipe: [String: String]) -> Bool {
+        requires.allSatisfy { key, allowed in recipe[key].map(allowed.contains) ?? false }
     }
 
     /// The values as a person reads them, with "a color foundation" style hints.
@@ -717,6 +725,7 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
     }
 
     static let sizes = ["mini", "small", "regular", "large", "extraLarge"]
+    static let custom = ["container": ["custom"]]
     static let tints = ["none", "accent", "critical"]
 
     public static let catalog: [ComponentElement] = [
@@ -734,7 +743,8 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
         ], source: "hig-buttons"),
         ComponentElement(id: "menu", title: "Menu", plural: "Menus", parameters: [
             ComponentParameter("style", "Style", ["automatic", "button", "borderlessButton"], systemDefault: "automatic"),
-            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderless", "plain", "glass"], systemDefault: "automatic"),
+            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderless", "plain", "glass"], systemDefault: "automatic",
+                               requires: ["style": ["button"]]),
             ComponentParameter("indicator", "Arrow", ["visible", "hidden"], systemDefault: "visible"),
             ComponentParameter("label", "Label", ["titleAndIcon", "titleOnly", "iconOnly"]),
             ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
@@ -769,11 +779,11 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
         ComponentElement(id: "card", title: "Card", plural: "Cards", parameters: [
             // GroupBox is the native box; a Form section the native group; custom draws its own surface.
             ComponentParameter("container", "Container", ["groupBox", "formSection", "custom"], source: "hig-boxes"),
-            ComponentParameter("surface", "Surface (custom)", ["none", "grouped", "bordered", "material", "glass"]),
-            ComponentParameter("radius", "Corners (custom)", ["none"], foundation: .radius),
-            ComponentParameter("padding", "Padding (custom)", ["system"], foundation: .space, systemDefault: "system", source: "swiftui-padding"),
-            ComponentParameter("border", "Border (custom)", ["none", "hairline"], systemDefault: "none"),
-            ComponentParameter("shadow", "Shadow (custom)", ["none", "soft"], systemDefault: "none"),
+            ComponentParameter("surface", "Surface (custom)", ["none", "grouped", "bordered", "material", "glass"], requires: custom),
+            ComponentParameter("radius", "Corners (custom)", ["none"], foundation: .radius, requires: custom),
+            ComponentParameter("padding", "Padding (custom)", ["system"], foundation: .space, systemDefault: "system", source: "swiftui-padding", requires: custom),
+            ComponentParameter("border", "Border (custom)", ["none", "hairline"], systemDefault: "none", requires: custom),
+            ComponentParameter("shadow", "Shadow (custom)", ["none", "soft"], systemDefault: "none", requires: custom),
         ], source: "hig-boxes"),
         ComponentElement(id: "sheet", title: "Sheet", plural: "Sheets", parameters: [
             // presentationSizing: automatic is a form-sized sheet fitted to its content's height.
@@ -782,7 +792,7 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
         ], source: "hig-sheets"),
         ComponentElement(id: "badge", title: "Badge", plural: "Badges", parameters: [
             ComponentParameter("style", "Style", ["system", "capsule", "plain"], systemDefault: "system", source: "swiftui-badge"),
-            ComponentParameter("tint", "Tint", tints, foundation: .color, systemDefault: "none"),
+            ComponentParameter("tint", "Tint", tints, foundation: .color, systemDefault: "none", requires: ["style": ["capsule"]]),
         ], source: "swiftui-badge"),
         ComponentElement(id: "toast", title: "Toast", plural: "Toasts", parameters: [
             ComponentParameter("surface", "Surface", ["glass", "material", "solid"], source: "hig-materials"),

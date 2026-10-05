@@ -84,6 +84,66 @@ public enum ComponentWords {
         return parts
     }
 
+    /// One setting's value in plain words (CD20): `borderedProminent` reads "Filled". macOS's default says so, with what
+    /// it draws when that is the same everywhere ("macOS default (pop-up)"). The code value stays in tooltips.
+    public static func value(element: String, parameter: String, value: String) -> String {
+        if let v = values["\(element).\(parameter)"]?[value] ?? values[parameter]?[value] { return v }
+        if value.contains(".") { return value }  // a foundation, such as radius.card
+        return value
+    }
+
+    /// What a behaviour setting does, one line (CD22): it can't be judged by looking.
+    public static func help(element: String, parameter: String) -> String? {
+        helps["\(element).\(parameter)"] ?? helps[parameter]
+    }
+
+    private static let values: [String: [String: String]] = [
+        "button.style": ["automatic": "macOS default", "bordered": "Bordered", "borderedProminent": "Filled", "borderless": "Borderless",
+                         "plain": "Plain", "link": "Link", "glass": "Glass", "glassProminent": "Glass, filled"],
+        "size": ["mini": "Mini", "small": "Small", "regular": "Regular", "large": "Large", "extraLarge": "Extra large"],
+        "label": ["titleAndIcon": "Icon and title", "titleOnly": "Title", "iconOnly": "Icon only"],
+        "button.shape": ["automatic": "macOS default", "capsule": "Capsule", "roundedRectangle": "Rounded rectangle", "circle": "Circle"],
+        "tint": ["none": "None", "accent": "Accent colour", "critical": "Red (critical)"],
+        "button.show": ["always": "Always", "onHover": "On hover"],
+        "button.confirm": ["no": "No", "yes": "Ask first"],
+        "button.key": ["none": "None", "defaultAction": "Return (default button)", "cancelAction": "Escape (cancel button)"],
+        "button.tooltip": ["none": "None", "title": "Title", "shortcut": "Title and shortcut"],
+        "menu.style": ["automatic": "macOS default", "button": "Button", "borderlessButton": "Borderless"],
+        "menu.look": ["automatic": "macOS default", "bordered": "Bordered", "borderless": "Borderless", "plain": "Plain", "glass": "Glass"],
+        "menu.indicator": ["visible": "Shown", "hidden": "Hidden"],
+        "picker.style": ["automatic": "macOS default (pop-up)", "menu": "Pop-up", "segmented": "Segmented", "inline": "Inline list",
+                         "radioGroup": "Radio buttons", "palette": "Palette"],
+        "picker.label": ["visible": "Shown", "hidden": "Hidden"],
+        "toggle.style": ["automatic": "macOS default (checkbox)", "switch": "Switch", "checkbox": "Checkbox", "button": "Button"],
+        "field.style": ["automatic": "macOS default", "roundedBorder": "Rounded border", "plain": "No border", "squareBorder": "Square border"],
+        "switcher.style": ["segmented": "Segmented", "menu": "Pop-up", "tabs": "Tabs", "dock": "Dock (drawn by Hatch)"],
+        "row.separators": ["visible": "Shown", "hidden": "Hidden"],
+        "row.accessory": ["none": "None", "chevron": "Chevron", "badge": "Count"],
+        "row.actions": ["none": "None", "onHover": "On hover", "always": "Always"],
+        "card.container": ["groupBox": "Group box", "formSection": "Form section", "custom": "Custom"],
+        "card.surface": ["none": "None", "grouped": "Grouped fill", "bordered": "Bordered", "material": "Material", "glass": "Glass"],
+        "card.radius": ["none": "macOS default"],
+        "card.padding": ["system": "macOS default"],
+        "card.border": ["none": "None", "hairline": "Hairline"],
+        "card.shadow": ["none": "None", "soft": "Soft"],
+        "sheet.sizing": ["automatic": "macOS default", "form": "Form", "page": "Page", "fitted": "Fit the content"],
+        "sheet.title": ["inline": "In the sheet", "large": "Large", "none": "None"],
+        "badge.style": ["system": "macOS default", "capsule": "Capsule", "plain": "Plain number"],
+        "toast.surface": ["glass": "Glass", "material": "Material", "solid": "Solid"],
+        "toast.position": ["top": "Top", "bottom": "Bottom"],
+        "toast.duration": ["short": "Short", "long": "Long"],
+        "emptyState.action": ["none": "None", "prominent": "Prominent button", "link": "Link"],
+    ]
+
+    private static let helps: [String: String] = [
+        "button.show": "When the button appears: always, or only when the pointer is over its row or card.",
+        "button.confirm": "Ask before doing it, for actions that can't be undone.",
+        "button.key": "Return makes it the default button of a sheet or alert (macOS draws it in the accent colour); Escape makes it the cancel button.",
+        "button.tooltip": "What the tooltip says when the pointer rests on it.",
+        "row.actions": "When a row's own buttons appear.",
+        "toast.duration": "How long the toast stays before it goes.",
+    ]
+
     /// The question for a role whose looks compete: "How should main action buttons look?"
     public static func lookQuestion(_ role: ComponentRole) -> String {
         let title = role.title.lowercased()

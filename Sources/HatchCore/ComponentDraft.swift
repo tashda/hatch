@@ -71,10 +71,11 @@ public enum ComponentDraft {
     /// the template has no role for join the role of the same purpose nearest to it (page actions join Other action,
     /// a form's buttons join Row action); only what is left gets a new role. Template roles the app does not use yet stay
     /// as provisional guesses for the first ticket that needs one.
-    public static func fromApp(name: String, inventory: ComponentInventory, template: ComponentTemplate? = ComponentTemplates.glass,
+    public static func fromApp(name: String, inventory: ComponentInventory, template: ComponentTemplate? = ComponentTemplates.native,
                                minimumMacOS: String = ComponentSystem.referenceMacOS, shell: ComponentShell? = nil) -> ComponentSystem {
-        let reference = (template ?? ComponentTemplates.glass).system(name: name)
-        var system = ComponentSystem(name: name, template: nil, foundations: reference.foundations, places: ComponentPlace.common,
+        let reference = (template ?? ComponentTemplates.native).system(name: name)
+        // The template it is compared with (CD46): its looks are recommended where the app differs (CD28).
+        var system = ComponentSystem(name: name, template: reference.template, foundations: reference.foundations, places: ComponentPlace.common,
                                      roles: reference.roles, minimumMacOS: minimumMacOS)
         system.rules = reference.rules.isEmpty ? ComponentRule.appleDefaults : reference.rules
         system.shell = shell
@@ -220,7 +221,7 @@ public enum ComponentDraft {
         let where_ = places.map { ComponentPlace.title($0).lowercased() }.joined(separator: ", ")
         return ComponentRole(
             "\(element.id).\(name)",
-            match?.title ?? "\(element.title) (\(importance.title.lowercased()), \(where_))",
+            match?.title ?? jobTitle(element: element, importance: importance, places: places),
             use: match?.use ?? "\(element.plural) at \(importance.title.lowercased()) importance in: \(where_). The app's most used look there (\(count) uses).",
             avoid: match?.avoid ?? "",
             places: places, importance: importance,
@@ -231,7 +232,25 @@ public enum ComponentDraft {
 
     static func overlap(_ a: [String], _ b: [String]) -> Int { Set(a).intersection(b).count }
 
+    /// Where most of a role's places are: 0 page, 1 row, 2 toolbar, 3 menu (the `families`), 4 floating.
+    static func mainFamily(_ places: [String]) -> Int? {
+        var tally: [Int: Int] = [:]
+        for p in places { if let f = p == "floating" ? 4 : families.firstIndex(where: { $0.contains(p) }) { tally[f, default: 0] += 1 } }
+        return tally.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
+    }
+
+    /// The id's last part for a role Hatch made up: what it is for, from where most of it sits.
     static func plainName(element: String, importance: ComponentRole.Importance, places: [String], recipe: [String: String]) -> String {
+        let family = mainFamily(places)
+        let suffix = family.map { ["InPage", "InRow", "InToolbar", "InMenu", "Floating"][$0] } ?? ""
+        guard element == "button" else {
+            switch importance {
+            case .main: return "primary" + suffix
+            case .destructive: return "destructive" + suffix
+            case .quiet: return "quiet" + suffix
+            case .other: return family.map { ["inPage", "inRow", "inToolbar", "inMenu", "floating"][$0] } ?? "standard"
+            }
+        }
         switch importance {
         case .main: return "primary"
         case .destructive: return "destructive"
@@ -239,19 +258,30 @@ public enum ComponentDraft {
             if recipe["style"] == "link" { return "link" }
             return Set(places).isSubset(of: ["sheetFooter", "alert"]) ? "cancel" : "quiet"
         case .other:
-            switch places.first {
-            case "toolbar": return "toolbar"
-            case "listRow", "card", "inspector", "popover": return "inRow"
-            case "contextMenu": return "menuItem"
-            case "form": return "inForm"
-            case "emptyState": return "emptyState"
-            case "alert" where element == "button": return "alertAction"
-            default: return element == "button" ? "secondary" : "inPage"
+            switch family {
+            case 2: return "toolbar"
+            case 1: return "inRow"
+            case 3: return "menuItem"
+            default: return places.contains("alert") && places.count == 1 ? "alertAction" : "secondary"
             }
         }
     }
 
-    /// "Row action: 3 looks in use" with each look as an option, the most used recommended.
+    /// A made-up role's title, by its job (CD2): "Main action in a row", "Menu button", never a list of places.
+    static func jobTitle(element: ComponentElement, importance: ComponentRole.Importance, places: [String]) -> String {
+        let qualifier = mainFamily(places).map { ["", " in a row", " in the toolbar", " in a menu", ", floating"][$0] } ?? ""
+        let base: String
+        switch element.id {
+        case "button": base = ["main": "Main action", "other": "Other action", "quiet": "Quiet action", "destructive": "Destructive action"][importance.rawValue] ?? "Action"
+        case "menu": base = "Menu button"
+        default: base = element.title
+        }
+        return base + qualifier
+    }
+
+    /// "Row action: 3 looks in use" with each look as an option. The recommendation follows CD28: never a look Apple's
+    /// guidance argues against; Follow macOS where the starting template lets macOS draw it; the template's own look,
+    /// offered even when the app doesn't use it (CD5); and only then the most used look. The reason names the rule.
     static func question(for role: ComponentRole, looks: [Look], reference: ComponentSystem?) -> ComponentQuestion {
         let element = ComponentElement.named(role.element)!
         let total = looks.reduce(0) { $0 + $1.count }
@@ -262,31 +292,58 @@ public enum ComponentDraft {
                                      examples: l.examples,
                                      effect: "Make this the look of \(role.id); the \(total - l.count) uses with other looks move to it when their screens are next touched.")
         }
+        let templateName = ComponentTemplates.named(reference?.template ?? "")?.title ?? "starting"
+        let ref = reference?.roles(of: role.element)
+            .filter { $0.importance == role.importance && overlap($0.places, role.places) > 0 }
+            .max { overlap($0.places, role.places) < overlap($1.places, role.places) }
+        // Apple's guidance, checked on the option as if it were the role's look (redundant settings don't count).
+        func againstApple(_ recipe: [String: String]) -> ComponentAdvice? {
+            var r = role; r.recipe = recipe; r.draft = nil; r.followsMacOS = false
+            return ComponentSystem(name: "check", roles: [r]).advice().first { $0.kind != .redundant }
+        }
+        // The template's look, when it has one of its own and Apple has nothing against it, is always an option.
+        var templateIndex: Int?
+        if let ref, !ref.followsMacOS, againstApple(ref.recipe) == nil {
+            let target = element.withoutDefaults(element.look(ref.recipe))
+            if let i = options.firstIndex(where: { element.withoutDefaults(element.look($0.recipe ?? [:])) == target }) {
+                templateIndex = i
+            } else {
+                let recipe = sanitize(ref.recipe, element: element).recipe
+                options.append(ComponentQuestion.Option(title: ComponentWords.look(element: role.element, recipe: element.look(recipe)), recipe: recipe,
+                                                        effect: "The \(templateName) template's look; all \(total) uses move to it when their screens are next touched."))
+                templateIndex = options.count - 1
+            }
+        }
         options.append(ComponentQuestion.Option(title: "Follow macOS", follow: true,
                                                 effect: "No look of its own: macOS decides, now and in later versions. Hand styling here is flagged."))
+        let followIndex = options.count - 1
         options.append(ComponentQuestion.Option(title: "Not sure yet",
                                                 effect: "Keep the most used look as a provisional guess and decide when a ticket needs it."))
         let rest = looks.count - shown.count
         let places = role.places.map { ComponentPlace.title($0).lowercased() }.joined(separator: ", ")
-        var reason = "\(looks.count) looks are in use in \(places)" + (rest > 0 ? " (\(rest) rare ones not shown)" : "")
-            + ". The first is the look most of them have today (\(shown[0].count) of \(total)), so choosing it changes the fewest screens."
-        // Point at the option nearest the macOS 27 reference: same style, then the most settings in common.
-        if let ref = reference?.roles(of: role.element).first(where: { $0.importance == role.importance && overlap($0.places, role.places) > 0 }) {
-            let target = element.look(ref.recipe)
-            let scored = shown.enumerated().map { i, l -> (Int, Int) in
-                let look = element.look(l.look)
-                guard look["style"] == target["style"] else { return (i, -1) }
-                return (i, target.filter { look[$0.key] == $0.value }.count)
-            }
-            if let best = scored.max(by: { $0.1 < $1.1 }), best.1 >= 0, best.0 != 0 {
-                let name = ComponentTemplates.named(reference?.template ?? "")?.title ?? "template"
-                reason += " Closest to the \(name) template, the macOS 27 reference (\(ComponentRole.summary(target))): option \(best.0 + 1)."
-            }
+        var reason = "\(looks.count) looks are in use in \(places)" + (rest > 0 ? " (\(rest) rare ones not shown)" : "") + ". "
+        let recommended: Int
+        if ref?.followsMacOS == true {
+            recommended = followIndex
+            reason += "The \(templateName) template lets macOS draw it here, so a look of its own would only repeat or fight macOS."
+        } else if let templateIndex {
+            recommended = templateIndex
+            reason += templateIndex < shown.count
+                ? "This is the \(templateName) template's look, and \(shown[templateIndex].count) of \(total) already look like it."
+                : "This is the \(templateName) template's look; the app doesn't use it yet."
+        } else if let i = shown.indices.first(where: { againstApple(options[$0].recipe ?? [:]) == nil }) {
+            recommended = i
+            reason += i == 0
+                ? "It is the look most of them have today (\(shown[0].count) of \(total)), so choosing it changes the fewest screens."
+                : "The most used look goes against Apple's guidance (\(againstApple(options[0].recipe ?? [:])!.message)), so the next most used one (\(shown[i].count) of \(total))."
+        } else {
+            recommended = followIndex
+            reason += "Every look in use goes against Apple's guidance, so macOS should draw it."
         }
         return ComponentQuestion(
             id: "look.\(role.id)", kind: .look, role: role.id,
             title: ComponentWords.lookQuestion(role),
-            options: options, recommended: 0, reason: reason)
+            options: options, recommended: recommended, reason: reason)
     }
 }
 

@@ -30,7 +30,7 @@ final class ComponentDraftTests: XCTestCase {
         let s = ComponentDraft.fromApp(name: "Acme", inventory: inventory, template: ComponentTemplates.glass, minimumMacOS: "14.0")
         XCTAssertEqual(s.problems(), [])
         XCTAssertEqual(s.minimumMacOS, "14.0")
-        XCTAssertNil(s.template, "a system from the app is not a template's")
+        XCTAssertEqual(s.template, "glass", "a system from the app remembers the template it is compared with (CD46)")
         let inRow = s.role("button.inRow")!
         XCTAssertEqual(inRow.recipe, ["style": "bordered", "size": "small", "label": "titleOnly"], "the most used look, tooltips aside")
         XCTAssertEqual(inRow.title, "Row action", "the template's words")
@@ -53,14 +53,15 @@ final class ComponentDraftTests: XCTestCase {
 
     func testOneQuestionPerRoleWithSeveralLooks() throws {
         var s = ComponentDraft.fromApp(name: "Acme", inventory: inventory)
+        XCTAssertEqual(s.template, "native", "macOS Native is the template an app is compared with by default (CD46)")
         let q = try XCTUnwrap(s.questions.first { $0.role == "button.inRow" })
         XCTAssertEqual(q.kind, .look)
         XCTAssertEqual(q.options.count, 5, "three looks (one a custom style), Follow macOS and Not sure yet")
-        XCTAssertEqual(q.options[0].count, 3)
-        XCTAssertEqual(q.recommended, 0)
-        XCTAssertTrue(q.reason.contains("3 of 5"))
+        XCTAssertEqual(q.options[0].count, 2, "Native has no row action in cards, so the card's button joins Other action")
         XCTAssertEqual(q.options.last?.title, "Not sure yet")
-        XCTAssertFalse(q.reason.contains("macOS 27 reference"), "Glass's row look is bordered small, which is option 1")
+        // CD28: Native lets macOS draw row actions, so Follow macOS is recommended, and the reason says why.
+        XCTAssertEqual(q.options[q.recommended].follow, true)
+        XCTAssertTrue(q.reason.contains("lets macOS draw it"), q.reason)
 
         let plain = q.options.firstIndex { $0.recipe?["style"] == "plain" }!
         try s.answer(q.id, option: plain, decision: "#7")
@@ -113,6 +114,36 @@ final class ComponentDraftTests: XCTestCase {
         XCTAssertEqual(s.problems(), [])
     }
 
+    /// CD28 and CD5: Apple's guidance first, then the template's own look (offered even when unused), then use counts.
+    func testRecommendationFollowsAppleThenTheTemplate() throws {
+        let inv = ComponentInventory(uses: [
+            // Row actions: the Glass look (small, bordered, title) is the second most used.
+            use("button", "listRow", ["style": "plain"]), use("button", "listRow", ["style": "plain"], line: 2),
+            use("button", "listRow", ["style": "bordered", "size": "small", "label": "titleOnly"], line: 3),
+            // Toggles: the app never uses Glass's mini switch.
+            use("toggle", "form", ["style": "checkbox"], line: 4), use("toggle", "form", ["style": "button"], line: 5),
+            // Main actions in rows: glass in content is most used, which Apple argues against.
+            use("button", "listRow", ["style": "glassProminent"], .main, line: 6), use("button", "listRow", ["style": "glassProminent"], .main, line: 7),
+            use("button", "card", ["style": "borderedProminent"], .main, line: 8),
+        ], swiftFiles: 1)
+        let s = ComponentDraft.fromApp(name: "Acme", inventory: inv, template: ComponentTemplates.glass)
+
+        let row = try XCTUnwrap(s.questions.first { $0.role == "button.inRow" })
+        XCTAssertEqual(row.options[row.recommended].recipe?["style"], "bordered", "the template's look wins over the most used")
+        XCTAssertTrue(row.reason.contains("Glass template's look"), row.reason)
+
+        let toggle = try XCTUnwrap(s.questions.first { $0.role == "toggle.setting" })
+        let added = toggle.options[toggle.recommended]
+        XCTAssertEqual(added.recipe?["style"], "switch", "the template's look is offered although the app doesn't use it")
+        XCTAssertEqual(added.count, 0)
+        XCTAssertTrue(toggle.reason.contains("doesn't use it yet"), toggle.reason)
+
+        let main = try XCTUnwrap(s.questions.first { $0.role == "button.primaryInRow" })
+        XCTAssertEqual(main.options[0].recipe?["style"], "glassProminent", "still listed first: it is the most used")
+        XCTAssertEqual(main.options[main.recommended].recipe?["style"], "borderedProminent", "never a look Apple argues against")
+        XCTAssertTrue(main.reason.contains("against Apple's guidance"), main.reason)
+    }
+
     func testNamesReadLikeTheTemplateAndLeftoversByFamily() {
         let inv = ComponentInventory(uses: [
             use("button", "listRow", ["style": "glassProminent"], .main),
@@ -122,7 +153,8 @@ final class ComponentDraftTests: XCTestCase {
         let s = ComponentDraft.fromApp(name: "Acme", inventory: inv)
         XCTAssertNotNil(s.role("button.primaryInRow"), "main actions in rows are their own role, one per row")
         XCTAssertNil(s.role("button.primaryInRow")?.perScreen)
-        XCTAssertNotNil(s.role("toggle.toolbar"))
+        XCTAssertEqual(s.role("button.primaryInRow")?.title, "Main action in a row", "named by its job, not by its places (CD2)")
+        XCTAssertEqual(s.role("toggle.inToolbar")?.title, "Toggle in the toolbar")
         XCTAssertEqual(s.problems(), [])
     }
 

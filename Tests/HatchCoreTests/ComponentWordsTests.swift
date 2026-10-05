@@ -36,4 +36,29 @@ final class ComponentWordsTests: XCTestCase {
         XCTAssertEqual(try store.questionOptions(ticketId: old.id).first?.title, "Standard button, text only")
         XCTAssertEqual(try store.syncComponentQuestions(projectId: p.id, system: system).updated, 0, "a second sync changes nothing")
     }
+
+    /// CD20: every value has a plain name; code values stay out of sight.
+    func testEveryValueHasAPlainName() {
+        XCTAssertEqual(ComponentWords.value(element: "button", parameter: "style", value: "borderedProminent"), "Filled")
+        XCTAssertEqual(ComponentWords.value(element: "picker", parameter: "style", value: "automatic"), "macOS default (pop-up)")
+        XCTAssertEqual(ComponentWords.value(element: "toggle", parameter: "size", value: "extraLarge"), "Extra large")
+        for e in ComponentElement.catalog {
+            for p in e.parameters {
+                for v in p.values {
+                    let name = ComponentWords.value(element: e.id, parameter: p.id, value: v)
+                    XCTAssertNotEqual(name, v == name && v.first?.isLowercase == true ? v : "", "\(e.id).\(p.id) \(v) has no plain name")
+                }
+            }
+        }
+        XCTAssertNotNil(ComponentWords.help(element: "button", parameter: "key"))
+    }
+
+    /// CD21: a setting that needs another one is only shown with it.
+    func testSettingsThatNeedAnother() {
+        let card = ComponentElement.named("card")!
+        XCTAssertFalse(card.parameter("shadow")!.applies(to: ["container": "groupBox"]))
+        XCTAssertTrue(card.parameter("shadow")!.applies(to: ["container": "custom"]))
+        XCTAssertFalse(ComponentElement.named("badge")!.parameter("tint")!.applies(to: [:]), "tint only colours a capsule")
+        XCTAssertTrue(ComponentElement.named("button")!.parameter("tint")!.applies(to: [:]))
+    }
 }

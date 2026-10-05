@@ -24,14 +24,14 @@ extension CoreCommands {
             let template = try c.args.option("template").map { id -> ComponentTemplate in
                 guard let t = ComponentTemplates.named(id) else { throw CLIError("No template called \(id).") }
                 return t
-            } ?? ComponentTemplates.glass
+            } ?? ComponentTemplates.native
             let files = ComponentInventoryScanner.appFiles(appRoot: folder, excluding: componentsExclusion(project, folder: folder))
             let inv = ComponentInventoryScanner.inventory(files: files)
             let minimum = ComponentInventoryScanner.minimumMacOS(appRoot: folder) ?? ComponentSystem.referenceMacOS
             system = ComponentDraft.fromApp(name: name, inventory: inv, template: template, minimumMacOS: minimum, shell: ComponentShell.detect(files: files))
             lines0 = ["Shell: " + (system.shell?.summary ?? "")]
         } else {
-            let id = c.args.option("template") ?? "glass"
+            let id = c.args.option("template") ?? "native"
             guard let t = ComponentTemplates.named(id) else {
                 throw CLIError("No template called \(id). Templates: \(ComponentTemplates.all.map(\.id).joined(separator: ", ")).")
             }
