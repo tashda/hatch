@@ -166,3 +166,27 @@ extension CoreCommands {
         return String(decoding: data, as: UTF8.self)
     }
 }
+
+extension CoreCommands {
+    /// hatch components generate [--out <folder>] [--product Name] [--package] [--dry-run]
+    /// Writes the role modifiers and named values into the components folder (the build ticket runs this). Only the
+    /// generated files are touched; custom roles stay the app's own views.
+    static func componentGenerate(_ c: Context) throws {
+        let (system, _) = try loadSystem(c)
+        let project = try? c.project()
+        let config = project?.config?.components
+        guard let out = c.args.option("out").map({ ($0 as NSString).expandingTildeInPath }) ?? project?.config?.componentsFolder else {
+            throw CLIError("Say where: --out <components folder>, or set the project's components folder.")
+        }
+        let product = c.args.option("product") ?? config?.product
+        let makePackage = c.args.flag("package") && !FileManager.default.fileExists(atPath: (out as NSString).appendingPathComponent("Package.swift"))
+        let files = ComponentCodegen.files(system, product: product, makePackage: makePackage)
+        if c.args.flag("dry-run") {
+            c.out.emit(["files": .array(files.keys.sorted().map { .string($0) })], text: files.keys.sorted().map { "would write \($0)" }.joined(separator: "\n"))
+            return
+        }
+        try NotebookWriter.write(files, in: out)
+        c.out.emit(["files": .array(files.keys.sorted().map { .string($0) })],
+                   text: "Wrote \(files.count) files in \(out): \(files.keys.sorted().joined(separator: ", ")). Views use \(system.roles.first.map { $0.codeName } ?? ".buttonRole(…)") and the named values from here.")
+    }
+}

@@ -58,7 +58,7 @@ final class ComponentDraftTests: XCTestCase {
         XCTAssertEqual(q.recommended, 0)
         XCTAssertTrue(q.reason.contains("3 of 5"))
         XCTAssertEqual(q.options.last?.title, "Not sure yet")
-        XCTAssertTrue(q.reason.contains("macOS 27 reference") == false, "Glass's row look is bordered small, which is option 1")
+        XCTAssertFalse(q.reason.contains("macOS 27 reference"), "Glass's row look is bordered small, which is option 1")
 
         let plain = q.options.firstIndex { $0.recipe?["style"] == "plain" }!
         try s.answer(q.id, option: plain, decision: "#7")

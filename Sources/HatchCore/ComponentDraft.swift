@@ -252,9 +252,18 @@ public enum ComponentDraft {
         let rest = looks.count - shown.count
         let places = role.places.map { ComponentPlace.title($0).lowercased() }.joined(separator: ", ")
         var reason = "It is the look most of them have today (\(shown[0].count) of \(total)), so choosing it changes the fewest screens."
-        if let ref = reference?.roles(of: role.element).first(where: { $0.importance == role.importance && overlap($0.places, role.places) > 0 }),
-           let i = shown.firstIndex(where: { element.look($0.look) == element.look(ref.recipe) }), i != 0 {
-            reason += " The \(ComponentTemplates.named(reference?.template ?? "")?.title ?? "template")'s look for this, the macOS 27 reference, is option \(i + 1)."
+        // Point at the option nearest the macOS 27 reference: same style, then the most settings in common.
+        if let ref = reference?.roles(of: role.element).first(where: { $0.importance == role.importance && overlap($0.places, role.places) > 0 }) {
+            let target = element.look(ref.recipe)
+            let scored = shown.enumerated().map { i, l -> (Int, Int) in
+                let look = element.look(l.look)
+                guard look["style"] == target["style"] else { return (i, -1) }
+                return (i, target.filter { look[$0.key] == $0.value }.count)
+            }
+            if let best = scored.max(by: { $0.1 < $1.1 }), best.1 >= 0, best.0 != 0 {
+                let name = ComponentTemplates.named(reference?.template ?? "")?.title ?? "template"
+                reason += " Closest to the \(name) template, the macOS 27 reference (\(ComponentRole.summary(target))): option \(best.0 + 1)."
+            }
         }
         return ComponentQuestion(
             id: "look.\(role.id)", kind: .look, role: role.id,

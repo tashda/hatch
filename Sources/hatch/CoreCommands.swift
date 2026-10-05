@@ -69,6 +69,7 @@ enum CoreCommands {
         case "answer": try componentAnswer(c); return
         case "agree": try componentAgree(c); return
         case "check": try componentCheck(c); return
+        case "generate": try componentGenerate(c); return
         default: break
         }
         if c.args.pos(1) == "templates" {
