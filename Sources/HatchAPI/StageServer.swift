@@ -516,6 +516,10 @@ public final class StageServer: @unchecked Sendable {
                 let role = try body.string("role", max: 120)
                 try system.addVariant(to: role, id: try body.string("id", max: 60), use: try body.string("use", max: 300), recipe: recipe())
                 message = "Components: variant of \(role)"
+            case "fallback":
+                let role = try body.string("role", max: 120), parameter = try body.string("parameter", max: 60)
+                try system.setFallback(role, parameter: parameter, value: try body.optionalString("value", max: 60))
+                message = "Components: \(role) on older macOS"
             case "rename":
                 let role = try body.string("role", max: 120)
                 try system.rename(role, title: try body.string("title", max: 80))

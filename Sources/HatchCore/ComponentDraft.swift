@@ -413,6 +413,12 @@ public extension ComponentSystem {
         questions.removeAll { $0.id == questionId }
     }
 
+    /// What a role draws on an older macOS for one setting, instead of the nearest look (nil goes back to the nearest).
+    mutating func setFallback(_ id: String, parameter: String, value: String?) throws {
+        guard let i = roles.firstIndex(where: { $0.id == id }) else { throw ComponentAnswerError.noRole(id) }
+        roles[i].fallbacks[parameter] = value
+    }
+
     /// Gives a role a new title (CD2). The id stays, so code, questions and decisions that name it still find it.
     mutating func rename(_ id: String, title: String) throws {
         guard let i = roles.firstIndex(where: { $0.id == id }) else { throw ComponentAnswerError.noRole(id) }

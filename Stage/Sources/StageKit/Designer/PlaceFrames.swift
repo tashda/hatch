@@ -60,13 +60,15 @@ struct PlaceFrame: View {
     private static let ownSurface: Set<String> = ["sheetFooter", "popover", "alert", "contextMenu", "floating"]
 
     @ViewBuilder private var sample: some View {
+        // Every place on a page is the same size (one width from the grid, one height here), so the eye compares the
+        // controls, not the boxes.
         if Self.ownSurface.contains(place.id) {
             mock
-                .frame(maxWidth: .infinity, minHeight: framed ? 110 : 60)
+                .frame(maxWidth: .infinity, minHeight: framed ? 170 : 60)
                 .padding(.vertical, 10)
         } else {
             mock
-                .frame(maxWidth: .infinity, minHeight: framed ? 110 : 60, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: framed ? 150 : 60, alignment: .leading)
                 .padding(14)
                 .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .shadow(color: .black.opacity(0.10), radius: 6, y: 2)
@@ -75,7 +77,7 @@ struct PlaceFrame: View {
 
     /// The look a role is drawn with here.
     private func recipe(_ role: ComponentRole) -> [String: String] {
-        today ? (role.draft ?? role.recipe) : model.look(of: role)
+        model.onCanvas(role, today ? (role.draft ?? role.recipe) : model.look(of: role))
     }
 
     /// Drawn with a look that is being tried and differs from today's.

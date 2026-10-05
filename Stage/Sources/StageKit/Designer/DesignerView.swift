@@ -64,6 +64,8 @@ struct DesignerView: View {
             AllInspector(model: model)
         case .templates?:
             TemplatesInspector(model: model)
+        case .decide?:
+            AllInspector(model: model)
         case .rules?:
             ContentUnavailableView("Rules", systemImage: "checklist", description: Text("Choose a value beside a rule; Hatch checks the ones marked."))
         case .foundations(let kind)?:
@@ -79,6 +81,7 @@ struct DesignerView: View {
         case .place(let p)?: model.system.place(p)?.title ?? p
         case .all?: "All Elements"
         case .templates?: "Templates"
+        case .decide?: "To Decide"
         case .foundations(let kind)?: kind.title
         case .rules?: "Rules"
         case nil: model.appName
@@ -109,11 +112,13 @@ struct DesignerView: View {
         }
         ToolbarItem {
             let n = model.system.questions.count
-            Button { model.nextQuestion() } label: { Label("\(n) to Decide", systemImage: "questionmark.bubble") }
+            Button { model.selection = .decide } label: { Label("\(n) to Decide", systemImage: "questionmark.bubble") }
                 .labelStyle(.titleAndIcon)
                 .disabled(n == 0)
-                .help("Go to the next question, in any element (⌘])")
+                .help("Everything waiting for a decision (⌘] goes to the next one)")
         }
+        // Its own glass group, apart from the window's tools.
+        ToolbarSpacer(.fixed)
         ToolbarItem {
             Button { model.openLiveWindow?() } label: { Label("Live Window", systemImage: "macwindow") }
                 .help("Open \(model.appName)'s own window shell with the roles in it, drawn by SwiftUI itself")
@@ -157,6 +162,8 @@ struct DesignerView: View {
             SystemMatrixView(model: model)
         case .templates?:
             TemplatesView(model: model)
+        case .decide?:
+            DecideList(model: model)
         case .place(let p)?:
             switch model.mode {
             case .inPlace: PlaceOverview(model: model, place: p)
@@ -189,6 +196,11 @@ struct HardCasesBar: View {
             Toggle("Disabled", isOn: $model.sample.disabled)
             Toggle("Larger Text", isOn: $model.largeText)
             Toggle("Inactive Window", isOn: $model.inactive)
+            Toggle("macOS \(model.oldestMacOSTitle)", isOn: $model.oldestMacOS)
+                .disabled(model.system.minimumMacOSNumber >= 27)
+                .help(model.system.minimumMacOSNumber >= 27
+                      ? "\(model.appName) runs only on the newest macOS, so nothing falls back."
+                      : "Draw every look as \(model.appName)'s oldest macOS (\(model.oldestMacOSTitle)) will: newer styles become their fallbacks.")
             Spacer()
             if let label = model.undoLabel {
                 Button("Undo \(label)") { model.undo() }.buttonStyle(.link).lineLimit(1)
@@ -237,8 +249,9 @@ struct DesignerSidebar: View {
 
     /// Elements by kind (CD11), so the list stays readable as the catalog grows.
     static let groups: [(title: String, elements: [String])] = [
-        ("Actions", ["button", "menu"]), ("Choices", ["picker", "toggle"]), ("Text", ["field"]),
-        ("Lists and Containers", ["row", "card", "sheet"]), ("Feedback", ["badge", "toast", "emptyState"]),
+        ("Actions", ["button", "menu", "controlGroup"]), ("Choices", ["picker", "toggle", "datePicker", "slider", "stepper"]),
+        ("Text", ["field", "textEditor"]), ("Lists and Containers", ["row", "table", "card", "form", "sheet"]),
+        ("Feedback", ["badge", "progress", "gauge", "toast", "emptyState"]),
     ]
 
     var body: some View {
@@ -256,7 +269,10 @@ struct DesignerSidebar: View {
                     }
                 }
             }
-            Label("All Elements", systemImage: "square.grid.3x3").badge(model.system.questions.count).tag(DesignerSelection.all)
+            if !model.system.questions.isEmpty {
+                Label("To Decide", systemImage: "questionmark.bubble").badge(model.system.questions.count).tag(DesignerSelection.decide)
+            }
+            Label("All Elements", systemImage: "square.grid.3x3").tag(DesignerSelection.all)
             ForEach(Self.groups, id: \.title) { group in
                 let used = group.elements.filter { model.system.elementsUsed.contains($0) && shown(ComponentElement.named($0)?.plural ?? $0) }
                 if !used.isEmpty {
@@ -370,6 +386,7 @@ struct RoleView: View {
         case .place(let p)?: model.system.place(p)?.title ?? p
         case .all?: "All Elements"
         case .templates?: "Templates"
+        case .decide?: "To Decide"
         default: ComponentElement.named(model.page(of: role.element))?.plural ?? role.element
         }
     }
@@ -393,13 +410,14 @@ struct RoleView: View {
             if !comparing {
                 Text("Choose a look on the right to see it here beside today's.").font(.callout).foregroundStyle(.secondary)
             }
-            Grid(alignment: .topLeading, horizontalSpacing: 20, verticalSpacing: 20) {
+            Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 20) {
                 if comparing {
                     GridRow {
                         Text("").gridColumnAlignment(.leading)
-                        Text("Today").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        Text(model.isPreviewing(role) ? "Preview" : "Draft")
-                            .font(.caption.weight(.semibold)).foregroundStyle(model.isPreviewing(role) ? .orange : .secondary)
+                        ThenNowLabel(now: false, title: "Today", detail: "as the app looks now")
+                        Text("")
+                        ThenNowLabel(now: true, title: model.isPreviewing(role) ? "Preview" : "Draft",
+                                     detail: model.isPreviewing(role) ? model.preview?.label ?? "" : "saved, not applied yet")
                     }
                 }
                 ForEach(role.places, id: \.self) { id in
@@ -419,9 +437,15 @@ struct RoleView: View {
                             }
                         }
                         .frame(width: 140, alignment: .leading).help(place.summary)
-                        Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, today: true, framed: false) }
+                        ThenNow(now: false, comparing: comparing) {
+                            Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, today: true, framed: false) }
+                        }
                         if comparing {
-                            Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, framed: false) }
+                            Image(systemName: "arrow.right").font(.title3.weight(.semibold)).foregroundStyle(.tertiary)
+                                .frame(maxHeight: .infinity)
+                            ThenNow(now: true, comparing: true) {
+                                Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, framed: false) }
+                            }
                         }
                     }
                 }
@@ -454,6 +478,137 @@ struct RoleView: View {
     }
 }
 
+// MARK: - To decide
+
+/// Everything waiting for a decision, grouped by control: what each role is for, where it is, and its options drawn.
+/// Clicking an option opens the role with that option previewed in every place.
+struct DecideList: View {
+    @ObservedObject var model: DesignerModel
+
+    var body: some View {
+        let groups = model.system.elementsUsed.map { e in (e, model.questions(for: e)) }.filter { !$0.1.isEmpty }
+        VStack(alignment: .leading, spacing: 24) {
+            Text("\(model.system.questions.count) looks to decide. Each shows the looks the app uses today and the template's; click one to see it in every place, then Keep.")
+                .foregroundStyle(.secondary)
+            ForEach(groups, id: \.0) { element, questions in
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(ComponentElement.named(element)?.plural ?? element).font(.title3.weight(.semibold))
+                    ForEach(questions, id: \.id) { q in card(q) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func card(_ q: ComponentQuestion) -> some View {
+        if let id = q.role, let role = model.system.role(id) {
+            let screens = model.screens(of: role)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(role.title).font(.headline)
+                    Text(role.places.map { ComponentPlace.title($0) }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Open") { model.open(role.id) }
+                }
+                Text(role.use).font(.callout).foregroundStyle(.secondary)
+                if !screens.isEmpty {
+                    Text("Used on " + screens.prefix(4).map(\.screen).joined(separator: ", ") + (screens.count > 4 ? " and \(screens.count - 4) more screens" : ""))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(Array(q.options.enumerated()), id: \.offset) { i, o in
+                            Button {
+                                model.open(role.id)
+                                model.tryLook(RoleInspectorPreview.make(role, q, i))
+                            } label: { option(role, q, i, o) }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(2)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shadow(color: .black.opacity(0.08), radius: 5, y: 2)
+        }
+    }
+
+    private func option(_ role: ComponentRole, _ q: ComponentQuestion, _ i: Int, _ o: ComponentQuestion.Option) -> some View {
+        let recommended = i == q.recommended
+        return VStack(alignment: .leading, spacing: 6) {
+            Group {
+                if let r = o.recipe {
+                    RecipeControl(element: role.element, recipe: r, system: model.system, importance: role.importance,
+                                  sample: SampleWords.content(role.importance, place: role.places.first ?? "page", base: SampleContent()))
+                        .allowsHitTesting(false)
+                        .fixedSize()
+                        .scaleEffect(0.85, anchor: .leading)
+                } else {
+                    Image(systemName: o.follow == true ? "apple.logo" : "questionmark.circle").font(.title3).foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 150, alignment: .leading)
+            .frame(minHeight: 34, alignment: .leading)
+            .clipped()
+            Text(o.recipe.map { ComponentWords.look(element: role.element, recipe: ComponentElement.named(role.element)?.look($0) ?? $0) } ?? o.title)
+                .font(.caption).lineLimit(2)
+            HStack(spacing: 4) {
+                if recommended { Text("Recommended").font(.caption2.weight(.semibold)).foregroundStyle(Color.accentColor) }
+                if o.count > 0 { Text("\(o.count) uses").font(.caption2).foregroundStyle(.secondary) }
+            }
+        }
+        .padding(10)
+        .frame(width: 170, alignment: .leading)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(recommended ? Color.accentColor : Color.clear, lineWidth: 1.5))
+        .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Then and now
+
+/// The column heading: Today is the past (a clock, grey), the preview is what it becomes (a sparkle, the accent).
+struct ThenNowLabel: View {
+    let now: Bool
+    let title: String
+    let detail: String
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: now ? "sparkles" : "clock.arrow.circlepath")
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title.uppercased()).font(.caption.weight(.bold))
+                Text(detail).font(.caption2).lineLimit(1)
+            }
+        }
+        .foregroundStyle(now ? Color.accentColor : .secondary)
+    }
+}
+
+/// Today drawn as the past: on a muted band, a little faded. The preview as what comes: on a tinted band, outlined in
+/// the accent colour, so the two never read as duplicates.
+struct ThenNow<Content: View>: View {
+    let now: Bool
+    let comparing: Bool
+    @ViewBuilder var content: () -> Content
+    var body: some View {
+        if !comparing {
+            content()
+        } else if now {
+            content()
+                .padding(8)
+                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 2))
+        } else {
+            content()
+                .saturation(0.55)
+                .opacity(0.8)
+                .padding(8)
+                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+}
+
 // MARK: - Matrix (CD32, CD33)
 
 /// One cell of a drawn matrix: the role's control and its name. Pointing at it lights up every cell of the same role.
@@ -466,7 +621,7 @@ struct MatrixCell: View {
     var body: some View {
         Button { model.open(role.id) } label: {
             VStack(spacing: 5) {
-                RecipeControl(element: role.element, recipe: model.look(of: role), system: model.system, importance: role.importance,
+                RecipeControl(element: role.element, recipe: model.onCanvas(role, model.look(of: role)), system: model.system, importance: role.importance,
                               sample: SampleWords.content(role.importance, place: place, base: model.sample))
                     .allowsHitTesting(false)
                     .frame(minHeight: 28)
@@ -688,8 +843,10 @@ struct AllInspector: View {
                 }
                 if !model.system.questions.isEmpty { Button("Start with the First") { model.nextQuestion() } }
             }
-            Text("Each cell is an element's most important role in a place. Read across a row to see if a place holds together; point at a cell to see where else its role sits.")
-                .font(.callout).foregroundStyle(.secondary).padding(.horizontal, 4)
+            if model.selection == .all {
+                Text("Each cell is an element's most important role in a place. Read across a row to see if a place holds together; point at a cell to see where else its role sits.")
+                    .font(.callout).foregroundStyle(.secondary).padding(.horizontal, 4)
+            }
         }
         .padding(14) }
     }
@@ -760,6 +917,9 @@ struct RoleInspector: View {
             } else {
                 if let q = model.question(for: role) { QuestionPicks(model: model, role: role, question: q) }
                 if let element { LookChoices(model: model, role: role, element: element) }
+                if let element, element.needs(model.look(of: role), newerThan: model.system.minimumMacOSNumber) != nil {
+                    OlderMacOSSection(model: model, role: role, element: element)
+                }
                 LookPicks(model: model, role: role)
                 if let element { FineTune(model: model, role: role, element: element) }
             }
@@ -1153,6 +1313,8 @@ struct LookChoices: View {
         if let value, value != p.systemDefault { tried[p.id] = value } else { tried[p.id] = nil }
         let current = (recipe[p.id] ?? p.systemDefault) == (value ?? p.systemDefault)
         let name = value.map { ComponentWords.value(element: element.id, parameter: p.id, value: $0) } ?? "macOS default"
+        let need = value.flatMap { p.needs($0) }.flatMap { $0 > model.system.minimumMacOSNumber ? $0 : nil }
+        let fallback = value.flatMap { p.fallback[$0] }.map { ComponentWords.value(element: element.id, parameter: p.id, value: $0) } ?? "macOS default"
         return Button { model.tryValue(p, value) } label: {
             VStack(spacing: 4) {
                 RecipeControl(element: element.id, recipe: tried, system: model.system, importance: role.importance,
@@ -1168,10 +1330,47 @@ struct LookChoices: View {
             .frame(maxWidth: .infinity)
             .background(current ? Color.accentColor.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(current ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: current ? 1.5 : 0.5))
+            .overlay(alignment: .topTrailing) {
+                if let need {
+                    // Newer than the app's oldest macOS: it falls back there.
+                    Text("\(Int(need))+").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .background(Color.purple, in: Capsule()).offset(x: 4, y: -5)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(value ?? "macOS default")
+        .help((value ?? "macOS default") + (need.map { "\nmacOS \(Int($0)) and later. On macOS \(model.oldestMacOSTitle): \(fallback)." } ?? ""))
+    }
+}
+
+/// What the role draws on the app's oldest macOS, for each setting that needs a newer one: the nearest look by default,
+/// or the owner's own choice.
+struct OlderMacOSSection: View {
+    @ObservedObject var model: DesignerModel
+    let role: ComponentRole
+    let element: ComponentElement
+
+    var body: some View {
+        let recipe = model.look(of: role)
+        let min = model.system.minimumMacOSNumber
+        let newer = element.parameters.filter { p in recipe[p.id].flatMap { p.needs($0) }.map { $0 > min } ?? false }
+        InspectorSection(title: "On macOS \(model.oldestMacOSTitle)", footer: "\(model.appName) still runs on macOS \(model.oldestMacOSTitle), which doesn't have these. Turn on macOS \(model.oldestMacOSTitle) above the canvas to see it.") {
+            ForEach(newer, id: \.id) { p in
+                let v = recipe[p.id]!
+                let nearest = p.fallback[v].map { ComponentWords.value(element: element.id, parameter: p.id, value: $0) } ?? "macOS default"
+                let options = p.values.filter { o in (p.needs(o) ?? 0) <= min && !p.deprecated.contains(o) }
+                Picker("\(p.title): \(ComponentWords.value(element: element.id, parameter: p.id, value: v))", selection: Binding(
+                    get: { role.fallbacks[p.id] ?? "" },
+                    set: { model.setFallback(role, parameter: p.id, value: $0.isEmpty ? nil : $0) })) {
+                    Text("Nearest: \(nearest)").tag("")
+                    Divider()
+                    ForEach(options, id: \.self) { o in Text(ComponentWords.value(element: element.id, parameter: p.id, value: o)).tag(o) }
+                }
+                .pickerStyle(.menu)
+            }
+        }
     }
 }
 

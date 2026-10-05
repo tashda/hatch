@@ -70,6 +70,7 @@ final class LocalComponentsSource: ComponentsSource {
             }
         case "removeRule": system.rules.removeAll { $0.id == body["id"]?.stringValue }
         case "rename": try system.rename(role ?? "", title: body["title"]?.stringValue ?? "")
+        case "fallback": try system.setFallback(role ?? "", parameter: body["parameter"]?.stringValue ?? "", value: body["value"]?.stringValue)
         case "restore", "replace":
             if let json = body["system"]?.stringValue { system = try JSONDecoder().decode(ComponentSystem.self, from: Data(json.utf8)) }
         default: break
@@ -153,6 +154,8 @@ enum DesignerSelection: Hashable {
     case all
     /// Templates compared with each other and with this app (CD47).
     case templates
+    /// Every open question, grouped by control (the owner: a view of what needs deciding, not only "next").
+    case decide
     /// One place with every element in it (CD9).
     case place(String)
     case foundations(ComponentFoundation.Kind)
@@ -172,6 +175,8 @@ final class DesignerModel: ObservableObject {
     @Published var largeText = false
     /// Draws prominent controls as in a window that is not in front (CD15).
     @Published var inactive = false
+    /// Draws every look as the app's oldest supported macOS will: newer values replaced by their fallbacks.
+    @Published var oldestMacOS = false
     /// The role is open on its own level (CD8): "‹ Buttons · Main action", drawn in every place it sits.
     @Published var focused = false
     /// The looks being tried, by role (CD13): one role, or every role of a batch change (CD24).
@@ -230,7 +235,7 @@ final class DesignerModel: ObservableObject {
     var selectedPlace: String? { if case .place(let p) = selection { return p }; return nil }
     /// The selection draws looks on the canvas (an element, a place or all), so hard cases and roles apply.
     var showsCanvas: Bool {
-        switch selection { case .element?, .place?, .all?, .templates?: true; default: false }
+        switch selection { case .element?, .place?, .all?, .templates?, .decide?: true; default: false }
     }
 
     /// Open questions about roles that sit in a place.
@@ -251,6 +256,24 @@ final class DesignerModel: ObservableObject {
         return role.draft ?? role.recipe
     }
     func isPreviewing(_ role: ComponentRole) -> Bool { previews[role.id] != nil }
+
+    /// The look as drawn on the canvas: on the oldest macOS when that hard case is on.
+    func onCanvas(_ role: ComponentRole, _ recipe: [String: String]) -> [String: String] {
+        guard oldestMacOS, let e = ComponentElement.named(role.element) else { return recipe }
+        return e.olderLook(recipe, on: system.minimumMacOSNumber, overrides: role.fallbacks)
+    }
+
+    /// The app's oldest macOS, as people write it ("14", "15.4").
+    var oldestMacOSTitle: String {
+        let v = system.minimumMacOS
+        return v.hasSuffix(".0") ? String(v.dropLast(2)) : v
+    }
+
+    /// A role's own fallback for one setting on older macOS (nil: the nearest look).
+    func setFallback(_ role: ComponentRole, parameter: String, value: String?) {
+        run("fallback", ["role": .string(role.id), "parameter": .string(parameter), "value": value.map { .string($0) } ?? .null],
+            label: "\(role.title) on older macOS")
+    }
 
     /// A look as it is drawn: settings macOS uses anyway left out, and a button's or menu's label as drawn when none is
     /// set (a button shows its title, a menu its title and icon), so two looks that draw the same compare equal.
@@ -406,7 +429,9 @@ final class DesignerModel: ObservableObject {
     /// The values to draw as choices for a setting: macOS's default first (nil), then the others, without the value that
     /// is macOS's default (it is the first).
     func choices(of p: ComponentParameter, for role: ComponentRole? = nil) -> [String?] {
-        let all: [String?] = [nil] + values(of: p).filter { $0 != p.systemDefault }.map { Optional($0) }
+        // Deprecated values are not offered (CD52), unless the role uses one now.
+        let current = role.flatMap { look(of: $0)[p.id] }
+        let all: [String?] = [nil] + values(of: p).filter { $0 != p.systemDefault && (!p.deprecated.contains($0) || $0 == current) }.map { Optional($0) }
         guard let role else { return all }
         // Only looks of the role's own kind (CD51): a setting toggle is never offered as a toggle button.
         return all.filter { v in

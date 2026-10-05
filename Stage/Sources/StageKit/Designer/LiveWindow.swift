@@ -63,7 +63,7 @@ struct LiveRole: View {
 
     var body: some View {
         if let role = model.system.role(element: element, place: place, importance: importance) {
-            RecipeControl(element: element, recipe: model.look(of: role), system: model.system, importance: importance, sample: sample)
+            RecipeControl(element: element, recipe: model.onCanvas(role, model.look(of: role)), system: model.system, importance: importance, sample: sample)
                 .help("\(role.id): \(role.use)")
         }
     }
