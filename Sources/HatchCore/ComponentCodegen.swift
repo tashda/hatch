@@ -142,9 +142,10 @@ public enum ComponentCodegen {
             switch r["style"] {
             case "button": m.append(".menuStyle(.button)")
             case "borderlessButton": m.append(".menuStyle(.button)"); m.append(".buttonStyle(.borderless)")  // the macOS 12+ way
+            case "borderedButton": m.append(".menuStyle(.button)"); m.append(".buttonStyle(.bordered)")
             default: break
             }
-            if let look = r["look"], look != "automatic", r["style"] != "borderlessButton" { m.append(".buttonStyle(\(buttonStyle(glass(look))))") }
+            if let look = r["look"], look != "automatic", r["style"] == "button" { m.append(".buttonStyle(\(buttonStyle(glass(look))))") }
             if let shape = r["shape"], shape != "automatic" { m.append(".buttonBorderShape(.\(shape))") }
             if r["indicator"] == "hidden" { m.append(".menuIndicator(.hidden)") }
             if r["order"] == "fixed" { m.append(".menuOrder(.fixed)") }

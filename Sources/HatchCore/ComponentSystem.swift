@@ -842,8 +842,10 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
             ComponentParameter("tooltip", "Tooltip", ["none", "title", "shortcut"], isLook: false, systemDefault: "none"),
         ], source: "hig-buttons"),
         ComponentElement(id: "menu", title: "Menu", plural: "Menus", parameters: [
-            ComponentParameter("style", "Style", ["automatic", "button", "borderlessButton"], systemDefault: "automatic", deprecated: ["borderlessButton"]),
-            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderedProminent", "borderless", "plain", "accessoryBar", "glass", "glassProminent"],
+            ComponentParameter("style", "Style", ["automatic", "button", "borderlessButton", "borderedButton"], systemDefault: "automatic",
+                               deprecated: ["borderlessButton", "borderedButton"]),
+            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderedProminent", "borderless", "plain", "link", "accessoryBar", "glass",
+                                                       "glassProminent"],
                                systemDefault: "automatic", requires: ["style": ["button"]],
                                since: ["accessoryBar": 14, "glass": 26, "glassProminent": 26],
                                fallback: ["accessoryBar": "borderless", "glass": "bordered", "glassProminent": "borderedProminent"]),
@@ -859,7 +861,7 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
             ComponentParameter("style", "Style", ["automatic", "menu", "segmented", "tabs", "inline", "radioGroup", "palette"],
                                systemDefault: "automatic", source: "swiftui-pickerstyle-automatic",
                                since: ["tabs": 27, "palette": 14], fallback: ["tabs": "segmented", "palette": "segmented"]),
-            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderless", "accessoryBar", "glass", "glassProminent"],
+            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderless", "plain", "accessoryBar", "glass", "glassProminent"],
                                systemDefault: "automatic", requires: ["style": ["menu"]],
                                since: ["accessoryBar": 14, "glass": 26, "glassProminent": 26],
                                fallback: ["accessoryBar": "borderless", "glass": "bordered", "glassProminent": "bordered"]),
@@ -870,7 +872,7 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
         ComponentElement(id: "toggle", title: "Toggle", plural: "Toggles", parameters: [
             // On macOS the automatic style is a checkbox (a button in a toolbar, a checkmark in a menu, a switch in a grouped form).
             ComponentParameter("style", "Style", ["automatic", "switch", "checkbox", "button"], systemDefault: "automatic", source: "swiftui-togglestyle-automatic"),
-            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderedProminent", "borderless", "accessoryBar", "glass", "glassProminent"],
+            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderedProminent", "borderless", "plain", "accessoryBar", "glass", "glassProminent"],
                                systemDefault: "automatic", requires: ["style": ["button"]],
                                since: ["accessoryBar": 14, "glass": 26, "glassProminent": 26],
                                fallback: ["accessoryBar": "borderless", "glass": "bordered", "glassProminent": "borderedProminent"]),

@@ -203,7 +203,8 @@ final class SwiftCorpus {
     init(files texts: [(path: String, text: String)]) {
         for (path, text) in texts {
             let s = SwiftStructure(text)
-            let hasControls = ["Button", "Menu", "Picker", "Toggle", "TextField", "searchable"].contains(where: text.contains)
+            // Every control name: a file with only a ProgressView or a Form still has controls (corpus check, gap 4).
+            let hasControls = text.contains("searchable") || SwiftStructure.elementNames.keys.contains(where: text.contains)
             files.append(File(path: path, structure: s, scope: SwiftStructure.Scope(views: s.structs(), members: s.members(), types: s.typeBodies(), path: path),
                               hasControls: hasControls))
         }
@@ -211,8 +212,28 @@ final class SwiftCorpus {
         for (index, f) in files.enumerated() {
             for site in f.structure.typeUses(names) { viewUses[site.name, default: []].append((index, site.at, site.modifiers)) }
             for (name, mods) in f.structure.styleWrappers(f.scope) where customModifiers[name] == nil { customModifiers[name] = mods }
+            for t in f.structure.declaredTypes() {
+                declaredTypes[Self.module(f.path), default: []].insert(t)
+                if t.hasSuffix("Style") { appStyles.types.insert(t) }
+            }
+            for s in f.structure.styleShorthands() { appStyles.statics["\(s.style).\(s.member)"] = s.type }
         }
     }
+
+    /// Types the app declares itself, by module: its own `struct Table` is not SwiftUI's there.
+    var declaredTypes: [String: Set<String>] = [:]
+
+    /// A guess at a file's module from its path: the folder after `Sources/`, else the first folder. A vendored
+    /// package's `struct ProgressView` does not hide SwiftUI's in the app.
+    static func module(_ path: String) -> String {
+        let parts = path.split(separator: "/").map(String.init).dropLast()
+        if let i = parts.lastIndex(of: "Sources"), i + 1 < parts.count { return parts[...(i + 1)].joined(separator: "/") }
+        return parts.first ?? ""
+    }
+
+    func declares(_ type: String, for path: String) -> Bool { declaredTypes[Self.module(path)]?.contains(type) == true }
+    /// The app's own styles: `struct HoverButtonStyle` and `.icon` from `extension ButtonStyle where Self == IconButtonStyle`.
+    var appStyles = StyleEnvironment.AppStyles()
 
     /// The app's own modifiers that only apply styles (`func checkboxStyle() -> some View { toggleStyle(.checkbox) }`,
     /// `struct GlassButton: ViewModifier`), by name, so a control styled through them gets the real style.
@@ -628,6 +649,49 @@ struct SwiftStructure {
     }
 
     /// Ranges of `struct Name … { … }` and `extension Name … { … }` bodies, for the view a control is written in.
+    /// Names of the top-level types this file declares (`struct Table`): a nested `WindowAlert.Button` does not hide
+    /// SwiftUI's Button elsewhere.
+    func declaredTypes() -> [String] {
+        var out: [String] = []
+        for word in ["struct", "class", "enum", "actor"].map({ Array($0.utf8) }) {
+            var i = 0
+            while i + word.count < b.count {
+                if b[i] == word[0], Array(b[i..<(i + word.count)]) == word, i == 0 || !Self.isIdent(b[i - 1]), Self.isSpace(b[i + word.count]),
+                   let id = identifier(startingAt: skipSpace(i + word.count, newlines: false)) {
+                    if enclosingBraces(of: i).isEmpty { out.append(id.name) }
+                    i = id.end; continue
+                }
+                i += 1
+            }
+        }
+        return out
+    }
+
+    /// The style shorthands this file declares: `extension ButtonStyle where Self == IconButtonStyle { static var icon … }`
+    /// gives (ButtonStyle, icon, IconButtonStyle).
+    func styleShorthands() -> [(style: String, member: String, type: String)] {
+        var out: [(String, String, String)] = []
+        let word = Array("extension".utf8)
+        var i = 0
+        while i + word.count < b.count {
+            defer { i += 1 }
+            guard b[i] == word[0], Array(b[i..<(i + word.count)]) == word, i == 0 || !Self.isIdent(b[i - 1]), Self.isSpace(b[i + word.count]),
+                  let proto = identifier(startingAt: skipSpace(i + word.count, newlines: false)), proto.name.hasSuffix("Style") else { continue }
+            var k = proto.end
+            while k < b.count, b[k] != UInt8(ascii: "{"), b[k] != UInt8(ascii: "}") { k += 1 }
+            guard k < b.count, b[k] == UInt8(ascii: "{"), partner[k] > k else { continue }
+            let header = text(proto.end, k)
+            guard let eq = header.range(of: "Self =="),
+                  let type = header[eq.upperBound...].split(whereSeparator: { !($0.isLetter || $0.isNumber || $0 == "_") }).first else { continue }
+            let body = text(k + 1, partner[k])
+            for m in ComponentReader.re(#"static\s+(?:var|func|let)\s+(\w+)"#).matches(in: body, range: NSRange(body.startIndex..., in: body)) {
+                if let r = Range(m.range(at: 1), in: body) { out.append((proto.name, String(body[r]), String(type))) }
+            }
+            i = proto.end
+        }
+        return out
+    }
+
     func structs() -> [(name: String, open: Int, close: Int)] {
         var out: [(String, Int, Int)] = []
         var i = 0
@@ -682,6 +746,15 @@ struct SwiftStructure {
             while k < close {
                 // `.toggleStyle(…)` or, with an implicit self, `toggleStyle(…)` at the start of an expression.
                 let start = b[k] == UInt8(ascii: ".") ? k + 1 : (Self.isIdentStart(b[k]) && !Self.isIdent(b[k - 1]) && b[k - 1] != UInt8(ascii: ".") ? k : -1)
+                // `modifier(GlassButtonModifier(prominent: prominent))`: the wrapper is that ViewModifier (corpus check, gap 2).
+                if start >= 0, let id = identifier(startingAt: start), id.name == "modifier" {
+                    let paren = skipSpace(id.end, newlines: false)
+                    if paren < b.count, b[paren] == UInt8(ascii: "("), partner[paren] > paren {
+                        let args = text(paren + 1, partner[paren]).trimmingCharacters(in: .whitespaces)
+                        if args.first?.isUppercase == true { mods.append(Modifier(name: id.name, args: args)) }
+                    }
+                    k = id.end; continue
+                }
                 if start >= 0, let id = identifier(startingAt: start), Self.styleModifierNames.contains(id.name) {
                     let paren = skipSpace(id.end, newlines: false)
                     if paren < b.count, b[paren] == UInt8(ascii: "("), partner[paren] > paren {
@@ -823,7 +896,12 @@ struct SwiftStructure {
         // Added with the macOS 27 catalog (CD52).
         "DatePicker": "datePicker", "ProgressView": "progress", "Slider": "slider", "Stepper": "stepper", "Gauge": "gauge",
         "ControlGroup": "controlGroup", "TextEditor": "textEditor", "Table": "table", "Form": "form", "TabView": "switcher",
+        // Buttons by another name: they take the same styles and sit in the same places (corpus check, gap 3).
+        "Link": "button", "ShareLink": "button", "SettingsLink": "button", "HelpLink": "button", "RenameButton": "button",
     ]
+
+    /// Words before a name that make it a declaration, not a control: `struct Toggle`, `extension Button`.
+    static let declarationWords: Set<String> = ["struct", "class", "enum", "extension", "protocol", "actor", "typealias", "func", "var", "let"]
 
     /// True when the `.` at `dot` continues an expression (`…).searchable(`), not an enum case (`kind: .searchable`).
     func isChained(_ dot: Int) -> Bool {
@@ -864,24 +942,35 @@ struct SwiftStructure {
                 continue
             }
             guard let element = Self.elementNames[id.name], prev != UInt8(ascii: "."), prev != UInt8(ascii: "#") else { continue }
-            let next = skipSpace(id.end, newlines: false)
+            if corpus?.declares(id.name, for: file) == true { continue }
+            let before = i > 0 ? skipSpaceBack(i - 1) : -1
+            if let word = identifier(endingAt: before), Self.declarationWords.contains(word.name) { continue }
+            var next = skipSpace(id.end, newlines: false)
+            // Allman style: `Button` with its `{` on the next line (corpus check, gap 5); not a type annotation (`: Form`).
+            if next < b.count, b[next] == 10, before < 0 || (b[before] != UInt8(ascii: ":") && b[before] != UInt8(ascii: ">")) {
+                let n = skipSpace(id.end, newlines: true)
+                if n < b.count, b[n] == UInt8(ascii: "{") { next = n }
+            }
             guard next < b.count, b[next] == UInt8(ascii: "(") || b[next] == UInt8(ascii: "{") else { continue }
-            if let use = control(element, nameEnd: id.end, start: i, scope: scope, corpus: corpus, file: file) { out.append(use) }
+            if let use = control(element, name: id.name, nameEnd: id.end, start: i, scope: scope, corpus: corpus, file: file) { out.append(use) }
         }
         return out
     }
 
     /// One control: its own call, trailing closures and modifiers, then what the enclosing blocks add.
-    func control(_ element: String, nameEnd: Int, start: Int, scope: Scope, corpus: SwiftCorpus?, file: String) -> ComponentInventory.Use? {
+    func control(_ element: String, name: String? = nil, nameEnd: Int, start: Int, scope: Scope, corpus: SwiftCorpus?, file: String) -> ComponentInventory.Use? {
         var p = skipSpace(nameEnd, newlines: false), args = "", rawArgs = ""
         var closures: [(label: String, open: Int)] = []
         if p < b.count, b[p] == UInt8(ascii: "("), partner[p] > p { args = text(p + 1, partner[p]); rawArgs = rawText(p + 1, partner[p]); p = partner[p] + 1 }
-        let trailing = skipSpace(p, newlines: false)
+        // Swift reads a `{` on the next line as the trailing closure too (Allman style).
+        let trailing = skipSpace(p, newlines: true)
         if trailing < b.count, b[trailing] == UInt8(ascii: "{"), partner[trailing] > trailing {
             closures.append(("", trailing)); p = partner[trailing] + 1
         }
         let own = chain(after: p)
         closures += own.closures
+        // SwiftUI's Table always has its columns; `Table("conversation")` is a database table.
+        if element == "table", rawArgs.trimmingCharacters(in: .whitespaces).hasPrefix("\"") || (closures.isEmpty && !args.contains("columns")) { return nil }
 
         // Inside a ButtonStyle's makeBody a Button is part of the style, not a use.
         if scope.members.contains(where: { $0.name == "makeBody" && $0.open < start && start < $0.close }) { return nil }
@@ -891,6 +980,7 @@ struct SwiftStructure {
         if context.place == "sheetFooter", element != "button", element != "menu" { context.place = "form" }
 
         var env = StyleEnvironment()
+        env.app = corpus?.appStyles ?? .init()
         let custom = corpus?.customModifiers ?? [:]
         env.read(own.modifiers, own: true, custom: custom)
         for level in context.chains { env.read(level, own: false, custom: custom) }
@@ -899,9 +989,11 @@ struct SwiftStructure {
         var importance = ComponentRole.Importance.other
         switch element {
         case "button":
-            recipe["style"] = env.buttonStyle ?? "automatic"
+            // A Link draws as a link unless a button style says otherwise; HelpLink is the round help button.
+            recipe["style"] = env.buttonStyle ?? (name == "Link" ? "link" : "automatic")
             if let s = env.size { recipe["size"] = s }
-            recipe["label"] = env.labelStyle ?? buttonLabel(args: args, closures: closures)
+            recipe["label"] = env.labelStyle ?? (name == "HelpLink" ? "iconOnly" : name == "ShareLink" && closures.isEmpty ? "titleAndIcon"
+                                                 : buttonLabel(args: args, closures: closures))
             if let s = env.shape { recipe["shape"] = s }
             if let t = env.tint { recipe["tint"] = t }
             if let k = env.key { recipe["key"] = k }
@@ -941,13 +1033,16 @@ struct SwiftStructure {
         case "progress":
             if let s = env.progressStyle { recipe["style"] = s }
             if let s = env.size { recipe["size"] = s }
+            if let t = env.tint { recipe["tint"] = t }
         case "slider":
             if env.thumbHidden { recipe["thumb"] = "hidden" }
             if let s = env.size { recipe["size"] = s }
+            if let t = env.tint { recipe["tint"] = t }
         case "stepper":
             if let s = env.size { recipe["size"] = s }
         case "gauge":
             if let s = env.gaugeStyle { recipe["style"] = s }
+            if let t = env.tint { recipe["tint"] = t }
         case "controlGroup":
             if let s = env.controlGroupStyle { recipe["style"] = s }
             if let s = env.size { recipe["size"] = s }
@@ -966,6 +1061,15 @@ struct SwiftStructure {
             recipe["style"] = env.textFieldStyle ?? "automatic"
             if recipe["style"] == "bordered", let shape = env.fieldShape { recipe["shape"] = shape }
             if let s = env.size { recipe["size"] = s }
+        }
+        // A style the catalog does not know is the app's own (`.icon`, `.luminare(…)`), not a bare value that would read
+        // as the macOS default (corpus check, gap 6).
+        if let e = ComponentElement.named(element) {
+            for key in ["style", "look"] {
+                guard let v = recipe[key], !v.hasPrefix("custom:"), let p = e.parameter(key), !p.values.isEmpty, !p.values.contains(v),
+                      key == "style" || p.applies(to: recipe) else { continue }
+                recipe[key] = "custom:" + v
+            }
         }
         return ComponentInventory.Use(element: element, place: context.place, recipe: recipe, importance: importance,
                                       role: env.role.map { "\(element).\($0)" }, file: file, line: line(of: start), view: context.view,
@@ -1427,8 +1531,19 @@ struct StyleEnvironment {
     var formStyle: String?, tableStyle: String?, tabViewStyle: String?, alternating = false, headersHidden = false, thumbHidden = false
     var labelsHidden = false
     var key: String?, help = false, role: String?
+    var app = AppStyles()
 
-    mutating func read(_ modifiers: [SwiftStructure.Modifier], own: Bool, custom: [String: [SwiftStructure.Modifier]] = [:]) {
+    /// The app's own style types and the shorthands it declares for them.
+    struct AppStyles {
+        /// `ButtonStyle.icon` → IconButtonStyle.
+        var statics: [String: String] = [:]
+        var types: Set<String> = []
+    }
+
+    /// `hint` is what the calls on the way in said (`prominent: true`, `kind: .primary`): it picks the branch of a
+    /// wrapper that applies a plain or a prominent style.
+    mutating func read(_ modifiers: [SwiftStructure.Modifier], own: Bool, custom: [String: [SwiftStructure.Modifier]] = [:],
+                       hint: String = "", depth: Int = 0) {
         for m in modifiers {
             // The app's own style wrappers: a style named at the call (`style: .glass`) wins, then what the wrapper applies.
             if !SwiftStructure.styleModifierNames.contains(m.name), m.name != "keyboardShortcut", m.name != "help" {
@@ -1438,36 +1553,37 @@ struct StyleEnvironment {
                     buttonStyle = named
                 }
                 let wrapped = m.name == "modifier" ? m.args.split(whereSeparator: { $0 == "(" || $0 == " " }).first.map(String.init) : m.name
-                if let wrapped, let inner = custom[wrapped] {
-                    read(inner, own: false)
+                if let wrapped, let inner = custom[wrapped], depth < 4 {
+                    let said = hint + " " + m.args
+                    read(Self.branch(inner, hint: said), own: false, custom: custom, hint: said, depth: depth + 1)
                     continue
                 }
             }
             let a = m.args.trimmingCharacters(in: .whitespacesAndNewlines)
             switch m.name {
-            case "buttonStyle": if buttonStyle == nil { buttonStyle = Self.style(a, suffix: "ButtonStyle") }
+            case "buttonStyle": if buttonStyle == nil { buttonStyle = style(a, suffix: "ButtonStyle") }
             case "controlSize": if size == nil { size = Self.member(a) }
-            case "labelStyle": if labelStyle == nil, let s = Self.member(a), ["iconOnly", "titleOnly", "titleAndIcon"].contains(s) { labelStyle = s }
+            case "labelStyle": if labelStyle == nil, let s = style(a, suffix: "LabelStyle"), ["iconOnly", "titleOnly", "titleAndIcon"].contains(s) { labelStyle = s }
             case "buttonBorderShape": if shape == nil { shape = Self.member(a) }
             case "tint": if tint == nil { tint = Self.tint(a) }
-            case "menuStyle": if menuStyle == nil { menuStyle = Self.style(a, suffix: "MenuStyle") }
+            case "menuStyle": if menuStyle == nil { menuStyle = style(a, suffix: "MenuStyle") }
             case "menuIndicator": if indicator == nil { indicator = Self.member(a) }
-            case "pickerStyle": if pickerStyle == nil { pickerStyle = Self.style(a, suffix: "PickerStyle") }
-            case "toggleStyle": if toggleStyle == nil { toggleStyle = Self.style(a, suffix: "ToggleStyle") }
-            case "textFieldStyle": if textFieldStyle == nil { textFieldStyle = Self.style(a, suffix: "TextFieldStyle") }
+            case "pickerStyle": if pickerStyle == nil { pickerStyle = style(a, suffix: "PickerStyle") }
+            case "toggleStyle": if toggleStyle == nil { toggleStyle = style(a, suffix: "ToggleStyle") }
+            case "textFieldStyle": if textFieldStyle == nil { textFieldStyle = style(a, suffix: "TextFieldStyle") }
             case "labelsHidden": labelsHidden = true
             case "buttonSizing": if sizing == nil { sizing = Self.member(a) }
             case "menuOrder": if menuOrder == nil { menuOrder = Self.member(a) }
             case "textInputBorderShape": if fieldShape == nil { fieldShape = Self.member(a) }
             case "horizontalRadioGroupLayout": horizontalRadio = true
-            case "datePickerStyle": if datePickerStyle == nil { datePickerStyle = Self.member(a) }
-            case "progressViewStyle": if progressStyle == nil { progressStyle = Self.member(a) }
-            case "gaugeStyle": if gaugeStyle == nil { gaugeStyle = Self.member(a) }
-            case "controlGroupStyle": if controlGroupStyle == nil { controlGroupStyle = Self.member(a) }
-            case "textEditorStyle": if textEditorStyle == nil { textEditorStyle = Self.member(a) }
-            case "formStyle": if formStyle == nil { formStyle = Self.member(a) }
-            case "tableStyle": if tableStyle == nil { tableStyle = Self.member(a) }
-            case "tabViewStyle": if tabViewStyle == nil { tabViewStyle = Self.member(a) }
+            case "datePickerStyle": if datePickerStyle == nil { datePickerStyle = style(a, suffix: "DatePickerStyle") }
+            case "progressViewStyle": if progressStyle == nil { progressStyle = style(a, suffix: "ProgressViewStyle") }
+            case "gaugeStyle": if gaugeStyle == nil { gaugeStyle = style(a, suffix: "GaugeStyle") }
+            case "controlGroupStyle": if controlGroupStyle == nil { controlGroupStyle = style(a, suffix: "ControlGroupStyle") }
+            case "textEditorStyle": if textEditorStyle == nil { textEditorStyle = style(a, suffix: "TextEditorStyle") }
+            case "formStyle": if formStyle == nil { formStyle = style(a, suffix: "FormStyle") }
+            case "tableStyle": if tableStyle == nil { tableStyle = style(a, suffix: "TableStyle") }
+            case "tabViewStyle": if tabViewStyle == nil { tabViewStyle = style(a, suffix: "TabViewStyle") }
             case "alternatingRowBackgrounds": alternating = a.isEmpty || a.contains("enabled")
             case "tableColumnHeaders": headersHidden = a.contains("hidden")
             case "sliderThumbVisibility": thumbHidden = a.contains("hidden")
@@ -1481,20 +1597,62 @@ struct StyleEnvironment {
         }
     }
 
-    /// `.glass` → glass; `PlainButtonStyle()` → plain; `.glass(.clear)` → glass; `MyStyle()` → custom:MyStyle.
+    /// The app's own first: a shorthand it declares (`.icon`) or a style type it defines (vvterm's own `GlassButtonStyle`).
+    func style(_ a: String, suffix: String) -> String? {
+        if let m = Self.member(a) {
+            let key = suffix == "ButtonStyle" ? ["ButtonStyle", "PrimitiveButtonStyle"] : [suffix]
+            if let t = key.lazy.compactMap({ app.statics["\($0).\(m)"] }).first { return "custom:" + t }
+        } else if let t = Self.typeName(a), app.types.contains(t) {
+            return "custom:" + t
+        }
+        return Self.style(a, suffix: suffix)
+    }
+
+    /// SwiftUI's own style types, by the name before the suffix: `RadioGroupPickerStyle` → radioGroup.
+    static let swiftUIStyles: Set<String> = [
+        "Automatic", "Plain", "Borderless", "Bordered", "BorderedProminent", "Link", "Glass", "GlassProminent", "AccessoryBar", "AccessoryBarAction",
+        "Switch", "Checkbox", "Button", "Segmented", "Menu", "Inline", "RadioGroup", "Palette", "RoundedBorder", "SquareBorder",
+        "BorderlessButton", "BorderedButton", "Circular", "Linear", "IconOnly", "TitleOnly", "TitleAndIcon", "Compact", "Field", "StepperField",
+        "Graphical", "LinearCapacity", "AccessoryLinear", "AccessoryLinearCapacity", "AccessoryCircular", "AccessoryCircularCapacity",
+        "Navigation", "CompactMenu", "Columns", "Grouped", "Inset", "Sidebar", "TabBarOnly", "SidebarAdaptable",
+    ]
+
+    /// `.glass` → glass; `PlainButtonStyle()` → plain; `.glass(.clear)` → glassClear; `SwiftUI.GlassButtonStyle()` → glass;
+    /// `MyStyle()` → custom:MyStyle; a parameter passed through (`style`) → nil.
     static func style(_ a: String, suffix: String) -> String? {
         if a.hasPrefix(".glass(.clear") { return "glassClear" }
         if let m = member(a) { return m }
-        guard let first = a.split(whereSeparator: { $0 == "(" || $0 == " " }).first.map(String.init), !first.isEmpty else { return nil }
-        if first.hasSuffix(suffix) {
+        guard var first = typeName(a) else { return nil }
+        if first.hasPrefix("SwiftUI.") { first.removeFirst("SwiftUI.".count) }
+        if first.hasSuffix(suffix), first.count > suffix.count {
             let base = String(first.dropLast(suffix.count))
-            let known = ["Plain": "plain", "Borderless": "borderless", "Bordered": "bordered", "BorderedProminent": "borderedProminent",
-                         "Link": "link", "Default": "automatic", "Automatic": "automatic", "Switch": "switch", "Checkbox": "checkbox",
-                         "Segmented": "segmented", "Menu": "menu", "Inline": "inline", "RoundedBorder": "roundedBorder", "Button": "button",
-                         "BorderlessButton": "borderlessButton"]
-            if let k = known[base] { return k }
+            if base == "Default" { return "automatic" }
+            if base == "PopUpButton" { return "menu" }
+            if base == "Glass", a.contains(".clear") { return "glassClear" }
+            if swiftUIStyles.contains(base) { return base.prefix(1).lowercased() + base.dropFirst() }
         }
         return "custom:" + first
+    }
+
+    /// The type an initialiser names: `PlainButtonStyle()` → PlainButtonStyle. Nil for a value (`style`, `isOn ? … : …`).
+    static func typeName(_ a: String) -> String? {
+        guard let first = a.split(whereSeparator: { $0 == "(" || $0 == " " }).first.map(String.init), first.first?.isUppercase == true else { return nil }
+        return first
+    }
+
+    /// A wrapper that applies a plain style in one branch and a prominent one in another: the branch the calls asked for.
+    /// A red tint there belongs to the destructive branch, so it applies only when the calls say destructive.
+    static func branch(_ mods: [SwiftStructure.Modifier], hint: String) -> [SwiftStructure.Modifier] {
+        let h = hint.lowercased()
+        var out = mods
+        if !["destructive", "danger", "critical", "delete"].contains(where: h.contains) {
+            out.removeAll { $0.name == "tint" && tint($0.args) == "critical" }
+        }
+        let styles = out.filter { $0.name == "buttonStyle" }
+        let prominent = styles.filter { $0.args.contains("Prominent") }
+        guard !prominent.isEmpty, prominent.count < styles.count else { return out }
+        let wants = ["prominent: true", ".primary", ".prominent", "primary: true", ".main"].contains(where: h.contains)
+        return out.filter { $0.name != "buttonStyle" || $0.args.contains("Prominent") == wants }
     }
 
     /// The member a leading-dot argument names: `.small` → small, `.glass(.clear)` → glass.
@@ -1503,10 +1661,12 @@ struct StyleEnvironment {
         return String(id)
     }
 
-    static func tint(_ a: String) -> String {
+    static func tint(_ a: String) -> String? {
         let lower = a.lowercased()
         if lower.contains("red") || lower.contains("critical") || lower.contains("destructive") { return "critical" }
         if lower.contains("accent") { return "accent" }
+        // A colour passed through (`tint`, `item.color`) says nothing fixed.
+        if a.first?.isLowercase == true || a == "nil" { return nil }
         return "custom"
     }
 }

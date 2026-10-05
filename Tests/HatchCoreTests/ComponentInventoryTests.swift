@@ -408,4 +408,52 @@ final class ComponentInventoryTests: XCTestCase {
             .write(to: root.appendingPathComponent("B.swift"), atomically: true, encoding: .utf8)
         XCTAssertEqual(ComponentInventoryScanner.appFiles(appRoot: root.path).map(\.path), ["A.swift"])
     }
+
+    /// Gaps found by the check on 76 open-source Mac apps (2026-10-05).
+    func testGapsFromTheCorpusCheck() {
+        func uses(_ files: [(String, String)]) -> [ComponentInventory.Use] { ComponentInventoryScanner.inventory(files: files).uses }
+
+        // A file with only a ProgressView, and Allman braces.
+        let progress = uses([("P.swift", "struct P: View { var body: some View { ProgressView().controlSize(.small).tint(.mint) } }")])
+        XCTAssertEqual(progress.map(\.element), ["progress"])
+        XCTAssertEqual(progress.first?.recipe["tint"], "custom")
+        let allman = uses([("A.swift", "struct A: View {\n var body: some View {\n  Button\n  {\n   go()\n  } label: {\n   Label(\"Add\", systemImage: \"plus\")\n  }\n  .buttonStyle(.borderless)\n }\n}")])
+        XCTAssertEqual(allman.first?.recipe["style"], "borderless", "the modifiers after an Allman block are read")
+        XCTAssertEqual(allman.first?.recipe["label"], "titleAndIcon")
+
+        // Links are buttons; a database Table and the app's own `struct Table` are not SwiftUI's.
+        let links = uses([("L.swift", "struct L: View { var body: some View { VStack { Link(\"Site\", destination: url); HelpLink(anchor: \"x\") } } }")])
+        XCTAssertEqual(links.map { $0.recipe["style"] ?? "" }, ["link", "automatic"])
+        XCTAssertEqual(links.last?.recipe["label"], "iconOnly")
+        XCTAssertTrue(uses([("D.swift", "let t = Table(\"conversation\")\nstruct D: View { var body: some View { Text(\"\") } }")]).isEmpty)
+        XCTAssertTrue(uses([("T.swift", "struct Table { init(_ x: Int) {} }\nlet t = Table(1) { }")]).isEmpty)
+
+        // A helper that hands over to a ViewModifier, with a plain and a prominent branch.
+        let helper = """
+        extension View { func fancyGlass(prominent: Bool = false) -> some View { modifier(FancyGlass(prominent: prominent)) } }
+        struct FancyGlass: ViewModifier {
+            let prominent: Bool
+            func body(content: Content) -> some View {
+                if prominent { content.buttonStyle(.glassProminent) } else { content.buttonStyle(.glass) }
+            }
+        }
+        struct V: View { var body: some View { HStack { Button("Add") {}.fancyGlass(prominent: true); Button("Cancel") {}.fancyGlass() } } }
+        """
+        XCTAssertEqual(uses([("H.swift", helper)]).map { $0.recipe["style"] ?? "" }, ["glassProminent", "glass"])
+
+        // The app's own shorthands and types are custom; SwiftUI's own initialisers are read.
+        let styles = """
+        extension ButtonStyle where Self == IconButtonStyle { static var icon: IconButtonStyle { .init() } }
+        struct IconButtonStyle: ButtonStyle { func makeBody(configuration: Configuration) -> some View { configuration.label } }
+        struct S: View { var body: some View { VStack {
+            Button("A") {}.buttonStyle(.icon)
+            Button("B") {}.buttonStyle(.luminare(main: true))
+            Button("C") {}.buttonStyle(SwiftUI.GlassButtonStyle())
+            Picker("P", selection: $p) { Text("x") }.pickerStyle(RadioGroupPickerStyle())
+            ProgressView().progressViewStyle(CircularProgressViewStyle())
+        } } }
+        """
+        XCTAssertEqual(uses([("S.swift", styles)]).map { $0.recipe["style"] ?? "" },
+                       ["custom:IconButtonStyle", "custom:luminare", "glass", "radioGroup", "circular"])
+    }
 }

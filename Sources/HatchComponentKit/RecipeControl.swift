@@ -233,6 +233,7 @@ private struct RecipeMenu: View {
         switch recipe["style"] {
         case "button": base.menuStyle(.button).recipeButtonStyle(recipe["look"]).recipeShape(recipe["shape"])
         case "borderlessButton": base.menuStyle(.button).buttonStyle(.borderless)
+        case "borderedButton": base.menuStyle(.button).buttonStyle(.bordered)
         default: base
         }
     }

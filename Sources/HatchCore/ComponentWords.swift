@@ -75,7 +75,7 @@ public enum ComponentWords {
     }
 
     private static func menu(_ r: [String: String]) -> [String] {
-        var parts = [["button": "Menu button", "borderlessButton": "Borderless menu"][r["style"] ?? ""] ?? "Standard menu"]
+        var parts = [["button": "Menu button", "borderlessButton": "Borderless menu", "borderedButton": "Bordered menu"][r["style"] ?? ""] ?? "Standard menu"]
         if let look = r["look"], look != "automatic" { parts.append(look == "glass" ? "glass" : look) }
         if r["indicator"] == "hidden" { parts.append("no arrow") }
         switch r["label"] {
@@ -124,21 +124,21 @@ public enum ComponentWords {
         "button.confirm": ["no": "No", "yes": "Ask first"],
         "button.key": ["none": "None", "defaultAction": "Return (default button)", "cancelAction": "Escape (cancel button)"],
         "button.tooltip": ["none": "None", "title": "Title", "shortcut": "Title and shortcut"],
-        "menu.style": ["automatic": "macOS default (pull-down)", "button": "Button", "borderlessButton": "Borderless (old)"],
+        "menu.style": ["automatic": "macOS default (pull-down)", "button": "Button", "borderlessButton": "Borderless (old)", "borderedButton": "Bordered (old)"],
         "menu.look": ["automatic": "macOS default", "bordered": "Bordered", "borderedProminent": "Filled", "borderless": "Borderless",
-                      "plain": "Plain", "accessoryBar": "Accessory bar", "glass": "Glass", "glassProminent": "Glass, filled"],
+                      "plain": "Plain", "link": "Link", "accessoryBar": "Accessory bar", "glass": "Glass", "glassProminent": "Glass, filled"],
         "menu.shape": ["automatic": "macOS default", "capsule": "Capsule", "roundedRectangle": "Rounded rectangle", "circle": "Circle"],
         "menu.order": ["automatic": "macOS default", "fixed": "As written"],
         "menu.indicator": ["visible": "Shown", "hidden": "Hidden"],
         "picker.style": ["automatic": "macOS default (pop-up)", "menu": "Pop-up", "segmented": "Segmented", "tabs": "Tab switcher",
                          "inline": "Inline list", "radioGroup": "Radio buttons", "palette": "Palette"],
-        "picker.look": ["automatic": "macOS default", "bordered": "Bordered", "borderless": "Borderless", "accessoryBar": "Accessory bar",
+        "picker.look": ["automatic": "macOS default", "bordered": "Bordered", "borderless": "Borderless", "plain": "Plain", "accessoryBar": "Accessory bar",
                         "glass": "Glass", "glassProminent": "Glass, filled"],
         "picker.layout": ["vertical": "Stacked", "horizontal": "In a row"],
         "picker.label": ["visible": "Shown", "hidden": "Hidden"],
         "toggle.style": ["automatic": "macOS default (checkbox)", "switch": "Switch", "checkbox": "Checkbox", "button": "Button"],
         "toggle.look": ["automatic": "macOS default", "bordered": "Bordered", "borderedProminent": "Filled", "borderless": "Borderless",
-                        "accessoryBar": "Accessory bar", "glass": "Glass", "glassProminent": "Glass, filled"],
+                        "plain": "Plain", "accessoryBar": "Accessory bar", "glass": "Glass", "glassProminent": "Glass, filled"],
         "field.style": ["automatic": "macOS default", "plain": "No border", "bordered": "Bordered",
                         "roundedBorder": "Rounded border (old)", "squareBorder": "Square border (old)"],
         "field.shape": ["automatic": "macOS default", "capsule": "Capsule", "roundedRectangle": "Rounded rectangle"],
