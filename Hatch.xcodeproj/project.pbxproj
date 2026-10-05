@@ -83,7 +83,6 @@
 		1B7B800577CA3495DEAF8891 /* QuickCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A056202E8E4F0CCCBABFBB2 /* QuickCapture.swift */; };
 		E82E2F2DD0373D41928DBA39 /* AnswerCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 548F8F5CD99070F671D33F73 /* AnswerCards.swift */; };
 		B4E878DB2FBF21F382A3287C /* DesignChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA502633D1195E18F8E0A2A /* DesignChoice.swift */; };
-		126F60B7E7AAA024DF004F84 /* ComponentOptionPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9D4556976CD9C9151A92AC /* ComponentOptionPreview.swift */; };
 		E9666C026E05CA6094D17B29 /* LogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D728C148F7A1D0026394FA /* LogView.swift */; };
 		ECF777578FF6A8D373CCEB2D /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64F0F50F0745471BE8744028 /* RootView.swift */; };
 		F5F821314834FAC30E7C33A3 /* TicketOverviewTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 501F8478F0F8743977F822BD /* TicketOverviewTab.swift */; };
@@ -128,7 +127,6 @@
 		50AA3B651A6F720EEC6333D3 /* IrisReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IrisReviewView.swift; sourceTree = "<group>"; };
 		548F8F5CD99070F671D33F73 /* AnswerCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnswerCards.swift; sourceTree = "<group>"; };
 		EEA502633D1195E18F8E0A2A /* DesignChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignChoice.swift; sourceTree = "<group>"; };
-		0B9D4556976CD9C9151A92AC /* ComponentOptionPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComponentOptionPreview.swift; sourceTree = "<group>"; };
 		1A056202E8E4F0CCCBABFBB2 /* QuickCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCapture.swift; sourceTree = "<group>"; };
 		46632CCECA82359165663D89 /* FiledByIris.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FiledByIris.swift; sourceTree = "<group>"; };
 		5CD8172654E3B05A33D62F8C /* DeskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskView.swift; sourceTree = "<group>"; };
@@ -248,7 +246,6 @@
 			children = (
 				548F8F5CD99070F671D33F73 /* AnswerCards.swift */,
 				EEA502633D1195E18F8E0A2A /* DesignChoice.swift */,
-				0B9D4556976CD9C9151A92AC /* ComponentOptionPreview.swift */,
 				1A056202E8E4F0CCCBABFBB2 /* QuickCapture.swift */,
 				46632CCECA82359165663D89 /* FiledByIris.swift */,
 				A08FF820CF142B03A9888E3C /* AttachmentThumb.swift */,
@@ -532,7 +529,6 @@
 				437B449283ADBC928D57C174 /* AgentsView.swift in Sources */,
 				E82E2F2DD0373D41928DBA39 /* AnswerCards.swift in Sources */,
 				B4E878DB2FBF21F382A3287C /* DesignChoice.swift in Sources */,
-				126F60B7E7AAA024DF004F84 /* ComponentOptionPreview.swift in Sources */,
 				1B7B800577CA3495DEAF8891 /* QuickCapture.swift in Sources */,
 				17DB170330246F9DA273703E /* FiledByIris.swift in Sources */,
 				421D632B0243EED9E2C59F19 /* AppState+Notifications.swift in Sources */,

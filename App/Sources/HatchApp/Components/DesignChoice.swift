@@ -15,6 +15,8 @@ struct DesignChoice {
         let id: String
         var name: String
         var note: String? = nil
+        var gain: String? = nil
+        var cost: String? = nil
         var recommended = false
         var isToday = false
         /// The option where it lives, large; `allPlaces` false draws only its main place.
@@ -30,6 +32,29 @@ struct DesignChoice {
 
     var today: Option? { options.first(where: \.isToday) }
     var choices: [Option] { options.filter { !$0.isToday } }
+
+    /// Takes the words of the answers with the same keys: the note, the gain and the cost, so a decision chosen by
+    /// picture alone still says what each option gains and costs.
+    func merging(_ answers: [AnswerOption]) -> DesignChoice {
+        var out = self
+        for i in out.options.indices {
+            guard let a = answers.first(where: { $0.id == out.options[i].id }) else { continue }
+            out.options[i].note = out.options[i].note ?? a.detail
+            out.options[i].gain = a.gain
+            out.options[i].cost = a.cost
+            out.options[i].recommended = a.recommended
+        }
+        return out
+    }
+
+    /// The answers named as the pictures are (plain words), for the list beside them.
+    func titled(_ answers: [AnswerOption]) -> [AnswerOption] {
+        answers.map { a in
+            var a = a
+            if let o = options.first(where: { $0.id == a.id }) { a.title = o.name }
+            return a
+        }
+    }
 }
 
 /// How a design is shown; picked in the Decide Lab, used by every decision about a look.
@@ -182,6 +207,7 @@ struct DesignChoiceView: View {
     /// The selected option's name, the recommendation and its words; Today on demand.
     @ViewBuilder private var caption: some View {
         if let o = shown {
+            VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(o.isToday ? "Today" : o.name).font(.headline)
                 if o.recommended && !o.isToday {
@@ -198,6 +224,19 @@ struct DesignChoiceView: View {
                         .help("Hold to see the look as it is today in the same place")
                 }
             }
+            if !o.isToday {
+                if let note = o.note { Text(note).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                if let g = o.gain { gainCost("plus", g, primary: true) }
+                if let c = o.cost { gainCost("minus", c, primary: false) }
+            }
+            }
+        }
+    }
+
+    private func gainCost(_ symbol: String, _ text: String, primary: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: symbol).font(.caption2.weight(.bold)).foregroundStyle(.secondary).frame(width: 10)
+            Text(text).font(.callout).foregroundStyle(primary ? Color.primary : Color.secondary)
         }
     }
 
@@ -265,19 +304,11 @@ struct DesignChoiceView: View {
 // MARK: - Design system answers
 
 extension DesignChoice {
-    /// A design system question or a change Proposal as a design to choose from: each option is its role drawn with that
-    /// look in the role's places. Nil for any other ticket. Ids are the answers' keys, so a picture selects its answer.
-    @MainActor
-    static func component(ticket: Ticket, state: AppState) -> DesignChoice? {
-        guard ticket.area == ComponentsSetup.area,
-              let notebook = state.project(id: ticket.projectId)?.config?.repo(.notebook)?.localPath,
-              let system = (try? ComponentSystem.load(notebook: notebook)) ?? nil else { return nil }
-        let qid = ComponentsSetup.componentQuestionId(inBody: ticket.body)
-            ?? (ComponentsSetup.changedRole(inBody: ticket.body) != nil ? ComponentsSetup.changeQuestionId(ticketId: ticket.id) : nil)
-        guard let qid, let q = system.questions.first(where: { $0.id == qid }),
-              let role = q.role.flatMap({ system.role($0) }), let element = ComponentElement.named(role.element) else { return nil }
+    /// A design system question as a design to choose from: each option is its role drawn with that look in the role's
+    /// places; a change has Today too. Ids are the options' indexes, the answers' keys in Decide.
+    static func component(question q: ComponentQuestion, system: ComponentSystem) -> DesignChoice? {
+        guard let role = q.role.flatMap({ system.role($0) }), let element = ComponentElement.named(role.element) else { return nil }
         let places = Array((q.place.map { [$0] } ?? role.places).prefix(3))
-        let project = state.project(id: ticket.projectId)
 
         func option(_ id: String, name: String, recipe: [String: String]?, recommended: Bool = false, isToday: Bool = false) -> Option {
             Option(id: id, name: name, recommended: recommended, isToday: isToday,
@@ -307,8 +338,26 @@ extension DesignChoice {
                 : recipe.map { ComponentWords.look(element: role.element, recipe: $0) + (o.custom.map { " (\($0))" } ?? "") } ?? o.title
             options.append(option(String(i), name: name, recipe: recipe, recommended: i == q.recommended))
         }
-        var choice = DesignChoice(options: options)
-        if let project {
+        return DesignChoice(options: options)
+    }
+
+    /// The design of a design system question or change Proposal ticket, read from its project's notebook. Nil for any
+    /// other ticket.
+    static func component(ticket: Ticket, store: HatchStore) -> DesignChoice? {
+        guard ticket.area == ComponentsSetup.area,
+              let notebook = ((try? store.project(id: ticket.projectId)) ?? nil)?.config?.repo(.notebook)?.localPath,
+              let system = (try? ComponentSystem.load(notebook: notebook)) ?? nil else { return nil }
+        let qid = ComponentsSetup.componentQuestionId(inBody: ticket.body)
+            ?? (ComponentsSetup.changedRole(inBody: ticket.body) != nil ? ComponentsSetup.changeQuestionId(ticketId: ticket.id) : nil)
+        guard let qid, let q = system.questions.first(where: { $0.id == qid }) else { return nil }
+        return component(question: q, system: system)
+    }
+
+    /// The same in the app, with the Designer one click away.
+    @MainActor
+    static func component(ticket: Ticket, state: AppState) -> DesignChoice? {
+        guard var choice = component(ticket: ticket, store: state.store) else { return nil }
+        if let project = state.project(id: ticket.projectId) {
             choice.openTitle = "Open the Designer"
             choice.open = { StageLauncher.shared.openDesigner(project: project, state: state) }
         }
@@ -356,3 +405,10 @@ enum DesignChoiceHarness {
         }
     }
 }
+
+// The Decide Lab shows these settings in its own rows.
+extension DesignChoiceStyle.Layout: LabChoice {}
+extension DesignChoiceStyle.Frame: LabChoice {}
+extension DesignChoiceStyle.Canvas: LabChoice {}
+extension DesignChoiceStyle.Today: LabChoice {}
+extension DesignChoiceStyle.Places: LabChoice {}

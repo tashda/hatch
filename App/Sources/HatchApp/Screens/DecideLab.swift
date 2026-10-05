@@ -324,9 +324,9 @@ enum LabQueue: String, LabChoice {
 }
 
 enum LabData: String, LabChoice {
-    case queue, all, long, twoQuestions, design, gains, agent, plan, short
+    case queue, all, long, twoQuestions, design, component, gains, agent, plan, short
     var title: String {
-        ["queue": "Your queue", "long": "Long answers", "twoQuestions": "Two questions", "design": "A design to choose", "gains": "Options with gains and costs",
+        ["queue": "Your queue", "long": "Long answers", "twoQuestions": "Two questions", "design": "A design to choose", "component": "A design system question", "gains": "Options with gains and costs",
          "agent": "An agent's long question", "plan": "A plan to approve", "short": "Two short answers", "all": "All hard cases (a queue of 7)"][rawValue]!
     }
     var about: String { "What the card shows: your real queue, or a hard case." }
@@ -447,6 +447,8 @@ struct LabCard: Identifiable {
     var body: String?
     var files: [String] = []
     var specimens: [LabSpecimen] = []
+    /// A decision about a look, drawn by the shared view (DesignChoice) as real Decide draws it.
+    var design: DesignChoice? = nil
     var main: String
     var hint: String
 }
@@ -488,6 +490,7 @@ enum LabCards {
                                            let detail = [o.detail, o.why].compactMap { $0 }.joined(separator: " ")
                                            return LabOption(id: o.key, title: o.title, detail: detail.isEmpty ? nil : detail, gain: o.gain, cost: o.cost, recommended: o.recommended)
                                        })]
+            c.design = DesignChoice.component(ticket: t, store: store)
             c.main = "Choose"; c.hint = "Records a decision"
         case .plan:
             c.kind = "Approve a plan"; c.statement = "The agent wants to go ahead"
@@ -541,7 +544,7 @@ enum LabCards {
     static func sample(_ data: LabData) -> [LabCard] {
         switch data {
         case .queue: return []
-        case .all: return [LabData.long, .twoQuestions, .design, .gains, .agent, .plan, .short].flatMap { sample($0) }
+        case .all: return [LabData.long, .twoQuestions, .design, .component, .gains, .agent, .plan, .short].flatMap { sample($0) }
         case .long:
             return [LabCard(id: "s-long", kind: "Iris asks", statement: "Iris has a question", number: "#15", type: .proposal,
                             title: "Design recommendations for Decide, starting with the “Iris asks” bubbles", facts: longFacts, questions: [longQ1],
@@ -560,6 +563,24 @@ enum LabCards {
                             questions: [LabQuestion(id: "d", asker: .agent("Agent on #140"), time: "12m ago", ask: "Which spacing feels easier to scan?",
                                                     options: specs.filter { !$0.isToday }.map { LabOption(id: $0.id, title: $0.name, detail: $0.note, recommended: $0.recommended) })],
                             specimens: specs, main: "Accept", hint: "Accepting starts the build")]
+        case .component:
+            // The Glass template's "Other action" with the looks a real app had: 18 in use, the four most common shown.
+            var system = ComponentTemplates.glass.system(name: "Hatch")
+            let q = ComponentQuestion(
+                id: "look.button.secondary", kind: .look, role: "button.secondary", title: "", options: [
+                    .init(title: "", recipe: ["style": "bordered", "label": "titleOnly"], count: 27, examples: ["ShortcutsSettingsPage.swift:43"], effect: ""),
+                    .init(title: "", recipe: ["style": "glass", "label": "titleAndIcon"], count: 15, examples: ["DecideLab.swift:1713"], effect: ""),
+                    .init(title: "", recipe: ["style": "plain", "label": "iconOnly"], count: 8, examples: ["TicketsView.swift:111"], effect: ""),
+                    .init(title: "Follow macOS", follow: true, effect: "No look of its own: macOS decides, now and in later versions."),
+                    .init(title: "Not sure yet", effect: "Keep the most used look as a provisional guess.")],
+                reason: "18 looks are in use in the action row, bottom bar and floating bars; the first is the most used (27 of 58).")
+            system.questions = [q]
+            let draft = ComponentsSetup.questionDraft(q, system: system)
+            let options = draft.options.map { LabOption(id: $0.key, title: $0.title, detail: $0.detail, gain: $0.gain, cost: $0.cost, recommended: $0.recommended) }
+            return [LabCard(id: "s-component", kind: "Pick one", statement: "Pick a look", number: "new-19", type: .question, title: draft.title, area: "Components",
+                            facts: [(nil, "Quick question"), ("Priority", "Normal"), ("Area", "Components"), ("Verify", "None")],
+                            questions: [LabQuestion(id: "c", asker: .hatch, ask: "I prepared these options. Choosing one records a decision.", options: options)],
+                            design: DesignChoice.component(question: q, system: system), main: "Choose", hint: "Records a decision")]
         case .gains:
             return [LabCard(id: "s-gains", kind: "Pick one", statement: "Pick one of 3", number: "#170", type: .question, title: "Two values for Color.accent", area: "Components",
                             facts: [(nil, "Quick question"), ("Priority", "Normal"), ("Area", "Components"), ("Verify", "None")],
@@ -614,6 +635,8 @@ final class LabModel: ObservableObject {
     @Published var selected: [String: String] = [:]
     @Published var own = ""
     @Published var drawer = LabStyle.load().queue == .drawer
+    /// How a design is shown, in the Lab and in Decide (DesignChoiceStyle).
+    @Published var designStyle = DesignChoiceStyle.current { didSet { designStyle.save() } }
 
     var cards: [LabCard] { style.data == .queue ? queue : LabCards.sample(style.data) }
     var card: LabCard? { cards.isEmpty ? nil : cards[min(index, cards.count - 1)] }
@@ -690,7 +713,10 @@ struct DecideLabView: View {
                 row("Keys", \.keys); row("Your own", \.own)
             }
             Section("Two or more questions") { row("Show", \.multi) }
-            Section("When a design is shown") { row("Show", \.design); row("Pictures", \.thumb); row("Choose", \.designChoice) }
+            Section {
+                designRow("Show", \.layout); designRow("Frame", \.frame); designRow("Canvas", \.canvas)
+                designRow("Today", \.today); designRow("Places", \.places); row("Choose", \.designChoice)
+            } header: { Text("When a design is shown") } footer: { Text("Every decision about a look uses these: design system questions, changes, and later Sweeps and Proposals.") }
             Section("Actions") {
                 row("Where", \.actions); row("Main button", \.mainButton); row("Size", \.buttonSize); row("Later and Note", \.secondary)
                 row("Order", \.order); row("Hint", \.hint); row("Key", \.returnKey)
@@ -732,6 +758,26 @@ struct DecideLabView: View {
         }
     }
 
+    /// A setting of the shared design view, in the same row as every other setting.
+    private func designRow<E: LabChoice>(_ title: String, _ kp: WritableKeyPath<DesignChoiceStyle, E>) -> some View {
+        let value = Binding<E>(get: { model.designStyle[keyPath: kp] }, set: { model.designStyle[keyPath: kp] = $0 })
+        let all = Array(E.allCases)
+        func step(_ by: Int) {
+            guard let at = all.firstIndex(of: value.wrappedValue) else { return }
+            value.wrappedValue = all[(at + by + all.count) % all.count]
+        }
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text(title)
+                Spacer(minLength: 8)
+                Button { step(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.borderless).help("Previous option")
+                Picker(title, selection: value) { ForEach(all) { Text($0.title).tag($0) } }.labelsHidden().pickerStyle(.menu).fixedSize()
+                Button { step(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.borderless).help("Next option")
+            }
+            Text(value.wrappedValue.about).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private func step<E: LabChoice>(_ kp: WritableKeyPath<LabStyle, E>, _ by: Int) {
         let all = Array(E.allCases)
         guard let at = all.firstIndex(of: model.style[keyPath: kp]) else { return }
@@ -745,7 +791,8 @@ struct DecideLabView: View {
             ("Title", s.titleSize.title), ("Header", s.header.title), ("Facts", s.tokens.title), ("Turn", s.turn.title), ("Question", s.ask.title),
             ("Picture", s.avatar.title), ("Line above", s.byline.title), ("Long message", s.longAsk.title), ("Answers", s.answers.title),
             ("Recommended", s.recommended.title), ("Selected", s.indicator.title), ("Long answers", s.longAnswer.title), ("Keys", s.keys.title),
-            ("Own answer", s.own.title), ("Two questions", s.multi.title), ("Design", s.design.title), ("Pictures", s.thumb.title),
+            ("Own answer", s.own.title), ("Two questions", s.multi.title), ("Design", model.designStyle.layout.title), ("Frame", model.designStyle.frame.title), ("Canvas", model.designStyle.canvas.title),
+            ("Today", model.designStyle.today.title), ("Places", model.designStyle.places.title),
             ("Choose design", s.designChoice.title), ("Actions", s.actions.title), ("Main button", s.mainButton.title), ("Button size", s.buttonSize.title),
             ("Later and Note", s.secondary.title), ("Order", s.order.title), ("Hint", s.hint.title), ("Key", s.returnKey.title), ("Progress", s.progress.title), ("What is left", s.queue.title)]
         return parts.map { "\($0.0) \($0.1)" }.joined(separator: " · ")
@@ -976,7 +1023,9 @@ private struct LabContextPane: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if let first = card.specimens.first {
+                if let design = card.design, let q = card.questions.first {
+                    DesignChoiceView(choice: design, selection: model.binding(q), style: model.designStyle)
+                } else if let first = card.specimens.first {
                     let sel = card.questions.first.map { model.selection($0) } ?? ""
                     let spec = card.specimens.first { $0.id == sel } ?? first
                     Text(spec.name).font(.title3.weight(.semibold))
@@ -1451,8 +1500,8 @@ private struct LabQuestionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ask
-            if !card.specimens.isEmpty && !splitDesign {
-                LabDesignView(card: card, question: question, model: model).padding(.top, s.gap(16)).padding(.leading, indent)
+            if let design = card.labDesign, !splitDesign {
+                DesignChoiceView(choice: design, selection: selection, style: model.designStyle).padding(.top, s.gap(16)).padding(.leading, indent)
             }
             if showAnswerList {
                 answers.padding(.top, s.gap(14)).padding(.leading, indent)
@@ -1462,7 +1511,7 @@ private struct LabQuestionView: View {
     }
 
     private var showAnswerList: Bool {
-        if card.specimens.isEmpty || splitDesign { return !question.options.isEmpty || (question.allowsOwn && s.own == .row) }
+        if card.labDesign == nil || splitDesign { return !question.options.isEmpty || (question.allowsOwn && s.own == .row) }
         return s.designChoice != .pictures
     }
 
@@ -1886,106 +1935,16 @@ private struct LabGainCost: View {
 
 // MARK: - Designs
 
-/// How a design's options are shown on the card: a gallery, large with a filmstrip, Today beside the pick, one at a
-/// time, a Stage card, or large beside its description.
-private struct LabDesignView: View {
-    let card: LabCard
-    let question: LabQuestion
-    @ObservedObject var model: LabModel
-    private var s: LabStyle { model.style }
-    private var selection: Binding<String> { model.binding(question) }
-    private var options: [LabSpecimen] { card.specimens.filter { !$0.isToday } }
-    private var today: LabSpecimen? { card.specimens.first(where: \.isToday) }
-    private var selected: LabSpecimen { options.first { $0.id == selection.wrappedValue } ?? options.first ?? card.specimens[0] }
-
-    var body: some View {
-        switch s.design {
-        case .gallery:
-            FlowLayout(spacing: 14) { ForEach(card.specimens) { thumb($0, width: s.thumb.width) } }.padding(4)
-        case .hero:
-            VStack(alignment: .leading, spacing: 12) {
-                LabSpecimenView(spec: selected, width: min(s.thumb.width * 2.4, 620))
-                caption(selected)
-                HStack(spacing: 10) { ForEach(card.specimens) { thumb($0, width: 96, captionShown: false) } }
-            }
-        case .compare:
-            VStack(alignment: .leading, spacing: 10) {
-                if options.count > 1 {
-                    Picker("Option", selection: selection) { ForEach(options) { Text($0.name).tag($0.id) } }.pickerStyle(.segmented).labelsHidden().fixedSize()
-                }
-                HStack(alignment: .top, spacing: 16) {
-                    if let today {
-                        VStack(alignment: .leading, spacing: 6) { Text("Today").font(.caption.weight(.semibold)).foregroundStyle(.secondary); LabSpecimenView(spec: today, width: s.thumb.width * 1.4) }
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(selected.name).font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor)
-                        LabSpecimenView(spec: selected, width: s.thumb.width * 1.4)
-                    }
-                }
-            }
-        case .carousel:
-            VStack(spacing: 10) {
-                HStack(spacing: 12) {
-                    Button { step(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.glass).buttonBorderShape(.circle)
-                    LabSpecimenView(spec: selected, width: min(s.thumb.width * 2.2, 560))
-                    Button { step(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.glass).buttonBorderShape(.circle)
-                }
-                caption(selected)
-                HStack(spacing: 6) { ForEach(options) { o in Circle().fill(o.id == selected.id ? Color.primary : Color.secondary.opacity(0.3)).frame(width: 6, height: 6) } }
-            }
-            .frame(maxWidth: .infinity)
-        case .stageCard:
-            HStack(spacing: 14) {
-                HStack(spacing: -30) { ForEach(card.specimens.prefix(4)) { LabSpecimenView(spec: $0, width: 110).shadow(color: .black.opacity(0.12), radius: 4, y: 2) } }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("\(card.specimens.count) options, drawn in the Stage").font(.headline)
-                    Text("Judge them side by side with scenarios and pins.").font(.callout).foregroundStyle(.secondary)
-                    Button("Open the Stage") {}.buttonStyle(.glass).buttonBorderShape(.capsule)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(14)
-            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
-        case .split:
-            HStack(alignment: .top, spacing: 16) {
-                LabSpecimenView(spec: selected, width: s.thumb.width * 1.6)
-                caption(selected)
-            }
-        }
-    }
-
-    private func step(_ by: Int) {
-        guard let at = options.firstIndex(where: { $0.id == selected.id }) else { return }
-        selection.wrappedValue = options[(at + by + options.count) % options.count].id
-    }
-
-    private func caption(_ spec: LabSpecimen) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Text(spec.name).font(.headline)
-                if spec.recommended { Label("Recommended", systemImage: "star.fill").font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor).imageScale(.small) }
-            }
-            Text(spec.note).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func thumb(_ spec: LabSpecimen, width: CGFloat, captionShown: Bool = true) -> some View {
-        let on = !spec.isToday && spec.id == selected.id
-        return Button { if !spec.isToday { selection.wrappedValue = spec.id } } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                LabSpecimenView(spec: spec, width: width)
-                    .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(on ? Color.accentColor : Color.clear, lineWidth: 3).padding(-3))
-                if captionShown {
-                    HStack(spacing: 5) {
-                        Text(spec.name).font(.callout.weight(on ? .semibold : .regular)).foregroundStyle(spec.isToday ? Color.secondary : Color.primary)
-                        if spec.recommended { Image(systemName: "star.fill").font(.caption2).foregroundStyle(Color.accentColor) }
-                    }
-                    .frame(width: width, alignment: .leading)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .help(spec.note)
+extension LabCard {
+    /// The card's design for the shared view: its own (a design system question), or its sample specimens.
+    var labDesign: DesignChoice? {
+        if let design { return design }
+        guard !specimens.isEmpty else { return nil }
+        return DesignChoice(options: specimens.map { spec in
+            DesignChoice.Option(id: spec.id, name: spec.name, note: spec.note, recommended: spec.recommended, isToday: spec.isToday,
+                                large: { _ in AnyView(LabSpecimenView(spec: spec, width: 520)) },
+                                small: { AnyView(LabSpecimenView(spec: spec, width: 96)) })
+        }, openTitle: "Open the Stage", open: {})
     }
 }
 

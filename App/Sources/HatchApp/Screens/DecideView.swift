@@ -495,6 +495,8 @@ private struct DecideCard: View {
     let leave: (Route) -> Void
 
     @State private var choices: [AnswerOption] = []
+    /// A decision about a look, drawn (DesignChoice, styled in the Decide Lab); nil for every other decision.
+    @State private var design: DesignChoice?
     @State private var body_ = ""
     @State private var info = ProposalInfo()
     @State private var openQuestions: [Question] = []
@@ -612,7 +614,12 @@ private struct DecideCard: View {
                 QuestionMessage(asker: item.ticket.status == .draft ? "Hatch" : "Agent on \(item.ticket.displayNumber)",
                                 text: item.ticket.type == .proposal ? "These are the looks for \(ComponentsSetup.changedRole(inBody: item.ticket.body) ?? "the role"). The Designer draws them in their places. Choosing one accepts the Proposal."
                                     : item.ticket.status == .draft ? "I prepared these options. Choosing one records a decision." : "These are the options. Choosing one records a decision.")
-                answerList(own: false)
+                if let design {
+                    DesignChoiceView(choice: design, selection: Binding(get: { selection }, set: { selected = $0 }))
+                        .padding(.leading, QuestionMessage.indent)
+                }
+                // DR8: a design is chosen by picture; the Lab can bring the list back beside it.
+                if design == nil || LabStyle.load().designChoice != .pictures { answerList(own: false) }
             }
         case .plan:
             VStack(alignment: .leading, spacing: answersGap) {
@@ -925,6 +932,7 @@ private struct DecideCard: View {
 
     private func load() {
         let store = state.store, t = item.ticket
+        design = nil
         switch item.kind {
         case .pick:
             let options = (try? store.questionOptions(ticketId: t.id)) ?? []
@@ -932,7 +940,7 @@ private struct DecideCard: View {
                 let detail = [o.detail, o.why].compactMap { $0 }.map { ".!?".contains($0.last ?? ".") ? $0 : $0 + "." }.joined(separator: " ")
                 return AnswerOption(id: o.key, title: o.title, detail: detail.isEmpty ? nil : detail, gain: o.gain, cost: o.cost, recommended: o.recommended, answer: o.key)
             }
-            choices = ComponentOptionSample.attach(choices, ticket: t, state: state)  // design system answers drawn in place
+            if let d = DesignChoice.component(ticket: t, state: state) { design = d.merging(choices); choices = d.titled(choices) }
         case .plan:
             let (rec, why) = planRecommendation()
             choices = [AnswerOption(id: "approve", title: "Approve the plan", detail: rec == "approve" ? why : "The agent goes ahead with these files.", recommended: rec == "approve", answer: "approve"),

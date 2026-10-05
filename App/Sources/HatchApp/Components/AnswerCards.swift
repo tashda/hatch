@@ -15,8 +15,6 @@ struct AnswerOption: Identifiable, Hashable {
     var recommended = false
     /// The text that goes back to the asker.
     var answer: String
-    /// A design system answer drawn in its places (Decide's component questions).
-    var sample: ComponentOptionSample? = nil
 
     /// A long answer split into a short bold line and the rest: at the first colon, dash or sentence end within 90
     /// characters; otherwise the whole text is the title.
@@ -121,7 +119,6 @@ struct AnswerList: View {
                                 .padding(.horizontal, 6).padding(.vertical, 2).background(Color.accentColor, in: Capsule())
                         }
                     }
-                    if let s = o.sample { ComponentOptionPreview(sample: s) }
                     if let d = o.detail {
                         Text(d).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                     }
