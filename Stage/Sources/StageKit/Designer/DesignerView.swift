@@ -264,9 +264,12 @@ struct DesignerSidebar: View {
             if !others.isEmpty { Section("Other") { ForEach(others, id: \.self) { e in element(e) } } }
             let places = model.placesUsed.filter { shown($0.title) }
             if !places.isEmpty {
-                Section("Places") {
+                Section("By Place") {
                     ForEach(places) { p in
-                        Text(p.title).badge(model.questions(inPlace: p.id).count).tag(DesignerSelection.place(p.id)).help(p.summary)
+                        // Not more elements: the same roles grouped by where they sit, so they read differently.
+                        Label(p.title, systemImage: "rectangle.dashed").foregroundStyle(.secondary)
+                            .badge(model.questions(inPlace: p.id).count).tag(DesignerSelection.place(p.id))
+                            .help("Every control in \(p.title.lowercased()): \(p.summary)")
                             .contextMenu { BatchMenuItems(model: model, element: nil, place: p.id) }
                     }
                 }
@@ -373,12 +376,18 @@ struct RoleView: View {
                     Button("Keep") { model.keep() }.buttonStyle(.borderedProminent)
                 }
             }
+            let comparing = model.isPreviewing(role) || role.draft != nil
+            if !comparing {
+                Text("Choose a look on the right to see it here beside today's.").font(.callout).foregroundStyle(.secondary)
+            }
             Grid(alignment: .topLeading, horizontalSpacing: 20, verticalSpacing: 20) {
-                GridRow {
-                    Text("").gridColumnAlignment(.leading)
-                    Text("Today").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Text(model.isPreviewing(role) ? "Preview" : role.draft != nil ? "Draft" : "Draft (as today)")
-                        .font(.caption.weight(.semibold)).foregroundStyle(model.isPreviewing(role) ? .orange : .secondary)
+                if comparing {
+                    GridRow {
+                        Text("").gridColumnAlignment(.leading)
+                        Text("Today").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text(model.isPreviewing(role) ? "Preview" : "Draft")
+                            .font(.caption.weight(.semibold)).foregroundStyle(model.isPreviewing(role) ? .orange : .secondary)
+                    }
                 }
                 ForEach(role.places, id: \.self) { id in
                     let place = model.system.place(id) ?? ComponentPlace(id, id, "")
@@ -393,29 +402,33 @@ struct RoleView: View {
                         }
                         .frame(width: 110, alignment: .leading).help(place.summary)
                         Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, today: true, framed: false) }
-                        Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, framed: false) }
+                        if comparing {
+                            Appearances(model: model) { PlaceFrame(place: place, element: role.element, model: model, focus: role.id, framed: false) }
+                        }
                     }
                 }
             }
             let looks = model.looksToday(role)
             if looks.count > 1 {
-                Divider()
-                Text("Also in the app today").font(.headline)
-                ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: 16) {
-                        ForEach(Array(looks.prefix(8).enumerated()), id: \.offset) { _, look in
-                            VStack(alignment: .leading, spacing: 4) {
-                                RecipeControl(element: role.element, recipe: look.look, system: model.system, importance: role.importance,
-                                              sample: SampleWords.content(role.importance, place: role.places.first ?? "page", base: model.sample))
-                                    .allowsHitTesting(false)
-                                Text("\(look.count) use\(look.count == 1 ? "" : "s")").font(.caption.weight(.medium))
-                                Text(look.examples.joined(separator: ", ")).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-                            }
-                            .frame(width: 170, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture { model.tryLook(DesignerPreview(role: role.id, recipe: look.look, label: "\(look.count) uses today")) }
-                            .help("Try this look everywhere")
+                Divider().padding(.top, 8)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("For reference: how the app draws it today").font(.headline)
+                    Text("\(looks.reduce(0) { $0 + $1.count }) places in the code use \(looks.count) different looks for this role. Whatever you choose, they move to it when their screens are next changed.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12, alignment: .top)], alignment: .leading, spacing: 12) {
+                    ForEach(Array(looks.prefix(8).enumerated()), id: \.offset) { _, look in
+                        VStack(alignment: .leading, spacing: 6) {
+                            RecipeControl(element: role.element, recipe: look.look, system: model.system, importance: role.importance,
+                                          sample: SampleWords.content(role.importance, place: role.places.first ?? "page", base: model.sample))
+                                .allowsHitTesting(false)
+                            Text("\(ComponentWords.look(element: role.element, recipe: look.look)) · \(look.count) use\(look.count == 1 ? "" : "s")")
+                                .font(.caption.weight(.medium))
+                            Text(look.examples.joined(separator: "\n")).font(.caption2.monospaced()).foregroundStyle(.secondary)
                         }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                 }
             }
@@ -703,7 +716,13 @@ struct RoleInspector: View {
             if let finding {
                 InspectorSection { AppleCallout(model: model, role: role, advice: finding) }
             }
-            if let q = model.question(for: role) {
+            if role.places.allSatisfy({ ComponentNative.systemPlaces[$0]?.allowed.isEmpty == true }) {
+                // Menu items and alerts are drawn by macOS: there is no look to choose, only order and wording (Rules).
+                InspectorSection(title: "Look", footer: "Order, wording and icons in menus are set under Rules.") {
+                    Text("macOS draws \(role.places.map { ComponentPlace.title($0).lowercased() }.joined(separator: " and ")) itself, so there is no look to choose here.")
+                    if !role.followsMacOS { Button("Follow macOS") { model.tryLook(DesignerPreview(role: role.id, recipe: role.recipe.filter { ComponentElement.named(role.element)?.parameter($0.key)?.isLook == false }, follow: true, label: "Follow macOS")) } }
+                }
+            } else if let q = model.question(for: role) {
                 QuestionPicks(model: model, role: role, question: q)
             } else {
                 LookPicks(model: model, role: role)

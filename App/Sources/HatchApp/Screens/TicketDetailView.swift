@@ -540,11 +540,12 @@ struct QuestionDecisionSheet: View {
         guard let choice else { return }
         let id = ticket.id, projectId = ticket.projectId, why = reason, kind = kind, prepared = ticket.status == .draft
         let done: Bool? = state.perform("Could not record the decision") {
+            // A design system question changes the system first, so a refused change leaves the ticket open.
+            try state.applyComponentDecision(ticket: ticket, choice: choice)
             // A Question Hatch prepared is still a draft; it takes its path on the way (decision CO11).
             if ticket.type == .proposal { _ = try state.store.decideComponentChange(ticketId: id, choice: choice, reason: why) }
             else if prepared { _ = try state.store.decidePreparedQuestion(ticketId: id, choice: choice, reason: why, kind: kind) }
             else { _ = try state.store.decideQuestion(ticketId: id, choice: choice, reason: why, kind: kind) }
-            try state.applyComponentDecision(ticket: ticket, choice: choice)
             return true
         }
         if done == true {

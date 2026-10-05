@@ -379,6 +379,11 @@ public extension ComponentSystem {
             guard let ri = roles.firstIndex(where: { $0.id == roleId }) else { throw ComponentAnswerError.noRole(roleId) }
             roles[ri].recipe = recipe
             roles[ri].custom = chosen.custom
+            // A look of its own no longer follows macOS (a role that followed it because the app's most used look was the
+            // default; leaving it set made the system invalid and the answer was lost).
+            if let element = ComponentElement.named(roles[ri].element), !element.withoutDefaults(element.look(recipe)).filter({ $0.key != "label" }).isEmpty || chosen.custom != nil {
+                roles[ri].followsMacOS = false
+            }
             roles[ri].status = .agreed
             roles[ri].decision = decision ?? roles[ri].decision
         }
@@ -648,7 +653,10 @@ public extension HatchStore {
         var filter = TicketFilter(); filter.projectId = projectId; filter.area = ComponentsSetup.area
         let existing = try tickets(filter).filter { $0.type == .question }
         var byQuestion: [String: Ticket] = [:]
-        for t in existing { if let id = ComponentsSetup.componentQuestionId(inBody: t.body) { byQuestion[id] = t } }
+        // A closed ticket for a question that is still open means its answer never reached the system: ask again.
+        for t in existing where !t.status.isTerminal {
+            if let id = ComponentsSetup.componentQuestionId(inBody: t.body) { byQuestion[id] = t }
+        }
         let open = Set(system.questions.map(\.id))
         var added = 0, dropped = 0
         // A change's looks are answered on its Proposal (CP3), not on a Question of their own.

@@ -873,11 +873,12 @@ private struct DecideCard: View {
         switch item.kind {
         case .pick:
             commit(agreed: agreed, startsAgent: false, label: "\(ticket.displayNumber) · \(c.title)") {
+                // A design system question changes the system first (DC9, DS4): if Hatch refuses the change, the ticket
+                // stays open and the error shows, instead of closing with nothing saved.
+                try state.applyComponentDecision(ticket: ticket, choice: key)
                 if ticket.type == .proposal { _ = try store.decideComponentChange(ticketId: ticket.id, choice: key, reason: note.isEmpty ? nil : note) }
                 else if ticket.status == .draft { _ = try store.decidePreparedQuestion(ticketId: ticket.id, choice: key, reason: note.isEmpty ? nil : note) }
                 else { _ = try store.decideQuestion(ticketId: ticket.id, choice: key, reason: note.isEmpty ? nil : note) }
-                // A design system question changes the system too (DC9, DS4).
-                try state.applyComponentDecision(ticket: ticket, choice: key)
             }
         case .plan:
             guard let plan = item.plan else { return }

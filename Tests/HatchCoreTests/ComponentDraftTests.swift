@@ -156,6 +156,18 @@ final class ComponentDraftTests: XCTestCase {
         XCTAssertThrowsError(try s.rename("button.inRow", title: "  "))
     }
 
+    /// Found in use: a role that follows macOS (the app's most used look was the default) took a look of its own from an
+    /// answer but still said it followed macOS, so the system was refused and the answer lost.
+    func testALookOfItsOwnStopsFollowingMacOS() throws {
+        var s = ComponentTemplates.native.system(name: "Acme")
+        XCTAssertTrue(s.role("toggle.setting")!.followsMacOS)
+        s.questions = [ComponentQuestion(id: "look.toggle.setting", kind: .look, role: "toggle.setting", title: "?",
+                                         options: [.init(title: "Switch", recipe: ["style": "switch"], count: 1, effect: "")], reason: "")]
+        try s.answer("look.toggle.setting", option: 0)
+        XCTAssertFalse(s.role("toggle.setting")!.followsMacOS)
+        XCTAssertEqual(s.problems(), [])
+    }
+
     func testNamesReadLikeTheTemplateAndLeftoversByFamily() {
         let inv = ComponentInventory(uses: [
             use("button", "listRow", ["style": "glassProminent"], .main),

@@ -19,6 +19,20 @@ final class ComponentWordsTests: XCTestCase {
         XCTAssertEqual(ComponentWords.lookQuestion(system.role("button.sheetDefault")!), "How should default buttons look?")
     }
 
+    /// Found in use: a Decide answer the system refused closed its ticket anyway; the question, still open, comes back.
+    func testAQuestionWhoseTicketClosedComesBack() throws {
+        let store = try HatchStore.inMemory()
+        let p = try store.upsertProject(key: "acme", name: "Acme")
+        var system = ComponentTemplates.glass.system(name: "Acme")
+        system.questions = [ComponentQuestion(id: "look.button.secondary", kind: .look, role: "button.secondary", title: "?",
+                                              options: [.init(title: "Plain", recipe: ["style": "plain"], count: 3, effect: "")], reason: "Most used.")]
+        XCTAssertEqual(try store.syncComponentQuestions(projectId: p.id, system: system).added, 1)
+        let first = try XCTUnwrap(try store.tickets(TicketFilter()).first)
+        try store.move(first.id, to: .dropped, actor: .owner, reason: "closed without the answer saved")
+        XCTAssertEqual(try store.syncComponentQuestions(projectId: p.id, system: system).added, 1, "asked again")
+        XCTAssertEqual(try store.syncComponentQuestions(projectId: p.id, system: system).added, 0)
+    }
+
     func testWaitingQuestionsTakeTheNewWording() throws {
         let store = try HatchStore.inMemory()
         let p = try store.upsertProject(key: "acme", name: "Acme")

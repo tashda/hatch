@@ -72,15 +72,32 @@ struct PlaceFrame: View {
         return 1
     }
 
-    /// A role's control; a click opens its role.
+    /// A role's control; a click opens its role. The control itself takes no clicks (a menu would open, a toggle flip),
+    /// so every control on the canvas can be chosen the same way; under the pointer it is outlined and named, which shows
+    /// what can be edited.
     @ViewBuilder func control(_ role: ComponentRole) -> some View {
         RecipeControl(element: element, recipe: recipe(role), system: model.system, importance: role.importance,
                       sample: SampleWords.content(role.importance, place: place.id, base: model.sample))
+            .allowsHitTesting(false)
             .padding(3)
             .opacity(emphasis(role))
+            .overlay {
+                if hovered == role.id {
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 1.5)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if hovered == role.id {
+                    Text("Edit \(role.title)").font(.caption2.weight(.semibold)).foregroundStyle(.white)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.accentColor, in: Capsule())
+                        .offset(y: 16).fixedSize()
+                }
+            }
             .contentShape(Rectangle())
-            .simultaneousGesture(TapGesture().onEnded { model.open(role.id) })
+            .onTapGesture { model.open(role.id) }
             .onHover { hovered = $0 ? role.id : (hovered == role.id ? nil : hovered) }
+            .zIndex(hovered == role.id ? 1 : 0)
             .help("\(role.title): \(role.use)")
     }
 
