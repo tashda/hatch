@@ -501,6 +501,15 @@ public final class StageServer: @unchecked Sendable {
                 let role = try body.string("role", max: 120)
                 try system.addVariant(to: role, id: try body.string("id", max: 60), use: try body.string("use", max: 300), recipe: recipe())
                 message = "Components: variant of \(role)"
+            case "restore":
+                // Undo in the Designer (CD23): the system as it was before the last kept change, checked like any other.
+                let restored = try JSONDecoder().decode(ComponentSystem.self, from: Data(try body.string("system", max: 4_000_000).utf8))
+                let problems = restored.problems()
+                guard problems.isEmpty, restored.name == system.name else {
+                    throw APIError(status: 422, code: "invalid", message: problems.first ?? "That is another app's design system.")
+                }
+                system = restored
+                message = "Components: undo" + ((try body.optionalString("label", max: 200)).map { " \($0)" } ?? "")
             default:
                 throw APIError(status: 404, code: "not_found", message: "Unknown components action \(action).")
             }

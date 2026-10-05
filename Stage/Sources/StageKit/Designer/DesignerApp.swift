@@ -162,6 +162,17 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                     try? await Task.sleep(nanoseconds: 450_000_000)
                     save(window, "\(element)-\(mode.rawValue)-\(dark ? "dark" : "light")", dir)
                 }
+                // The role level (CD8): the first role with a question, then its recommendation as a preview (CD13).
+                model.mode = .inPlace
+                if let q = model.questions(for: element).first, let id = q.role, let role = model.system.role(id) {
+                    model.open(id)
+                    try? await Task.sleep(nanoseconds: 450_000_000)
+                    save(window, "\(element)-role-\(dark ? "dark" : "light")", dir)
+                    model.tryLook(RoleInspectorPreview.make(role, q, q.recommended))
+                    try? await Task.sleep(nanoseconds: 450_000_000)
+                    save(window, "\(element)-preview-\(dark ? "dark" : "light")", dir)
+                    model.back()
+                }
             }
             model.selection = .rules
             try? await Task.sleep(nanoseconds: 450_000_000)

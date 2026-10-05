@@ -32,8 +32,20 @@ public struct RecipePlaceSample: View {
             .fixedSize()
     }
 
-    private var controls: some View {
-        HStack(spacing: 8) { ForEach(cells) { control($0) } }
+    @ViewBuilder private var controls: some View {
+        if role.element == "badge" && place == "toolbar" {
+            // A toolbar badge sits on a toolbar item, as the system draws it.
+            Image(systemName: "tray").font(.title3).foregroundStyle(.secondary)
+                .overlay(alignment: .topTrailing) { control(role).offset(x: 7, y: -6) }
+                .padding(.trailing, 6)
+        } else {
+            HStack(spacing: 8) { ForEach(cells) { control($0) } }
+        }
+    }
+
+    /// A toast's position decides where it floats (CD21: a setting that is only visible in its place).
+    private var floatingAlignment: Alignment {
+        role.element == "toast" && (recipe ?? role.recipe)["position"] == "top" ? .top : .bottom
     }
 
     public var body: some View {
@@ -88,6 +100,9 @@ public struct RecipePlaceSample: View {
                 .padding(8)
             }
             .background(.background, in: RoundedRectangle(cornerRadius: 8))
+        case "listRow" where role.element == "row":
+            // A row draws its own list, once (B6).
+            control(role).padding(4).background(.background, in: RoundedRectangle(cornerRadius: 8))
         case "listRow":
             VStack(spacing: 0) {
                 ForEach(["Fix the login sheet", "Toast feels cramped"], id: \.self) { title in
@@ -135,6 +150,13 @@ public struct RecipePlaceSample: View {
             .padding(.vertical, 6)
             .frame(width: 200, alignment: .leading)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        case "floating" where role.element == "toast":
+            // A toast is its own floating surface: no bar around it (no glass on glass).
+            control(role)
+                .padding(12)
+                .frame(maxWidth: .infinity, minHeight: 110, alignment: floatingAlignment)
+                .background(LinearGradient(colors: [.teal.opacity(0.25), .indigo.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: 8))
         case "floating":
             HStack(spacing: 6) { ForEach(cells) { control($0) } }
                 .padding(6)

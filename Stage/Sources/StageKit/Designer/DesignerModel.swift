@@ -55,6 +55,8 @@ final class LocalComponentsSource: ComponentsSource {
                 system.rules.append(ComponentRule(id: kind, kind: kind, value: value, text: info.says(value), status: .agreed))
             }
         case "removeRule": system.rules.removeAll { $0.id == body["id"]?.stringValue }
+        case "restore":
+            if let json = body["system"]?.stringValue { system = try JSONDecoder().decode(ComponentSystem.self, from: Data(json.utf8)) }
         default: break
         }
 
@@ -77,13 +79,33 @@ final class HatchComponentsSource: ComponentsSource {
     }
 }
 
-/// What the main area shows for the selected element.
+/// What the main area shows for the selected element (CD10: Today vs Draft lives inside a role).
 enum DesignerMode: String, CaseIterable, Identifiable {
-    case inPlace, matrix, today
+    case inPlace, matrix
     var id: String { rawValue }
     var title: String {
-        switch self { case .inPlace: "In Place"; case .matrix: "Matrix"; case .today: "Today vs Draft" }
+        switch self { case .inPlace: "In Place"; case .matrix: "Matrix" }
     }
+}
+
+/// How the canvas is drawn (CD15): light, dark, or each place in both side by side. Only the canvas and the live
+/// window change; the inspector stays as the system draws it.
+enum DesignerAppearance: String, CaseIterable, Identifiable {
+    case light, dark, both
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
+/// A look being tried on a role and drawn everywhere it sits, not saved until Keep (CD13).
+struct DesignerPreview: Equatable {
+    var role: String
+    var recipe: [String: String]
+    /// Following macOS: no look of its own.
+    var follow = false
+    /// The open question's option it comes from, so Keep answers it.
+    var option: Int?
+    /// What it is, for the canvas and the undo menu ("Glass", "Most used", "Style: Filled").
+    var label: String
 }
 
 /// What the sidebar selects.
@@ -101,8 +123,27 @@ final class DesignerModel: ObservableObject {
     @Published var selectedRole: String?
     @Published var mode: DesignerMode = .inPlace
     @Published var sample = SampleContent()
-    @Published var dark = false
+    @Published var appearance: DesignerAppearance
     @Published var largeText = false
+    /// Draws prominent controls as in a window that is not in front (CD15).
+    @Published var inactive = false
+    /// The role is open on its own level (CD8): "‹ Buttons · Main action", drawn in every place it sits.
+    @Published var focused = false
+    /// The look being tried, if any (CD13).
+    @Published private(set) var preview: DesignerPreview?
+    /// Systems before each kept change, newest last, for ⌘Z (CD23).
+    @Published private(set) var undoStack: [(label: String, system: ComponentSystem)] = []
+    /// The appearance of the Mac when the Designer opened, so Light and Dark are explicit (B1: macOS doesn't go back from a
+    /// forced dark appearance when it is set to "none").
+    let systemScheme: ColorScheme
+
+    /// Dark or not, for the snapshot run and the live window.
+    var dark: Bool {
+        get { appearance == .dark }
+        set { appearance = newValue ? .dark : .light }
+    }
+    /// The live window's scheme: Both shows it light.
+    var liveScheme: ColorScheme { appearance == .dark ? .dark : .light }
     /// A problem worth showing: Hatch is away, or a change was refused.
     @Published private(set) var notice: String?
     @Published private(set) var busy = false
@@ -119,6 +160,9 @@ final class DesignerModel: ObservableObject {
         system = s
         appName = s.name
         self.inventory = inventory
+        let scheme: ColorScheme = NSApp?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+        systemScheme = scheme
+        appearance = scheme == .dark ? .dark : .light
         selection = s.elementsUsed.first.map { .element($0) }
         selectedRole = s.elementsUsed.first.flatMap { s.roles(of: $0).first?.id }
     }
@@ -128,6 +172,63 @@ final class DesignerModel: ObservableObject {
     var selectedElement: String? { if case .element(let e) = selection { return e }; return nil }
     var role: ComponentRole? { selectedRole.flatMap { system.role($0) } }
 
+    /// The look a role is drawn with now: the preview, then its draft, then its look.
+    func look(of role: ComponentRole) -> [String: String] {
+        if let p = preview, p.role == role.id { return p.recipe }
+        return role.draft ?? role.recipe
+    }
+    func isPreviewing(_ role: ComponentRole) -> Bool { preview?.role == role.id }
+
+    /// The open look question about a role, if any.
+    func question(for role: ComponentRole) -> ComponentQuestion? { system.questions.first { $0.role == role.id } }
+
+    /// Every open question, element by element in the sidebar's order, for the toolbar's queue (CD27).
+    var queue: [ComponentQuestion] {
+        system.elementsUsed.flatMap { questions(for: $0) }
+    }
+
+    /// Opens a role on its own level, closing any preview of another role.
+    func open(_ roleId: String) {
+        if preview?.role != roleId { preview = nil }
+        selectedRole = roleId
+        if let r = system.role(roleId), selectedElement != r.element { selection = .element(r.element) }
+        focused = true
+    }
+
+    /// Back to the element (Esc).
+    func back() { preview = nil; focused = false }
+
+    /// The next question after the selected role's, anywhere (⌘]).
+    func nextQuestion(forward: Bool = true) {
+        let list = queue
+        guard !list.isEmpty else { return }
+        let i = list.firstIndex { $0.role == selectedRole }
+        let next = i.map { list[(($0 + (forward ? 1 : -1)) % list.count + list.count) % list.count] } ?? list[0]
+        if let r = next.role { open(r) }
+    }
+
+    /// The looks worth trying on a role when nothing is asked about it (CD18): the current look, macOS's default,
+    /// each template's look, and the app's most used look, each named by where it comes from, duplicates merged.
+    func picks(for role: ComponentRole) -> [(label: String, recipe: [String: String], follow: Bool)] {
+        guard let element = ComponentElement.named(role.element) else { return [] }
+        var out: [(label: String, recipe: [String: String], follow: Bool)] = []
+        func add(_ label: String, _ recipe: [String: String], follow: Bool = false) {
+            let key = element.withoutDefaults(element.look(recipe))
+            if let i = out.firstIndex(where: { element.withoutDefaults(element.look($0.recipe)) == key && $0.follow == follow }) {
+                out[i].label += " · " + label
+            } else { out.append((label, recipe, follow)) }
+        }
+        add("Current", role.draft ?? role.recipe, follow: role.followsMacOS)
+        let behaviour = role.recipe.filter { element.parameter($0.key)?.isLook == false }
+        add("macOS default", behaviour, follow: true)
+        for t in ComponentTemplates.all {
+            let ref = t.system(name: "ref").roles(of: role.element)
+                .filter { $0.importance == role.importance && !Set($0.places).isDisjoint(with: role.places) }.first
+            if let ref { add(t.title, ref.recipe, follow: ref.followsMacOS) }
+        }
+        if let top = looksToday(role).first { add("Most used in the app", top.look.merging(behaviour) { a, _ in a }) }
+        return Array(out.prefix(5))
+    }
     func questions(for element: String) -> [ComponentQuestion] {
         system.questions.filter { q in q.role.map { system.role($0)?.element == element } ?? false }
     }
@@ -184,26 +285,88 @@ final class DesignerModel: ObservableObject {
     func discard(_ role: ComponentRole) { run("discard", ["role": .string(role.id)]) }
     func apply(_ role: ComponentRole?) { run("apply", role.map { ["role": .string($0.id)] } ?? [:]) }
 
-    /// Steps one setting of the selected role (‹ ›). A provisional role changes at once; an agreed one gets a draft.
-    func step(_ parameter: ComponentParameter, by delta: Int) {
-        guard let role else { return }
-        var recipe = role.draft ?? role.recipe
-        let values = parameter.values + (system.foundations.filter { parameter.foundation == $0.kind }.map(\.id))
-        let current = recipe[parameter.id].flatMap { values.firstIndex(of: $0) } ?? 0
-        let next = (current + delta + values.count) % values.count
-        recipe[parameter.id] = values[next]
-        run("look", ["role": .string(role.id), "recipe": .object(recipe.mapValues { .string($0) })])
+    /// The values a setting can take for this system: its own and the system's foundations of its kind.
+    func values(of parameter: ComponentParameter) -> [String] {
+        parameter.values + system.foundations.filter { parameter.foundation == $0.kind }.map(\.id)
     }
 
-    private func run(_ action: String, _ body: JSONValue) {
+    /// Tries a look on a role everywhere it sits, without saving (CD13).
+    func tryLook(_ p: DesignerPreview) {
+        preview = p
+        if selectedRole != p.role { selectedRole = p.role }
+    }
+
+    /// Tries one setting of the selected role (Fine-tune, CD19). macOS's default removes the setting.
+    func tryValue(_ parameter: ComponentParameter, _ value: String?) {
+        guard let role else { return }
+        var recipe = look(of: role)
+        if let value, value != parameter.systemDefault { recipe[parameter.id] = value } else { recipe[parameter.id] = nil }
+        let words = value.map { ComponentWords.value(element: role.element, parameter: parameter.id, value: $0) } ?? "macOS default"
+        tryLook(DesignerPreview(role: role.id, recipe: recipe, label: "\(parameter.title): \(words)"))
+    }
+
+    /// Saves the preview as one change (CD23): an answer to the open question, Follow macOS, or a new look.
+    func keep() {
+        guard let p = preview, let role = system.role(p.role) else { return }
+        preview = nil
+        if let i = p.option, let q = question(for: role) {
+            run("answer", ["question": .string(q.id), "option": .int(i), "setting": .bool(false)], label: "\(role.title): \(p.label)")
+        } else if p.follow {
+            run("follow", ["role": .string(role.id)], label: "\(role.title) follows macOS")
+        } else {
+            // Settings macOS uses anyway are left out (CD35), so nothing redundant is saved.
+            let element = ComponentElement.named(role.element)
+            let recipe = element.map { $0.withoutDefaults(p.recipe) } ?? p.recipe
+            run("look", ["role": .string(role.id), "recipe": .object(recipe.mapValues { .string($0) })], label: "\(role.title): \(p.label)")
+        }
+    }
+
+    /// The questions of an element that are easy (CD29): the recommendation is the template's look, or the look
+    /// most of the uses already have (80% or more).
+    func clearQuestions(_ element: String) -> [ComponentQuestion] {
+        questions(for: element).filter { q in
+            guard q.options.indices.contains(q.recommended) else { return false }
+            if q.reason.contains("template's look") || q.reason.contains("lets macOS draw it") { return true }
+            let total = q.options.reduce(0) { $0 + $1.count }
+            return total > 0 && q.options[q.recommended].count * 5 >= total * 4
+        }
+    }
+
+    /// Answers the easy questions with their recommendations; the roles stay provisional until agreed (DS8).
+    func acceptClear(_ element: String) {
+        for q in clearQuestions(element) {
+            run("answer", ["question": .string(q.id), "option": .int(q.recommended), "setting": .bool(false)],
+                label: "\(q.role.flatMap { system.role($0)?.title } ?? q.title): recommended")
+        }
+    }
+
+    /// Drops the preview: the role is drawn as it is again (Esc).
+    func discard() { preview = nil }
+
+    /// Undoes the last kept change (⌘Z): Hatch writes the system as it was before it.
+    func undo() {
+        guard let last = undoStack.popLast(), let data = try? last.system.encoded() else { return }
+        preview = nil
+        run("restore", ["system": .string(String(decoding: data, as: UTF8.self)), "label": .string(last.label)], label: nil)
+    }
+    var undoLabel: String? { undoStack.last?.label }
+
+    private func run(_ action: String, _ body: JSONValue, label: String? = "") {
         busy = true
         defer { busy = false }
+        let before = system
         do {
             system = try source.change(action, body)
             notice = nil
-            if let id = selectedRole, system.role(id) == nil { selectedRole = nil }
+            if let label, system != before { undoStack.append((label.isEmpty ? Self.describe(action) : label, before)) }
+            if let id = selectedRole, system.role(id) == nil { selectedRole = nil; focused = false }
         } catch {
             notice = "\(error)"
         }
+    }
+
+    private static func describe(_ action: String) -> String {
+        ["agree": "Agree", "apply": "Apply draft", "discard": "Discard draft", "follow": "Follow macOS", "setting": "Let people choose",
+         "rule": "Rule", "removeRule": "Remove rule", "unfollow": "Stop following macOS", "variant": "Variant", "change": "Ask for looks"][action] ?? action
     }
 }

@@ -97,6 +97,18 @@ public enum ComponentWords {
         helps["\(element).\(parameter)"] ?? helps[parameter]
     }
 
+    /// Whether to offer "Let people choose in Settings" for an element (CD36), and why. Rule 3: a recommendation each time.
+    public static func settingAdvice(element: String) -> (offer: Bool, reason: String) {
+        switch element {
+        case "row": return (true, "Dense or roomy lists are a common choice in pro apps, as in Mail and Finder.")
+        case "badge": return (true, "Some people find counts stressful; Mail and the Dock let them turn badges off.")
+        case "toast": return (true, "Slower readers need toasts to stay longer.")
+        case "button", "menu", "picker", "toggle", "field":
+            return (false, "People expect these to look like macOS; a setting doubles what has to be tested and nobody asks for it.")
+        default: return (false, "It is structure, not taste: changing it per person breaks layouts.")
+        }
+    }
+
     private static let values: [String: [String: String]] = [
         "button.style": ["automatic": "macOS default", "bordered": "Bordered", "borderedProminent": "Filled", "borderless": "Borderless",
                          "plain": "Plain", "link": "Link", "glass": "Glass", "glassProminent": "Glass, filled"],

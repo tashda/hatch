@@ -14,6 +14,8 @@ public struct SampleContent: Equatable {
     public var longLabel = false
     /// Give buttons their real keys (the live window's sheet and alert); off in tiles, where many would compete.
     public var liveKeys = false
+    /// The place it is drawn in, when a control looks different by place (a badge on a toolbar item or in a row).
+    public var place: String?
 
     public var shownTitle: String { longLabel ? "Save and continue to the next step" : title }
 }
@@ -48,7 +50,7 @@ public struct RecipeControl: View {
         case "row": RecipeRow(recipe: recipe)
         case "card": RecipeCard(recipe: recipe, system: system)
         case "sheet": RecipeSheet(recipe: recipe)
-        case "badge": RecipeBadge(recipe: recipe)
+        case "badge": RecipeBadge(recipe: recipe, place: sample.place)
         case "toast": RecipeToast(recipe: recipe)
         case "emptyState": RecipeEmptyState(recipe: recipe)
         default: Text(element).foregroundStyle(.secondary)
@@ -367,9 +369,9 @@ private struct RecipeCard: View {
     var body: some View {
         switch recipe["container"] {
         case "groupBox":
-            GroupBox("Details") { content }.frame(width: 240)
+            GroupBox("Details") { content }.frame(maxWidth: 240)
         case "formSection":
-            Form { Section("Details") { content } }.formStyle(.grouped).frame(width: 260, height: 130).scrollDisabled(true)
+            Form { Section("Details") { content } }.formStyle(.grouped).frame(maxWidth: 240).frame(height: 130).scrollDisabled(true)
         default:
             custom
         }
@@ -384,10 +386,10 @@ private struct RecipeCard: View {
             content
         }
         .padding(recipe["padding"].flatMap { $0 == "system" ? nil : RecipeColor.points($0, system: system, fallback: 16) } ?? 16)
-        .frame(width: 240, alignment: .leading)
+        .frame(maxWidth: 240, alignment: .leading)
         .background {
             switch recipe["surface"] {
-            case "grouped": shape.fill(.background.secondary)
+            case "grouped": shape.fill(.fill.quaternary)
             case "material": shape.fill(.regularMaterial)
             case "bordered": shape.strokeBorder(.separator)
             default: EmptyView()
@@ -395,7 +397,10 @@ private struct RecipeCard: View {
         }
         .modifier(GlassIf(on: recipe["surface"] == "glass", shape: shape))
         .overlay { if recipe["border"] == "hairline" { shape.strokeBorder(.separator, lineWidth: 0.5) } }
-        .shadow(color: .black.opacity(recipe["shadow"] == "soft" ? 0.08 : 0), radius: 4, y: 1)
+        .background {
+            // A soft shadow needs a surface to fall from; without one it would be invisible.
+            if recipe["shadow"] == "soft" { shape.fill(.background).shadow(color: .black.opacity(0.14), radius: 8, y: 3) }
+        }
     }
 }
 
@@ -430,19 +435,23 @@ private struct RecipeSheet: View {
 @available(macOS 26.0, *)
 private struct RecipeBadge: View {
     let recipe: [String: String]
+    let place: String?
 
     var body: some View {
         let text = Text("3").font(.caption2.weight(.semibold)).monospacedDigit()
         switch recipe["style"] {
         case "plain": text.foregroundStyle(.secondary)
-        case "capsule":
-            text.foregroundStyle(.white)
-                .padding(.horizontal, 5).padding(.vertical, 1)
-                .background(recipe["tint"] == "accent" ? Color.accentColor : Color.red, in: Capsule())
+        case "capsule": capsule(text, color: recipe["tint"] == "accent" ? Color.accentColor : Color.red)
         default:
-            // The system badge, on a real list row.
-            List { Text("Waiting for me").badge(3) }.frame(width: 220, height: 44).scrollDisabled(true)
+            // The system badge: a red capsule on a toolbar item (like the Dock's), the count in grey at the end of a row.
+            if place == "toolbar" { capsule(text, color: .red) } else { Text("3").monospacedDigit().foregroundStyle(.secondary) }
         }
+    }
+
+    private func capsule(_ text: some View, color: Color) -> some View {
+        text.foregroundStyle(.white)
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background(color, in: Capsule())
     }
 }
 
@@ -490,6 +499,7 @@ private struct RecipeEmptyState: View {
 public enum SampleWords {
     public static func content(_ importance: ComponentRole.Importance, place: String, base: SampleContent) -> SampleContent {
         var s = base
+        s.place = place
         switch (importance, place) {
         case (_, "toolbar"): s.title = "Refresh"; s.symbol = "arrow.clockwise"
         case (.main, _): s.title = base.longLabel ? base.title : "Save"; s.symbol = "checkmark"

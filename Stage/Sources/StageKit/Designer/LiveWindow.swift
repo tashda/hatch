@@ -28,7 +28,7 @@ struct LiveWindowView: View {
     var body: some View {
         navigation
             .modifier(LiveChrome(model: model, live: live, shell: shell))
-            .preferredColorScheme(model.dark ? .dark : nil)
+            .preferredColorScheme(model.liveScheme)
             .dynamicTypeSize(model.largeText ? .xxLarge : .large)
     }
 
@@ -62,7 +62,7 @@ struct LiveRole: View {
 
     var body: some View {
         if let role = model.system.role(element: element, place: place, importance: importance) {
-            RecipeControl(element: element, recipe: role.draft ?? role.recipe, system: model.system, importance: importance, sample: sample)
+            RecipeControl(element: element, recipe: model.look(of: role), system: model.system, importance: importance, sample: sample)
                 .help("\(role.id): \(role.use)")
         }
     }
@@ -253,6 +253,16 @@ private struct LivePage: View {
     private var page: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                // The demo's own links sit at the top, clear of the toast and the bottom bar (B11).
+                HStack {
+                    Button("Open a Sheet") { live.sheet = true }
+                    Button("Open an Alert") { live.alert = true }
+                    Button("Show a Popover") { live.popover = true }
+                        .popover(isPresented: $live.popover) { LivePopover(model: model) }
+                    Button("Show the Empty State") { live.empty = true }
+                }
+                .buttonStyle(.link)
+                .font(.caption)
                 Text("Toast feels cramped").font(.title2.bold())
                 HStack(spacing: 8) {
                     LiveRole(model: model, element: "button", place: "actionRow", importance: .main, title: "Accept", symbol: "checkmark")
@@ -276,15 +286,6 @@ private struct LivePage: View {
                 .formStyle(.grouped)
                 .frame(height: 220)
                 .scrollDisabled(true)
-                HStack {
-                    Button("Open a Sheet") { live.sheet = true }
-                    Button("Open an Alert") { live.alert = true }
-                    Button("Show a Popover") { live.popover = true }
-                        .popover(isPresented: $live.popover) { LivePopover(model: model) }
-                    Button("Show the Empty State") { live.empty = true }
-                }
-                .buttonStyle(.link)
-                .font(.caption)
             }
             .padding()
             .frame(maxWidth: 760, alignment: .leading)
@@ -301,7 +302,7 @@ private struct LivePage: View {
         }
         .overlay(alignment: .bottom) {
             if let toast = model.system.role(element: "toast", place: "floating", importance: .other) {
-                RecipeControl(element: "toast", recipe: toast.recipe, system: model.system).padding(.bottom, 70)
+                RecipeControl(element: "toast", recipe: model.look(of: toast), system: model.system).padding(.bottom, 70)
             }
         }
     }
@@ -313,10 +314,10 @@ private struct LivePage: View {
             LiveRole(model: model, element: "button", place: "card", importance: .other, title: "Open", symbol: "arrow.up.forward")
         }
         if let role = model.system.role(element: "card", place: "page", importance: .other) {
-            switch (role.draft ?? role.recipe)["container"] {
+            switch model.look(of: role)["container"] {
             case "groupBox": GroupBox("Details") { content }
             case "formSection": Form { Section("Details") { content } }.formStyle(.grouped).frame(height: 150).scrollDisabled(true)
-            default: RecipeControl(element: "card", recipe: role.draft ?? role.recipe, system: model.system)
+            default: RecipeControl(element: "card", recipe: model.look(of: role), system: model.system)
             }
         } else {
             GroupBox("Details") { content }
@@ -343,7 +344,7 @@ private struct LiveSheet: View {
     @ObservedObject var live: LiveState
 
     var body: some View {
-        let sizing = model.system.role(element: "sheet", place: "page", importance: .other).map { ($0.draft ?? $0.recipe)["sizing"] ?? "automatic" } ?? "automatic"
+        let sizing = model.system.role(element: "sheet", place: "page", importance: .other).map { model.look(of: $0)["sizing"] ?? "automatic" } ?? "automatic"
         VStack(alignment: .leading, spacing: 12) {
             Text("Rename Area").font(.headline)
             Text("The new name shows on every ticket in this area.").foregroundStyle(.secondary)

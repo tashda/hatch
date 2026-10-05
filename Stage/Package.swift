@@ -41,6 +41,8 @@ targets.append(
         ]
     )
 )
+// The Components Designer's model: previews, Keep and undo against a design system kept in memory (CD13, CD23).
+targets.append(.testTarget(name: "StageKitTests", dependencies: ["StageKit", .product(name: "HatchCore", package: "hatch")]))
 targets.append(
     // The spike round (decision O1): Echo today plus two options of the notification toast.
     // Plain SwiftUI, no EchoDesignSystem. `manifest.sample.json` is the manifest an agent would hand in with `hatch offer`.
