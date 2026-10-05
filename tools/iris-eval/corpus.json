@@ -187,7 +187,10 @@
    "path": "small",
    "outcome": "ready",
    "area": "Settings",
-   "next": "build"
+   "next": "build",
+   "alsoPaths": [
+    "bug"
+   ]
   }
  },
  {
@@ -692,8 +695,9 @@
    "question": "This undoes decision #: the sidebar stays on the left. Keep it or replace it?",
    "area": "Sidebar",
    "alsoPaths": [
-    "visual",
-    "approaches"
+    "question",
+    "approaches",
+    "visual"
    ]
   },
   "decisions": [
@@ -715,6 +719,7 @@
    "question": "This undoes decision #: deletes use Undo, not dialogs. Keep it or replace it?",
    "area": "Billing",
    "alsoPaths": [
+    "question",
     "approaches"
    ]
   },
@@ -737,9 +742,10 @@
    "question": "This undoes decision #: Settings icons are monochrome. Keep it or replace it?",
    "area": "Settings",
    "alsoPaths": [
+    "sweep",
     "small",
-    "approaches",
-    "sweep"
+    "question",
+    "approaches"
    ]
   },
   "decisions": [
@@ -1561,6 +1567,81 @@
    "outcome": "ready",
    "alsoPaths": [
     "visual"
+   ]
+  }
+ },
+ {
+  "id": "role-red-save-caps",
+  "project": "app",
+  "title": "MAKE THE SAVE BUTTON IN THE SHEET BIG AND RED",
+  "body": "SAVE SHOULD BE HUGE AND RED SO NOBODY MISSES IT.",
+  "gold": {
+   "path": "small",
+   "outcome": "asks",
+   "alsoPaths": [
+    "visual",
+    "question",
+    "approaches"
+   ]
+  }
+ },
+ {
+  "id": "role-red-save-casual",
+  "project": "app",
+  "title": "hey can u make the save btn in the sheet big n red lol",
+  "body": "so ppl dont miss it",
+  "gold": {
+   "path": "small",
+   "outcome": "asks",
+   "alsoPaths": [
+    "visual",
+    "question",
+    "approaches"
+   ]
+  }
+ },
+ {
+  "id": "role-red-save-polite",
+  "project": "app",
+  "title": "Could you please make the Save button in the sheet large and red?",
+  "body": "Hi! It would be great if Save stood out a lot more. Thank you!",
+  "gold": {
+   "path": "small",
+   "outcome": "asks",
+   "alsoPaths": [
+    "visual",
+    "question",
+    "approaches"
+   ]
+  }
+ },
+ {
+  "id": "role-two-main-casual",
+  "project": "app",
+  "title": "add publish next to save, same size, both bold",
+  "body": "ok? thx",
+  "gold": {
+   "path": "small",
+   "outcome": "asks",
+   "alsoPaths": [
+    "visual",
+    "question",
+    "approaches"
+   ]
+  }
+ },
+ {
+  "id": "role-gradient-caps",
+  "project": "app",
+  "title": "GIVE CANCEL A GRADIENT PILL STYLE IN SHEETS",
+  "body": "IT SHOULD LOOK SPECIAL.",
+  "gold": {
+   "path": "small",
+   "outcome": "asks",
+   "alsoPaths": [
+    "visual",
+    "question",
+    "approaches"
    ]
   }
  }
