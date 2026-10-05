@@ -7,8 +7,8 @@ import HatchAgent
 // Hatch is in the background. Running agents, the status line, the latest activity, what waits for you, and a few
 // actions. Clicking an agent or Open Desk brings the main window forward on that page.
 
-/// The item in the menu bar (decision AI5): a soft tile with Hatch's sun only peeking over its bottom edge when nothing waits,
-/// and a smaller orange sun glowing in the middle when tickets wait for you (the sun is the signal, no badge).
+/// The item in the menu bar (decision AI5): a tile with Hatch's sun in a cut-out circle. Grey and soft when nothing waits;
+/// a solid tile with an orange sun when tickets wait for you (the sun is the signal, no badge).
 struct MenuBarLabel: View {
     let waiting: Bool
 
@@ -17,30 +17,29 @@ struct MenuBarLabel: View {
             .accessibilityLabel(waiting ? "Hatch, tickets wait for you" : "Hatch")
     }
 
-    /// Drawn in code at 18 pt, so it stays sharp at 1x and 2x. At rest it is a template image and the menu bar tints it.
-    /// Waiting it carries colour, so it is not a template: the tile is drawn in the label colour of the appearance it is
-    /// drawn in (the drawing runs at draw time), so it still suits a light or a dark menu bar.
+    /// Drawn in code on the 18 pt canvas, the tile 16.5 pt so it matches the solid icons beside it. At rest it is a template
+    /// image (tile 40 %, sun 80 %) and the menu bar tints it. Waiting it carries colour, so it is not a template: the tile is
+    /// drawn in the label colour of the appearance it is drawn in (the drawing runs at draw time), so it suits a light or a
+    /// dark menu bar, and the sun keeps Hatch's orange.
     static func glyph(waiting: Bool) -> NSImage {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
-            let tile = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 1.5, width: 15, height: 15), xRadius: 4.2, yRadius: 4.2)
-            (waiting ? NSColor.labelColor : NSColor.black).withAlphaComponent(0.32).setFill()
-            tile.fill()
-            NSGraphicsContext.saveGraphicsState()
-            tile.addClip()
+            let sunRadius: CGFloat = 4.4, gap: CGFloat = 1.21
+            func circle(_ r: CGFloat) -> NSBezierPath { NSBezierPath(ovalIn: NSRect(x: 9 - r, y: 9 - r, width: r * 2, height: r * 2)) }
+            let tile = NSBezierPath(roundedRect: NSRect(x: 0.75, y: 0.75, width: 16.5, height: 16.5), xRadius: 4.84, yRadius: 4.84)
+            tile.append(circle(sunRadius + gap))
+            tile.windingRule = .evenOdd
             if waiting {
-                let centre = NSPoint(x: 9, y: 9)
-                let glow = NSColor(srgbRed: 1, green: 0.706, blue: 0.235, alpha: 1)
-                NSGradient(colors: [glow.withAlphaComponent(0.75), glow.withAlphaComponent(0)])?
-                    .draw(fromCenter: centre, radius: 3.8, toCenter: centre, radius: 7.2, options: .drawsBeforeStartingLocation)
-                let sun = NSBezierPath(ovalIn: NSRect(x: 9 - 3.8, y: 9 - 3.8, width: 7.6, height: 7.6))
-                sun.addClip()
-                NSGradient(colors: [NSColor(srgbRed: 1, green: 0.824, blue: 0.478, alpha: 1), NSColor(srgbRed: 1, green: 0.604, blue: 0.063, alpha: 1)])?
-                    .draw(fromCenter: NSPoint(x: 9, y: 7.86), radius: 0, toCenter: NSPoint(x: 9, y: 7.86), radius: 4.56, options: .drawsAfterEndingLocation)
+                NSColor.labelColor.withAlphaComponent(1).setFill()
+                tile.fill()
+                let sun = NSGradient(colors: [NSColor(srgbRed: 1, green: 0.824, blue: 0.478, alpha: 1),
+                                              NSColor(srgbRed: 1, green: 0.627, blue: 0.110, alpha: 1)])
+                sun?.draw(in: circle(sunRadius), angle: 90)
             } else {
-                NSColor.black.setFill()
-                NSBezierPath(ovalIn: NSRect(x: 9 - 5.4, y: 18.6 - 5.4, width: 10.8, height: 10.8)).fill()
+                NSColor.black.withAlphaComponent(0.40).setFill()
+                tile.fill()
+                NSColor.black.withAlphaComponent(0.80).setFill()
+                circle(sunRadius).fill()
             }
-            NSGraphicsContext.restoreGraphicsState()
             return true
         }
         image.isTemplate = !waiting
