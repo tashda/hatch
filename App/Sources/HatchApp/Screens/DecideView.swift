@@ -639,7 +639,7 @@ private struct DecideCard: View {
             }
         case .judge:
             VStack(alignment: .leading, spacing: answersGap) {
-                Text(item.ticket.type == .proposal ? "Judge the options in the Stage, or accept the recommendation." : "Open it to choose a variant.")
+                Text(item.ticket.type.isProposalLike ? "Judge the options in the Stage, or accept the recommendation." : "Open it to choose a variant.")
                     .foregroundStyle(.secondary)
                 if !info.recommendations.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
@@ -687,7 +687,7 @@ private struct DecideCard: View {
         case .plan: return selection == "back" ? "Send back" : "Approve"
         case .answer: return "Close as answered"
         case .submit: return "Submit"
-        case .judge: return item.ticket.type == .proposal && !info.recommendations.isEmpty ? "Accept the recommendation" : "Open it"
+        case .judge: return item.ticket.type.isProposalLike && !info.recommendations.isEmpty ? "Accept the recommendation" : "Open it"
         case .verify: return "Open Previews"
         }
     }
@@ -704,7 +704,7 @@ private struct DecideCard: View {
         case .iris: "Answers go to \(currentQuestion?.askedBy ?? "Iris"); the ticket goes on"
         case .answer: "Closes the Question"
         case .submit: "Iris checks it (a model call)"
-        case .judge: item.ticket.type == .proposal ? "Accepting starts the build" : "Opens the ticket"
+        case .judge: item.ticket.type.isProposalLike ? "Accepting starts the build" : "Opens the ticket"
         case .verify: "Opens Previews"
         }
     }
@@ -731,7 +731,7 @@ private struct DecideCard: View {
                 if refineAllowed {
                     Button("Refine") { session.noteOpen ? refine() : toggleNote() }.buttonStyle(.glass).help("Send back to refine with a note (R)")
                 }
-                if item.kind == .judge && item.ticket.type == .proposal {
+                if item.kind == .judge && item.ticket.type.isProposalLike {
                     Button("Open the Stage") { StageLauncher.shared.open(ticket: item.ticket, state: state) }.buttonStyle(.glass)
                 }
                 if item.kind == .pick && item.ticket.type == .proposal, let project = state.project(id: item.ticket.projectId) {
@@ -845,7 +845,7 @@ private struct DecideCard: View {
                 VettingBridge.start(ticketId: id, state: state)
             }
         case .judge:
-            guard item.ticket.type == .proposal, !info.recommendations.isEmpty else { leave(.ticket(item.ticket.id)); return }
+            guard item.ticket.type.isProposalLike, !info.recommendations.isEmpty else { leave(.ticket(item.ticket.id)); return }
             var picks: [String: String] = [:]
             for r in info.recommendations { picks[r.id] = r.choiceId }
             let store = state.store, id = item.ticket.id
@@ -889,7 +889,7 @@ private struct DecideCard: View {
         let store = state.store, ticket = item.ticket
         if item.kind == .plan, let plan = item.plan {
             refineCommit(label: "\(ticket.displayNumber) · plan sent back") { _ = try store.decidePlanReview(id: plan.id, approve: false, note: text) }
-        } else if ticket.type == .proposal || ticket.type == .sketch {
+        } else if ticket.type.isProposalLike || ticket.type == .sketch {
             refineCommit(label: "\(ticket.displayNumber) · sent back to refine") { _ = try store.sendBackProposal(ticketId: ticket.id, reason: .changeOption, note: text) }
         }
     }
