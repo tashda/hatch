@@ -23,6 +23,9 @@ public enum BriefBuilder {
         }
     }
 
+    /// How many of the owner's answers a brief carries.
+    static let answerCap = 8
+
     public static func brief(store: HatchStore, ticketId: Int, agent: String, kind: AgentTaskKind? = nil) throws -> String {
         guard let t = try store.ticket(id: ticketId) else { throw StoreError.notFound("ticket \(ticketId)") }
         let kind = kind ?? taskKind(for: t)
@@ -48,7 +51,9 @@ public enum BriefBuilder {
         let answered = try store.questions(ticketId: t.id).filter { !$0.isOpen }
         if !answered.isEmpty {
             out.append("\n## Owner's answers")
-            for q in answered { out.append("- \(Text.oneLine(q.text, 160)) -> \(Text.oneLine(q.answer ?? "", 300))") }
+            // The latest are the ones that still matter; a long thread would be paid for on every turn.
+            if answered.count > answerCap { out.append("(\(answered.count - answerCap) earlier answers are on the ticket: hatch ticket show \(t.displayNumber))") }
+            for q in answered.suffix(answerCap) { out.append("- \(Text.oneLine(q.text, 160)) -> \(Text.oneLine(q.answer ?? "", 300))") }
         }
         let open = try store.questions(ticketId: t.id, openOnly: true)
         if !open.isEmpty {
