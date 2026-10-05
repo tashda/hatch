@@ -34,7 +34,7 @@ struct ComponentOptionSample: Hashable {
             var out = c
             // Following macOS draws the control with no look of its own: what SwiftUI does by default.
             let recipe = o.follow == true ? [:] : o.recipe.map { element.look($0) }
-            if let recipe { out.title = ComponentWords.look(element: role.element, recipe: recipe) + (o.custom.map { " (\($0))" } ?? "") }
+            if let recipe, o.follow != true { out.title = ComponentWords.look(element: role.element, recipe: recipe) + (o.custom.map { " (\($0))" } ?? "") }
             out.sample = ComponentOptionSample(id: "\(qid).\(i)", role: role, recipe: recipe, places: places, system: system)
             return out
         }
