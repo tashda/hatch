@@ -174,6 +174,8 @@ public extension HatchStore {
         if let why, !why.isEmpty {
             try record(to, actor: by, kind: "link", payload: .object(["from": .int(from), "kind": .string(kind.rawValue), "why": .string(why)]))
         }
+        // A ticket under a Goal is a sub-issue of the Goal's issue on GitHub (decision SW2).
+        if kind == .parent { try enqueueParent(child: from, parent: to) }
     }
 
     func unlink(from: Int, to: Int, kind: LinkKind) throws {

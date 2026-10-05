@@ -89,6 +89,13 @@ public final class SyncEngine {
             try tracker.closeIssue(repo: repo, number: number, reason: op.payload["reason"]?.stringValue ?? "completed")
         case "issue.reopen":
             try tracker.reopenIssue(repo: repo, number: number)
+        case "issue.parent":
+            // Both issues must exist; until the Goal has its issue the operation waits.
+            guard let parentId = op.payload["parent"]?.intValue, let parent = try store.ticket(id: parentId) else {
+                throw TrackerError.validation("Operation \(op.id) names no parent ticket")
+            }
+            guard let parentNumber = parent.ghNumber else { return false }
+            try tracker.addSubIssue(repo: repo, parent: parentNumber, child: number)
         default:
             throw TrackerError.validation("Unknown operation \(op.op)")
         }

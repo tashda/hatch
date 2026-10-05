@@ -119,6 +119,8 @@ public protocol IssueTracker: AnyObject {
     func addComment(repo: String, number: Int, body: String) throws -> Int
     func closeIssue(repo: String, number: Int, reason: String) throws
     func reopenIssue(repo: String, number: Int) throws
+    /// Makes `child` a sub-issue of `parent` (decision SW2: a Sweep or ticket under its Goal). Doing it twice is not an error.
+    func addSubIssue(repo: String, parent: Int, child: Int) throws
     func listIssues(repo: String, since: Date?) throws -> [RemoteIssue]
     func listComments(repo: String, number: Int, since: Date?) throws -> [RemoteComment]
     func ensureLabels(repo: String, _ labels: [LabelSpec]) throws
@@ -157,6 +159,8 @@ public final class InMemoryTracker: IssueTracker, @unchecked Sendable {
     public private(set) var knownLabels: [String: [String: LabelSpec]] = [:]
     public private(set) var files: [String: Data] = [:]      // "repo/path"
     public private(set) var calls: [String] = []              // "createIssue", "setLabels#3", ...
+    /// Repo to parent number to its sub-issue numbers, in the order they were added.
+    public private(set) var subIssues: [String: [Int: [Int]]] = [:]
     public var checkRunsByRef: [String: [CheckRun]] = [:]
     private var nextNumber: Int
     private var nextCommentId = 9000
@@ -279,6 +283,15 @@ public final class InMemoryTracker: IssueTracker, @unchecked Sendable {
         guard issues[repo]?[number] != nil else { throw TrackerError.notFound("issue #\(number)") }
         issues[repo]?[number]?.issue.state = "open"
         issues[repo]?[number]?.issue.updatedAt = clock()
+    }
+
+    public func addSubIssue(repo: String, parent: Int, child: Int) throws {
+        try enter("addSubIssue#\(parent)<\(child)")
+        lock.lock(); defer { lock.unlock() }
+        guard issues[repo]?[parent] != nil, issues[repo]?[child] != nil else { throw TrackerError.notFound("issue #\(issues[repo]?[parent] == nil ? parent : child)") }
+        var list = subIssues[repo]?[parent] ?? []
+        if !list.contains(child) { list.append(child) }
+        subIssues[repo, default: [:]][parent] = list
     }
 
     public func listIssues(repo: String, since: Date?) throws -> [RemoteIssue] {

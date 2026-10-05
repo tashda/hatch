@@ -229,6 +229,19 @@ public final class GitHubClient: IssueTracker, @unchecked Sendable {
         _ = try perform("PATCH", url("\(repoPath(repo))/issues/\(number)"), body: ["state": "closed", "state_reason": .string(reason)])
     }
 
+    /// GitHub wants the child's numeric id, not its number, so the child is read first.
+    public func addSubIssue(repo: String, parent: Int, child: Int) throws {
+        let c = try perform("GET", url("\(repoPath(repo))/issues/\(child)"))
+        guard let id = JSONValue.parse(String(decoding: c.body, as: UTF8.self))["id"]?.intValue else {
+            throw TrackerError.http(status: c.status, message: "Unexpected response reading issue #\(child)")
+        }
+        do {
+            _ = try perform("POST", url("\(repoPath(repo))/issues/\(parent)/sub_issues"), body: ["sub_issue_id": .int(id)])
+        } catch TrackerError.validation(let message) where message.lowercased().contains("already") {
+            return  // It is a sub-issue already: that is what was asked for.
+        }
+    }
+
     public func reopenIssue(repo: String, number: Int) throws {
         _ = try perform("PATCH", url("\(repoPath(repo))/issues/\(number)"), body: ["state": "open", "state_reason": "reopened"])
     }

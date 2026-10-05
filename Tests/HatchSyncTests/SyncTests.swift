@@ -42,6 +42,27 @@ final class SyncTests: XCTestCase {
 
     // MARK: Push
 
+    func testATicketUnderAGoalBecomesASubIssueOnceBothIssuesExist() throws {
+        let child = try submitted(.sweep, "How sheets look")
+        let goal = try store.createTicket(projectId: project.id, type: .theme, title: "Sheets", body: "x")
+        try store.link(from: child.id, to: goal.id, kind: .parent)
+        try store.link(from: child.id, to: goal.id, kind: .parent)   // twice: one operation
+        XCTAssertEqual(try store.pendingOps(ticketId: child.id).filter { $0.op == "issue.parent" }.count, 1)
+        _ = try engine.pushPending(repo: repo)
+        XCTAssertTrue(tracker.subIssues.isEmpty, "the Goal is a draft and has no issue yet, so the operation waits")
+        XCTAssertEqual(try store.pendingOps(ticketId: child.id).filter { $0.op == "issue.parent" }.count, 1)
+        _ = try store.move(goal.id, to: .done, actor: .hatch)
+        try store.enqueueCreateIssue(goal.id)
+        _ = try engine.pushPending(repo: repo)   // the Goal's issue is made; the child's operation was ahead of it in the queue
+        _ = try engine.pushPending(repo: repo)
+        let childNumber = try XCTUnwrap(try store.ticket(id: child.id)?.ghNumber)
+        let goalNumber = try XCTUnwrap(try store.ticket(id: goal.id)?.ghNumber)
+        XCTAssertEqual(tracker.subIssues[repo]?[goalNumber], [childNumber], "GitHub shows the Sweep under its Goal")
+        XCTAssertTrue(try store.pendingOps(ticketId: child.id).filter { $0.op == "issue.parent" }.isEmpty)
+        _ = try engine.pushPending(repo: repo)
+        XCTAssertEqual(tracker.callCount("addSubIssue"), 1, "sent once")
+    }
+
     func testCreatePushesIssueAndStoresNumber() throws {
         let t = try submitted()
         let s = try engine.pushPending(repo: repo)

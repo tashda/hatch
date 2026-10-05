@@ -42,6 +42,13 @@ public extension HatchStore {
         ])
     }
 
+    /// Asks GitHub to make the ticket's issue a sub-issue of its parent's. Waits for both issues to exist; once is enough.
+    func enqueueParent(child: Int, parent: Int) throws {
+        let pending = try db.query("SELECT payload FROM sync_log WHERE ticket_id = ? AND op = 'issue.parent' AND state = 'pending'", [.int(child)]) { JSONValue.parse($0.string("payload") ?? "{}") }
+        if pending.contains(where: { $0["parent"]?.intValue == parent }) { return }
+        try enqueue(op: "issue.parent", ticketId: child, payload: ["parent": .int(parent)])
+    }
+
     func enqueueLabels(_ id: Int) throws {
         guard let t = try ticket(id: id) else { return }
         let labels = JSONValue.array(try self.labels(for: t).map { .string($0) })
