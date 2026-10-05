@@ -205,7 +205,24 @@ public struct DecideRun {
     private var waiting: [Waiting] = []
     private var history: [(itemId: String, index: Int, items: [PendingDecision])] = []
 
-    public init(items: [PendingDecision]) { self.items = items }
+    /// The decisions in the order they first came up; the pills keep this order whatever the owner does.
+    public let firstOrder: [String]
+
+    public init(items: [PendingDecision]) { self.items = items; firstOrder = items.map(\.id) }
+
+    /// Goes to a decision without deciding the one on screen: the chosen one becomes current and the one that was on
+    /// screen stays open, right after it. Only open decisions (not reached yet, or left for later) can be gone to.
+    public mutating func go(to id: String) {
+        guard current?.id != id, let j = items[index...].firstIndex(where: { $0.id == id }) else { return }
+        let item = items.remove(at: j)
+        items.insert(item, at: index)
+        last = nil
+    }
+
+    /// The open decisions in their first order, current included: where Back and Forward can go.
+    public var open: [String] {
+        firstOrder.filter { id in id == current?.id || items[index...].contains { $0.id == id } }
+    }
 
     public var current: PendingDecision? { index < items.count ? items[index] : nil }
     public var remaining: Int { max(0, items.count - index) }

@@ -71,6 +71,23 @@ final class DecideSession: ObservableObject {
 
     func undo() { run.undo() }
 
+    /// Goes to a decision without deciding the one on screen (Back, Forward, a pill, the queue card).
+    func go(to id: String) {
+        guard run.open.contains(id) else { return }
+        run.go(to: id)
+        noteOpen = false; note = ""; highlight = nil; typing = false
+    }
+
+    /// The open decision before or after the one on screen, in the pills' order.
+    func neighbour(_ by: Int) -> String? {
+        let open = run.open
+        guard let cur = current?.id, let i = open.firstIndex(of: cur), open.indices.contains(i + by) else { return nil }
+        return open[i + by]
+    }
+
+    /// How many decisions are still open, the one on screen included.
+    var openCount: Int { run.open.count }
+
     private func tick() {
         let due = run.due()
         due.forEach { $0() }
@@ -148,6 +165,10 @@ struct DecideSessionView: View {
     @FocusState private var focused: Bool
     @FocusState private var noteFocused: Bool
     @State private var showShortcuts = false
+    /// Which side's queue card is showing (hovering an arrow), and whether the pointer is on the arrow or the card.
+    @State private var queueSide: HorizontalEdge?
+    @State private var overArrow = false
+    @State private var overQueue = false
     let request: AppState.DecideRequest
 
     init(request: AppState.DecideRequest, store: HatchStore, projectId: Int?) {
@@ -171,6 +192,8 @@ struct DecideSessionView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.snappy(duration: 0.28), value: session.index)
             .overlay(alignment: .bottom) { toast.padding(.bottom, session.current == nil ? 18 : 82) }
+            .overlay { if session.current != nil { sideArrows.padding(.bottom, 64) } }
+            .animation(.snappy(duration: 0.22), value: queueSide)
         }
         // One grey panel with the decision on a white card in it (DR8); the window footer stays visible under it.
         .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
@@ -195,7 +218,7 @@ struct DecideSessionView: View {
             Spacer()
             progressPills
             Spacer()
-            Text(session.current == nil ? "All clear" : "\(session.remaining) left · about \(session.minutesLeft) min")
+            Text(session.current == nil ? "All clear" : "\(session.openCount) left")
                 .font(.callout).foregroundStyle(.secondary).monospacedDigit()
             Button { showShortcuts.toggle() } label: { Image(systemName: "questionmark") }
                 .buttonStyle(.glass).buttonBorderShape(.capsule)
@@ -218,16 +241,19 @@ struct DecideSessionView: View {
     /// was left for later, faint when not reached.
     private var progressPills: some View {
         let numbers = Dictionary(session.items.map { ($0.id, $0.ticket.displayNumber) }, uniquingKeysWith: { a, _ in a })
+        let byId = Dictionary(session.items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         return HStack(spacing: 4) {
             ForEach(session.run.marks, id: \.id) { m in
-                pill(m.mark).help("\(numbers[m.id] ?? "") · \(Self.words(m.mark))")
-                    .accessibilityLabel("\(numbers[m.id] ?? ""), \(Self.words(m.mark))")
+                if let item = byId[m.id] {
+                    DecidePill(mark: m.mark, item: item, canGo: session.run.open.contains(m.id) && m.mark != .current) { session.go(to: m.id) }
+                        .accessibilityLabel("\(numbers[m.id] ?? ""), \(Self.words(m.mark))")
+                }
             }
         }
-        .animation(.snappy(duration: 0.3), value: session.index)
+        .animation(.snappy(duration: 0.3), value: session.current?.id)
     }
 
-    @ViewBuilder private func pill(_ mark: DecideRun.Mark) -> some View {
+    @ViewBuilder static func pill(_ mark: DecideRun.Mark) -> some View {
         switch mark {
         case .current: Capsule().fill(Theme.you).frame(width: 28, height: 6)
         case .waiting: Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 16, height: 6)
@@ -265,6 +291,51 @@ struct DecideSessionView: View {
         }
     }
 
+    // MARK: Back, Forward and what is left
+
+    /// A round glass arrow at each side of the card: Back and Forward go to the previous or next open decision without
+    /// deciding this one. Resting the pointer on an arrow slides in what is left as a glass card on that side.
+    private var sideArrows: some View {
+        HStack(alignment: .center, spacing: 0) {
+            arrow(.leading)
+            Spacer(minLength: 0)
+            arrow(.trailing)
+        }
+        .padding(.horizontal, 16)
+        .overlay(alignment: queueSide == .leading ? .leading : .trailing) {
+            if let side = queueSide {
+                DecideQueueCard(session: session) { id in session.go(to: id); queueSide = nil }
+                    .padding(side == .leading ? .leading : .trailing, 72)
+                    .onHover { overQueue = $0; hoverChanged(side) }
+                    .transition(.move(edge: side == .leading ? .leading : .trailing).combined(with: .opacity))
+            }
+        }
+    }
+
+    private func arrow(_ side: HorizontalEdge) -> some View {
+        let target = session.neighbour(side == .leading ? -1 : 1)
+        return Button { if let target { session.go(to: target) } } label: {
+            Image(systemName: side == .leading ? "chevron.left" : "chevron.right").font(.title3.weight(.semibold)).frame(width: 22, height: 22)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .opacity(target == nil ? 0.35 : 1)
+        .help(side == .leading ? "Previous decision, without deciding this one (←)" : "Next decision, without deciding this one (→)")
+        .accessibilityLabel(side == .leading ? "Previous decision" : "Next decision")
+        .onHover { overArrow = $0; hoverChanged(side) }
+    }
+
+    /// Opens the card for the side the pointer is on; closes it a moment after the pointer leaves both the arrow and
+    /// the card, so moving from one to the other keeps it open.
+    private func hoverChanged(_ side: HorizontalEdge) {
+        if overArrow || overQueue {
+            if queueSide == nil || overArrow { queueSide = side }
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { if !overArrow && !overQueue { queueSide = nil } }
+    }
+
     /// The keys, in a popover from the ? button rather than always on screen.
     private var shortcuts: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -273,6 +344,7 @@ struct DecideSessionView: View {
                 hint("↵", "Answer, or the main action")
                 hint("1–4", "Select an answer")
                 hint("↑ ↓", "Move the selection")
+                hint("← →", "Previous or next decision, without deciding")
                 hint("N", "Write a note")
                 hint("R", "Send back to refine")
                 hint("Space", "Later")
@@ -291,7 +363,7 @@ struct DecideSessionView: View {
 
     private func legend(_ mark: DecideRun.Mark) -> some View {
         HStack(spacing: 10) {
-            pill(mark).frame(width: 28, alignment: .center)
+            Self.pill(mark).frame(width: 28, alignment: .center)
             Text(Self.words(mark).capitalizedFirst).font(.callout)
         }
     }
@@ -351,10 +423,10 @@ struct DecideSessionView: View {
         guard session.current != nil else { return .ignored }
         switch press.key {
         case .return: NotificationCenter.default.post(name: .hxDecideKey, object: "accept"); return .handled
-        case .leftArrow: NotificationCenter.default.post(name: .hxDecideKey, object: "left"); return .handled
+        case .leftArrow: if let id = session.neighbour(-1) { session.go(to: id) }; return .handled
         case .upArrow: NotificationCenter.default.post(name: .hxDecideKey, object: "up"); return .handled
         case .downArrow: NotificationCenter.default.post(name: .hxDecideKey, object: "down"); return .handled
-        case .rightArrow: NotificationCenter.default.post(name: .hxDecideKey, object: "right"); return .handled
+        case .rightArrow: if let id = session.neighbour(1) { session.go(to: id) }; return .handled
         case .space: NotificationCenter.default.post(name: .hxDecideKey, object: "later"); return .handled
         default: break
         }
@@ -659,11 +731,11 @@ private struct DecideCard: View {
     private func key(_ k: String) {
         switch k {
         case "accept": if !mainDisabled { accept() }
-        case "up", "down", "left", "right":
+        case "up", "down":
             let ids = selectableIds
             guard !ids.isEmpty else { return }
             let at = ids.firstIndex(of: selection) ?? 0
-            let step = (k == "down" || k == "right") ? 1 : ids.count - 1
+            let step = k == "down" ? 1 : ids.count - 1
             selected = ids[(at + step) % ids.count]
             ownFocused = selected == "own"
         case "1", "2", "3", "4":
@@ -875,6 +947,107 @@ private struct DecideCard: View {
             openQuestions = open
             choices = open.first.map(AnswerOption.replies(for:)) ?? []
             selected = nil
+        }
+    }
+}
+
+// MARK: - The queue
+
+/// One progress pill: its ticket on hover, and a click goes there when it is still open.
+private struct DecidePill: View {
+    let mark: DecideRun.Mark
+    let item: PendingDecision
+    let canGo: Bool
+    let go: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        DecideSessionView.pill(mark)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+            .onTapGesture { if canGo { go() } }
+            .popover(isPresented: $hovering, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        DecideSessionView.pill(mark).frame(width: 28)
+                        Text("\(item.ticket.displayNumber) · \(DecideSessionView.words(mark))").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text(item.ticket.title).font(.callout.weight(.medium)).lineLimit(2)
+                    if canGo { Text("Click to go there").font(.caption).foregroundStyle(.secondary) }
+                }
+                .padding(12).frame(width: 280, alignment: .leading)
+            }
+    }
+}
+
+/// What is left, as a glass card: the open decisions (on screen, up next, left for later) to click, and what was
+/// decided, dimmed. Each row has a dot in its pill's colour.
+private struct DecideQueueCard: View {
+    @ObservedObject var session: DecideSession
+    let go: (String) -> Void
+
+    var body: some View {
+        let byId = Dictionary(session.items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let marks = session.run.marks
+        let open = marks.filter { if case .handled = $0.mark { return false }; return $0.mark != .setAside }
+        let done = marks.filter { if case .handled = $0.mark { return true }; return $0.mark == .setAside }
+        VStack(alignment: .leading, spacing: 0) {
+            Text("\(session.openCount) left").font(.headline).padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(open, id: \.id) { m in if let item = byId[m.id] { row(m.mark, item, clickable: m.mark != .current) } }
+                    if !done.isEmpty {
+                        Text("Decided").font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 2)
+                        ForEach(done, id: \.id) { m in if let item = byId[m.id] { row(m.mark, item, clickable: false).opacity(0.6) } }
+                    }
+                }
+                .padding(.horizontal, 6).padding(.bottom, 10)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .frame(width: 340)
+        .frame(maxHeight: 460)
+        .fixedSize(horizontal: false, vertical: true)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
+    }
+
+    private func row(_ mark: DecideRun.Mark, _ item: PendingDecision, clickable: Bool) -> some View {
+        Button { if clickable { go(item.id) } } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                DecideSessionView.pill(mark).frame(width: 28).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
+                Text(item.ticket.displayNumber).font(.caption.monospaced()).foregroundStyle(.secondary).frame(width: 40, alignment: .leading)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.ticket.title).lineLimit(1)
+                    Text(subtitle(mark, item)).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(mark == .current ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 9))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .allowsHitTesting(clickable || mark == .current)
+    }
+
+    /// What kind of decision it is, and where it stands when that is not just "waiting".
+    private func subtitle(_ mark: DecideRun.Mark, _ item: PendingDecision) -> String {
+        let kind: String
+        switch item.kind {
+        case .pick: kind = "Pick one"
+        case .plan: kind = "Approve a plan"
+        case .iris: kind = "Iris asks"
+        case .answer: kind = "An answer"
+        case .submit: kind = "A draft"
+        case .judge: kind = "Needs a sitting"
+        case .verify: kind = "Try it"
+        }
+        switch mark {
+        case .waiting: return kind
+        case .current: return kind + " · on screen"
+        default: return kind + " · " + DecideSessionView.words(mark)
         }
     }
 }

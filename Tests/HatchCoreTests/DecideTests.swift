@@ -110,6 +110,24 @@ final class DecideRunTests: XCTestCase {
         XCTAssertTrue(run.isWaiting, "parking waits out the undo window like any decision")
     }
 
+    func testGoingToADecisionDecidesNothingAndKeepsThePills() {
+        var run = DecideRun(items: [item(1), item(2), item(3), item(4)])
+        run.go(to: "t3")
+        XCTAssertEqual(run.current?.id, "t3")
+        XCTAssertTrue(run.records.isEmpty, "going somewhere is not a decision")
+        XCTAssertEqual(run.marks.map(\.id), ["t1", "t2", "t3", "t4"], "the pills keep their order")
+        XCTAssertEqual(run.marks.map(\.mark), [.waiting, .waiting, .current, .waiting])
+        XCTAssertEqual(run.open, ["t1", "t2", "t3", "t4"])
+        run.decide(.chose(agreed: true), startsAgent: false, label: "three") {}
+        XCTAssertEqual(run.current?.id, "t1", "the one that was on screen comes next")
+        XCTAssertEqual(run.open, ["t1", "t2", "t4"])
+        run.go(to: "t3")
+        XCTAssertEqual(run.current?.id, "t1", "a decided one cannot be gone to")
+        run.decide(.later, startsAgent: false, label: "one later") {}
+        run.go(to: "t1")
+        XCTAssertEqual(run.current?.id, "t1", "one left for later can be gone to")
+    }
+
     func testLaterMovesTheCardToTheEndAndClosingRunsEverything() {
         var run = DecideRun(items: [item(1), item(2, .judge)])
         var done = 0

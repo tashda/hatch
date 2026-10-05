@@ -1042,7 +1042,7 @@ private struct LabProgressView: View {
         case .pills:
             HStack(spacing: 4) {
                 ForEach(0..<min(n, 16), id: \.self) { k in
-                    let pill = Capsule().fill(k == i ? Theme.you : (k < i ? Theme.finished : Color.secondary.opacity(0.25))).frame(width: k == i ? 26 : 18, height: 6)
+                    let pill = Capsule().fill(k == i ? Theme.you : Color.secondary.opacity(0.25)).frame(width: k == i ? 26 : 18, height: 6)
                     if model.style.queue == .pills, k < model.cards.count {
                         LabPillHover(model: model, index: k) { pill }
                     } else {
@@ -2127,11 +2127,11 @@ private struct LabQueueList: View {
 
     @MainActor static func sections(_ model: LabModel) -> [Group] {
         let rows = model.cards.enumerated().map { i, c in
-            Row(index: i, card: c, color: i == model.index ? Theme.you : (i < model.index ? Theme.finished : Color.secondary.opacity(0.35)))
+            Row(index: i, card: c, color: i == model.index ? Theme.you : Color.secondary.opacity(0.35))
         }
+        // Nothing is decided in the Lab: going to a card only moves there.
         return [Group(title: "On screen", rows: rows.filter { $0.index == model.index }),
-                Group(title: "Up next", rows: rows.filter { $0.index > model.index }),
-                Group(title: "Decided", rows: rows.filter { $0.index < model.index })].filter { !$0.rows.isEmpty }
+                Group(title: "Open", rows: rows.filter { $0.index != model.index })].filter { !$0.rows.isEmpty }
     }
 
     var body: some View {

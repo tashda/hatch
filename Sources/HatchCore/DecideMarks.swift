@@ -15,19 +15,17 @@ extension DecideRun {
         case setAside
     }
 
-    /// One mark per decision, in the order they first came up. Later puts a decision at the end of the queue again; it
-    /// keeps its first place here, so the bar never grows or shifts while the owner works through it.
+    /// One mark per decision, in the order they first came up. Later puts a decision at the end of the queue again and
+    /// going to one moves it forward; it keeps its first place here, so the bar never grows or shifts.
     public var marks: [(id: String, mark: Mark)] {
-        var seen = Set<String>()
         let currentId = current?.id
-        return items.compactMap { item in
-            guard seen.insert(item.id).inserted else { return nil }
-            if item.id == currentId { return (item.id, .current) }
-            switch records[item.id]?.outcome {
-            case .none: return (item.id, .waiting)
-            case .later?, .opened?: return (item.id, .later)
-            case .setAside?: return (item.id, .setAside)
-            case .chose?, .refined?: return (item.id, .handled(startsAgent: records[item.id]?.startsAgent ?? false))
+        return firstOrder.map { id in
+            if id == currentId { return (id, .current) }
+            switch records[id]?.outcome {
+            case .none: return (id, .waiting)
+            case .later?, .opened?: return (id, .later)
+            case .setAside?: return (id, .setAside)
+            case .chose?, .refined?: return (id, .handled(startsAgent: records[id]?.startsAgent ?? false))
             }
         }
     }
