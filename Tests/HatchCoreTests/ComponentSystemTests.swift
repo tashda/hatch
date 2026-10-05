@@ -119,7 +119,7 @@ final class ComponentSystemTests: XCTestCase {
     func testProblemsAreFound() {
         var s = ComponentTemplates.glass.system(name: "Hatch")
         s.roles.append(ComponentRole("button.extra", "Extra", use: "Clashes", places: ["listRow"], importance: .other, recipe: ["style": "glass"]))
-        s.roles.append(ComponentRole("slider.volume", "Volume", use: "x", places: ["form"], importance: .other, recipe: ["style": "x"]))
+        s.roles.append(ComponentRole("dial.volume", "Volume", use: "x", places: ["form"], importance: .other, recipe: ["style": "x"]))
         s.roles.append(ComponentRole("button.odd", "Odd", use: "x", places: ["nowhere"], importance: .quiet,
                                      recipe: ["style": "huge", "colour": "red", "tint": "color.brand"]))
         s.roles.append(ComponentRole("card.empty", "Empty", use: "x", places: ["page"], importance: .quiet))
@@ -129,7 +129,7 @@ final class ComponentSystemTests: XCTestCase {
         let p = s.problems()
         func has(_ text: String) -> Bool { p.contains { $0.contains(text) } }
         XCTAssertTrue(has("Roles button.inRow and button.extra both claim button in listRow"), p.joined(separator: "\n"))
-        XCTAssertTrue(has("no element called slider"))
+        XCTAssertTrue(has("no element called dial"))
         XCTAssertTrue(has("no place called nowhere"))
         XCTAssertTrue(has("huge is not a value of style"))
         XCTAssertTrue(has("has no setting colour"))

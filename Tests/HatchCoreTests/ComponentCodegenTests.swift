@@ -113,9 +113,37 @@ final class ComponentCodegenTests: XCTestCase {
         }
         let r = shell(["xcrun", "swiftc", "-typecheck", "-target", "arm64-apple-macos27.0", "-sdk", sdk] + paths)
         XCTAssertEqual(r.status, 0, r.err ?? "")
+
+        // The same values for an app that still runs on macOS 13: every value newer than that must say which macOS it
+        // needs (`since`), or the generated code calls an API macOS 13 doesn't have and this fails.
+        s.minimumMacOS = "13.0"
+        let old = dir.appendingPathComponent("old", isDirectory: true)
+        try FileManager.default.createDirectory(at: old, withIntermediateDirectories: true)
+        var oldPaths: [String] = []
+        for (name, text) in ComponentCodegen.files(s, product: nil) {
+            let url = old.appendingPathComponent(name); try text.write(to: url, atomically: true, encoding: .utf8); oldPaths.append(url.path)
+        }
+        let r13 = shell(["xcrun", "swiftc", "-typecheck", "-target", "arm64-apple-macos13.0", "-sdk", sdk] + oldPaths)
+        XCTAssertEqual(r13.status, 0, r13.err ?? "")
         #else
         throw XCTSkip("macOS only")
         #endif
+    }
+
+    /// A newer look falls back on older macOS: the catalog's nearest, or the role's own choice.
+    func testOlderLookAndTheRolesOwnFallback() {
+        let button = ComponentElement.named("button")!
+        XCTAssertEqual(button.needs(["style": "glass"], newerThan: 15), 26)
+        XCTAssertNil(button.needs(["style": "glass"], newerThan: 26))
+        XCTAssertEqual(button.olderLook(["style": "glassProminent", "size": "large"], on: 15), ["style": "borderedProminent", "size": "large"])
+        XCTAssertEqual(button.olderLook(["style": "glass"], on: 15, overrides: ["style": "borderless"]), ["style": "borderless"])
+        XCTAssertEqual(button.olderLook(["size": "extraLarge"], on: 13), ["size": "large"])
+        var s = ComponentTemplates.glass.system(name: "Acme")
+        s.minimumMacOS = "15.0"
+        let i = s.roles.firstIndex { $0.id == "button.secondary" }!
+        s.roles[i].fallbacks = ["style": "borderless"]
+        let code = ComponentCodegen.roles(s)
+        XCTAssertTrue(code.contains("self.buttonStyle(.borderless)"), "the role's own fallback")
     }
 
     func shell(_ args: [String]) -> (status: Int32, out: String?, err: String?) {

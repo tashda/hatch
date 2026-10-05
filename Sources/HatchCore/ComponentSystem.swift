@@ -569,6 +569,8 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
     public var usedOn: [String]
     /// The owner wants this to become a setting in the app (NF5); the check accepts other looks here until it exists.
     public var configurable: Bool
+    /// The owner's own fallback per setting on older macOS (setting → value), when the nearest look isn't wanted.
+    public var fallbacks: [String: String] = [:]
 
     public init(_ id: String, _ title: String, use: String, avoid: String = "", places: [String], importance: Importance,
                 perScreen: Int? = nil, recipe: [String: String] = [:], custom: String? = nil, variants: [ComponentVariant] = [],
@@ -582,7 +584,7 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, use, avoid, places, importance, perScreen, recipe, custom, variants, status, decision, draft, followsMacOS, sources, configurable, usedOn
+        case id, title, use, avoid, places, importance, perScreen, recipe, custom, variants, status, decision, draft, followsMacOS, sources, configurable, usedOn, fallbacks
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -599,6 +601,7 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
         if followsMacOS { try c.encode(true, forKey: .followsMacOS) }
         if !sources.isEmpty { try c.encode(sources, forKey: .sources) }
         if configurable { try c.encode(true, forKey: .configurable) }
+        if !fallbacks.isEmpty { try c.encode(fallbacks, forKey: .fallbacks) }
         if !usedOn.isEmpty { try c.encode(usedOn, forKey: .usedOn) }
     }
 
@@ -620,6 +623,7 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
         followsMacOS = try c.decodeIfPresent(Bool.self, forKey: .followsMacOS) ?? false
         sources = try c.decodeIfPresent([String].self, forKey: .sources) ?? []
         configurable = try c.decodeIfPresent(Bool.self, forKey: .configurable) ?? false
+        fallbacks = try c.decodeIfPresent([String: String].self, forKey: .fallbacks) ?? [:]
         usedOn = try c.decodeIfPresent([String].self, forKey: .usedOn) ?? []
     }
 
@@ -689,11 +693,27 @@ public struct ComponentParameter: Equatable, Sendable {
     /// Other settings it needs to mean anything (a card's surface only with a custom container), so the Designer shows it
     /// only then (CD21: a setting that changes nothing on screen feels broken).
     public var requires: [String: [String]]
+    /// The macOS a value needs, when newer than macOS 14 (glass styles: 26). Older systems draw its `fallback`.
+    public var since: [String: Double]
+    /// What a newer value becomes on an older macOS: the nearest look it has (glass → bordered). Missing means macOS's
+    /// default there.
+    public var fallback: [String: String]
+    /// Values Apple deprecated: still read from an app's code, not offered as choices.
+    public var deprecated: Set<String>
+    /// The macOS a foundation value needs here (a radius for a button's shape: 14).
+    public var foundationSince: Double?
 
     public init(_ id: String, _ title: String, _ values: [String], foundation: ComponentFoundation.Kind? = nil, isLook: Bool = true,
-                systemDefault: String? = nil, source: String? = nil, requires: [String: [String]] = [:]) {
+                systemDefault: String? = nil, source: String? = nil, requires: [String: [String]] = [:],
+                since: [String: Double] = [:], fallback: [String: String] = [:], deprecated: Set<String> = [], foundationSince: Double? = nil) {
         self.id = id; self.title = title; self.values = values; self.foundation = foundation; self.isLook = isLook
-        self.systemDefault = systemDefault; self.source = source; self.requires = requires
+        self.systemDefault = systemDefault; self.source = source; self.requires = requires; self.since = since; self.fallback = fallback
+        self.deprecated = deprecated; self.foundationSince = foundationSince
+    }
+
+    /// The macOS a value needs, when newer than 13.
+    public func needs(_ value: String) -> Double? {
+        since[value] ?? (value.contains(".") && foundation != nil ? foundationSince : nil)
     }
 
     /// Whether it changes anything for this recipe (its `requires` hold).
@@ -721,6 +741,25 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
     public func parameter(_ id: String) -> ComponentParameter? { parameters.first { $0.id == id } }
     public static func named(_ id: String) -> ComponentElement? { catalog.first { $0.id == id } }
 
+    /// The newest macOS a look needs, when it needs one newer than `version`.
+    public func needs(_ recipe: [String: String], newerThan version: Double) -> Double? {
+        let need = recipe.compactMap { k, v in parameter(k)?.needs(v) }.max()
+        return need.flatMap { $0 > version ? $0 : nil }
+    }
+
+    /// The look on an older macOS: each value that system doesn't have becomes the role's own choice for it, else the
+    /// value's fallback, else macOS's default (the setting is left out).
+    public func olderLook(_ recipe: [String: String], on version: Double, overrides: [String: String] = [:]) -> [String: String] {
+        var out = recipe
+        for (k, v) in recipe {
+            guard let p = parameter(k), let need = p.needs(v), need > version else { continue }
+            var replacement = overrides[k] ?? p.fallback[v]
+            if let r = replacement, let n = p.needs(r), n > version { replacement = p.fallback[r] }
+            out[k] = replacement
+        }
+        return out
+    }
+
     /// The choices that make the look, in the order people decide them (CD50): for a button its style, shape, size and
     /// label. They are drawn as options of their own; the rest stay in Fine-tune.
     public var keyParameters: [ComponentParameter] {
@@ -728,10 +767,14 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
     }
 
     static let keys: [String: [String]] = [
-        "button": ["style", "shape", "size", "label"], "menu": ["style", "look", "label", "indicator", "size"],
-        "picker": ["style", "size", "label"], "toggle": ["style", "size"], "field": ["style", "size"], "switcher": ["style", "size"],
-        "row": ["separators", "accessory"], "card": ["container", "surface"], "sheet": ["sizing", "title"], "badge": ["style"],
-        "toast": ["surface", "position"], "emptyState": ["action"],
+        "menu": ["style", "look", "shape", "label", "indicator", "size"],
+        "picker": ["style", "look", "layout", "size", "label"], "toggle": ["style", "look", "size"], "field": ["style", "shape", "size"],
+        "switcher": ["style", "size"],
+        "button": ["style", "shape", "size", "sizing", "label"], "row": ["list", "height", "alternating", "separators", "accessory"],
+        "card": ["container", "surface"], "sheet": ["sizing", "title"], "badge": ["style"],
+        "toast": ["surface", "position"], "emptyState": ["action"], "table": ["style", "headers", "alternating"], "form": ["style"],
+        "datePicker": ["style", "size"], "progress": ["style", "size"], "slider": ["thumb", "size"], "stepper": ["size"], "gauge": ["style"],
+        "controlGroup": ["style", "size"], "textEditor": ["style"],
     ]
 
     /// The settings that change how it looks, without behaviour (key, tooltip, confirmation).
@@ -748,13 +791,23 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
     static let custom = ["container": ["custom"]]
     static let tints = ["none", "accent", "critical"]
 
+    // The catalog (CD52): every look option SwiftUI offers on macOS for these controls, checked against the macOS 27 SDK
+    // (2026-10-05). `since` says the macOS a value needs when newer than 13; `fallback` what an older macOS draws instead.
+    // Values Apple deprecated are kept so an app's code is still read, and marked so they are not offered.
     public static let catalog: [ComponentElement] = [
         ComponentElement(id: "button", title: "Button", plural: "Buttons", parameters: [
-            ComponentParameter("style", "Style", ["automatic", "bordered", "borderedProminent", "borderless", "plain", "link", "glass", "glassProminent"],
-                               systemDefault: "automatic", source: "swiftui-buttonstyle-automatic"),
-            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+            ComponentParameter("style", "Style", ["automatic", "bordered", "borderedProminent", "borderless", "plain", "link", "accessoryBar",
+                                                  "accessoryBarAction", "glass", "glassProminent", "glassClear"],
+                               systemDefault: "automatic", source: "swiftui-buttonstyle-automatic",
+                               since: ["accessoryBar": 14, "accessoryBarAction": 14, "glass": 26, "glassProminent": 26, "glassClear": 26],
+                               fallback: ["accessoryBar": "borderless", "accessoryBarAction": "borderless", "glass": "bordered",
+                                          "glassProminent": "borderedProminent", "glassClear": "bordered"]),
+            ComponentParameter("shape", "Shape", ["automatic", "capsule", "roundedRectangle", "circle"], foundation: .radius, systemDefault: "automatic",
+                               since: ["capsule": 14, "circle": 14], foundationSince: 14),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
+            ComponentParameter("sizing", "Width", ["automatic", "fitted", "flexible"], systemDefault: "automatic", source: "swiftui-buttonsizing",
+                               since: ["fitted": 26, "flexible": 26]),
             ComponentParameter("label", "Label", ["titleAndIcon", "titleOnly", "iconOnly"]),
-            ComponentParameter("shape", "Shape", ["automatic", "capsule", "roundedRectangle", "circle"], systemDefault: "automatic"),
             ComponentParameter("tint", "Tint", tints, foundation: .color, systemDefault: "none", source: "hig-color"),
             ComponentParameter("show", "Shown", ["always", "onHover"], isLook: false, systemDefault: "always"),
             ComponentParameter("confirm", "Confirm first", ["no", "yes"], isLook: false, systemDefault: "no", source: "hig-alerts"),
@@ -762,65 +815,138 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
             ComponentParameter("tooltip", "Tooltip", ["none", "title", "shortcut"], isLook: false, systemDefault: "none"),
         ], source: "hig-buttons"),
         ComponentElement(id: "menu", title: "Menu", plural: "Menus", parameters: [
-            ComponentParameter("style", "Style", ["automatic", "button", "borderlessButton"], systemDefault: "automatic"),
-            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderless", "plain", "glass"], systemDefault: "automatic",
-                               requires: ["style": ["button"]]),
+            ComponentParameter("style", "Style", ["automatic", "button", "borderlessButton"], systemDefault: "automatic", deprecated: ["borderlessButton"]),
+            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderedProminent", "borderless", "plain", "accessoryBar", "glass", "glassProminent"],
+                               systemDefault: "automatic", requires: ["style": ["button"]],
+                               since: ["accessoryBar": 14, "glass": 26, "glassProminent": 26],
+                               fallback: ["accessoryBar": "borderless", "glass": "bordered", "glassProminent": "borderedProminent"]),
+            ComponentParameter("shape", "Shape", ["automatic", "capsule", "roundedRectangle", "circle"], systemDefault: "automatic",
+                               requires: ["style": ["button"]], since: ["capsule": 14, "circle": 14]),
             ComponentParameter("indicator", "Arrow", ["visible", "hidden"], systemDefault: "visible"),
             ComponentParameter("label", "Label", ["titleAndIcon", "titleOnly", "iconOnly"]),
-            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
+            ComponentParameter("order", "Order", ["automatic", "fixed"], isLook: false, systemDefault: "automatic"),
         ], source: "hig-menus"),
         ComponentElement(id: "picker", title: "Picker", plural: "Pickers", parameters: [
             // On macOS the automatic style is a pop-up button.
-            ComponentParameter("style", "Style", ["automatic", "menu", "segmented", "inline", "radioGroup", "palette"],
-                               systemDefault: "automatic", source: "swiftui-pickerstyle-automatic"),
+            ComponentParameter("style", "Style", ["automatic", "menu", "segmented", "tabs", "inline", "radioGroup", "palette"],
+                               systemDefault: "automatic", source: "swiftui-pickerstyle-automatic",
+                               since: ["tabs": 27, "palette": 14], fallback: ["tabs": "segmented", "palette": "segmented"]),
+            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderless", "accessoryBar", "glass", "glassProminent"],
+                               systemDefault: "automatic", requires: ["style": ["menu"]],
+                               since: ["accessoryBar": 14, "glass": 26, "glassProminent": 26],
+                               fallback: ["accessoryBar": "borderless", "glass": "bordered", "glassProminent": "bordered"]),
+            ComponentParameter("layout", "Layout", ["vertical", "horizontal"], systemDefault: "vertical", requires: ["style": ["radioGroup"]]),
             ComponentParameter("label", "Label", ["visible", "hidden"], systemDefault: "visible"),
-            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
         ], source: "hig-pickers"),
         ComponentElement(id: "toggle", title: "Toggle", plural: "Toggles", parameters: [
-            // On macOS the automatic style is a checkbox (a button in a toolbar, a checkmark in a menu).
+            // On macOS the automatic style is a checkbox (a button in a toolbar, a checkmark in a menu, a switch in a grouped form).
             ComponentParameter("style", "Style", ["automatic", "switch", "checkbox", "button"], systemDefault: "automatic", source: "swiftui-togglestyle-automatic"),
-            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderedProminent", "borderless", "accessoryBar", "glass", "glassProminent"],
+                               systemDefault: "automatic", requires: ["style": ["button"]],
+                               since: ["accessoryBar": 14, "glass": 26, "glassProminent": 26],
+                               fallback: ["accessoryBar": "borderless", "glass": "bordered", "glassProminent": "borderedProminent"]),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
+            ComponentParameter("tint", "Tint", tints, foundation: .color, systemDefault: "none"),
         ], source: "hig-toggles"),
         ComponentElement(id: "field", title: "Text field", plural: "Text fields", parameters: [
-            ComponentParameter("style", "Style", ["automatic", "roundedBorder", "plain", "squareBorder"], systemDefault: "automatic", source: "swiftui-textfieldstyle-automatic"),
-            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+            // macOS 27: bordered with a border shape replaces roundedBorder and squareBorder ("as of macOS 26, text fields no
+            // longer have a rectangular border").
+            ComponentParameter("style", "Style", ["automatic", "plain", "bordered", "roundedBorder", "squareBorder"], systemDefault: "automatic",
+                               source: "swiftui-textfieldstyle-automatic", since: ["bordered": 27], fallback: ["bordered": "roundedBorder"],
+                               deprecated: ["roundedBorder", "squareBorder"]),
+            ComponentParameter("shape", "Border shape", ["automatic", "capsule", "roundedRectangle"], systemDefault: "automatic",
+                               source: "swiftui-textinputbordershape", requires: ["style": ["bordered"]], since: ["capsule": 27, "roundedRectangle": 27]),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
         ], source: "hig-text-fields"),
         ComponentElement(id: "switcher", title: "Section switcher", plural: "Section switchers", parameters: [
-            // A segmented control or a pop-up are native; the dock is drawn by the app.
-            ComponentParameter("style", "Style", ["segmented", "menu", "tabs", "dock"], source: "hig-segmented"),
-            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+            // A segmented control, the macOS 27 tab switcher, a pop-up, a tab view in its styles, or the app's own dock.
+            ComponentParameter("style", "Style", ["segmented", "tabSegments", "menu", "tabs", "tabBar", "groupedTabs", "sidebarTabs", "dock"],
+                               source: "hig-segmented",
+                               since: ["tabSegments": 27, "tabBar": 15, "groupedTabs": 15, "sidebarTabs": 15, "dock": 26],
+                               fallback: ["tabSegments": "segmented", "tabBar": "tabs", "groupedTabs": "tabs", "sidebarTabs": "tabs", "dock": "segmented"]),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
         ], source: "hig-segmented"),
         ComponentElement(id: "row", title: "List row", plural: "List rows", parameters: [
-            // List draws rows (height, padding, selection) itself; only these are the app's to choose.
+            // The list draws rows (padding, selection); these are the list's styles and the row's own choices.
+            ComponentParameter("list", "List style", ["automatic", "plain", "inset", "bordered", "sidebar"], systemDefault: "automatic", source: "swiftui-liststyle"),
+            ComponentParameter("height", "Row height", ["automatic", "compact", "roomy"], systemDefault: "automatic"),
+            ComponentParameter("alternating", "Alternating rows", ["off", "on"], systemDefault: "off", since: ["on": 14]),
             ComponentParameter("separators", "Separators", ["visible", "hidden"], systemDefault: "visible", source: "swiftui-listrowseparator"),
             ComponentParameter("accessory", "Accessory", ["none", "chevron", "badge"], systemDefault: "none", source: "swiftui-badge"),
             ComponentParameter("actions", "Actions", ["none", "onHover", "always"], isLook: false, systemDefault: "none"),
         ], source: "hig-lists"),
+        ComponentElement(id: "table", title: "Table", plural: "Tables", parameters: [
+            ComponentParameter("style", "Style", ["automatic", "inset", "bordered"], systemDefault: "automatic", source: "swiftui-tablestyle"),
+            ComponentParameter("headers", "Column headers", ["visible", "hidden"], systemDefault: "visible", since: ["hidden": 14]),
+            ComponentParameter("alternating", "Alternating rows", ["off", "on"], systemDefault: "off", since: ["on": 14]),
+        ], source: "hig-lists"),
         ComponentElement(id: "card", title: "Card", plural: "Cards", parameters: [
             // GroupBox is the native box; a Form section the native group; custom draws its own surface.
             ComponentParameter("container", "Container", ["groupBox", "formSection", "custom"], source: "hig-boxes"),
-            ComponentParameter("surface", "Surface (custom)", ["none", "grouped", "bordered", "material", "glass"], requires: custom),
-            ComponentParameter("radius", "Corners (custom)", ["none"], foundation: .radius, requires: custom),
-            ComponentParameter("padding", "Padding (custom)", ["system"], foundation: .space, systemDefault: "system", source: "swiftui-padding", requires: custom),
-            ComponentParameter("border", "Border (custom)", ["none", "hairline"], systemDefault: "none", requires: custom),
-            ComponentParameter("shadow", "Shadow (custom)", ["none", "soft"], systemDefault: "none", requires: custom),
+            ComponentParameter("surface", "Surface", ["none", "grouped", "bordered", "material", "glass", "glassClear"], requires: custom,
+                               since: ["glass": 26, "glassClear": 26], fallback: ["glass": "material", "glassClear": "material"]),
+            ComponentParameter("radius", "Corners", ["none", "concentric"], foundation: .radius, requires: custom, since: ["concentric": 26]),
+            ComponentParameter("padding", "Padding", ["system"], foundation: .space, systemDefault: "system", source: "swiftui-padding", requires: custom),
+            ComponentParameter("border", "Border", ["none", "hairline"], systemDefault: "none", requires: custom),
+            ComponentParameter("shadow", "Shadow", ["none", "soft"], systemDefault: "none", requires: custom),
         ], source: "hig-boxes"),
+        ComponentElement(id: "form", title: "Form layout", plural: "Form layouts", parameters: [
+            // How a settings form lays out: macOS picks columns, or grouped rows in a Settings window.
+            ComponentParameter("style", "Style", ["automatic", "columns", "grouped"], systemDefault: "automatic", source: "swiftui-formstyle"),
+        ], source: "swiftui-form"),
         ComponentElement(id: "sheet", title: "Sheet", plural: "Sheets", parameters: [
             // presentationSizing: automatic is a form-sized sheet fitted to its content's height.
-            ComponentParameter("sizing", "Sizing", ["automatic", "form", "page", "fitted"], systemDefault: "automatic", source: "swiftui-presentationsizing"),
+            ComponentParameter("sizing", "Sizing", ["automatic", "form", "page", "fitted"], systemDefault: "automatic", source: "swiftui-presentationsizing",
+                               since: ["form": 15, "page": 15, "fitted": 15]),
             ComponentParameter("title", "Title", ["inline", "large", "none"], systemDefault: "inline"),
         ], source: "hig-sheets"),
         ComponentElement(id: "badge", title: "Badge", plural: "Badges", parameters: [
             ComponentParameter("style", "Style", ["system", "capsule", "plain"], systemDefault: "system", source: "swiftui-badge"),
+            ComponentParameter("prominence", "Prominence", ["standard", "increased", "decreased"], systemDefault: "standard", source: "swiftui-badgeprominence",
+                               requires: ["style": ["system"]], since: ["increased": 14, "decreased": 14]),
             ComponentParameter("tint", "Tint", tints, foundation: .color, systemDefault: "none", requires: ["style": ["capsule"]]),
         ], source: "swiftui-badge"),
         ComponentElement(id: "toast", title: "Toast", plural: "Toasts", parameters: [
-            ComponentParameter("surface", "Surface", ["glass", "material", "solid"], source: "hig-materials"),
+            ComponentParameter("surface", "Surface", ["glass", "glassClear", "material", "solid"], source: "hig-materials",
+                               since: ["glass": 26, "glassClear": 26], fallback: ["glass": "material", "glassClear": "material"]),
             ComponentParameter("position", "Position", ["top", "bottom"], source: "hig-layout"),
             ComponentParameter("duration", "Duration", ["short", "long"], isLook: false),
         ], tier: .hatchDrawn, source: "hig-materials"),
         ComponentElement(id: "emptyState", title: "Empty state", plural: "Empty states", parameters: [
-            ComponentParameter("action", "Next step", ["none", "prominent", "link"], source: "swiftui-contentunavailable"),
+            ComponentParameter("action", "Next step", ["none", "prominent", "glassProminent", "link"], source: "swiftui-contentunavailable",
+                               since: ["glassProminent": 26], fallback: ["glassProminent": "prominent"]),
         ], source: "swiftui-contentunavailable"),
+        ComponentElement(id: "datePicker", title: "Date picker", plural: "Date pickers", parameters: [
+            ComponentParameter("style", "Style", ["automatic", "compact", "field", "stepperField", "graphical"], systemDefault: "automatic", source: "swiftui-datepickerstyle"),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
+        ], source: "hig-pickers"),
+        ComponentElement(id: "progress", title: "Progress", plural: "Progress indicators", parameters: [
+            ComponentParameter("style", "Style", ["automatic", "linear", "circular"], systemDefault: "automatic", source: "swiftui-progressviewstyle"),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
+            ComponentParameter("tint", "Tint", tints, foundation: .color, systemDefault: "none"),
+        ], source: "hig-progress-indicators"),
+        ComponentElement(id: "slider", title: "Slider", plural: "Sliders", parameters: [
+            ComponentParameter("thumb", "Thumb", ["visible", "hidden"], systemDefault: "visible", source: "swiftui-slider", since: ["hidden": 26]),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
+            ComponentParameter("tint", "Tint", tints, foundation: .color, systemDefault: "none"),
+        ], source: "hig-sliders"),
+        ComponentElement(id: "stepper", title: "Stepper", plural: "Steppers", parameters: [
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
+        ], source: "hig-steppers"),
+        ComponentElement(id: "gauge", title: "Gauge", plural: "Gauges", parameters: [
+            ComponentParameter("style", "Style", ["automatic", "linearCapacity", "accessoryLinear", "accessoryLinearCapacity", "accessoryCircular",
+                                                  "accessoryCircularCapacity"], systemDefault: "automatic", source: "swiftui-gaugestyle"),
+            ComponentParameter("tint", "Tint", tints, foundation: .color, systemDefault: "none"),
+        ], source: "hig-gauges"),
+        ComponentElement(id: "controlGroup", title: "Control group", plural: "Control groups", parameters: [
+            ComponentParameter("style", "Style", ["automatic", "navigation", "palette", "menu", "compactMenu"], systemDefault: "automatic",
+                               source: "swiftui-controlgroupstyle", since: ["palette": 14, "menu": 13.3, "compactMenu": 13.3]),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize", since: ["extraLarge": 14], fallback: ["extraLarge": "large"]),
+        ], source: "hig-buttons"),
+        ComponentElement(id: "textEditor", title: "Text editor", plural: "Text editors", parameters: [
+            ComponentParameter("style", "Style", ["automatic", "plain"], systemDefault: "automatic", source: "swiftui-texteditorstyle", since: ["plain": 14]),
+        ], source: "hig-text-views"),
     ]
 }

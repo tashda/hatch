@@ -104,17 +104,15 @@ public enum ComponentCodegen {
         if element.id == "card", let container = recipe["container"], container != "custom" {
             return out + "\(indent)\(container == "groupBox" ? "GroupBox { self }" : "Section { self }")\n"
         }
-        if element.id == "sheet", recipe["sizing"].map({ $0 != "automatic" }) == true, system.minimumMacOSNumber < 15 {
-            return out + "\(indent)if #available(macOS 15.0, *) {\n\(indent)    \(chain(modern))\n\(indent)} else {\n\(indent)    self\n\(indent)}\n"
-        }
-        let needsNew = modern.contains { $0.contains(".glass") }
-        if needsNew && system.minimumMacOSNumber < 26 {
-            let (older, _) = modifiers(element: element, recipe: recipe, system: system, older: true)
-            out += "\(indent)if #available(macOS 26.0, *) {\n\(indent)    \(chain(modern))\n\(indent)} else {\n\(indent)    \(chain(older))\n\(indent)}\n"
+        // A look newer than the app's oldest macOS: that macOS gets the role's fallback (the catalog's nearest, or the
+        // owner's own), so one role works everywhere the app runs.
+        if let need = element.needs(recipe, newerThan: system.minimumMacOSNumber) {
+            let older = element.olderLook(recipe, on: system.minimumMacOSNumber, overrides: role.fallbacks)
+            let (m, _) = modifiers(element: element, recipe: older, system: system, older: true)
+            out += "\(indent)if #available(macOS \(String(format: "%.1f", need)), *) {\n\(indent)    \(chain(modern))\n\(indent)} else {\n\(indent)    \(chain(m))\n\(indent)}\n"
         } else {
             out += "\(indent)\(chain(modern))\n"
         }
-        _ = role
         return out
     }
 
@@ -126,14 +124,15 @@ public enum ComponentCodegen {
         var m: [String] = [], notes: [String] = []
         func glass(_ style: String) -> String {
             guard older else { return style }
-            return ["glass": "bordered", "glassProminent": "borderedProminent"][style] ?? style
+            return ["glass": "bordered", "glassProminent": "borderedProminent", "glassClear": "bordered"][style] ?? style
         }
         switch element.id {
         case "button":
-            if let style = r["style"], style != "automatic" { m.append(".buttonStyle(.\(glass(style)))") }
+            if let style = r["style"], style != "automatic" { m.append(".buttonStyle(\(buttonStyle(glass(style))))") }
             if let size = r["size"] { m.append(".controlSize(.\(size))") }
             if let label = r["label"] { m.append(".labelStyle(.\(label))") }
-            if let shape = r["shape"], shape != "automatic" { m.append(".buttonBorderShape(.\(shape))") }
+            if let shape = r["shape"], shape != "automatic" { m.append(".buttonBorderShape(\(borderShape(shape, system)))") }
+            if let sizing = r["sizing"], sizing != "automatic" { m.append(".buttonSizing(.\(sizing))") }
             if let tint = r["tint"], tint != "none" { m.append(".tint(\(color(tint, system)))") }
             if let key = r["key"], key != "none" { m.append(".keyboardShortcut(.\(key))") }
             if r["show"] == "onHover" { notes.append("Shown on hover or selection: the row decides when.") }
@@ -145,30 +144,48 @@ public enum ComponentCodegen {
             case "borderlessButton": m.append(".menuStyle(.button)"); m.append(".buttonStyle(.borderless)")  // the macOS 12+ way
             default: break
             }
-            if let look = r["look"], look != "automatic", r["style"] != "borderlessButton" { m.append(".buttonStyle(.\(glass(look)))") }
+            if let look = r["look"], look != "automatic", r["style"] != "borderlessButton" { m.append(".buttonStyle(\(buttonStyle(glass(look))))") }
+            if let shape = r["shape"], shape != "automatic" { m.append(".buttonBorderShape(.\(shape))") }
             if r["indicator"] == "hidden" { m.append(".menuIndicator(.hidden)") }
+            if r["order"] == "fixed" { m.append(".menuOrder(.fixed)") }
             if let label = r["label"] { m.append(".labelStyle(.\(label))") }
             if let size = r["size"] { m.append(".controlSize(.\(size))") }
         case "picker":
             if let style = r["style"], style != "automatic" { m.append(".pickerStyle(.\(style))") }
+            if let look = r["look"], look != "automatic" { m.append(".buttonStyle(\(buttonStyle(glass(look))))") }
+            if r["layout"] == "horizontal" { m.append(".horizontalRadioGroupLayout()") }
             if r["label"] == "hidden" { m.append(".labelsHidden()") }
             if let size = r["size"] { m.append(".controlSize(.\(size))") }
         case "toggle":
             if let style = r["style"], style != "automatic" { m.append(".toggleStyle(.\(style))") }
+            if let look = r["look"], look != "automatic" { m.append(".buttonStyle(\(buttonStyle(glass(look))))") }
             if let size = r["size"] { m.append(".controlSize(.\(size))") }
+            if let tint = r["tint"], tint != "none" { m.append(".tint(\(color(tint, system)))") }
         case "field":
             if let style = r["style"], style != "automatic" { m.append(".textFieldStyle(.\(style))") }
+            if let shape = r["shape"], shape != "automatic" { m.append(".textInputBorderShape(.\(shape))") }
             if let size = r["size"] { m.append(".controlSize(.\(size))") }
         case "switcher":
             switch r["style"] {
             case "segmented", "menu": m.append(".pickerStyle(.\(r["style"]!))")
+            case "tabSegments": m.append(".pickerStyle(.tabs)")
             case "tabs": notes.append("A tab view: write TabView for the sections; this modifier only sizes it.")
+            case "tabBar": m.append(".tabViewStyle(.tabBarOnly)"); notes.append("For a TabView.")
+            case "groupedTabs": m.append(".tabViewStyle(.grouped)"); notes.append("For a TabView.")
+            case "sidebarTabs": m.append(".tabViewStyle(.sidebarAdaptable)"); notes.append("For a TabView.")
             case let other?: notes.append("\(other): drawn by the app's own view; as a Picker it falls back to segmented."); m.append(".pickerStyle(.segmented)")
             default: break
             }
             if let size = r["size"] { m.append(".controlSize(.\(size))") }
         case "row":
-            // The list draws rows (height, padding, selection); only the separators are the app's preference.
+            // The list's style and density, and the row's own separators.
+            if let list = r["list"], list != "automatic" { m.append(".listStyle(.\(list))") }
+            switch r["height"] {
+            case "compact": m.append(".environment(\\.defaultMinListRowHeight, 22)")
+            case "roomy": m.append(".environment(\\.defaultMinListRowHeight, 40)")
+            default: break
+            }
+            if r["alternating"] == "on" { m.append(".alternatingRowBackgrounds()") }
             if r["separators"] == "hidden" { m.append(".listRowSeparator(.hidden)") }
             if r["accessory"] == "badge" { notes.append("Counts: .badge(count) on the row.") }
             if r["accessory"] == "chevron" { notes.append("A chevron: an Image(systemName: \"chevron.right\") at the trailing end.") }
@@ -176,21 +193,52 @@ public enum ComponentCodegen {
         case "card":
             // GroupBox and Form sections are wrapped in `body`; only a custom card draws its own surface.
             guard r["container"] == "custom" else { break }
-            let radius = r["radius"].flatMap { $0 == "none" ? nil : value($0, system) } ?? "12"
+            let radius = r["radius"].flatMap { $0 == "none" || $0 == "concentric" ? nil : value($0, system) } ?? "12"
             if let pad = r["padding"], pad != "system" { m.append(".padding(\(value(pad, system) ?? "16"))") } else { m.append(".padding()") }
-            let shape = "RoundedRectangle(cornerRadius: \(radius), style: .continuous)"
+            // Concentric corners follow the window or sheet the card sits in (macOS 26).
+            let shape = r["radius"] == "concentric" ? "ConcentricRectangle()" : "RoundedRectangle(cornerRadius: \(radius), style: .continuous)"
             switch r["surface"] {
-            case "grouped": m.append(".background(.background.secondary, in: \(shape))")
+            // .quaternary works back to macOS 12, unlike .background.secondary (14): one surface for every macOS.
+            case "grouped": m.append(".background(.quaternary, in: \(shape))")
             case "bordered": m.append(".overlay(\(shape).strokeBorder(.separator))")
             case "material": m.append(".background(.regularMaterial, in: \(shape))")
             case "glass": m.append(older ? ".background(.regularMaterial, in: \(shape))" : ".glassEffect(.regular, in: \(shape))")
+            case "glassClear": m.append(older ? ".background(.regularMaterial, in: \(shape))" : ".glassEffect(.clear, in: \(shape))")
             default: break
             }
             if r["border"] == "hairline", r["surface"] != "bordered" { m.append(".overlay(\(shape).strokeBorder(.separator, lineWidth: 0.5))") }
             if r["shadow"] == "soft" { m.append(".shadow(color: .black.opacity(0.08), radius: 4, y: 1)") }
         case "sheet":
             if let sizing = r["sizing"], sizing != "automatic" { m.append(".presentationSizing(.\(sizing))") }
+        case "table":
+            if let style = r["style"], style != "automatic" { m.append(".tableStyle(.\(style))") }
+            if r["headers"] == "hidden" { m.append(".tableColumnHeaders(.hidden)") }
+            if r["alternating"] == "on" { m.append(".alternatingRowBackgrounds()") }
+        case "form":
+            if let style = r["style"], style != "automatic" { m.append(".formStyle(.\(style))") }
+        case "datePicker":
+            if let style = r["style"], style != "automatic" { m.append(".datePickerStyle(.\(style))") }
+            if let size = r["size"] { m.append(".controlSize(.\(size))") }
+        case "progress":
+            if let style = r["style"], style != "automatic" { m.append(".progressViewStyle(.\(style))") }
+            if let size = r["size"] { m.append(".controlSize(.\(size))") }
+            if let tint = r["tint"], tint != "none" { m.append(".tint(\(color(tint, system)))") }
+        case "slider":
+            if r["thumb"] == "hidden" { m.append(".sliderThumbVisibility(.hidden)") }
+            if let size = r["size"] { m.append(".controlSize(.\(size))") }
+            if let tint = r["tint"], tint != "none" { m.append(".tint(\(color(tint, system)))") }
+        case "stepper":
+            if let size = r["size"] { m.append(".controlSize(.\(size))") }
+        case "gauge":
+            if let style = r["style"], style != "automatic" { m.append(".gaugeStyle(.\(style))") }
+            if let tint = r["tint"], tint != "none" { m.append(".tint(\(color(tint, system)))") }
+        case "controlGroup":
+            if let style = r["style"], style != "automatic" { m.append(".controlGroupStyle(.\(style))") }
+            if let size = r["size"] { m.append(".controlSize(.\(size))") }
+        case "textEditor":
+            if let style = r["style"], style != "automatic" { m.append(".textEditorStyle(.\(style))") }
         case "badge":
+            if let p = r["prominence"], p != "standard", r["style"] ?? "system" == "system" { m.append(".badgeProminence(.\(p))") }
             switch r["style"] {
             case "capsule":
                 m.append(".font(.caption2.weight(.semibold))"); m.append(".monospacedDigit()")
@@ -203,14 +251,26 @@ public enum ComponentCodegen {
             m.append(".padding(.horizontal, 14)"); m.append(".padding(.vertical, 8)")
             switch r["surface"] {
             case "glass": m.append(older ? ".background(.regularMaterial, in: Capsule())" : ".glassEffect(.regular, in: .capsule)")
+            case "glassClear": m.append(older ? ".background(.regularMaterial, in: Capsule())" : ".glassEffect(.clear, in: .capsule)")
             case "material": m.append(".background(.regularMaterial, in: Capsule())")
-            default: m.append(".background(.background.secondary, in: Capsule())")
+            default: m.append(".background(.quaternary, in: Capsule())")
             }
             notes.append("Placed at the \(r["position"] ?? "bottom") of the window; \(r["duration"] ?? "short") on screen.")
         default:
             notes.append("Drawn by the app's own view.")
         }
         return (m, notes)
+    }
+
+    /// A button style as Swift: `.glass(.clear)` for clear glass, `.accessoryBar`, `.bordered`…
+    static func buttonStyle(_ style: String) -> String {
+        style == "glassClear" ? ".glass(.clear)" : ".\(style)"
+    }
+
+    /// A button border shape: a named one, or a rounded rectangle with a radius foundation.
+    static func borderShape(_ shape: String, _ s: ComponentSystem) -> String {
+        if shape.contains("."), let v = value(shape, s) { return ".roundedRectangle(radius: \(v))" }
+        return ".\(shape)"
     }
 
     /// `critical` → `Palette.critical` when the system names it, else `.red`; a `color.*` foundation → `Palette.*`.

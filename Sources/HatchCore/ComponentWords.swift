@@ -40,7 +40,9 @@ public enum ComponentWords {
         case "emptyState":
             parts = [["prominent": "Empty state with a button", "link": "Empty state with a link", "none": "Empty state, no next step"][recipe["action"] ?? ""] ?? "Empty state"]
         default:
-            parts = [ComponentRole.summary(recipe)]
+            // Any other element: its settings in plain words, or "Standard" when it follows macOS.
+            let named = recipe.sorted { $0.key < $1.key }.map { value(element: element, parameter: $0.key, value: $0.value) }
+            parts = named.isEmpty ? ["Standard " + (ComponentElement.named(element)?.title.lowercased() ?? element)] : named
         }
         if let size = recipe["size"], size != "regular" { parts.append(size == "extraLarge" ? "extra large" : size) }
         if let tint = recipe["tint"], tint != "none" { parts.append(tint == "accent" ? "accent color" : tint == "critical" ? "red" : "\(tint) color") }
@@ -111,7 +113,9 @@ public enum ComponentWords {
 
     private static let values: [String: [String: String]] = [
         "button.style": ["automatic": "macOS default", "bordered": "Bordered", "borderedProminent": "Filled", "borderless": "Borderless",
-                         "plain": "Plain", "link": "Link", "glass": "Glass", "glassProminent": "Glass, filled"],
+                         "plain": "Plain", "link": "Link", "accessoryBar": "Accessory bar", "accessoryBarAction": "Accessory bar action",
+                         "glass": "Glass", "glassProminent": "Glass, filled", "glassClear": "Clear glass"],
+        "button.sizing": ["automatic": "macOS default", "fitted": "Fits its title", "flexible": "Fills the width"],
         "size": ["mini": "Mini", "small": "Small", "regular": "Regular", "large": "Large", "extraLarge": "Extra large"],
         "label": ["titleAndIcon": "Icon and title", "titleOnly": "Title", "iconOnly": "Icon only"],
         "button.shape": ["automatic": "macOS default", "capsule": "Capsule", "roundedRectangle": "Rounded rectangle", "circle": "Circle"],
@@ -120,31 +124,59 @@ public enum ComponentWords {
         "button.confirm": ["no": "No", "yes": "Ask first"],
         "button.key": ["none": "None", "defaultAction": "Return (default button)", "cancelAction": "Escape (cancel button)"],
         "button.tooltip": ["none": "None", "title": "Title", "shortcut": "Title and shortcut"],
-        "menu.style": ["automatic": "macOS default", "button": "Button", "borderlessButton": "Borderless"],
-        "menu.look": ["automatic": "macOS default", "bordered": "Bordered", "borderless": "Borderless", "plain": "Plain", "glass": "Glass"],
+        "menu.style": ["automatic": "macOS default (pull-down)", "button": "Button", "borderlessButton": "Borderless (old)"],
+        "menu.look": ["automatic": "macOS default", "bordered": "Bordered", "borderedProminent": "Filled", "borderless": "Borderless",
+                      "plain": "Plain", "accessoryBar": "Accessory bar", "glass": "Glass", "glassProminent": "Glass, filled"],
+        "menu.shape": ["automatic": "macOS default", "capsule": "Capsule", "roundedRectangle": "Rounded rectangle", "circle": "Circle"],
+        "menu.order": ["automatic": "macOS default", "fixed": "As written"],
         "menu.indicator": ["visible": "Shown", "hidden": "Hidden"],
-        "picker.style": ["automatic": "macOS default (pop-up)", "menu": "Pop-up", "segmented": "Segmented", "inline": "Inline list",
-                         "radioGroup": "Radio buttons", "palette": "Palette"],
+        "picker.style": ["automatic": "macOS default (pop-up)", "menu": "Pop-up", "segmented": "Segmented", "tabs": "Tab switcher",
+                         "inline": "Inline list", "radioGroup": "Radio buttons", "palette": "Palette"],
+        "picker.look": ["automatic": "macOS default", "bordered": "Bordered", "borderless": "Borderless", "accessoryBar": "Accessory bar",
+                        "glass": "Glass", "glassProminent": "Glass, filled"],
+        "picker.layout": ["vertical": "Stacked", "horizontal": "In a row"],
         "picker.label": ["visible": "Shown", "hidden": "Hidden"],
         "toggle.style": ["automatic": "macOS default (checkbox)", "switch": "Switch", "checkbox": "Checkbox", "button": "Button"],
-        "field.style": ["automatic": "macOS default", "roundedBorder": "Rounded border", "plain": "No border", "squareBorder": "Square border"],
-        "switcher.style": ["segmented": "Segmented", "menu": "Pop-up", "tabs": "Tabs", "dock": "Dock (drawn by Hatch)"],
+        "toggle.look": ["automatic": "macOS default", "bordered": "Bordered", "borderedProminent": "Filled", "borderless": "Borderless",
+                        "accessoryBar": "Accessory bar", "glass": "Glass", "glassProminent": "Glass, filled"],
+        "field.style": ["automatic": "macOS default", "plain": "No border", "bordered": "Bordered",
+                        "roundedBorder": "Rounded border (old)", "squareBorder": "Square border (old)"],
+        "field.shape": ["automatic": "macOS default", "capsule": "Capsule", "roundedRectangle": "Rounded rectangle"],
+        "switcher.style": ["segmented": "Segmented", "tabSegments": "Tab switcher", "menu": "Pop-up", "tabs": "Tab view",
+                           "tabBar": "Tab bar", "groupedTabs": "Grouped tab bar", "sidebarTabs": "Sidebar tabs", "dock": "Dock (drawn by Hatch)"],
+        "row.list": ["automatic": "macOS default", "plain": "Plain", "inset": "Inset", "bordered": "Bordered", "sidebar": "Sidebar"],
+        "row.height": ["automatic": "macOS default", "compact": "Compact", "roomy": "Roomy"],
+        "alternating": ["off": "Off", "on": "Alternating"],
+        "table.style": ["automatic": "macOS default (inset)", "inset": "Inset", "bordered": "Bordered with grid"],
+        "table.headers": ["visible": "Shown", "hidden": "Hidden"],
+        "form.style": ["automatic": "macOS default", "columns": "Columns", "grouped": "Grouped (like Settings)"],
+        "badge.prominence": ["standard": "Standard", "increased": "More prominent", "decreased": "Less prominent"],
+        "datePicker.style": ["automatic": "macOS default", "compact": "Compact", "field": "Field", "stepperField": "Field with stepper",
+                             "graphical": "Calendar"],
+        "progress.style": ["automatic": "macOS default", "linear": "Bar", "circular": "Spinner"],
+        "slider.thumb": ["visible": "Shown", "hidden": "Hidden (a level)"],
+        "gauge.style": ["automatic": "macOS default", "linearCapacity": "Filling bar", "accessoryLinear": "Bar with a marker",
+                        "accessoryLinearCapacity": "Small filling bar", "accessoryCircular": "Ring with a marker",
+                        "accessoryCircularCapacity": "Filling ring"],
+        "controlGroup.style": ["automatic": "macOS default (joined)", "navigation": "Navigation (back, forward)", "palette": "Palette",
+                               "menu": "Menu", "compactMenu": "Compact menu"],
+        "textEditor.style": ["automatic": "macOS default", "plain": "Plain"],
         "row.separators": ["visible": "Shown", "hidden": "Hidden"],
         "row.accessory": ["none": "None", "chevron": "Chevron", "badge": "Count"],
         "row.actions": ["none": "None", "onHover": "On hover", "always": "Always"],
         "card.container": ["groupBox": "Group box", "formSection": "Form section", "custom": "Custom"],
-        "card.surface": ["none": "None", "grouped": "Grouped fill", "bordered": "Bordered", "material": "Material", "glass": "Glass"],
-        "card.radius": ["none": "macOS default"],
+        "card.surface": ["none": "None", "grouped": "Grouped fill", "bordered": "Bordered", "material": "Material", "glass": "Glass", "glassClear": "Clear glass"],
+        "card.radius": ["none": "macOS default", "concentric": "Concentric with the window"],
         "card.padding": ["system": "macOS default"],
         "card.border": ["none": "None", "hairline": "Hairline"],
         "card.shadow": ["none": "None", "soft": "Soft"],
         "sheet.sizing": ["automatic": "macOS default", "form": "Form", "page": "Page", "fitted": "Fit the content"],
         "sheet.title": ["inline": "In the sheet", "large": "Large", "none": "None"],
         "badge.style": ["system": "macOS default", "capsule": "Capsule", "plain": "Plain number"],
-        "toast.surface": ["glass": "Glass", "material": "Material", "solid": "Solid"],
+        "toast.surface": ["glass": "Glass", "glassClear": "Clear glass", "material": "Material", "solid": "Solid"],
         "toast.position": ["top": "Top", "bottom": "Bottom"],
         "toast.duration": ["short": "Short", "long": "Long"],
-        "emptyState.action": ["none": "None", "prominent": "Prominent button", "link": "Link"],
+        "emptyState.action": ["none": "None", "prominent": "Filled button", "glassProminent": "Glass, filled button", "link": "Link"],
     ]
 
     private static let helps: [String: String] = [
@@ -154,6 +186,7 @@ public enum ComponentWords {
         "button.tooltip": "What the tooltip says when the pointer rests on it.",
         "row.actions": "When a row's own buttons appear.",
         "toast.duration": "How long the toast stays before it goes.",
+        "menu.order": "Whether macOS may reorder the items (putting the first nearest the pointer), or keeps them as written.",
     ]
 
     /// The question for a role whose looks compete: "How should main action buttons look?"

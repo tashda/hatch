@@ -54,6 +54,15 @@ public struct RecipeControl: View {
         case "badge": RecipeBadge(recipe: recipe, place: sample.place)
         case "toast": RecipeToast(recipe: recipe)
         case "emptyState": RecipeEmptyState(recipe: recipe)
+        case "table": RecipeTable(recipe: recipe)
+        case "form": RecipeForm(recipe: recipe)
+        case "datePicker": RecipeDatePicker(recipe: recipe)
+        case "progress": RecipeProgress(recipe: recipe)
+        case "slider": RecipeSlider(recipe: recipe)
+        case "stepper": Stepper("Copies: 2", value: .constant(2)).controlSize(ControlSize(recipe: recipe["size"])).fixedSize()
+        case "gauge": RecipeGauge(recipe: recipe)
+        case "controlGroup": RecipeControlGroup(recipe: recipe)
+        case "textEditor": RecipeTextEditor(recipe: recipe)
         default: Text(element).foregroundStyle(.secondary)
         }
     }
@@ -102,15 +111,27 @@ extension View {
         case "link": self.buttonStyle(.link)
         case "glass": self.buttonStyle(.glass)
         case "glassProminent": self.buttonStyle(.glassProminent)
+        case "glassClear": self.buttonStyle(.glass(.clear))
+        case "accessoryBar": self.buttonStyle(.accessoryBar)
+        case "accessoryBarAction": self.buttonStyle(.accessoryBarAction)
         default: self
         }
     }
 
-    @ViewBuilder public func recipeShape(_ value: String?) -> some View {
+    @ViewBuilder public func recipeSizing(_ value: String?) -> some View {
+        switch value {
+        case "fitted": self.buttonSizing(.fitted)
+        case "flexible": self.buttonSizing(.flexible)
+        default: self
+        }
+    }
+
+    @ViewBuilder public func recipeShape(_ value: String?, system: ComponentSystem? = nil) -> some View {
         switch value {
         case "capsule": self.buttonBorderShape(.capsule)
         case "roundedRectangle": self.buttonBorderShape(.roundedRectangle)
         case "circle": self.buttonBorderShape(.circle)
+        case let v? where v.hasPrefix("radius."): self.buttonBorderShape(.roundedRectangle(radius: RecipeColor.points(v, system: system, fallback: 8)))
         default: self
         }
     }
@@ -160,6 +181,7 @@ private struct RecipeButton: View {
         .recipeButtonStyle(recipe["style"].flatMap { $0 == "automatic" ? nil : $0 } ?? (looksDefault ? "borderedProminent" : nil))
         .controlSize(ControlSize(recipe: recipe["size"]))
         .recipeShape(recipe["shape"])
+        .recipeSizing(recipe["sizing"])
         .recipeTint(recipe["tint"])
         .help(recipe["tooltip"] == "shortcut" ? "\(sample.shownTitle) (⌘S)" : sample.shownTitle)
         .modifier(RecipeKey(key: sample.liveKeys ? recipe["key"] : nil))
@@ -209,7 +231,7 @@ private struct RecipeMenu: View {
             }
         }
         switch recipe["style"] {
-        case "button": base.menuStyle(.button).recipeButtonStyle(recipe["look"])
+        case "button": base.menuStyle(.button).recipeButtonStyle(recipe["look"]).recipeShape(recipe["shape"])
         case "borderlessButton": base.menuStyle(.button).buttonStyle(.borderless)
         default: base
         }
@@ -229,10 +251,12 @@ private struct RecipePicker: View {
         }
         Group {
             switch recipe["style"] {
-            case "menu": picker.pickerStyle(.menu)
+            case "menu": picker.pickerStyle(.menu).recipeButtonStyle(recipe["look"])
             case "segmented": picker.pickerStyle(.segmented)
+            case "tabs": picker.modifier(TabsPickerStyle())
             case "inline": picker.pickerStyle(.inline)
-            case "radioGroup": picker.pickerStyle(.radioGroup)
+            case "radioGroup":
+                if recipe["layout"] == "horizontal" { picker.pickerStyle(.radioGroup).horizontalRadioGroupLayout() } else { picker.pickerStyle(.radioGroup) }
             case "palette": picker.pickerStyle(.palette)
             default: picker
             }
@@ -263,11 +287,12 @@ private struct RecipeToggle: View {
             switch recipe["style"] {
             case "switch": toggle.toggleStyle(.switch)
             case "checkbox": toggle.toggleStyle(.checkbox)
-            case "button": toggle.toggleStyle(.button)
+            case "button": toggle.toggleStyle(.button).recipeButtonStyle(recipe["look"])
             default: toggle
             }
         }
         .controlSize(ControlSize(recipe: recipe["size"]))
+        .recipeTint(recipe["tint"])
         .fixedSize()
     }
 }
@@ -281,6 +306,7 @@ private struct RecipeField: View {
         let field = TextField("Name", text: $text)
         Group {
             switch recipe["style"] {
+            case "bordered": field.modifier(BorderedField(shape: recipe["shape"]))
             case "roundedBorder": field.textFieldStyle(.roundedBorder)
             case "plain": field.textFieldStyle(.plain)
             case "squareBorder": field.textFieldStyle(.squareBorder)
@@ -319,6 +345,13 @@ private struct RecipeSwitcher: View {
         case "menu":
             Picker("Section", selection: $section) { Text("Overview").tag(0); Text("Work").tag(1); Text("Files").tag(2) }
                 .pickerStyle(.menu).labelsHidden().fixedSize()
+        case "tabSegments":
+            // macOS 27's tab switcher: a segmented control drawn for moving between sections.
+            Picker("Section", selection: $section) { Text("Overview").tag(0); Text("Work").tag(1); Text("Files").tag(2) }
+                .modifier(TabsPickerStyle()).labelsHidden().fixedSize()
+                .controlSize(ControlSize(recipe: recipe["size"]))
+        case "tabBar", "groupedTabs", "sidebarTabs":
+            tabView(recipe["style"]!)
         case "tabs":
             // The native view switcher for the main area on macOS: a real tab view.
             TabView(selection: $section) {
@@ -332,6 +365,26 @@ private struct RecipeSwitcher: View {
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
                 .controlSize(ControlSize(recipe: recipe["size"]))
         }
+    }
+}
+
+@available(macOS 26.0, *)
+extension RecipeSwitcher {
+    /// A real tab view in one of its styles, with three sections.
+    @ViewBuilder func tabView(_ style: String) -> some View {
+        let view = TabView {
+            Tab("Overview", systemImage: "square.grid.2x2") { Text("Overview").frame(maxWidth: .infinity, maxHeight: .infinity) }
+            Tab("Work", systemImage: "hammer") { Text("Work") }
+            Tab("Files", systemImage: "folder") { Text("Files") }
+        }
+        Group {
+            switch style {
+            case "tabBar": view.tabViewStyle(.tabBarOnly)
+            case "groupedTabs": view.tabViewStyle(.grouped)
+            default: view.tabViewStyle(.sidebarAdaptable)
+            }
+        }
+        .frame(width: 320, height: 150)
     }
 }
 
@@ -354,8 +407,54 @@ private struct RecipeRow: View {
                 .listRowSeparator(recipe["separators"] == "hidden" ? .hidden : .automatic)
             }
         }
-        .frame(width: 300, height: 110)
+        .modifier(ListLook(style: recipe["list"], alternating: recipe["alternating"] == "on"))
+        .environment(\.defaultMinListRowHeight, recipe["height"] == "compact" ? 22 : recipe["height"] == "roomy" ? 40 : 28)
+        .frame(width: 300, height: recipe["height"] == "roomy" ? 150 : 110)
         .scrollDisabled(true)
+    }
+}
+
+/// macOS 27's tab switcher; on macOS 26 its fallback, a segmented control.
+@available(macOS 26.0, *)
+struct TabsPickerStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 27.0, *) { content.pickerStyle(.tabs) } else { content.pickerStyle(.segmented) }
+    }
+}
+
+/// macOS 27's bordered text field with its border shape; on macOS 26 its fallback, the rounded border.
+@available(macOS 26.0, *)
+struct BorderedField: ViewModifier {
+    let shape: String?
+    func body(content: Content) -> some View {
+        if #available(macOS 27.0, *) {
+            switch shape {
+            case "capsule": content.textFieldStyle(.bordered).textInputBorderShape(.capsule)
+            case "roundedRectangle": content.textFieldStyle(.bordered).textInputBorderShape(.roundedRectangle)
+            default: content.textFieldStyle(.bordered)
+            }
+        } else {
+            content.textFieldStyle(.roundedBorder)
+        }
+    }
+}
+
+/// A list's style and zebra rows.
+@available(macOS 26.0, *)
+struct ListLook: ViewModifier {
+    let style: String?
+    let alternating: Bool
+    func body(content: Content) -> some View {
+        Group {
+            switch style {
+            case "plain": content.listStyle(.plain)
+            case "inset": content.listStyle(.inset)
+            case "bordered": content.listStyle(.bordered)
+            case "sidebar": content.listStyle(.sidebar)
+            default: content
+            }
+        }
+        .alternatingRowBackgrounds(alternating ? .enabled : .automatic)
     }
 }
 
@@ -400,7 +499,8 @@ private struct RecipeCard: View {
             default: EmptyView()
             }
         }
-        .modifier(GlassIf(on: recipe["surface"] == "glass", shape: shape))
+        .modifier(GlassIf(on: recipe["surface"] == "glass", clear: false, shape: shape))
+        .modifier(GlassIf(on: recipe["surface"] == "glassClear", clear: true, shape: shape))
         .overlay { if recipe["border"] == "hairline" { shape.strokeBorder(.separator, lineWidth: 0.5) } }
         .background {
             // A soft shadow needs a surface to fall from; without one it would be invisible.
@@ -412,9 +512,10 @@ private struct RecipeCard: View {
 @available(macOS 26.0, *)
 private struct GlassIf<S: Shape>: ViewModifier {
     let on: Bool
+    var clear = false
     let shape: S
     func body(content: Content) -> some View {
-        if on { content.glassEffect(.regular, in: shape) } else { content }
+        if on { content.glassEffect(clear ? .clear : .regular, in: shape) } else { content }
     }
 }
 
@@ -473,6 +574,7 @@ private struct RecipeToast: View {
         .padding(.horizontal, 14).padding(.vertical, 8)
         switch recipe["surface"] {
         case "glass": content.glassEffect(.regular, in: .capsule)
+        case "glassClear": content.glassEffect(.clear, in: .capsule)
         case "material": content.background(.regularMaterial, in: Capsule())
         default: content.background(.background.secondary, in: Capsule())
         }
@@ -491,11 +593,161 @@ private struct RecipeEmptyState: View {
         } actions: {
             switch recipe["action"] {
             case "prominent": Button("New Ticket") {}.buttonStyle(.borderedProminent)
+            case "glassProminent": Button("New Ticket") {}.buttonStyle(.glassProminent)
             case "link": Button("New Ticket") {}.buttonStyle(.link)
             default: EmptyView()
             }
         }
         .frame(width: 280, height: 190)
+    }
+}
+
+@available(macOS 26.0, *)
+private struct RecipeTable: View {
+    let recipe: [String: String]
+    struct Item: Identifiable { let id: Int; let name: String; let status: String }
+    let items = [Item(id: 1, name: "Fix the login sheet", status: "Building"), Item(id: 2, name: "Toast feels cramped", status: "Ready"),
+                 Item(id: 3, name: "Sync stalls after sleep", status: "To verify")]
+    var body: some View {
+        let table = Table(items) {
+            TableColumn("Title", value: \.name)
+            TableColumn("Status", value: \.status)
+        }
+        Group {
+            switch recipe["style"] {
+            case "inset": table.tableStyle(.inset)
+            case "bordered": table.tableStyle(.bordered)
+            default: table
+            }
+        }
+        .tableColumnHeaders(recipe["headers"] == "hidden" ? .hidden : .automatic)
+        .alternatingRowBackgrounds(recipe["alternating"] == "on" ? .enabled : .automatic)
+        .frame(width: 320, height: 120)
+        .scrollDisabled(true)
+    }
+}
+
+@available(macOS 26.0, *)
+private struct RecipeForm: View {
+    let recipe: [String: String]
+    var body: some View {
+        let form = Form {
+            Toggle("Sync in the background", isOn: .constant(true))
+            Picker("Refresh", selection: .constant(1)) { Text("Every hour").tag(1); Text("Daily").tag(2) }
+            TextField("Name", text: .constant("Desk"))
+        }
+        Group {
+            switch recipe["style"] {
+            case "columns": form.formStyle(.columns)
+            case "grouped": form.formStyle(.grouped)
+            default: form
+            }
+        }
+        .frame(width: 330, height: 150)
+        .scrollDisabled(true)
+    }
+}
+
+@available(macOS 26.0, *)
+private struct RecipeDatePicker: View {
+    let recipe: [String: String]
+    var body: some View {
+        let picker = DatePicker("Due", selection: .constant(Date(timeIntervalSinceReferenceDate: 813_000_000)), displayedComponents: .date)
+        Group {
+            switch recipe["style"] {
+            case "compact": picker.datePickerStyle(.compact)
+            case "field": picker.datePickerStyle(.field)
+            case "stepperField": picker.datePickerStyle(.stepperField)
+            case "graphical": picker.datePickerStyle(.graphical).frame(width: 240)
+            default: picker
+            }
+        }
+        .controlSize(ControlSize(recipe: recipe["size"]))
+        .fixedSize()
+    }
+}
+
+@available(macOS 26.0, *)
+private struct RecipeProgress: View {
+    let recipe: [String: String]
+    var body: some View {
+        let progress = ProgressView(value: 0.6) { Text("Building") }
+        Group {
+            switch recipe["style"] {
+            case "linear": progress.progressViewStyle(.linear)
+            case "circular": progress.progressViewStyle(.circular)
+            default: progress
+            }
+        }
+        .controlSize(ControlSize(recipe: recipe["size"]))
+        .recipeTint(recipe["tint"])
+        .frame(width: 200)
+    }
+}
+
+@available(macOS 26.0, *)
+private struct RecipeSlider: View {
+    let recipe: [String: String]
+    var body: some View {
+        Slider(value: .constant(0.4), in: 0...1, step: 0.1) { Text("Volume") }
+            .sliderThumbVisibility(recipe["thumb"] == "hidden" ? .hidden : .automatic)
+            .controlSize(ControlSize(recipe: recipe["size"]))
+            .recipeTint(recipe["tint"])
+            .frame(width: 200)
+    }
+}
+
+@available(macOS 26.0, *)
+private struct RecipeGauge: View {
+    let recipe: [String: String]
+    var body: some View {
+        let gauge = Gauge(value: 0.62) { Text("CPU") } currentValueLabel: { Text("62") }
+        Group {
+            switch recipe["style"] {
+            case "linearCapacity": gauge.gaugeStyle(.linearCapacity)
+            case "accessoryLinear": gauge.gaugeStyle(.accessoryLinear)
+            case "accessoryLinearCapacity": gauge.gaugeStyle(.accessoryLinearCapacity)
+            case "accessoryCircular": gauge.gaugeStyle(.accessoryCircular)
+            case "accessoryCircularCapacity": gauge.gaugeStyle(.accessoryCircularCapacity)
+            default: gauge
+            }
+        }
+        .recipeTint(recipe["tint"])
+        .frame(width: 200)
+    }
+}
+
+@available(macOS 26.0, *)
+private struct RecipeControlGroup: View {
+    let recipe: [String: String]
+    var body: some View {
+        let group = ControlGroup {
+            Button { } label: { Label("Back", systemImage: "chevron.left") }
+            Button { } label: { Label("Forward", systemImage: "chevron.right") }
+        } label: { Label("Navigate", systemImage: "arrow.left.arrow.right") }
+        Group {
+            switch recipe["style"] {
+            case "navigation": group.controlGroupStyle(.navigation)
+            case "palette": group.controlGroupStyle(.palette)
+            case "menu": group.controlGroupStyle(.menu)
+            case "compactMenu": group.controlGroupStyle(.compactMenu)
+            default: group
+            }
+        }
+        .controlSize(ControlSize(recipe: recipe["size"]))
+        .fixedSize()
+    }
+}
+
+@available(macOS 26.0, *)
+private struct RecipeTextEditor: View {
+    let recipe: [String: String]
+    var body: some View {
+        let editor = TextEditor(text: .constant("Notes for the build: the toast wraps early."))
+        Group {
+            if recipe["style"] == "plain" { editor.textEditorStyle(.plain) } else { editor }
+        }
+        .frame(width: 240, height: 70)
     }
 }
 

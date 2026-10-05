@@ -668,7 +668,10 @@ struct SwiftStructure {
     }
 
     static let styleModifierNames: Set<String> = ["buttonStyle", "controlSize", "labelStyle", "buttonBorderShape", "toggleStyle", "pickerStyle",
-                                                  "textFieldStyle", "menuStyle", "menuIndicator", "tint", "labelsHidden"]
+                                                  "textFieldStyle", "menuStyle", "menuIndicator", "tint", "labelsHidden",
+                                                  "buttonSizing", "menuOrder", "textInputBorderShape", "horizontalRadioGroupLayout", "datePickerStyle",
+                                                  "progressViewStyle", "gaugeStyle", "controlGroupStyle", "textEditorStyle", "formStyle", "tableStyle",
+                                                  "tabViewStyle", "alternatingRowBackgrounds", "tableColumnHeaders", "sliderThumbVisibility", "badgeProminence"]
 
     /// Functions and ViewModifiers in this file that apply styles, with the styles in their bodies (the first branch of
     /// an `if #available` first, so the newest look wins).
@@ -817,6 +820,9 @@ struct SwiftStructure {
     static let elementNames: [String: String] = [
         "Button": "button", "Menu": "menu", "Picker": "picker", "Toggle": "toggle",
         "TextField": "field", "SecureField": "field",
+        // Added with the macOS 27 catalog (CD52).
+        "DatePicker": "datePicker", "ProgressView": "progress", "Slider": "slider", "Stepper": "stepper", "Gauge": "gauge",
+        "ControlGroup": "controlGroup", "TextEditor": "textEditor", "Table": "table", "Form": "form", "TabView": "switcher",
     ]
 
     /// True when the `.` at `dot` continues an expression (`…).searchable(`), not an enum case (`kind: .searchable`).
@@ -899,6 +905,7 @@ struct SwiftStructure {
             if let s = env.shape { recipe["shape"] = s }
             if let t = env.tint { recipe["tint"] = t }
             if let k = env.key { recipe["key"] = k }
+            if let w = env.sizing { recipe["sizing"] = w }
             if env.help { recipe["tooltip"] = "title" }
             if args.contains("role: .destructive") || args.contains("role:.destructive") { importance = .destructive }
             else if env.key == "defaultAction" || (recipe["style"]?.hasSuffix("Prominent") ?? false) { importance = .main }
@@ -913,17 +920,51 @@ struct SwiftStructure {
             recipe["style"] = env.menuStyle ?? "automatic"
             if let s = env.buttonStyle { recipe["look"] = s }
             if let s = env.indicator { recipe["indicator"] = s }
+            if let s = env.shape { recipe["shape"] = s }
+            if env.menuOrder == "fixed" { recipe["order"] = "fixed" }
             recipe["label"] = env.labelStyle ?? buttonLabel(args: args, closures: closures)
             if let s = env.size { recipe["size"] = s }
         case "picker":
             recipe["style"] = env.pickerStyle ?? "automatic"
+            if recipe["style"] == "menu", let b = env.buttonStyle { recipe["look"] = b }
+            if env.horizontalRadio { recipe["layout"] = "horizontal" }
             if env.labelsHidden { recipe["label"] = "hidden" }
             if let s = env.size { recipe["size"] = s }
         case "toggle":
             recipe["style"] = env.toggleStyle ?? "automatic"
+            if recipe["style"] == "button", let b = env.buttonStyle { recipe["look"] = b }
             if let s = env.size { recipe["size"] = s }
+            if let t = env.tint { recipe["tint"] = t }
+        case "datePicker":
+            if let s = env.datePickerStyle { recipe["style"] = s }
+            if let s = env.size { recipe["size"] = s }
+        case "progress":
+            if let s = env.progressStyle { recipe["style"] = s }
+            if let s = env.size { recipe["size"] = s }
+        case "slider":
+            if env.thumbHidden { recipe["thumb"] = "hidden" }
+            if let s = env.size { recipe["size"] = s }
+        case "stepper":
+            if let s = env.size { recipe["size"] = s }
+        case "gauge":
+            if let s = env.gaugeStyle { recipe["style"] = s }
+        case "controlGroup":
+            if let s = env.controlGroupStyle { recipe["style"] = s }
+            if let s = env.size { recipe["size"] = s }
+        case "textEditor":
+            if let s = env.textEditorStyle { recipe["style"] = s }
+        case "table":
+            if let s = env.tableStyle { recipe["style"] = s }
+            if env.headersHidden { recipe["headers"] = "hidden" }
+            if env.alternating { recipe["alternating"] = "on" }
+        case "form":
+            if let s = env.formStyle { recipe["style"] = s }
+        case "switcher":
+            // A TabView: its style, in the switcher's words.
+            recipe["style"] = ["tabBarOnly": "tabBar", "grouped": "groupedTabs", "sidebarAdaptable": "sidebarTabs"][env.tabViewStyle ?? ""] ?? "tabs"
         default:
             recipe["style"] = env.textFieldStyle ?? "automatic"
+            if recipe["style"] == "bordered", let shape = env.fieldShape { recipe["shape"] = shape }
             if let s = env.size { recipe["size"] = s }
         }
         return ComponentInventory.Use(element: element, place: context.place, recipe: recipe, importance: importance,
@@ -1381,6 +1422,9 @@ struct SwiftStructure {
 struct StyleEnvironment {
     var buttonStyle: String?, size: String?, labelStyle: String?, shape: String?, tint: String?
     var menuStyle: String?, indicator: String?, pickerStyle: String?, toggleStyle: String?, textFieldStyle: String?
+    var sizing: String?, menuOrder: String?, fieldShape: String?, horizontalRadio = false
+    var datePickerStyle: String?, progressStyle: String?, gaugeStyle: String?, controlGroupStyle: String?, textEditorStyle: String?
+    var formStyle: String?, tableStyle: String?, tabViewStyle: String?, alternating = false, headersHidden = false, thumbHidden = false
     var labelsHidden = false
     var key: String?, help = false, role: String?
 
@@ -1412,6 +1456,21 @@ struct StyleEnvironment {
             case "toggleStyle": if toggleStyle == nil { toggleStyle = Self.style(a, suffix: "ToggleStyle") }
             case "textFieldStyle": if textFieldStyle == nil { textFieldStyle = Self.style(a, suffix: "TextFieldStyle") }
             case "labelsHidden": labelsHidden = true
+            case "buttonSizing": if sizing == nil { sizing = Self.member(a) }
+            case "menuOrder": if menuOrder == nil { menuOrder = Self.member(a) }
+            case "textInputBorderShape": if fieldShape == nil { fieldShape = Self.member(a) }
+            case "horizontalRadioGroupLayout": horizontalRadio = true
+            case "datePickerStyle": if datePickerStyle == nil { datePickerStyle = Self.member(a) }
+            case "progressViewStyle": if progressStyle == nil { progressStyle = Self.member(a) }
+            case "gaugeStyle": if gaugeStyle == nil { gaugeStyle = Self.member(a) }
+            case "controlGroupStyle": if controlGroupStyle == nil { controlGroupStyle = Self.member(a) }
+            case "textEditorStyle": if textEditorStyle == nil { textEditorStyle = Self.member(a) }
+            case "formStyle": if formStyle == nil { formStyle = Self.member(a) }
+            case "tableStyle": if tableStyle == nil { tableStyle = Self.member(a) }
+            case "tabViewStyle": if tabViewStyle == nil { tabViewStyle = Self.member(a) }
+            case "alternatingRowBackgrounds": alternating = a.isEmpty || a.contains("enabled")
+            case "tableColumnHeaders": headersHidden = a.contains("hidden")
+            case "sliderThumbVisibility": thumbHidden = a.contains("hidden")
             case "keyboardShortcut" where own:
                 if key == nil { key = a.hasPrefix(".defaultAction") ? "defaultAction" : a.hasPrefix(".cancelAction") ? "cancelAction" : nil }
             case "help" where own: help = true
@@ -1424,6 +1483,7 @@ struct StyleEnvironment {
 
     /// `.glass` → glass; `PlainButtonStyle()` → plain; `.glass(.clear)` → glass; `MyStyle()` → custom:MyStyle.
     static func style(_ a: String, suffix: String) -> String? {
+        if a.hasPrefix(".glass(.clear") { return "glassClear" }
         if let m = member(a) { return m }
         guard let first = a.split(whereSeparator: { $0 == "(" || $0 == " " }).first.map(String.init), !first.isEmpty else { return nil }
         if first.hasSuffix(suffix) {

@@ -50,6 +50,29 @@ public enum ComponentTemplates {
         ComponentFoundation("text.code", .text, use: "Numbers and code only.", system: "body", design: "monospaced"),
     ]
 
+    /// The controls added with the macOS 27 catalog (CD52): every template lets macOS draw them, so they look native
+    /// until the owner chooses otherwise.
+    static let moreControls: [ComponentRole] = [
+        ComponentRole("progress.standard", "Progress", use: "How far a task has come, or that it is working.",
+                      places: ["page", "listRow", "sheetFooter"], importance: .other, followsMacOS: true, sources: ["hig-progress-indicators"]),
+        ComponentRole("datePicker.setting", "Date", use: "Choosing a date or time in a form or the inspector.",
+                      places: ["form", "inspector", "popover"], importance: .other, followsMacOS: true, sources: ["hig-pickers"]),
+        ComponentRole("slider.setting", "Slider", use: "A value along a range, such as a volume.",
+                      places: ["form", "inspector", "popover"], importance: .other, followsMacOS: true, sources: ["hig-sliders"]),
+        ComponentRole("stepper.setting", "Stepper", use: "Raising or lowering a number by a step.",
+                      places: ["form", "inspector"], importance: .other, followsMacOS: true, sources: ["hig-steppers"]),
+        ComponentRole("textEditor.notes", "Notes", use: "Longer text: notes, descriptions.",
+                      places: ["page", "form"], importance: .other, followsMacOS: true, sources: ["hig-text-views"]),
+        ComponentRole("table.standard", "Table", use: "Many records with columns to sort.",
+                      places: ["page"], importance: .other, followsMacOS: true, sources: ["hig-lists"]),
+        ComponentRole("form.settings", "Settings form", use: "A form of settings: labels and their controls.",
+                      places: ["page", "inspector", "popover"], importance: .other, followsMacOS: true, sources: ["swiftui-form"]),
+        ComponentRole("controlGroup.toolbar", "Grouped buttons", use: "Buttons that belong together, such as back and forward.",
+                      places: ["toolbar"], importance: .other, followsMacOS: true, sources: ["hig-buttons"]),
+        ComponentRole("gauge.status", "Gauge", use: "A level within a range, such as storage used.",
+                      places: ["page", "inspector"], importance: .other, followsMacOS: true, sources: ["hig-gauges"]),
+    ]
+
     // MARK: macOS Native
 
     /// Apple's defaults (NF1, NF3): almost every role follows macOS, so the system decides now and in later versions.
@@ -144,7 +167,7 @@ public enum ComponentTemplates {
                     use: "A pane with nothing to show: say why and give the next step, ideally a button.",
                     places: ["page", "emptyState"], importance: .other,
                     recipe: ["action": "prominent"], custom: "ContentUnavailableView", sources: ["swiftui-contentunavailable"]),
-            ]))
+            ] + moreControls))
     }
 
     // MARK: Compact
@@ -288,6 +311,6 @@ public enum ComponentTemplates {
                     use: "A pane with nothing to show: say why and give the next step.",
                     places: ["page", "emptyState"], importance: .other,
                     recipe: ["action": "prominent"], custom: "ContentUnavailableView", sources: ["swiftui-contentunavailable"]),
-            ]))
+            ] + moreControls))
     }
 }

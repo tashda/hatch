@@ -96,6 +96,25 @@ public enum ComponentNative {
         AppleReference("swiftui-scrollcontentbackground", "SwiftUI: scrollContentBackground(_:)", "/documentation/swiftui/view/scrollcontentbackground(_:)"),
         AppleReference("swiftui-inspector", "SwiftUI: inspector(isPresented:content:)", "/documentation/swiftui/view/inspector(ispresented:content:)"),
         AppleReference("swiftui-padding", "SwiftUI: padding(_:_:)", "/documentation/swiftui/view/padding(_:_:)"),
+        // Added with the macOS 27 catalog check (CD52).
+        AppleReference("hig-pickers", "HIG: Pickers", "/design/human-interface-guidelines/pickers"),
+        AppleReference("swiftui-buttonsizing", "SwiftUI: buttonSizing(_:)", "/documentation/swiftui/view/buttonsizing(_:)"),
+        AppleReference("swiftui-textinputbordershape", "SwiftUI: textInputBorderShape(_:)", "/documentation/swiftui/view/textinputbordershape(_:)"),
+        AppleReference("swiftui-liststyle", "SwiftUI: ListStyle", "/documentation/swiftui/liststyle"),
+        AppleReference("swiftui-tablestyle", "SwiftUI: TableStyle", "/documentation/swiftui/tablestyle"),
+        AppleReference("swiftui-formstyle", "SwiftUI: FormStyle", "/documentation/swiftui/formstyle"),
+        AppleReference("swiftui-badgeprominence", "SwiftUI: BadgeProminence", "/documentation/swiftui/badgeprominence"),
+        AppleReference("swiftui-datepickerstyle", "SwiftUI: DatePickerStyle", "/documentation/swiftui/datepickerstyle"),
+        AppleReference("swiftui-progressviewstyle", "SwiftUI: ProgressViewStyle", "/documentation/swiftui/progressviewstyle"),
+        AppleReference("swiftui-slider", "SwiftUI: Slider", "/documentation/swiftui/slider"),
+        AppleReference("swiftui-gaugestyle", "SwiftUI: GaugeStyle", "/documentation/swiftui/gaugestyle"),
+        AppleReference("swiftui-controlgroupstyle", "SwiftUI: ControlGroupStyle", "/documentation/swiftui/controlgroupstyle"),
+        AppleReference("swiftui-texteditorstyle", "SwiftUI: TextEditorStyle", "/documentation/swiftui/texteditorstyle"),
+        AppleReference("hig-progress-indicators", "HIG: Progress indicators", "/design/human-interface-guidelines/progress-indicators"),
+        AppleReference("hig-sliders", "HIG: Sliders", "/design/human-interface-guidelines/sliders"),
+        AppleReference("hig-steppers", "HIG: Steppers", "/design/human-interface-guidelines/steppers"),
+        AppleReference("hig-gauges", "HIG: Gauges", "/design/human-interface-guidelines/gauges"),
+        AppleReference("hig-text-views", "HIG: Text views", "/design/human-interface-guidelines/text-views"),
     ]
 
     /// Places macOS styles itself (NF1): what a role may still set there. Toolbars: only the one prominent key action;
