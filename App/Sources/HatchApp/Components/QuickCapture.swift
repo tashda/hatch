@@ -296,6 +296,8 @@ struct QuickCaptureView: View {
     let close: () -> Void
 
     @State private var problem: String?
+    /// Chosen when the bar opens, so it does not change while you type.
+    @State private var greeting = IrisPersonality.standard.greeting()
     /// The name and key of the control under the pointer. Tooltips do not show for a panel while Hatch is not the
     /// active app, so the bar shows it itself, as Raycast does.
     @State private var hint: String?
@@ -335,6 +337,8 @@ struct QuickCaptureView: View {
         .onChange(of: draft.shots.map(\.id)) { _, _ in QuickCapture.shared.refreshShadow() }
         .onChange(of: draft.prompt.count / 60) { _, _ in QuickCapture.shared.refreshShadow() }
         .onAppear {
+            if let p = QuickCapture.shared.startupProblem { problem = p; QuickCapture.shared.startupProblem = nil }
+            greeting = state.irisPersonality.greeting()
             if draft.projectId == nil || !state.projects.contains(where: { $0.id == draft.projectId }) { draft.projectId = startProject }
             DispatchQueue.main.async {
                 focused = true
@@ -354,7 +358,7 @@ struct QuickCaptureView: View {
                 .contentShape(Rectangle())
                 .gesture(WindowDragGesture())
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 7 }
-            TextField("What do you want?", text: $draft.prompt, axis: .vertical)
+            TextField(greeting, text: $draft.prompt, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.title2)
                 .lineLimit(1...8)

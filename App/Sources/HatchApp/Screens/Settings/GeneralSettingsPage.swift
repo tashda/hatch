@@ -23,6 +23,19 @@ struct GeneralSettingsPage: View {
             startSection
 
             Section {
+                Picker(selection: state.preferenceBinding(Preference.irisPersonality, default: IrisPersonality.standard.rawValue)) {
+                    ForEach(IrisPersonality.allCases) { Text($0.title).tag($0.rawValue) }
+                } label: {
+                    Text("Personality")
+                    Text(state.irisPersonality.detail)
+                }
+            } header: {
+                Text("Iris")
+            } footer: {
+                Text("Only the words in Quick Capture. It does not change how she works on tickets.")
+            }
+
+            Section {
                 Picker("Dock badge", selection: state.preferenceBinding(Preference.dockBadge, default: "waiting")) {
                     Text("Decisions waiting for you").tag("waiting")
                     Text("Off").tag("off")

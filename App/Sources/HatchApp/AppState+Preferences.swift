@@ -16,6 +16,7 @@ enum Preference {
     static let menuBarScope = "menu_bar_scope"      // "all" (default) or "selected": which projects the menu bar counts
     static let confirmDrop = "confirm_drop"         // on by default
     static let newTicketType = "new_ticket_type"    // empty asks; otherwise a TicketType raw value
+    static let irisPersonality = "iris_personality" // IrisPersonality raw value; only the words in Quick Capture
 
     // Notifications
     static let notifyWaiting = "notify_waiting"
@@ -106,6 +107,8 @@ extension AppState {
         Binding(get: { self.hxSetting(key) ?? fallback }, set: { self.setPreference(key, $0) })
     }
 
+    var irisPersonality: IrisPersonality { IrisPersonality(rawValue: hxSetting(Preference.irisPersonality) ?? "") ?? .standard }
+
     var appearanceChoice: AppearanceChoice { AppearanceChoice(rawValue: hxSetting(Preference.appearance) ?? "") ?? .system }
 
     /// The type New ticket starts with; nil asks.
@@ -163,4 +166,53 @@ extension AppState {
     }
 
     static let mainWindowId = "main"
+}
+
+
+/// How Iris greets you in Quick Capture. Only the words in the empty bar change; the work she does for a ticket is the
+/// same for every personality. Add a case here and it shows up in Settings › General.
+enum IrisPersonality: String, CaseIterable, Identifiable {
+    case bitter, plain
+
+    var id: String { rawValue }
+
+    /// The default: a bitter old woman who knows everything and does not like to be disturbed.
+    static let standard = IrisPersonality.bitter
+
+    var title: String {
+        switch self {
+        case .bitter: "Bitter"
+        case .plain: "Plain"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .bitter: "Grunts at you, but files it"
+        case .plain: "Just asks what you want"
+        }
+    }
+
+    /// One line is picked each time the bar opens.
+    var greetings: [String] {
+        switch self {
+        case .bitter: [
+            "What do you want from me?",
+            "Oh, you again...",
+            "Make it quick.",
+            "I was in the middle of something.",
+            "Well? Out with it.",
+            "Yes, yes, I know already. What is it?",
+            "Back so soon?",
+            "I know everything. Ask anyway.",
+            "Don't just stand there.",
+            "Hmph. Go on, then.",
+            "Couldn't figure it out yourself?",
+            "Wipe your feet and say what you want.",
+        ]
+        case .plain: ["What do you want?"]
+        }
+    }
+
+    func greeting() -> String { greetings.randomElement() ?? "What do you want?" }
 }
