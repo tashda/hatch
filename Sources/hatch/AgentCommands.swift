@@ -140,7 +140,11 @@ enum AgentCommands {
     // hatch offer #151 manifest.json | --sketch sketch.json | --components looks.json | --answer "text"
     static func offer(_ c: Context) throws {
         let t = try c.ticket(c.args.pos(1))
-        let service = OfferService(store: c.store, agent: t.takenBy ?? "agent")
+        var service = OfferService(store: c.store, agent: t.takenBy ?? "agent")
+        // A Sweep's role design is checked against the project's design system (SW14).
+        service.designSystem = { [store = c.store] ticket in
+            (try? store.project(id: ticket.projectId))?.flatMap { $0.config?.repo(.notebook)?.localPath }.flatMap { try? ComponentSystem.load(notebook: $0) } ?? nil
+        }
         let result: OfferResult
         if let answer = c.args.option("answer") { result = try service.offerAnswer(ticketId: t.id, answer: answer) }
         else if let file = c.args.option("components") {
@@ -333,6 +337,9 @@ enum AgentCommands {
         // Publishes its port and token (as the app does), so a Stage or the Components Designer can reach it.
         let server = StageServer(store: c.store, paths: HatchPaths.current(), port: UInt16(c.args.option("port") ?? "0") ?? 0)
         server.commitNotebook = { folder, message in _ = try? NotebookWriter.commit(message, in: folder) }
+        c.store.onProposalAccepted = { [weak store = c.store] ticket in
+            store?.saveRoleDesign(of: ticket) { notebook, message in _ = try NotebookWriter.commit(message, in: notebook) }
+        }
         try server.start()
         print("Hatch Stage API on http://127.0.0.1:\(server.port)  (token in \(HatchPaths.current().tokenFile.path))")
         RunLoop.main.run()

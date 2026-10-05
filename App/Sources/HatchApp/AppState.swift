@@ -111,6 +111,10 @@ final class AppState: ObservableObject {
     init(store: HatchStore, paths: AppPaths) {
         self.store = store
         self.paths = paths
+        // A Sweep that names a role saves the look the owner accepted as the role's design, wherever it is accepted (SW14).
+        store.onProposalAccepted = { [weak store] ticket in
+            store?.saveRoleDesign(of: ticket) { notebook, message in _ = try NotebookWriter.commit(message, in: notebook) }
+        }
         refreshSyncSummary()
         refreshDecisionCount()
     }

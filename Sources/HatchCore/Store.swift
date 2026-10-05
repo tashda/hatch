@@ -3,6 +3,10 @@ import Foundation
 /// The single place that reads and writes Hatch's SQLite database. Every state change goes through here, so the
 /// event log, the search index and the GitHub sync queue can never disagree with the ticket (decision: the app does the bookkeeping).
 public final class HatchStore: @unchecked Sendable {
+    /// Runs after a Proposal or Sweep is accepted, outside the transaction. The app and `hatch serve` set it, so a Sweep that names a
+    /// role saves the chosen look in the notebook wherever the owner accepts it (Decide, the Desk, the Stage, the ticket).
+    public var onProposalAccepted: (@Sendable (Ticket) -> Void)?
+
     public let db: Database
     public var now: @Sendable () -> Date
 

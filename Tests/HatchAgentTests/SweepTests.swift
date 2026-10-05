@@ -251,4 +251,82 @@ final class SweepTests: XCTestCase {
         XCTAssertEqual(try store.sweepItems(ticketId: t.id).map(\.state), [.verified, .verified, .todo])
         XCTAssertEqual(try store.verifyAllSweepItems(ticketId: t.id), 0, "nothing left to verify")
     }
+
+    // A Sweep that names a role (decision SW14).
+
+    private func roleSweepManifest() -> ProposalManifest {
+        var m = sweepManifest(items())
+        m.role = ManifestRole(id: "button.primary", looks: ["a": ["style": "bordered"], "b": ["style": "glass"]], use: "The main action of a sheet")
+        return m
+    }
+
+    func testTheGateWantsALookForEveryOptionOfARoleSweep() {
+        func roleCodes(_ role: ManifestRole) -> [String] {
+            var m = sweepManifest(items()); m.role = role
+            return codes(ProposalValidator.validate(m, isSweep: true)).filter { $0.hasPrefix("role.") }
+        }
+        XCTAssertEqual(roleCodes(ManifestRole(id: "button.primary", looks: ["a": ["style": "bordered"], "b": ["style": "glass"]])), [])
+        XCTAssertEqual(roleCodes(ManifestRole(id: "button.primary", looks: ["a": ["style": "bordered"]])), ["role.look-missing"])
+        XCTAssertEqual(roleCodes(ManifestRole(id: "button.primary", looks: ["a": ["style": "bordered"], "b": ["style": "glass"], "z": ["style": "plain"]])), ["role.look-unknown"])
+    }
+
+    func testTheLooksAreCheckedAgainstTheDesignSystem() throws {
+        let system = ComponentTemplates.glass.system(name: "Echo")
+        XCTAssertTrue(RoleDesignCheck.problems(roleSweepManifest().role!, system: system).isEmpty)
+        let bad = ManifestRole(id: "button.primary", looks: ["a": ["style": "shiny"], "b": ["glow": "yes"]])
+        XCTAssertEqual(RoleDesignCheck.problems(bad, system: system).map(\.code), ["look.value", "look.setting"])
+        XCTAssertEqual(RoleDesignCheck.problems(ManifestRole(id: "button.nope", looks: ["a": ["style": "plain"]]), system: system).first?.code, "change.role")
+    }
+
+    func testTheAcceptedLookIsSavedAsTheRolesDesignInTheNotebook() throws {
+        let notebook = FileManager.default.temporaryDirectory.appendingPathComponent("nb-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: notebook, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: notebook) }
+        var system = ComponentTemplates.glass.system(name: "Echo")
+        try system.agree("button.primary")
+        try system.write(notebook: notebook.path)
+        var config = Fixture.config
+        config.repos.append(RepoConfig(role: .notebook, remote: "acme/notebook", branch: "main", localPath: notebook.path))
+        let p = try store.upsertProject(key: "echo", name: "Echo", config: config)
+
+        let t = try Fixture.ticket(store, p, type: .sweep, title: "Sheet footers", body: "x", status: .ready)
+        for (status, actor) in [(Status.preparing, Actor.agent), (.yourCall, .agent)] { try store.move(t.id, to: status, actor: actor) }
+        var manifest = roleSweepManifest()
+        manifest.exhibitTopic = ManifestTopic(id: "footer", question: "Which look?", recommended: "a", why: "Calmer.")
+        try store.saveProposal(ticketId: t.id, manifestJSON: try manifest.jsonString())
+
+        var committed: [String] = []
+        store.onProposalAccepted = { [unowned store] ticket in
+            store!.saveRoleDesign(of: ticket) { _, message in committed.append(message) }
+        }
+        let accepted = try store.acceptProposal(ticketId: t.id, choices: ["footer": "b"])
+        XCTAssertEqual(accepted.ticket.status, .accepted)
+        let saved = try XCTUnwrap(try ComponentSystem.load(notebook: notebook.path))
+        XCTAssertEqual(saved.role("button.primary")?.draft, ["style": "glass"], "the option the owner picked, not the recommendation")
+        XCTAssertEqual(saved.role("button.primary")?.decision, accepted.ticket.displayNumber)
+        XCTAssertEqual(committed.count, 1)
+        XCTAssertTrue(committed[0].contains("button.primary") && committed[0].contains("option b"))
+        XCTAssertFalse(try store.events(ticketId: t.id, kinds: ["role-design"]).isEmpty)
+    }
+
+    func testALookThatNoLongerPassesIsNotSavedAndTheOwnerIsToldOnTheTicket() throws {
+        let notebook = FileManager.default.temporaryDirectory.appendingPathComponent("nb-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: notebook, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: notebook) }
+        try ComponentTemplates.glass.system(name: "Echo").write(notebook: notebook.path)
+        var config = Fixture.config
+        config.repos.append(RepoConfig(role: .notebook, remote: "acme/notebook", branch: "main", localPath: notebook.path))
+        let p = try store.upsertProject(key: "echo", name: "Echo", config: config)
+        let t = try Fixture.ticket(store, p, type: .sweep, title: "Sheet footers", body: "x", status: .ready)
+        for (status, actor) in [(Status.preparing, Actor.agent), (.yourCall, .agent)] { try store.move(t.id, to: status, actor: actor) }
+        var manifest = roleSweepManifest()
+        manifest.role = ManifestRole(id: "button.primary", looks: ["a": ["style": "shiny"], "b": ["style": "glass"]])
+        manifest.exhibitTopic = ManifestTopic(id: "footer", question: "Which look?", recommended: "a", why: "Calmer.")
+        try store.saveProposal(ticketId: t.id, manifestJSON: try manifest.jsonString())
+        store.onProposalAccepted = { [unowned store] ticket in store!.saveRoleDesign(of: ticket) { _, _ in XCTFail("nothing should be committed") } }
+        _ = try store.acceptProposal(ticketId: t.id, choices: ["footer": "a"])
+        XCTAssertNil(try ComponentSystem.load(notebook: notebook.path)?.role("button.primary")?.draft)
+        XCTAssertTrue(try store.notes(ticketId: t.id).contains { $0.body.contains("could not be saved as a role design") })
+        XCTAssertFalse(try store.events(ticketId: t.id, kinds: ["role-design-failed"]).isEmpty)
+    }
 }

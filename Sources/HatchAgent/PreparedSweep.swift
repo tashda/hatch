@@ -36,9 +36,10 @@ public struct PreparedSweepService {
 
     /// Runs the same gate as a hand-in (the items, the kinds, the specimens) and the code check when `appRoot` is given, then
     /// makes the ticket and puts it at Your call. A Sweep that fails the gate is never made, so the owner never meets a half-finished one.
-    public func create(projectId: Int, _ sweep: PreparedSweep, appRoot: String?) throws -> PreparedSweepResult {
+    public func create(projectId: Int, _ sweep: PreparedSweep, appRoot: String?, system: ComponentSystem? = nil) throws -> PreparedSweepResult {
         var issues = ProposalValidator.validate(sweep.manifest, isSweep: true)
         if let appRoot { issues += SweepItemCheck.problems(sweep.manifest.items, appRoot: appRoot) }
+        if let role = sweep.manifest.role, let system { issues += RoleDesignCheck.problems(role, system: system) }
         if issues.hasErrors { return .rejected(issues) }
         let json = try sweep.manifest.jsonString()
         let ticket = try store.db.transaction { () -> Ticket in

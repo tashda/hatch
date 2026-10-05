@@ -23,6 +23,8 @@ public struct OfferService {
     public var stageCheck: (@Sendable (Ticket, ProposalManifest) throws -> [GateIssue])?
     /// Where a Sweep's items are looked up. Nil means the ticket's own app workspace; tests set it.
     public var itemRoot: (@Sendable (Ticket) -> String?)?
+    /// The design system a Sweep's role design is checked against (SW14). Nil: the design is not checked, and a warning says so.
+    public var designSystem: (@Sendable (Ticket) -> ComponentSystem?)?
 
     public init(store: HatchStore, agent: String = "agent", stageCheck: (@Sendable (Ticket, ProposalManifest) throws -> [GateIssue])? = nil) {
         self.store = store; self.agent = agent; self.stageCheck = stageCheck
@@ -54,6 +56,10 @@ public struct OfferService {
         if t.type == .sweep, !issues.hasErrors {
             if let root = appRoot(for: t) { issues += SweepItemCheck.problems(manifest.items, appRoot: root) }
             else { issues.append(.warning("items.unchecked", "The items could not be checked against the code: this ticket has no app workspace.", "Run hatch take again to get one.")) }
+        }
+        if t.type == .sweep, !issues.hasErrors, let role = manifest.role {
+            if let system = designSystem?(t) { issues += RoleDesignCheck.problems(role, system: system) }
+            else { issues.append(.warning("role.unchecked", "The role design could not be checked: the project has no design system in its notebook.", "Set up Components first, or drop `role`.")) }
         }
         if !issues.hasErrors, let stageCheck { issues += try stageCheck(t, manifest) }
         if issues.hasErrors { return try reject(t, issues) }

@@ -23,18 +23,21 @@ public struct ProposalManifest: Codable, Equatable, Sendable {
     /// The control whose choices are the Sweep's kinds (decision SW6); every specimen draws itself for its value, and the Stage
     /// shows one row per kind. Required when the items fall in two or more kinds.
     public var matrixControl: String?
+    /// When the Sweep changes how a kind of control looks (decision SW14): the design-system role and a look for each option. The
+    /// look of the option the owner accepts is saved as the role's design.
+    public var role: ManifestRole?
 
     public init(revision: Int = 1, specs: [String] = [], summary: String = "", asked: String = "",
                 controls: [ManifestControl] = [], specimens: [ManifestSpecimen] = [], questions: [ManifestQuestion] = [],
                 exhibitTopic: ManifestTopic? = nil, presets: [ManifestPreset] = [], scenarios: [ManifestScenario] = [],
-                conformance: ManifestConformance? = nil, items: [ManifestItem] = [], matrixControl: String? = nil) {
-        self.items = items; self.matrixControl = matrixControl
+                conformance: ManifestConformance? = nil, items: [ManifestItem] = [], matrixControl: String? = nil, role: ManifestRole? = nil) {
+        self.items = items; self.matrixControl = matrixControl; self.role = role
         self.revision = revision; self.specs = specs; self.summary = summary; self.asked = asked
         self.controls = controls; self.specimens = specimens; self.questions = questions
         self.exhibitTopic = exhibitTopic; self.presets = presets; self.scenarios = scenarios; self.conformance = conformance
     }
 
-    private enum CodingKeys: String, CodingKey { case revision, specs, summary, asked, controls, specimens, exhibits, questions, exhibitTopic, presets, scenarios, conformance, items, matrixControl }
+    private enum CodingKeys: String, CodingKey { case revision, specs, summary, asked, controls, specimens, exhibits, questions, exhibitTopic, presets, scenarios, conformance, items, matrixControl, role }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -53,6 +56,7 @@ public struct ProposalManifest: Codable, Equatable, Sendable {
         conformance = try c.decodeIfPresent(ManifestConformance.self, forKey: .conformance)
         items = try c.decodeIfPresent([ManifestItem].self, forKey: .items) ?? []
         matrixControl = try c.decodeIfPresent(String.self, forKey: .matrixControl)
+        role = try c.decodeIfPresent(ManifestRole.self, forKey: .role)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -70,6 +74,7 @@ public struct ProposalManifest: Codable, Equatable, Sendable {
         try c.encodeIfPresent(conformance, forKey: .conformance)
         if !items.isEmpty { try c.encode(items, forKey: .items) }
         try c.encodeIfPresent(matrixControl, forKey: .matrixControl)
+        try c.encodeIfPresent(role, forKey: .role)
     }
 
     /// Parses the JSON an agent hands in. Errors say where the JSON is wrong, in words an agent can act on.
@@ -109,6 +114,21 @@ public struct ManifestItem: Codable, Equatable, Sendable {
         self.id = id; self.title = title; self.name = name; self.file = file; self.kind = kind; self.note = note
     }
     public var input: SweepItemInput { SweepItemInput(key: id, title: title, name: name, file: file, kind: kind, note: note) }
+}
+
+/// The design-system role a Sweep changes, with a look for each option, as the element's own settings (`{"style": "bordered"}`).
+public struct ManifestRole: Codable, Equatable, Sendable {
+    public var id: String
+    /// Option (specimen) id to its look.
+    public var looks: [String: [String: String]]
+    /// Limits the design to one place or one area (a variant) instead of the role everywhere.
+    public var place: String?
+    public var area: String?
+    /// One line for when this look applies, for a variant.
+    public var use: String?
+    public init(id: String, looks: [String: [String: String]], place: String? = nil, area: String? = nil, use: String? = nil) {
+        self.id = id; self.looks = looks; self.place = place; self.area = area; self.use = use
+    }
 }
 
 public enum ManifestError: Error, CustomStringConvertible, Equatable {

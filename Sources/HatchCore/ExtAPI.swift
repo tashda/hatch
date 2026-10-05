@@ -72,6 +72,13 @@ public extension HatchStore {
     /// All or nothing: an illegal move leaves the picks untouched.
     @discardableResult
     func acceptProposal(ticketId: Int, choices: [String: String] = [:]) throws -> (ticket: Ticket, decisionId: Int, summary: String) {
+        let result = try acceptProposalInTransaction(ticketId: ticketId, choices: choices)
+        // After the transaction: saving a Sweep's role design writes files and commits the notebook (decision SW14).
+        onProposalAccepted?(result.ticket)
+        return result
+    }
+
+    private func acceptProposalInTransaction(ticketId: Int, choices: [String: String]) throws -> (ticket: Ticket, decisionId: Int, summary: String) {
         try db.transaction {
             guard let before = try ticket(id: ticketId) else { throw StoreError.notFound("ticket \(ticketId)") }
             for topic in choices.keys.sorted() { try setPick(ticketId: ticketId, topic: topic, choice: choices[topic]!) }

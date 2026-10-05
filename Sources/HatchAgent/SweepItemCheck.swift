@@ -32,3 +32,13 @@ public enum SweepItemCheck {
         return out
     }
 }
+
+/// Checks a Sweep's role design against the design system (decision SW14), with the check the system itself offers for a change
+/// Proposal: only the element's own settings, only their values, and the whole system still valid.
+public enum RoleDesignCheck {
+    public static func problems(_ role: ManifestRole, system: ComponentSystem) -> [GateIssue] {
+        role.looks.sorted(by: { $0.key < $1.key }).flatMap { option, look in
+            system.problems(look: look, forRole: role.id, label: "Option '\(option)'").map { GateIssue.error($0.code, $0.message, $0.fix) }
+        }
+    }
+}

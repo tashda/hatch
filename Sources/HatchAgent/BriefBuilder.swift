@@ -346,6 +346,7 @@ public enum BriefBuilder {
             default:
                 let sweep = t.type == .sweep ? [
                     "This is a Sweep: one change to several similar things. First survey the code once and list every instance in the manifest `items`: {id, title, name, file, kind, note}. `name` is the type or view as the code spells it and `file` is its path relative to the app. Hatch checks both against the code, so list only what exists. Start from Candidates below (a name scan): confirm, remove and add.",
+                    "If the change is to how a kind of control looks, also name the design-system role: `role`: {\"id\": \"button.cancel\", \"looks\": {\"a\": {\"style\": \"bordered\"}, \"b\": {...}}, \"place\"/\"area\" only if it is not for the role everywhere, \"use\"}: one look for each option, using only the element's own settings (see Components in the notebook). Hatch checks each look against the design system, and the look the owner accepts is saved as the role's design.",
                     "Group the items into `kind`s of look-alikes. Add one control whose choices are the kinds and set `matrixControl` to its id; every specimen, Today too, draws itself for that control's value, so the Stage shows the design against every kind at once. One unified design for all of them, not one per item.",
                 ] : []
                 return sweep + [

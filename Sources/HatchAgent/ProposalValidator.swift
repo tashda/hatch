@@ -23,7 +23,7 @@ public enum ProposalValidator {
     /// The gate. Add a rule here and write one test for its code.
     public static let rules: [Rule] = [
         todayFirst, enoughProposals, specimenGainCost, specimenSizes, specimenSizeAdvice, duplicateIDs, controlQuestions, controlChoices,
-        questionRules, exhibitTopicRules, standardScenarios, presetRules, revisionRules, specIDAdvice, sweepItemRules,
+        questionRules, exhibitTopicRules, standardScenarios, presetRules, revisionRules, specIDAdvice, sweepItemRules, roleRules,
     ]
 
     public static func validate(_ manifest: ProposalManifest, previous: ProposalManifest? = nil, picks: [String: String] = [:], isSweep: Bool = false) -> [GateIssue] {
@@ -32,6 +32,23 @@ public enum ProposalValidator {
     }
 
     static func slug(_ s: String) -> String { s.lowercased().filter { $0.isLetter || $0.isNumber } }
+
+    // MARK: A Sweep's role
+
+    /// A Sweep that names a role has a look for every option and none for an option that is not there (decision SW14). That the looks
+    /// pass the design system is `RoleDesignCheck`, which needs the system.
+    static func roleRules(_ i: Input) -> [GateIssue] {
+        guard i.isSweep, let role = i.manifest.role else { return [] }
+        var out: [GateIssue] = []
+        let options = Set(i.manifest.proposalSpecimens.map(\.id))
+        for option in options.sorted() where role.looks[option] == nil {
+            out.append(.error("role.look-missing", "Option '\(option)' has no look for the role \(role.id).", "Give every option a look in role.looks: {\"\(option)\": {\"style\": \"bordered\"}}."))
+        }
+        for option in role.looks.keys.sorted() where !options.contains(option) {
+            out.append(.error("role.look-unknown", "role.looks names '\(option)', which is not one of the options.", "Use the ids of the proposal specimens."))
+        }
+        return out
+    }
 
     // MARK: Sweep items
 
