@@ -26,6 +26,23 @@ public struct ComponentsConfig: Codable, Equatable, Sendable {
 }
 
 public extension ProjectConfig {
+    /// The area a file of the app belongs to, by the areas' folders (the longest matching folder wins).
+    func area(ofFile path: String) -> String? {
+        var best: (String, Int)?
+        for a in areas {
+            for prefix in a.paths {
+                // Globs end in `/**` or `/*`; the folder before them is what matters.
+                var p = prefix
+                while p.hasSuffix("*") || p.hasSuffix("/") { p.removeLast() }
+                guard !p.isEmpty, !p.contains("*") else { continue }
+                if path == p || path.hasPrefix(p + "/") || path.contains("/" + p + "/") {
+                    if best == nil || p.count > best!.1 { best = (a.name, p.count) }
+                }
+            }
+        }
+        return best?.0
+    }
+
     /// The components folder on this Mac: inside the app clone, or the root of a separate components repository
     /// (the advanced case, for a package several apps share). Nil when the project has none or no clone here.
     var componentsFolder: String? {

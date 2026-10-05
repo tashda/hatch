@@ -53,7 +53,7 @@ public enum ComponentCodegen {
         let generated = s.elementsUsed.compactMap { e -> (ComponentElement, [(String, ComponentRole, ComponentVariant?)])? in
             guard let element = ComponentElement.named(e) else { return nil }
             var cases: [(String, ComponentRole, ComponentVariant?)] = []
-            for r in s.roles(of: e) where r.custom == nil || !r.recipe.isEmpty {
+            for r in s.roles(of: e) where r.custom == nil || !r.recipe.isEmpty || r.followsMacOS {
                 guard isIdentifier(r.name) else { continue }
                 cases.append((r.name, r, nil))
                 for v in r.variants where isIdentifier(v.id) { cases.append((r.name + v.id.prefix(1).uppercased() + v.id.dropFirst(), r, v)) }
@@ -92,8 +92,21 @@ public enum ComponentCodegen {
 
     /// One case's modifiers, with an `if #available` fallback when it needs a newer macOS than the app supports.
     static func body(element: ComponentElement, recipe: [String: String], role: ComponentRole, system: ComponentSystem, indent: String) -> String {
+        if role.followsMacOS {
+            // macOS draws it: only behaviour is written (NF3).
+            let behaviour = recipe.filter { element.parameter($0.key)?.isLook == false }
+            let (m, notes) = modifiers(element: element, recipe: behaviour, system: system, older: false)
+            return "\(indent)// Follows macOS: the system draws it.\n" + notes.map { "\(indent)// \($0)\n" }.joined() + "\(indent)\(chain(m))\n"
+        }
         let (modern, notes) = modifiers(element: element, recipe: recipe, system: system, older: false)
         var out = notes.map { "\(indent)// \($0)\n" }.joined()
+        // Native containers wrap the view instead of drawing a surface (NF1).
+        if element.id == "card", let container = recipe["container"], container != "custom" {
+            return out + "\(indent)\(container == "groupBox" ? "GroupBox { self }" : "Section { self }")\n"
+        }
+        if element.id == "sheet", recipe["sizing"].map({ $0 != "automatic" }) == true, system.minimumMacOSNumber < 15 {
+            return out + "\(indent)if #available(macOS 15.0, *) {\n\(indent)    \(chain(modern))\n\(indent)} else {\n\(indent)    self\n\(indent)}\n"
+        }
         let needsNew = modern.contains { $0.contains(".glass") }
         if needsNew && system.minimumMacOSNumber < 26 {
             let (older, _) = modifiers(element: element, recipe: recipe, system: system, older: true)
@@ -149,19 +162,22 @@ public enum ComponentCodegen {
         case "switcher":
             switch r["style"] {
             case "segmented", "menu": m.append(".pickerStyle(.\(r["style"]!))")
+            case "tabs": notes.append("A tab view: write TabView for the sections; this modifier only sizes it.")
             case let other?: notes.append("\(other): drawn by the app's own view; as a Picker it falls back to segmented."); m.append(".pickerStyle(.segmented)")
             default: break
             }
             if let size = r["size"] { m.append(".controlSize(.\(size))") }
         case "row":
-            let pad = ["compact": 2, "regular": 4, "airy": 8][r["density"] ?? "regular"] ?? 4
-            m.append(".padding(.vertical, \(pad))")
+            // The list draws rows (height, padding, selection); only the separators are the app's preference.
             if r["separators"] == "hidden" { m.append(".listRowSeparator(.hidden)") }
+            if r["accessory"] == "badge" { notes.append("Counts: .badge(count) on the row.") }
+            if r["accessory"] == "chevron" { notes.append("A chevron: an Image(systemName: \"chevron.right\") at the trailing end.") }
             if r["actions"] == "onHover" { notes.append("Row actions show on hover or selection.") }
-            if r["selection"] == "fill" { notes.append("Selection: a soft fill, drawn by the list.") }
         case "card":
+            // GroupBox and Form sections are wrapped in `body`; only a custom card draws its own surface.
+            guard r["container"] == "custom" else { break }
             let radius = r["radius"].flatMap { $0 == "none" ? nil : value($0, system) } ?? "12"
-            if let pad = r["padding"], pad != "none" { m.append(".padding(\(value(pad, system) ?? "16"))") }
+            if let pad = r["padding"], pad != "system" { m.append(".padding(\(value(pad, system) ?? "16"))") } else { m.append(".padding()") }
             let shape = "RoundedRectangle(cornerRadius: \(radius), style: .continuous)"
             switch r["surface"] {
             case "grouped": m.append(".background(.background.secondary, in: \(shape))")
@@ -173,15 +189,15 @@ public enum ComponentCodegen {
             if r["border"] == "hairline", r["surface"] != "bordered" { m.append(".overlay(\(shape).strokeBorder(.separator, lineWidth: 0.5))") }
             if r["shadow"] == "soft" { m.append(".shadow(color: .black.opacity(0.08), radius: 4, y: 1)") }
         case "sheet":
-            let w = ["small": 360, "medium": 480, "large": 640][r["width"] ?? "medium"] ?? 480
-            m.append(".frame(minWidth: \(w), idealWidth: \(w))")
-            if r["footer"] == "spread" { notes.append("Footer: Cancel on the left, the main action on the right.") }
+            if let sizing = r["sizing"], sizing != "automatic" { m.append(".presentationSizing(.\(sizing))") }
         case "badge":
-            m.append(".font(.caption2.weight(.semibold))"); m.append(".monospacedDigit()")
-            if r["style"] != "plain" {
-                m.append(".foregroundStyle(.white)")
-                m.append(".padding(.horizontal, 5)"); m.append(".padding(.vertical, 1)")
+            switch r["style"] {
+            case "capsule":
+                m.append(".font(.caption2.weight(.semibold))"); m.append(".monospacedDigit()")
+                m.append(".foregroundStyle(.white)"); m.append(".padding(.horizontal, 5)"); m.append(".padding(.vertical, 1)")
                 m.append(".background(\(color(r["tint"] ?? "accent", system)), in: Capsule())")
+            case "plain": m.append(".font(.caption2.weight(.semibold))"); m.append(".monospacedDigit()"); m.append(".foregroundStyle(.secondary)")
+            default: notes.append("System badge: .badge(count) on the row, toolbar item or menu item.")
             }
         case "toast":
             m.append(".padding(.horizontal, 14)"); m.append(".padding(.vertical, 8)")

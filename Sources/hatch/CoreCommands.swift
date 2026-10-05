@@ -68,6 +68,8 @@ enum CoreCommands {
         case "questions": try componentQuestions(c); return
         case "answer": try componentAnswer(c); return
         case "agree": try componentAgree(c); return
+        case "follow": try componentFollow(c); return
+        case "refs": try componentRefs(c); return
         case "check": try componentCheck(c); return
         case "generate": try componentGenerate(c); return
         default: break
@@ -207,11 +209,16 @@ enum CoreCommands {
                 if !r.avoid.isEmpty { lines.append("      not: \(r.avoid)") }
                 lines.append("      where: \(places)")
                 lines.append("      look: \(r.lookSummary)")
+                if !r.sources.isEmpty { lines.append("      why: " + r.sources.compactMap { ComponentNative.reference($0)?.url }.joined(separator: " ")) }
                 for v in r.variants { lines.append("      variant \(v.id): \(v.use) (\(ComponentRole.summary(v.recipe)))") }
             }
         }
         let problems = system.problems()
         if !problems.isEmpty { lines.append("\nProblems:\n" + problems.map { "  - " + $0 }.joined(separator: "\n")) }
+        let advice = system.advice()
+        if !advice.isEmpty {
+            lines.append("\nAgainst Apple's guidance:\n" + advice.map { "  - \($0.message) (\(ComponentNative.reference($0.source)?.url ?? $0.source))" }.joined(separator: "\n"))
+        }
         var json = JSONValue.parse(String(decoding: try system.encoded(), as: UTF8.self)).objectValue ?? [:]
         json["problems"] = .array(problems.map { .string($0) })
         c.out.emit(.object(json), text: lines.joined(separator: "\n"))

@@ -50,6 +50,20 @@ extension CoreCommands {
                    text: lines.joined(separator: "\n"))
     }
 
+    /// hatch components refs: the Apple pages behind the defaults, rules and advice, and which to read again because
+    /// the installed SDK is newer than the one they were checked against (NF1).
+    static func componentRefs(_ c: Context) throws {
+        let installed = shellOutput(["xcrun", "--show-sdk-version", "--sdk", "macosx"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let stale = installed.isEmpty ? [] : ComponentNative.stale(installedSDK: installed)
+        var lines = ["\(ComponentNative.references.count) Apple pages, read \(ComponentNative.checkedOn) against the macOS \(ComponentNative.checkedSDK) SDK"
+                     + (installed.isEmpty ? "." : "; installed SDK \(installed).")]
+        if !stale.isEmpty { lines.append("Read again (the SDK moved on): " + stale.map(\.id).joined(separator: ", ")) }
+        for r in ComponentNative.references { lines.append("  \(r.id)  \(r.title)  \(r.url)") }
+        c.out.emit(["references": .array(ComponentNative.references.map { r in
+                        ["id": .string(r.id), "title": .string(r.title), "url": .string(r.url), "checked": .string(r.checked), "sdk": .string(r.sdk)] }),
+                    "stale": .array(stale.map { .string($0.id) })], text: lines.joined(separator: "\n"))
+    }
+
     /// hatch components questions
     static func componentQuestions(_ c: Context) throws {
         let (system, _) = try loadSystem(c)
@@ -73,6 +87,24 @@ extension CoreCommands {
         try system.answer(id, option: n - 1, decision: c.args.option("decision"))
         try save(system, notebook: notebook, message: "Components: \(question?.title ?? id) — \(question?.options[n - 1].title ?? "")")
         c.out.emit(["answered": .string(id), "left": .int(system.questions.count)], text: "Answered. \(system.questions.count) question\(system.questions.count == 1 ? "" : "s") left.")
+    }
+
+    /// hatch components follow (--role R | --element E [--place P] | --area A)   [--stop]
+    /// macOS decides there (NF3): no look of its own, hand styling flagged, never asked again.
+    static func componentFollow(_ c: Context) throws {
+        var (system, notebook) = try loadSystem(c)
+        let message: String
+        if let role = c.args.option("role") {
+            try system.followMacOS(role: role, decision: c.args.option("decision"))
+            message = "Components: \(role) follows macOS"
+        } else {
+            let scope = ComponentFollow(element: c.args.option("element"), place: c.args.option("place"), area: c.args.option("area"),
+                                        decision: c.args.option("decision"))
+            if c.args.flag("stop") { system.stopFollowing(scope.id); message = "Components: \(scope.title) no longer follow macOS" }
+            else { try system.followMacOS(scope); message = "Components: \(scope.title) follow macOS" }
+        }
+        try save(system, notebook: notebook, message: message)
+        c.out.emit(["follows": .array(system.follows.map { .string($0.id) })], text: message.replacingOccurrences(of: "Components: ", with: "") + ".")
     }
 
     /// hatch components agree [<role>]
@@ -131,7 +163,7 @@ extension CoreCommands {
             throw CLIError("Give the app's folder: hatch components check <folder>.")
         }
         let inv = ComponentInventoryScanner.scan(appRoot: folder, excluding: [project?.config?.components?.path].compactMap { $0 })
-        var findings = ComponentCheck.findings(inv.uses, system: system)
+        var findings = ComponentCheck.findings(inv.uses, system: system, areaOf: { project?.config?.area(ofFile: $0) })
         if let base = c.args.option("diff") {
             let diff = shellOutput(["git", "-C", folder, "diff", "-U0", "\(base)...HEAD", "--", "*.swift"])
             findings = ComponentCheck.inDiff(findings, diff: diff)

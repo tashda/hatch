@@ -150,7 +150,7 @@ enum AgentCommands {
                let system = try? ComponentSystem.load(notebook: notebook) {
                 let diff = (try? manager.git.git(["diff", "-U0", "\(repo.defaultBranch)...HEAD", "--", "*.swift"], in: ws.path)) ?? ""
                 let inv = ComponentInventoryScanner.scan(appRoot: ws.path, excluding: [project?.config?.components?.path].compactMap { $0 })
-                let all = ComponentCheck.inDiff(ComponentCheck.findings(inv.uses, system: system), diff: diff)
+                let all = ComponentCheck.inDiff(ComponentCheck.findings(inv.uses, system: system, areaOf: { project?.config?.area(ofFile: $0) }), diff: diff)
                 // Only places read from the code's structure are pressed on the agent; guessed ones are a note.
                 let found = all.filter(\.certain)
                 if all.count > found.count {

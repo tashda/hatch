@@ -51,16 +51,17 @@ public struct ComponentFinding: Equatable, Sendable {
 
 public enum ComponentCheck {
     /// Every finding for these uses, in file and line order.
-    public static func findings(_ uses: [ComponentInventory.Use], system: ComponentSystem) -> [ComponentFinding] {
+    /// `areaOf` maps a file to its area (the project's areas and their folders), for areas that follow macOS.
+    public static func findings(_ uses: [ComponentInventory.Use], system: ComponentSystem, areaOf: ((String) -> String?)? = nil) -> [ComponentFinding] {
         var out: [ComponentFinding] = []
         for u in uses {
-            if let f = finding(u, system: system) { out.append(f) }
+            if let f = finding(u, system: system, area: areaOf?(u.file)) { out.append(f) }
         }
         out += tooMany(uses, system: system)
         return out.sorted { ($0.file, $0.line) < ($1.file, $1.line) }
     }
 
-    static func finding(_ u: ComponentInventory.Use, system: ComponentSystem) -> ComponentFinding? {
+    static func finding(_ u: ComponentInventory.Use, system: ComponentSystem, area: String? = nil) -> ComponentFinding? {
         let look = u.signature
         func make(_ kind: ComponentFinding.Kind, _ role: String?, _ message: String) -> ComponentFinding {
             let certain = u.evidence == "structure" || kind == .unknownRole
@@ -82,6 +83,13 @@ public enum ComponentCheck {
             return nil
         }
         guard let place = u.place, let element = ComponentElement.named(u.element) else { return nil }
+        // Where macOS decides (NF3), any look written by hand fights it.
+        if system.followsMacOS(element: u.element, place: place, importance: u.importance, area: area) {
+            let set = element.look(u.recipe).filter { $0.value != defaultValue($0.key, element: element) && !($0.key == "label") }
+            guard !set.isEmpty else { return nil }
+            return make(.mismatch, system.role(element: u.element, place: place, importance: u.importance)?.id,
+                        "This follows macOS: remove \(set.keys.sorted().map { "\($0) \(set[$0]!)" }.joined(separator: ", ")) and let the system draw it.")
+        }
         guard let role = system.role(element: u.element, place: place, importance: u.importance) else {
             return make(.noRole, nil, "No role for a \(element.title.lowercased()) at \(u.importance.title.lowercased()) importance in a \(placeTitle) yet. Ask with hatch ask (suggest the nearest role), do not invent a look.")
         }
@@ -89,6 +97,7 @@ public enum ComponentCheck {
         // Menu and alert items are drawn by the system; their look cannot differ.
         if place == "contextMenu" || place == "alert" { return nil }
         let differences = differencesFromRole(u.recipe, role: role, element: element)
+        if !differences.isEmpty, role.configurable { return nil }  // becomes an app setting (NF5): other looks are fine for now
         if differences.isEmpty {
             return make(.couldUseRole, role.id, "Matches \(role.id): write \(role.codeName) instead of the styles.")
         }

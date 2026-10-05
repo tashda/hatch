@@ -51,6 +51,8 @@ final class ComponentsAPITests: APITestCase {
         let client = StageClient(paths: paths)
         XCTAssertThrowsError(try client.changeComponents(project: "echo", action: "look", body: ["role": "button.toolbar", "recipe": ["style": "huge"]]))
         XCTAssertThrowsError(try client.changeComponents(project: "echo", action: "answer", body: ["question": "nope", "option": 0]))
-        XCTAssertEqual(try ComponentSystem.load(notebook: notebook.path)?.role("button.toolbar")?.recipe["style"], "automatic", "nothing written")
+        let toolbar = try ComponentSystem.load(notebook: notebook.path)?.role("button.toolbar")
+        XCTAssertNil(toolbar?.draft, "nothing written")
+        XCTAssertTrue(toolbar?.followsMacOS == true)
     }
 }

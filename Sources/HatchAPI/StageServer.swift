@@ -441,6 +441,19 @@ public final class StageServer: @unchecked Sendable {
                 let role = try body.optionalString("role", max: 120)
                 let changed = try system.applyDrafts(role, decision: decision)
                 message = "Components: baseline v\(system.version), " + changed.joined(separator: ", ")
+            case "follow":
+                if let role = try body.optionalString("role", max: 120) {
+                    try system.followMacOS(role: role, decision: decision)
+                    message = "Components: \(role) follows macOS"
+                } else {
+                    let scope = ComponentFollow(element: try body.optionalString("element", max: 60), place: try body.optionalString("place", max: 60),
+                                                area: try body.optionalString("area", max: 120), decision: decision)
+                    try system.followMacOS(scope)
+                    message = "Components: \(scope.title) follow macOS"
+                }
+            case "unfollow":
+                system.stopFollowing(try body.string("scope", max: 300))
+                message = "Components: stop following macOS"
             case "discard":
                 let role = try body.string("role", max: 120)
                 try system.discardDraft(role)

@@ -36,9 +36,11 @@ final class ComponentDraftTests: XCTestCase {
         XCTAssertEqual(inRow.title, "Row action", "the template's words")
         XCTAssertEqual(inRow.status, .provisional)
         XCTAssertNil(inRow.custom)
-        let primary = s.role("button.primary")!
-        XCTAssertEqual(primary.recipe["style"], "borderedProminent")
-        XCTAssertEqual(primary.recipe["key"], "defaultAction", "behaviour most uses share is kept")
+        // The app's sheets use borderedProminent for the default button: that is a look of its own, kept.
+        let sheetDefault = s.role("button.sheetDefault")!
+        XCTAssertEqual(sheetDefault.recipe["style"], "borderedProminent")
+        XCTAssertEqual(sheetDefault.recipe["key"], "defaultAction", "behaviour most uses share is kept")
+        XCTAssertFalse(sheetDefault.followsMacOS)
         XCTAssertEqual(s.role("button.cancel")?.recipe["key"], "cancelAction")
         XCTAssertEqual(s.role("button.menuItem")?.places, ["contextMenu"])
         // The link in a form joins the Link role, whose places include form.
@@ -53,7 +55,7 @@ final class ComponentDraftTests: XCTestCase {
         var s = ComponentDraft.fromApp(name: "Acme", inventory: inventory)
         let q = try XCTUnwrap(s.questions.first { $0.role == "button.inRow" })
         XCTAssertEqual(q.kind, .look)
-        XCTAssertEqual(q.options.count, 4, "three looks (one a custom style) and Not sure yet")
+        XCTAssertEqual(q.options.count, 5, "three looks (one a custom style), Follow macOS and Not sure yet")
         XCTAssertEqual(q.options[0].count, 3)
         XCTAssertEqual(q.recommended, 0)
         XCTAssertTrue(q.reason.contains("3 of 5"))
@@ -136,7 +138,8 @@ final class ComponentCheckTests: XCTestCase {
             use("listRow", ["style": "bordered", "size": "small", "label": "titleOnly"], line: 8, role: "button.inRow"),
         ]
         let f = ComponentCheck.findings(uses, system: system)
-        XCTAssertEqual(f.map(\.kind), [.couldUseRole, .mismatch, .noRole, .wrongPlace, .unknownRole])
+        XCTAssertEqual(f.map(\.kind), [.couldUseRole, .mismatch, .noRole, .wrongPlace, .unknownRole, .mismatch],
+                       "the menu item follows macOS, so a style written on it is flagged")
         XCTAssertTrue(f[0].message.contains(".buttonRole(.inRow)"))
         XCTAssertTrue(f[1].message.contains("style glass (role: bordered)"))
         XCTAssertTrue(f[3].message.contains("use button.inRow"))
@@ -214,5 +217,61 @@ final class ComponentCheckTests: XCTestCase {
             +new
             """
         XCTAssertEqual(ComponentCheck.addedLines(diff: diff)["A.swift"], [11, 12, 42])
+    }
+}
+
+final class ComponentFollowTests: XCTestCase {
+    func use(_ element: String, _ place: String, _ recipe: [String: String], file: String = "App/Desk/A.swift") -> ComponentInventory.Use {
+        ComponentInventory.Use(element: element, place: place, recipe: recipe, importance: .other, role: nil, file: file, line: 1, view: "V")
+    }
+
+    func testARoleFollowsMacOS() throws {
+        var s = ComponentTemplates.glass.system(name: "Acme")
+        try s.followMacOS(role: "button.toolbar", decision: "#3")
+        let r = s.role("button.toolbar")!
+        XCTAssertTrue(r.followsMacOS)
+        XCTAssertEqual(r.status, .agreed)
+        XCTAssertEqual(r.recipe, ["label": "titleAndIcon", "tooltip": "shortcut"], "behaviour and the label's content stay, styles go")
+        XCTAssertEqual(r.lookSummary, "follows macOS; label titleAndIcon, tooltip shortcut")
+        XCTAssertEqual(s.problems(), [])
+        // Hand styling there is flagged; plain code is fine.
+        let f = ComponentCheck.findings([use("button", "toolbar", ["style": "bordered"]), use("button", "toolbar", ["style": "automatic"])], system: s)
+        XCTAssertEqual(f.count, 1)
+        XCTAssertTrue(f[0].message.contains("follows macOS: remove style bordered"))
+        // Code: only behaviour.
+        let code = ComponentCodegen.roles(s)
+        XCTAssertTrue(code.contains("case .toolbar:\n            // Follows macOS: the system draws it."))
+        // Giving it a look again is a redesign.
+        try s.setLook("button.toolbar", recipe: ["style": "glass"])
+        XCTAssertEqual(s.role("button.toolbar")?.status, .inRedesign)
+        XCTAssertFalse(s.role("button.toolbar")!.followsMacOS)
+    }
+
+    func testGroupsAndAreasFollowMacOS() throws {
+        var s = ComponentTemplates.glass.system(name: "Acme")
+        try s.followMacOS(ComponentFollow(element: "button", place: "contextMenu"))
+        XCTAssertTrue(s.role("button.menuItem")!.followsMacOS, "the role that only lives in context menus follows too")
+        try s.followMacOS(ComponentFollow(element: "button", place: "listRow"))
+        XCTAssertFalse(s.role("button.inRow")!.followsMacOS, "a role that also lives elsewhere is left to the owner")
+        try s.followMacOS(ComponentFollow(area: "Settings"))
+        var config = ProjectConfig(name: "Acme", ticketsRepo: "o/t")
+        config.areas = [AreaConfig(name: "Settings", paths: ["App/Settings/**"]), AreaConfig(name: "Desk", paths: ["App/Desk/**"])]
+        XCTAssertEqual(config.area(ofFile: "App/Settings/General.swift"), "Settings")
+        let uses = [use("toggle", "form", ["style": "switch"], file: "App/Settings/General.swift"),
+                    use("toggle", "form", ["style": "switch"], file: "App/Desk/Filters.swift")]
+        let f = ComponentCheck.findings(uses, system: s, areaOf: { config.area(ofFile: $0) })
+        XCTAssertEqual(f.filter { $0.message.contains("follows macOS") }.map(\.file), ["App/Settings/General.swift"])
+        XCTAssertEqual(s.problems(), [])
+        let roundTrip = try JSONDecoder().decode(ComponentSystem.self, from: s.encoded())
+        XCTAssertEqual(roundTrip.follows, s.follows)
+    }
+
+    func testFollowIsAnAnswer() throws {
+        let inv = ComponentInventory(uses: [use("button", "toolbar", ["style": "bordered"]), use("button", "toolbar", ["style": "plain"])], swiftFiles: 1)
+        var s = ComponentDraft.fromApp(name: "Acme", inventory: inv)
+        let q = s.questions.first { $0.role == "button.toolbar" }!
+        let i = q.options.firstIndex { $0.follow == true }!
+        try s.answer(q.id, option: i)
+        XCTAssertTrue(s.role("button.toolbar")!.followsMacOS)
     }
 }

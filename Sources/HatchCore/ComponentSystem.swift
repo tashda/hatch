@@ -28,6 +28,8 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
     /// What the owner still has to decide: looks to pick at setup, mismatches found later (DS4, DS7). Answered in the
     /// Components Designer or with `hatch components answer`; each answer changes the system and leaves the list.
     public var questions: [ComponentQuestion]
+    /// Whole groups that follow macOS (NF3): an element in a place ("all context menus"), or an area ("Settings").
+    public var follows: [ComponentFollow]
     /// The oldest macOS the app runs on. macOS 27 is the reference (glass styles and the rest); generated code falls
     /// back for anything older.
     public var minimumMacOS: String
@@ -36,13 +38,13 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
 
     public init(name: String, version: Int = 1, template: String? = nil, foundations: [ComponentFoundation] = [],
                 places: [ComponentPlace] = [], roles: [ComponentRole] = [], questions: [ComponentQuestion] = [],
-                minimumMacOS: String = ComponentSystem.referenceMacOS) {
+                minimumMacOS: String = ComponentSystem.referenceMacOS, follows: [ComponentFollow] = []) {
         self.format = Self.currentFormat; self.name = name; self.version = version; self.template = template
         self.foundations = foundations; self.places = places; self.roles = roles; self.questions = questions
-        self.minimumMacOS = minimumMacOS
+        self.minimumMacOS = minimumMacOS; self.follows = follows
     }
 
-    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS }
+    private enum CodingKeys: String, CodingKey { case format, name, version, template, foundations, places, roles, questions, minimumMacOS, follows }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -55,6 +57,18 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         roles = try c.decodeIfPresent([ComponentRole].self, forKey: .roles) ?? []
         questions = try c.decodeIfPresent([ComponentQuestion].self, forKey: .questions) ?? []
         minimumMacOS = try c.decodeIfPresent(String.self, forKey: .minimumMacOS) ?? Self.referenceMacOS
+        follows = try c.decodeIfPresent([ComponentFollow].self, forKey: .follows) ?? []
+    }
+
+    /// True when macOS decides this element's look here: the role follows macOS, or a scope covers the element in this
+    /// place, or the area.
+    public func followsMacOS(element: String, place: String?, importance: ComponentRole.Importance, area: String? = nil) -> Bool {
+        if let place, let r = role(element: element, place: place, importance: importance), r.followsMacOS { return true }
+        return follows.contains { f in
+            (f.area == nil || f.area?.caseInsensitiveCompare(area ?? "") == .orderedSame)
+                && (f.element == nil || f.element == element) && (f.place == nil || f.place == place)
+                && !(f.area == nil && f.element == nil && f.place == nil)
+        }
     }
 
     // MARK: Reading and writing
@@ -167,8 +181,15 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
             if r.places.isEmpty { out.append("Role \(r.id) is allowed in no place.") }
             for p in r.places where !placeIds.contains(p) { out.append("Role \(r.id): no place called \(p).") }
             if let n = r.perScreen, n < 1 { out.append("Role \(r.id): at most \(n) per screen makes no sense; use 1 or more, or leave it out.") }
-            if r.recipe.isEmpty && r.custom == nil { out.append("Role \(r.id) has neither a recipe nor a custom view.") }
+            if r.recipe.isEmpty && r.custom == nil && !r.followsMacOS { out.append("Role \(r.id) has neither a recipe nor a custom view.") }
+            // A following role keeps only behaviour and the label's content (whether it shows a symbol), never a style.
+            let styled = element.look(r.recipe).filter { $0.key != "label" }
+            if r.followsMacOS, !styled.isEmpty {
+                out.append("Role \(r.id) follows macOS, so it cannot set \(styled.keys.sorted().joined(separator: ", ")); only behaviour (key, tooltip, confirmation) and the label.")
+            }
+            for s in r.sources where ComponentNative.reference(s) == nil { out.append("Role \(r.id) cites \(s), which is not a known Apple reference.") }
             out += recipeProblems(r.recipe, element: element, owner: "Role \(r.id)")
+            if let draft = r.draft { out += recipeProblems(draft, element: element, owner: "The draft of \(r.id)") }
             for id in duplicates(r.variants.map(\.id)) { out.append("Role \(r.id): variant \(id) is listed twice.") }
             for v in r.variants {
                 out += recipeProblems(v.recipe, element: element, owner: "Variant \(r.id).\(v.id)")
@@ -246,6 +267,15 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
                 let limit = r.perScreen.map { "; at most \($0) per screen" } ?? ""
                 s += "| `\(r.id)` \(r.title) | \(Self.cell(r.use)) | \(Self.cell(r.avoid.isEmpty ? "–" : r.avoid)) | \(places)\(limit) | \(Self.cell(r.lookSummary)) | `\(r.codeName)` | \(r.status.title) |\n"
             }
+            // Why each role looks as it does: the Apple pages it follows (NF1).
+            let cited = roles(of: elementId).filter { !$0.sources.isEmpty }
+            if !cited.isEmpty {
+                s += "\nWhy, from Apple:\n\n"
+                for r in cited {
+                    let links = r.sources.compactMap { ComponentNative.reference($0) }.map { "[\($0.title)](\($0.url))" }
+                    s += "- `\(r.id)`" + (r.followsMacOS ? " follows macOS" : "") + ": " + links.joined(separator: ", ") + "\n"
+                }
+            }
             let variants = roles(of: elementId).flatMap { r in r.variants.map { (r, $0) } }
             if !variants.isEmpty {
                 s += "\nVariants:\n\n"
@@ -264,6 +294,15 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
             }
         }
 
+        if !follows.isEmpty {
+            s += "\n## Following macOS\n\nmacOS decides the look here; write no style:\n\n" + follows.map { "- \($0.title)\n" }.joined()
+        }
+        let notes = advice()
+        if !notes.isEmpty {
+            s += "\n## Against Apple's guidance\n\n" + notes.map { n in
+                "- \(n.message)" + (ComponentNative.reference(n.source).map { " ([\($0.title)](\($0.url)))" } ?? "") + "\n"
+            }.joined()
+        }
         if !foundations.isEmpty {
             s += "\n## Foundations\n\n| Name | Value | Use |\n|---|---|---|\n"
             for f in foundations { s += "| `\(f.id)` | \(Self.cell(f.valueSummary)) | \(Self.cell(f.use)) |\n" }
@@ -277,6 +316,29 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
 
     static func cell(_ text: String) -> String {
         text.replacingOccurrences(of: "|", with: "\\|").replacingOccurrences(of: "\n", with: " ")
+    }
+}
+
+/// A group that follows macOS (NF3). Any field left out means "any": `element: menu`, `place: contextMenu`, or `area: Settings`.
+public struct ComponentFollow: Codable, Equatable, Sendable, Identifiable {
+    public var element: String?
+    public var place: String?
+    public var area: String?
+    public var decision: String?
+
+    public init(element: String? = nil, place: String? = nil, area: String? = nil, decision: String? = nil) {
+        self.element = element; self.place = place; self.area = area; self.decision = decision
+    }
+
+    public var id: String { [element ?? "*", place ?? "*", area ?? "*"].joined(separator: "|") }
+
+    /// "Context menus", "Buttons in Settings", "Everything in Settings".
+    public var title: String {
+        let what = element.flatMap { ComponentElement.named($0)?.plural } ?? "Everything"
+        var s = what
+        if let place { s += " in " + ComponentPlace.title(place).lowercased() + "s" }
+        if let area { s += " in \(area)" }
+        return s
     }
 }
 
@@ -443,17 +505,43 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
     /// A proposed new look for an agreed role, judged beside the current one (workflow E). Applying it makes the next
     /// baseline version.
     public var draft: [String: String]?
+    /// The role has no look of its own: macOS decides, now and in later versions (NF3). Its recipe holds only behaviour
+    /// (a default key, a tooltip, a confirmation).
+    public var followsMacOS: Bool
+    /// Apple's pages behind this role's look or rule (ids in `ComponentNative.references`), so the owner sees why and Hatch
+    /// knows what to recheck when Apple's documentation changes.
+    public var sources: [String]
+    /// The owner wants this to become a setting in the app (NF5); the check accepts other looks here until it exists.
+    public var configurable: Bool
 
     public init(_ id: String, _ title: String, use: String, avoid: String = "", places: [String], importance: Importance,
                 perScreen: Int? = nil, recipe: [String: String] = [:], custom: String? = nil, variants: [ComponentVariant] = [],
-                status: Status = .provisional, decision: String? = nil) {
+                status: Status = .provisional, decision: String? = nil, followsMacOS: Bool = false, sources: [String] = [],
+                configurable: Bool = false) {
         self.id = id; self.title = title; self.use = use; self.avoid = avoid; self.places = places; self.importance = importance
         self.perScreen = perScreen; self.recipe = recipe; self.custom = custom; self.variants = variants
-        self.status = status; self.decision = decision
+        self.status = status; self.decision = decision; self.followsMacOS = followsMacOS; self.sources = sources
+        self.configurable = configurable
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, use, avoid, places, importance, perScreen, recipe, custom, variants, status, decision, draft
+        case id, title, use, avoid, places, importance, perScreen, recipe, custom, variants, status, decision, draft, followsMacOS, sources, configurable
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(title, forKey: .title); try c.encode(use, forKey: .use)
+        if !avoid.isEmpty { try c.encode(avoid, forKey: .avoid) }
+        try c.encode(places, forKey: .places); try c.encode(importance, forKey: .importance)
+        try c.encodeIfPresent(perScreen, forKey: .perScreen)
+        if !recipe.isEmpty { try c.encode(recipe, forKey: .recipe) }
+        try c.encodeIfPresent(custom, forKey: .custom)
+        if !variants.isEmpty { try c.encode(variants, forKey: .variants) }
+        try c.encode(status, forKey: .status)
+        try c.encodeIfPresent(decision, forKey: .decision); try c.encodeIfPresent(draft, forKey: .draft)
+        if followsMacOS { try c.encode(true, forKey: .followsMacOS) }
+        if !sources.isEmpty { try c.encode(sources, forKey: .sources) }
+        if configurable { try c.encode(true, forKey: .configurable) }
     }
 
     public init(from decoder: Decoder) throws {
@@ -471,6 +559,9 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
         status = try c.decodeIfPresent(Status.self, forKey: .status) ?? .provisional
         decision = try c.decodeIfPresent(String.self, forKey: .decision)
         draft = try c.decodeIfPresent([String: String].self, forKey: .draft)
+        followsMacOS = try c.decodeIfPresent(Bool.self, forKey: .followsMacOS) ?? false
+        sources = try c.decodeIfPresent([String].self, forKey: .sources) ?? []
+        configurable = try c.decodeIfPresent(Bool.self, forKey: .configurable) ?? false
     }
 
     public var element: String { id.split(separator: ".", maxSplits: 1).first.map(String.init) ?? id }
@@ -482,6 +573,10 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
 
     /// "glass prominent, large, title and icon, capsule".
     public var lookSummary: String {
+        if followsMacOS {
+            let behaviour = Self.summary(self.recipe)
+            return "follows macOS" + (self.recipe.isEmpty ? "" : "; \(behaviour)")
+        }
         let recipe = Self.summary(self.recipe)
         guard custom != nil else { return recipe }
         return self.recipe.isEmpty ? "custom view" : "custom view; \(recipe)"
@@ -525,9 +620,15 @@ public struct ComponentParameter: Equatable, Sendable {
     public var foundation: ComponentFoundation.Kind?
     /// False for behaviour (a keyboard key, a tooltip, a confirmation): two uses that differ only there look the same.
     public var isLook: Bool
+    /// What macOS uses when nothing is set (NF1). Setting it is redundant: the recipe says only what differs.
+    public var systemDefault: String?
+    /// The Apple page that says so (`ComponentNative.references`).
+    public var source: String?
 
-    public init(_ id: String, _ title: String, _ values: [String], foundation: ComponentFoundation.Kind? = nil, isLook: Bool = true) {
+    public init(_ id: String, _ title: String, _ values: [String], foundation: ComponentFoundation.Kind? = nil, isLook: Bool = true,
+                systemDefault: String? = nil, source: String? = nil) {
         self.id = id; self.title = title; self.values = values; self.foundation = foundation; self.isLook = isLook
+        self.systemDefault = systemDefault; self.source = source
     }
 
     /// The values as a person reads them, with "a color foundation" style hints.
@@ -536,89 +637,105 @@ public struct ComponentParameter: Equatable, Sendable {
 
 /// A kind of control or block, with the settings its recipes use. The catalog is fixed in Hatch; places and roles are data.
 public struct ComponentElement: Equatable, Sendable, Identifiable {
+    /// Who draws it (NF1): macOS with a style chosen from Apple's (most), or Hatch where Apple has no control.
+    public enum Tier: String, Sendable { case systemStyle, hatchDrawn }
+
     public var id: String
     public var title: String
     public var plural: String
     public var parameters: [ComponentParameter]
+    public var tier: Tier = .systemStyle
+    /// The Apple page for the native control.
+    public var source: String? = nil
 
     public func parameter(_ id: String) -> ComponentParameter? { parameters.first { $0.id == id } }
+    public static func named(_ id: String) -> ComponentElement? { catalog.first { $0.id == id } }
 
     /// The settings that change how it looks, without behaviour (key, tooltip, confirmation).
     public func look(_ recipe: [String: String]) -> [String: String] {
         recipe.filter { parameter($0.key)?.isLook ?? true }
     }
-    public static func named(_ id: String) -> ComponentElement? { catalog.first { $0.id == id } }
+
+    /// The recipe without settings that only repeat what macOS does anyway (NF1).
+    public func withoutDefaults(_ recipe: [String: String]) -> [String: String] {
+        recipe.filter { parameter($0.key)?.systemDefault != $0.value }
+    }
 
     static let sizes = ["mini", "small", "regular", "large", "extraLarge"]
     static let tints = ["none", "accent", "critical"]
 
     public static let catalog: [ComponentElement] = [
         ComponentElement(id: "button", title: "Button", plural: "Buttons", parameters: [
-            ComponentParameter("style", "Style", ["automatic", "bordered", "borderedProminent", "borderless", "plain", "link", "glass", "glassProminent"]),
-            ComponentParameter("size", "Size", sizes),
+            ComponentParameter("style", "Style", ["automatic", "bordered", "borderedProminent", "borderless", "plain", "link", "glass", "glassProminent"],
+                               systemDefault: "automatic", source: "swiftui-buttonstyle-automatic"),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
             ComponentParameter("label", "Label", ["titleAndIcon", "titleOnly", "iconOnly"]),
-            ComponentParameter("shape", "Shape", ["automatic", "capsule", "roundedRectangle", "circle"]),
-            ComponentParameter("tint", "Tint", tints, foundation: .color),
-            ComponentParameter("show", "Shown", ["always", "onHover"]),
-            ComponentParameter("confirm", "Confirm first", ["no", "yes"], isLook: false),
-            ComponentParameter("key", "Key", ["none", "defaultAction", "cancelAction"], isLook: false),
-            ComponentParameter("tooltip", "Tooltip", ["none", "title", "shortcut"], isLook: false),
-        ]),
+            ComponentParameter("shape", "Shape", ["automatic", "capsule", "roundedRectangle", "circle"], systemDefault: "automatic"),
+            ComponentParameter("tint", "Tint", tints, foundation: .color, systemDefault: "none", source: "hig-color"),
+            ComponentParameter("show", "Shown", ["always", "onHover"], isLook: false, systemDefault: "always"),
+            ComponentParameter("confirm", "Confirm first", ["no", "yes"], isLook: false, systemDefault: "no", source: "hig-alerts"),
+            ComponentParameter("key", "Key", ["none", "defaultAction", "cancelAction"], isLook: false, systemDefault: "none", source: "swiftui-defaultaction"),
+            ComponentParameter("tooltip", "Tooltip", ["none", "title", "shortcut"], isLook: false, systemDefault: "none"),
+        ], source: "hig-buttons"),
         ComponentElement(id: "menu", title: "Menu", plural: "Menus", parameters: [
-            ComponentParameter("style", "Style", ["automatic", "button", "borderlessButton"]),
-            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderless", "plain", "glass"]),
-            ComponentParameter("indicator", "Arrow", ["visible", "hidden"]),
+            ComponentParameter("style", "Style", ["automatic", "button", "borderlessButton"], systemDefault: "automatic"),
+            ComponentParameter("look", "Button look", ["automatic", "bordered", "borderless", "plain", "glass"], systemDefault: "automatic"),
+            ComponentParameter("indicator", "Arrow", ["visible", "hidden"], systemDefault: "visible"),
             ComponentParameter("label", "Label", ["titleAndIcon", "titleOnly", "iconOnly"]),
-            ComponentParameter("size", "Size", sizes),
-        ]),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+        ], source: "hig-menus"),
         ComponentElement(id: "picker", title: "Picker", plural: "Pickers", parameters: [
-            ComponentParameter("style", "Style", ["automatic", "menu", "segmented", "inline", "radioGroup", "palette"]),
-            ComponentParameter("label", "Label", ["visible", "hidden"]),
-            ComponentParameter("size", "Size", sizes),
-        ]),
+            // On macOS the automatic style is a pop-up button.
+            ComponentParameter("style", "Style", ["automatic", "menu", "segmented", "inline", "radioGroup", "palette"],
+                               systemDefault: "automatic", source: "swiftui-pickerstyle-automatic"),
+            ComponentParameter("label", "Label", ["visible", "hidden"], systemDefault: "visible"),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+        ], source: "hig-pickers"),
         ComponentElement(id: "toggle", title: "Toggle", plural: "Toggles", parameters: [
-            ComponentParameter("style", "Style", ["automatic", "switch", "checkbox", "button"]),
-            ComponentParameter("size", "Size", sizes),
-        ]),
+            // On macOS the automatic style is a checkbox (a button in a toolbar, a checkmark in a menu).
+            ComponentParameter("style", "Style", ["automatic", "switch", "checkbox", "button"], systemDefault: "automatic", source: "swiftui-togglestyle-automatic"),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+        ], source: "hig-toggles"),
         ComponentElement(id: "field", title: "Text field", plural: "Text fields", parameters: [
-            ComponentParameter("style", "Style", ["automatic", "roundedBorder", "plain", "squareBorder"]),
-            ComponentParameter("size", "Size", sizes),
-        ]),
+            ComponentParameter("style", "Style", ["automatic", "roundedBorder", "plain", "squareBorder"], systemDefault: "automatic", source: "swiftui-textfieldstyle-automatic"),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+        ], source: "hig-text-fields"),
         ComponentElement(id: "switcher", title: "Section switcher", plural: "Section switchers", parameters: [
-            ComponentParameter("style", "Style", ["segmented", "menu", "dock", "sidebar", "tabs"]),
-            ComponentParameter("size", "Size", sizes),
-        ]),
+            // A segmented control or a pop-up are native; the dock is drawn by the app.
+            ComponentParameter("style", "Style", ["segmented", "menu", "tabs", "dock"], source: "hig-segmented"),
+            ComponentParameter("size", "Size", sizes, systemDefault: "regular", source: "swiftui-controlsize"),
+        ], source: "hig-segmented"),
         ComponentElement(id: "row", title: "List row", plural: "List rows", parameters: [
-            ComponentParameter("density", "Density", ["compact", "regular", "airy"]),
-            ComponentParameter("selection", "Selection", ["system", "fill"]),
-            ComponentParameter("accessory", "Accessory", ["none", "chevron", "count"]),
-            ComponentParameter("actions", "Actions", ["none", "onHover", "always"]),
-            ComponentParameter("separators", "Separators", ["visible", "hidden"]),
-        ]),
+            // List draws rows (height, padding, selection) itself; only these are the app's to choose.
+            ComponentParameter("separators", "Separators", ["visible", "hidden"], systemDefault: "visible", source: "swiftui-listrowseparator"),
+            ComponentParameter("accessory", "Accessory", ["none", "chevron", "badge"], systemDefault: "none", source: "swiftui-badge"),
+            ComponentParameter("actions", "Actions", ["none", "onHover", "always"], isLook: false, systemDefault: "none"),
+        ], source: "hig-lists"),
         ComponentElement(id: "card", title: "Card", plural: "Cards", parameters: [
-            ComponentParameter("surface", "Surface", ["none", "grouped", "bordered", "material", "glass"]),
-            ComponentParameter("radius", "Corners", ["none"], foundation: .radius),
-            ComponentParameter("padding", "Padding", ["none"], foundation: .space),
-            ComponentParameter("border", "Border", ["none", "hairline"]),
-            ComponentParameter("shadow", "Shadow", ["none", "soft"]),
-        ]),
+            // GroupBox is the native box; a Form section the native group; custom draws its own surface.
+            ComponentParameter("container", "Container", ["groupBox", "formSection", "custom"], source: "hig-boxes"),
+            ComponentParameter("surface", "Surface (custom)", ["none", "grouped", "bordered", "material", "glass"]),
+            ComponentParameter("radius", "Corners (custom)", ["none"], foundation: .radius),
+            ComponentParameter("padding", "Padding (custom)", ["system"], foundation: .space, systemDefault: "system", source: "swiftui-padding"),
+            ComponentParameter("border", "Border (custom)", ["none", "hairline"], systemDefault: "none"),
+            ComponentParameter("shadow", "Shadow (custom)", ["none", "soft"], systemDefault: "none"),
+        ], source: "hig-boxes"),
         ComponentElement(id: "sheet", title: "Sheet", plural: "Sheets", parameters: [
-            ComponentParameter("width", "Width", ["small", "medium", "large"]),
-            ComponentParameter("footer", "Footer", ["trailing", "spread"]),
-            ComponentParameter("title", "Title", ["inline", "large", "none"]),
-        ]),
+            // presentationSizing: automatic is a form-sized sheet fitted to its content's height.
+            ComponentParameter("sizing", "Sizing", ["automatic", "form", "page", "fitted"], systemDefault: "automatic", source: "swiftui-presentationsizing"),
+            ComponentParameter("title", "Title", ["inline", "large", "none"], systemDefault: "inline"),
+        ], source: "hig-sheets"),
         ComponentElement(id: "badge", title: "Badge", plural: "Badges", parameters: [
-            ComponentParameter("style", "Style", ["count", "capsule", "plain"]),
-            ComponentParameter("tint", "Tint", tints, foundation: .color),
-        ]),
+            ComponentParameter("style", "Style", ["system", "capsule", "plain"], systemDefault: "system", source: "swiftui-badge"),
+            ComponentParameter("tint", "Tint", tints, foundation: .color, systemDefault: "none"),
+        ], source: "swiftui-badge"),
         ComponentElement(id: "toast", title: "Toast", plural: "Toasts", parameters: [
-            ComponentParameter("surface", "Surface", ["glass", "material", "solid"]),
-            ComponentParameter("position", "Position", ["top", "bottom"]),
-            ComponentParameter("duration", "Duration", ["short", "long"]),
-        ]),
+            ComponentParameter("surface", "Surface", ["glass", "material", "solid"], source: "hig-materials"),
+            ComponentParameter("position", "Position", ["top", "bottom"], source: "hig-layout"),
+            ComponentParameter("duration", "Duration", ["short", "long"], isLook: false),
+        ], tier: .hatchDrawn, source: "hig-materials"),
         ComponentElement(id: "emptyState", title: "Empty state", plural: "Empty states", parameters: [
-            ComponentParameter("style", "Style", ["system", "custom"]),
-            ComponentParameter("action", "Next step", ["none", "prominent", "link"]),
-        ]),
+            ComponentParameter("action", "Next step", ["none", "prominent", "link"], source: "swiftui-contentunavailable"),
+        ], source: "swiftui-contentunavailable"),
     ]
 }

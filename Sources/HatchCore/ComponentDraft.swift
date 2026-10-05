@@ -25,14 +25,18 @@ public struct ComponentQuestion: Codable, Equatable, Sendable, Identifiable {
         public var recipe: [String: String]?
         /// The app's own style or view this look uses (`MenuRowStyle`), which becomes the role's custom view.
         public var custom: String?
+        /// Choosing it makes the role follow macOS (NF3).
+        public var follow: Bool?
         /// How many uses have this look today.
         public var count: Int
         public var examples: [String]
         /// What choosing it does, one line.
         public var effect: String
 
-        public init(title: String, recipe: [String: String]? = nil, custom: String? = nil, count: Int = 0, examples: [String] = [], effect: String) {
-            self.title = title; self.recipe = recipe; self.custom = custom; self.count = count; self.examples = examples; self.effect = effect
+        public init(title: String, recipe: [String: String]? = nil, custom: String? = nil, follow: Bool? = nil, count: Int = 0,
+                    examples: [String] = [], effect: String) {
+            self.title = title; self.recipe = recipe; self.custom = custom; self.follow = follow; self.count = count
+            self.examples = examples; self.effect = effect
         }
     }
 
@@ -106,7 +110,8 @@ public enum ComponentDraft {
             let top = sanitize(found[0].recipe.merging(found[0].look) { $1 }, element: element)
             system.roles[i].recipe = top.recipe
             system.roles[i].custom = top.custom ?? system.roles[i].custom
-            if top.recipe.isEmpty && system.roles[i].custom == nil { system.roles[i].recipe = ["style": "automatic"].filter { element.parameter($0.key) != nil } }
+            // Nothing differs from the system's default: the app already lets macOS decide here (NF3).
+            if element.look(top.recipe).isEmpty && system.roles[i].custom == nil { system.roles[i].followsMacOS = true } else { system.roles[i].followsMacOS = false }
             system.roles[i].variants = []
             if found.count > 1 { system.questions.append(question(for: system.roles[i], looks: found, reference: reference)) }
         }
@@ -173,6 +178,8 @@ public enum ComponentDraft {
         for (k, v) in recipe {
             if v.hasPrefix("custom:") { custom = String(v.dropFirst(7)); continue }
             guard let p = element.parameter(k), p.values.contains(v) || (p.foundation != nil && v.contains(".")) else { continue }
+            // What macOS does anyway is left out (NF1).
+            if p.systemDefault == v { continue }
             out[k] = v
         }
         return (out, custom)
@@ -247,6 +254,8 @@ public enum ComponentDraft {
                                      examples: l.examples,
                                      effect: "Make this the look of \(role.id); the \(total - l.count) uses with other looks move to it when their screens are next touched.")
         }
+        options.append(ComponentQuestion.Option(title: "Follow macOS", follow: true,
+                                                effect: "No look of its own: macOS decides, now and in later versions. Hand styling here is flagged."))
         options.append(ComponentQuestion.Option(title: "Not sure yet",
                                                 effect: "Keep the most used look as a provisional guess and decide when a ticket needs it."))
         let rest = looks.count - shown.count
@@ -290,18 +299,19 @@ public extension ComponentSystem {
     /// "Not sure yet" leaves it provisional. Either way the question leaves the list. `decision` records where it was
     /// decided (`#12`, `DS4`).
     mutating func answer(_ questionId: String, option: Int, decision: String? = nil) throws {
-        guard let qi = questions.firstIndex(where: { $0.id == questionId }) else { throw ComponentAnswerError.noQuestion(questionId) }
-        let q = questions[qi]
+        guard let q = questions.first(where: { $0.id == questionId }) else { throw ComponentAnswerError.noQuestion(questionId) }
         guard q.options.indices.contains(option) else { throw ComponentAnswerError.noOption(option + 1) }
         let chosen = q.options[option]
-        if let roleId = q.role, let recipe = chosen.recipe {
+        if let roleId = q.role, chosen.follow == true {
+            try followMacOS(role: roleId, decision: decision)
+        } else if let roleId = q.role, let recipe = chosen.recipe {
             guard let ri = roles.firstIndex(where: { $0.id == roleId }) else { throw ComponentAnswerError.noRole(roleId) }
             roles[ri].recipe = recipe
             roles[ri].custom = chosen.custom
             roles[ri].status = .agreed
             roles[ri].decision = decision ?? roles[ri].decision
         }
-        questions.remove(at: qi)
+        questions.removeAll { $0.id == questionId }
     }
 
     /// Marks a role agreed as it is (DS8), or every provisional role when `id` is nil.
@@ -315,11 +325,46 @@ public extension ComponentSystem {
         }
     }
 
+    /// Makes a role follow macOS (NF3): its look settings go, behaviour (key, tooltip, confirmation) stays, and it is agreed.
+    mutating func followMacOS(role roleId: String, decision: String? = nil) throws {
+        guard let i = roles.firstIndex(where: { $0.id == roleId }), let element = ComponentElement.named(roles[i].element) else {
+            throw ComponentAnswerError.noRole(roleId)
+        }
+        roles[i].recipe = roles[i].recipe.filter { element.parameter($0.key)?.isLook == false || $0.key == "label" }
+        roles[i].custom = nil
+        roles[i].draft = nil
+        roles[i].variants = []
+        roles[i].followsMacOS = true
+        roles[i].status = .agreed
+        roles[i].decision = decision ?? roles[i].decision
+        questions.removeAll { $0.role == roleId && $0.kind == .look }
+    }
+
+    /// Makes a whole group follow macOS: an element in a place, or an area. Roles it covers follow too.
+    mutating func followMacOS(_ scope: ComponentFollow) throws {
+        guard scope.element != nil || scope.place != nil || scope.area != nil else { throw StoreError.invalid("Say what follows macOS: an element, a place or an area.") }
+        follows.removeAll { $0.id == scope.id }
+        follows.append(scope)
+        if scope.area == nil {
+            for r in roles where (scope.element == nil || r.element == scope.element) && (scope.place == nil || r.places == [scope.place!]) {
+                try followMacOS(role: r.id, decision: scope.decision)
+            }
+        }
+    }
+
+    /// Stops following macOS for a group (roles keep following until changed one by one).
+    mutating func stopFollowing(_ scopeId: String) { follows.removeAll { $0.id == scopeId } }
+
     /// Changes a role's look. A provisional role takes it at once (it is still being decided); an agreed one gets it as
     /// a draft beside its current look and goes into redesign, because changing it changes every screen that uses it.
     mutating func setLook(_ roleId: String, recipe: [String: String]) throws {
         guard let i = roles.firstIndex(where: { $0.id == roleId }) else { throw ComponentAnswerError.noRole(roleId) }
-        if roles[i].status == .provisional {
+        if roles[i].followsMacOS {
+            // Giving a following role a look of its own is a redesign of it.
+            roles[i].followsMacOS = false
+            roles[i].draft = recipe
+            roles[i].status = .inRedesign
+        } else if roles[i].status == .provisional {
             roles[i].recipe = recipe
         } else {
             roles[i].draft = recipe == roles[i].recipe ? nil : recipe

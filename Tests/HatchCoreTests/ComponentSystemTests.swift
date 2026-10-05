@@ -2,6 +2,31 @@ import XCTest
 @testable import HatchCore
 
 final class ComponentSystemTests: XCTestCase {
+    func testTemplatesAreNativeFirst() {
+        for t in ComponentTemplates.all {
+            let s = t.system(name: "Acme")
+            XCTAssertEqual(s.advice().map(\.message), [], "\(t.id) sets nothing macOS does anyway and nothing against Apple's guidance")
+            for r in s.roles {
+                XCTAssertFalse(r.sources.isEmpty, "\(t.id) \(r.id) says which Apple page it follows")
+                for id in r.sources { XCTAssertNotNil(ComponentNative.reference(id), id) }
+            }
+        }
+        let native = ComponentTemplates.native.system(name: "Acme")
+        XCTAssertGreaterThan(native.roles.filter(\.followsMacOS).count, native.roles.count / 2, "macOS Native mostly follows macOS")
+    }
+
+    func testAdviceFindsWhatFightsTheSystem() {
+        var s = ComponentTemplates.glass.system(name: "Acme")
+        s.roles.append(ComponentRole("button.rowGlass", "x", use: "x", places: ["form"], importance: .quiet, recipe: ["style": "glass", "size": "regular", "key": "defaultAction"]))
+        s.roles.append(ComponentRole("menu.inMenu", "x", use: "x", places: ["contextMenu"], importance: .other, recipe: ["look": "bordered"]))
+        s.roles.append(ComponentRole("switcher.page", "x", use: "x", places: ["page"], importance: .other, recipe: ["style": "segmented"]))
+        let kinds = Set(s.advice().map(\.kind))
+        XCTAssertEqual(kinds, [.redundant, .glassInContent, .wrongDefault, .systemPlace, .switcherInContent])
+        XCTAssertTrue(s.advice().allSatisfy { ComponentNative.reference($0.source) != nil })
+        XCTAssertTrue(ComponentNative.stale(installedSDK: "27.0").isEmpty)
+        XCTAssertEqual(ComponentNative.stale(installedSDK: "28.0").count, ComponentNative.references.count)
+    }
+
     func testTemplatesHaveNoProblems() {
         XCTAssertEqual(ComponentTemplates.all.map(\.id), ["native", "glass"])
         for t in ComponentTemplates.all {
@@ -25,8 +50,10 @@ final class ComponentSystemTests: XCTestCase {
         XCTAssertEqual(s.role("button.primary")?.perScreen, 1)
 
         let native = ComponentTemplates.native.system(name: "Acme")
-        XCTAssertEqual(native.role(element: "button", place: "sheetFooter", importance: .main)?.recipe["style"], "borderedProminent")
-        XCTAssertEqual(s.role(element: "button", place: "sheetFooter", importance: .main)?.recipe["style"], "glassProminent")
+        // In a sheet the default button is only its key: macOS draws it (NF1).
+        XCTAssertEqual(native.role(element: "button", place: "sheetFooter", importance: .main)?.recipe, ["key": "defaultAction"])
+        XCTAssertTrue(native.role(element: "button", place: "sheetFooter", importance: .main)!.followsMacOS)
+        XCTAssertEqual(s.role(element: "button", place: "sheetFooter", importance: .main)?.id, "button.sheetDefault")
     }
 
     func testMatrixListsPlacesAndImportances() {
