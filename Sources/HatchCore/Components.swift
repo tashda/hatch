@@ -646,6 +646,8 @@ public enum ComponentsScanner {
         var candidates: [ComponentsCandidate] = []
         for dir in packageDirs {
             let full = root.appendingPathComponent(dir).path
+            // The app's own package is the app, not its components (CP5).
+            if isAppItself(folder: full) { continue }
             let cat = catalog(at: full, isPackage: true)
             let named = namePattern.firstMatch(in: (dir as NSString).lastPathComponent, range: NSRange(location: 0, length: (dir as NSString).lastPathComponent.utf16.count)) != nil
             // An unnamed package is components only with a real mass of named colors and type; a few sizes and a
@@ -684,6 +686,20 @@ public enum ComponentsScanner {
         perFile.sort { $0.1 > $1.1 || ($0.1 == $1.1 && $0.0 < $1.0) }
         return ComponentsScan(candidates: candidates, typed: typed, typedFiles: perFile.prefix(8).map { (path: $0.0, count: $0.1) }, swiftFiles: files.count,
                               colorLiterals: colors, sizeLiterals: sizes)
+    }
+
+    /// True when a folder is the app itself rather than its components: its Package.swift builds an executable, or its
+    /// code has the app's `@main`. Such a folder is never offered as the components, and a setting that points at it is
+    /// offered for repair (CP5).
+    public static func isAppItself(folder: String) -> Bool {
+        let base = URL(fileURLWithPath: folder)
+        if let manifest = try? String(contentsOf: base.appendingPathComponent("Package.swift"), encoding: .utf8),
+           manifest.contains(".executableTarget(") || manifest.contains(".executable(") { return true }
+        for url in swiftFiles(under: base).prefix(400) {
+            guard let text = try? String(contentsOf: url, encoding: .utf8), text.contains("@main") else { continue }
+            if text.range(of: #"@main\s+(?:public\s+)?struct\s+\w+\s*:\s*App\b"#, options: .regularExpression) != nil { return true }
+        }
+        return false
     }
 
     /// Everything in a components folder: tokens and views from its Swift files, colors from its asset catalogs.

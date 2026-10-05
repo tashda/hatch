@@ -278,4 +278,19 @@ final class ComponentsTests: XCTestCase {
         XCTAssertTrue(drafts[0].body.contains("`Echo/Sources/Shared/DesignSystem`"))
         XCTAssertEqual(drafts[0].area, "Components")
     }
+
+    func testTheAppItselfIsNeverItsComponents() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = root.appendingPathComponent("App"), ui = root.appendingPathComponent("Packages/AcmeUI")
+        for (dir, manifest, code) in [(app, ".executableTarget(name: \"Acme\")", "@main struct AcmeApp: App {}\npublic extension Color { static let a = Color.red; static let b = Color.blue; static let c = Color.green }\npublic enum Spacing { public static let s: CGFloat = 4; public static let m: CGFloat = 8; public static let l: CGFloat = 16 }"),
+                                      (ui, ".library(name: \"AcmeUI\")", "public extension Color { static let surface = Color.white; static let ink = Color.black }")] {
+            try FileManager.default.createDirectory(at: dir.appendingPathComponent("Sources"), withIntermediateDirectories: true)
+            try "let p = Package(\(manifest))".write(to: dir.appendingPathComponent("Package.swift"), atomically: true, encoding: .utf8)
+            try code.write(to: dir.appendingPathComponent("Sources/A.swift"), atomically: true, encoding: .utf8)
+        }
+        XCTAssertTrue(ComponentsScanner.isAppItself(folder: app.path))
+        XCTAssertFalse(ComponentsScanner.isAppItself(folder: ui.path))
+        XCTAssertEqual(ComponentsScanner.scan(appRoot: root.path).candidates.map(\.path), ["Packages/AcmeUI"])
+    }
 }
