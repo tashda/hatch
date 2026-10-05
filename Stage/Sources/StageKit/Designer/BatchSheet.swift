@@ -127,24 +127,30 @@ struct BatchSheet: View {
     }
 }
 
-/// While a batch is previewed: what it is, and Discard or Keep.
+/// While something is previewed outside a role's own view (a batch, or a look tried from Templates or the Matrix):
+/// what it is, and Discard or Keep.
 struct BatchBanner: View {
     @ObservedObject var model: DesignerModel
 
     var body: some View {
         if let b = model.batch {
-            HStack(spacing: 10) {
-                Image(systemName: "eye").foregroundStyle(.orange)
-                Text("Preview: \(b.title)").font(.callout.weight(.medium))
-                Text("\(b.items.count) role\(b.items.count == 1 ? "" : "s")" + (b.items.contains(where: \.onlyHere) ? ", some only here" : ""))
-                    .font(.callout).foregroundStyle(.secondary)
-                Spacer()
-                Button("Discard") { model.discard() }
-                Button("Keep") { model.keep() }.buttonStyle(.borderedProminent)
-            }
-            .padding(.horizontal, 16).padding(.vertical, 8)
-            .background(.orange.opacity(0.1))
+            bar("Preview: \(b.title)", "\(b.items.count) role\(b.items.count == 1 ? "" : "s")" + (b.items.contains(where: \.onlyHere) ? ", some only here" : ""))
+        } else if !model.focused, let p = model.previews.values.first, let role = model.system.role(p.role) {
+            bar("Preview: \(role.title), \(p.label)", "in \(role.places.count) place\(role.places.count == 1 ? "" : "s")")
         }
+    }
+
+    private func bar(_ title: String, _ detail: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "eye").foregroundStyle(.orange)
+            Text(title).font(.callout.weight(.medium))
+            Text(detail).font(.callout).foregroundStyle(.secondary)
+            Spacer()
+            Button("Discard") { model.discard() }
+            Button("Keep") { model.keep() }.buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 8)
+        .background(.orange.opacity(0.1))
     }
 }
 
@@ -157,7 +163,7 @@ struct BatchMenuItems: View {
     var body: some View {
         let what = element.flatMap { ComponentElement.named($0)?.plural } ?? "Everything"
         let scope = place.map { " in \(ComponentPlace.title($0))" } ?? ""
-        ForEach(ComponentTemplates.all) { t in
+        ForEach(model.templates) { t in
             Button("Use \(t.title) for \(place == nil ? "All " : "")\(what)\(scope)") { model.request = .template(t.id, element: element, place: place) }
         }
         Button("Follow macOS for \(place == nil ? "All " : "")\(what)\(scope)") { model.request = .follow(element: element, place: place) }

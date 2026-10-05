@@ -41,36 +41,77 @@ struct ComponentRoleSample: View {
 struct ComponentsStartCard: View {
     let project: Project
     let loaded: ComponentsView.Loaded
-    let start: (ComponentTemplate?) -> Void
+    /// The chosen template, and whether to compare it with the app's own controls.
+    let start: (ComponentTemplate, Bool) -> Void
     @EnvironmentObject var state: AppState
+    @State private var chosen: String?
+
+    /// Hatch's templates and the owner's (CD47), and the one new projects start from (CD46: the marked one, else Native).
+    private var library: ComponentTemplateLibrary { ComponentTemplateLibrary(folder: state.paths.root.appendingPathComponent("templates", isDirectory: true)) }
 
     var body: some View {
         HXCard {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 if loaded.notebook == nil {
                     Label("No notebook on this Mac", systemImage: "book.closed").font(.headline)
                     Text("The design system lives in the project's notebook. Choose its folder in Project settings.").foregroundStyle(.secondary)
                     Button("Project Settings") { state.navigate(to: .projects) }.buttonStyle(.glass)
                 } else {
-                    Label("No design system yet", systemImage: "square.grid.3x3.square").font(.headline)
-                    Text("Roles say which control to use in which place: the main action of a sheet, an action in a row, a toolbar item. "
-                         + "Hatch starts them from \(project.name)'s own most-used looks, or from a template, and asks where looks compete. macOS 27 is the reference; older versions get fallbacks.")
+                    let lib = library
+                    let templates = lib.all
+                    let recommended = lib.recommended.id
+                    let selected = chosen ?? recommended
+                    Label("Choose a starting point", systemImage: "square.grid.3x3.square").font(.headline)
+                    Text(loaded.hasClone
+                         ? "Hatch compares \(project.name)'s own controls with the template: where they match, they are used; where they differ, Hatch asks, recommending Apple's guidance first, then the template."
+                         : "Every role starts from the template, as a guess you can change in the Components Designer.")
                         .foregroundStyle(.secondary)
-                    HStack {
-                        if loaded.hasClone {
-                            Button { start(nil) } label: { Label("Start from the App", systemImage: "wand.and.stars") }
-                                .buttonStyle(.glassProminent)
-                                .controlSize(.large)
-                                .help("Read the app's controls and propose a role for each kind, the most-used look first")
+                    // A drawn gallery (CD3): each starting point in three places, so it is chosen by seeing it.
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            ForEach(templates) { t in tile(t, selected: selected == t.id, recommended: recommended == t.id) }
                         }
-                        Menu {
-                            ForEach(ComponentTemplates.all) { t in Button(t.title) { start(t) } }
-                        } label: { Label("Start from a Template", systemImage: "square.on.square") }
-                            .menuStyle(.button).menuIndicator(.hidden).buttonStyle(.glass).controlSize(.large).fixedSize()
+                        .padding(2)
+                    }
+                    HStack {
+                        Spacer()
+                        let name = templates.first { $0.id == selected }?.title ?? "macOS Native"
+                        Button {
+                            if let t = lib.named(selected) { start(t, loaded.hasClone) }
+                        } label: { Label(loaded.hasClone ? "Start from \(name), Compared with the App" : "Start from \(name)", systemImage: "wand.and.stars") }
+                            .buttonStyle(.glassProminent)
+                            .controlSize(.large)
                     }
                 }
             }
         }
+    }
+
+    private func tile(_ t: ComponentTemplate, selected: Bool, recommended: Bool) -> some View {
+        let system = t.system(name: project.name)
+        let samples: [(String, String)] = [("bottomBar", "button"), ("listRow", "button"), ("inspector", "toggle")]
+        return Button { chosen = t.id } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(t.title).font(.headline)
+                    if recommended { Text("Recommended").font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor) }
+                    Spacer()
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle").foregroundStyle(selected ? Color.accentColor : .secondary)
+                }
+                ForEach(samples, id: \.0) { place, element in
+                    if let role = ComponentRole.Importance.allCases.lazy.compactMap({ system.role(element: element, place: place, importance: $0) }).first {
+                        RecipePlaceSample(place: place, role: role, recipe: nil, system: system)
+                    }
+                }
+                Text(t.isShipped ? t.summary : "Yours. " + t.summary).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+            }
+            .padding(10)
+            .frame(width: 290, alignment: .topLeading)
+            .background(.background, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(selected ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: selected ? 2 : 0.5))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -192,6 +192,9 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                 save(window, "place-inspector-\(mode.rawValue)-\(dark ? "dark" : "light")", dir)
             }
             model.mode = .inPlace
+            model.selection = .templates
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            save(window, "templates-\(dark ? "dark" : "light")", dir)
             model.selection = .rules
             try? await Task.sleep(nanoseconds: 450_000_000)
             save(window, "rules-\(dark ? "dark" : "light")", dir)

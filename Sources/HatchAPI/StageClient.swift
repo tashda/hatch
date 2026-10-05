@@ -70,6 +70,22 @@ public final class StageClient: @unchecked Sendable {
         return try Self.system(json)
     }
 
+    /// The owner's templates and the one marked for new projects (CD46, CD47).
+    public func componentTemplates() throws -> (defaultId: String?, saved: [SavedTemplate]) {
+        try Self.templates(try request("GET", "/v1/component-templates", nil, key: nil))
+    }
+
+    /// save (project, title, summary), default (id or none), remove (id); returns the library after it.
+    public func changeTemplates(_ action: String, body: JSONValue) throws -> (defaultId: String?, saved: [SavedTemplate]) {
+        try Self.templates(try request("POST", "/v1/component-templates/\(action)", body, key: UUID().uuidString))
+    }
+
+    static func templates(_ json: JSONValue) throws -> (defaultId: String?, saved: [SavedTemplate]) {
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let saved = try (json["saved"]?.arrayValue ?? []).map { try decoder.decode(SavedTemplate.self, from: Data($0.jsonString().utf8)) }
+        return (json["defaultId"]?.stringValue, saved)
+    }
+
     static func system(_ json: JSONValue) throws -> ComponentSystem {
         guard let s = json["system"] else { throw StoreError.invalid("No system in the reply.") }
         return try JSONDecoder().decode(ComponentSystem.self, from: Data(s.jsonString().utf8))

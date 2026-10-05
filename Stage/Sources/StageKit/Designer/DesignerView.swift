@@ -57,6 +57,8 @@ struct DesignerView: View {
             PlaceInspector(model: model, place: p)
         case .all?:
             AllInspector(model: model)
+        case .templates?:
+            TemplatesInspector(model: model)
         case .rules?:
             ContentUnavailableView("Rules", systemImage: "checklist", description: Text("Choose a value beside a rule; Hatch checks the ones marked."))
         case .foundations(let kind)?:
@@ -71,6 +73,7 @@ struct DesignerView: View {
         case .element(let e)?: ComponentElement.named(e)?.plural ?? e
         case .place(let p)?: model.system.place(p)?.title ?? p
         case .all?: "All Elements"
+        case .templates?: "Templates"
         case .foundations(let kind)?: kind.title
         case .rules?: "Rules"
         case nil: model.appName
@@ -147,6 +150,8 @@ struct DesignerView: View {
             RulesView(model: model)
         case .all?:
             SystemMatrixView(model: model)
+        case .templates?:
+            TemplatesView(model: model)
         case .place(let p)?:
             switch model.mode {
             case .inPlace: PlaceOverview(model: model, place: p)
@@ -267,6 +272,7 @@ struct DesignerSidebar: View {
                 }
             }
             Section("System") {
+                Label("Templates", systemImage: "square.on.square").tag(DesignerSelection.templates)
                 Label("Rules", systemImage: "checklist").badge(model.system.rules.filter { !$0.isOff }.count).tag(DesignerSelection.rules)
                 ForEach(ComponentFoundation.Kind.allCases, id: \.self) { kind in
                     let count = model.system.foundations.filter { $0.kind == kind }.count
@@ -347,6 +353,7 @@ struct RoleView: View {
         switch model.selection {
         case .place(let p)?: model.system.place(p)?.title ?? p
         case .all?: "All Elements"
+        case .templates?: "Templates"
         default: ComponentElement.named(role.element)?.plural ?? role.element
         }
     }
@@ -596,7 +603,7 @@ struct PlaceInspector: View {
                 }
             }
             InspectorSection(title: "For the Whole Place", footer: "Each opens a list of every role it changes; a role that also sits elsewhere can change everywhere or only here.") {
-                ForEach(ComponentTemplates.all) { t in
+                ForEach(model.templates) { t in
                     Button("Use \(t.title) Here…") { model.request = .template(t.id, element: nil, place: place) }
                 }
                 Button("Follow macOS Here…") { model.request = .follow(element: nil, place: place) }
@@ -1102,7 +1109,7 @@ struct ElementInspector: View {
                 }
             }
             InspectorSection(title: "For All \(ComponentElement.named(element)?.plural ?? element)") {
-                ForEach(ComponentTemplates.all) { t in
+                ForEach(model.templates) { t in
                     Button("Use \(t.title)…") { model.request = .template(t.id, element: element, place: nil) }
                         .help(t.summary)
                 }

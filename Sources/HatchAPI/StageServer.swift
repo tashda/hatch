@@ -359,6 +359,16 @@ public final class StageServer: @unchecked Sendable {
             let key = rest[1], action = rest[3]
             return try mutate(req) { try self.changeComponents(key, action, Body(req)) }
         }
+        // The owner's templates (CD46, CD47): one library for every project, written only by Hatch.
+        if rest == ["component-templates"] {
+            try need("GET")
+            return (200, try templatesJSON(), false)
+        }
+        if rest.count == 2, rest[0] == "component-templates" {
+            try need("POST")
+            let action = rest[1]
+            return try mutate(req) { try self.changeTemplates(action, Body(req)) }
+        }
         if rest.count == 3, rest[0] == "tickets" {
             let ref = rest[1]
             switch rest[2] {
@@ -532,6 +542,39 @@ public final class StageServer: @unchecked Sendable {
         }
         commitNotebook?(folder, message)
         return (["system": JSONValue.parse(String(decoding: try system.encoded(), as: UTF8.self))], nil)
+    }
+
+    private func templateLibrary() throws -> ComponentTemplateLibrary {
+        guard let paths else { throw APIError(status: 503, code: "unavailable", message: "Hatch has no support folder for templates.") }
+        return ComponentTemplateLibrary(folder: paths.templatesFolder)
+    }
+
+    /// The marked template and the owner's saved ones, each with its system (shipped ones are in every Hatch).
+    private func templatesJSON() throws -> JSONValue {
+        let lib = try templateLibrary()
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        let saved = try lib.saved().map { JSONValue.parse(String(decoding: try encoder.encode($0), as: UTF8.self)) }
+        return ["defaultId": lib.defaultId.map { .string($0) } ?? .null, "saved": .array(saved)]
+    }
+
+    private func changeTemplates(_ action: String, _ body: Body) throws -> (JSONValue, StageEvent?) {
+        let lib = try templateLibrary()
+        do {
+            switch action {
+            case "save":
+                let (system, _) = try componentSystem(try body.string("project", max: 120))
+                try lib.save(system, title: try body.string("title", max: 80), summary: try body.optionalString("summary", max: 500) ?? "", from: system.name)
+            case "default":
+                try lib.setDefault(try body.optionalString("id", max: 120))
+            case "remove":
+                try lib.remove(try body.string("id", max: 120))
+            default:
+                throw APIError(status: 404, code: "not_found", message: "Unknown templates action \(action).")
+            }
+        } catch let e as StoreError {
+            throw APIError(status: 422, code: "invalid", message: "\(e)")
+        }
+        return (try templatesJSON(), nil)
     }
 
     private func ticket(_ ref: String) throws -> Ticket { try store.resolve(ref) }

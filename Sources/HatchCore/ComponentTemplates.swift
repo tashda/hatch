@@ -8,8 +8,15 @@ public struct ComponentTemplate: Sendable, Identifiable {
     public var summary: String
     let make: @Sendable (String) -> ComponentSystem
 
+    public init(id: String, title: String, summary: String, make: @escaping @Sendable (String) -> ComponentSystem) {
+        self.id = id; self.title = title; self.summary = summary; self.make = make
+    }
+
     /// The template as a system for an app with this name.
     public func system(name: String) -> ComponentSystem { make(name) }
+
+    /// Shipped with Hatch (not saved by the owner).
+    public var isShipped: Bool { ComponentTemplates.all.contains { $0.id == id } }
 }
 
 public enum ComponentTemplates {

@@ -33,6 +33,8 @@ public struct HatchPaths: Sendable {
     public var databaseURL: URL { home.appendingPathComponent("hatch.sqlite") }
     public var databasePath: String { databaseURL.path }
     public var tokenFile: URL { home.appendingPathComponent("stage-token") }
+    /// The owner's own design system templates (CD47), shared by every project.
+    public var templatesFolder: URL { home.appendingPathComponent("templates", isDirectory: true) }
     public var portFile: URL { home.appendingPathComponent("stage-port") }
     public var outboxFile: URL { stageHome.appendingPathComponent("outbox.jsonl") }
     /// Requests Hatch refused for good (for example the ticket was deleted). Kept so nothing vanishes silently.

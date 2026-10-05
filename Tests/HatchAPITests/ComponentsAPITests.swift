@@ -97,4 +97,40 @@ final class ComponentsAPITests: APITestCase {
         XCTAssertNil(toolbar?.draft, "nothing written")
         XCTAssertTrue(toolbar?.followsMacOS == true)
     }
+
+    /// CD23 and CD24: a batch from the Designer is sent whole and is one commit; ⌘Z restores the system before it.
+    func testReplaceAndRestore() throws {
+        let client = StageClient(paths: paths)
+        let before = try client.components(project: "echo")
+        var next = before
+        try next.rename("button.inRow", title: "Row button")
+        let data = String(decoding: try next.encoded(), as: UTF8.self)
+        var system = try client.changeComponents(project: "echo", action: "replace", body: ["system": .string(data), "label": "Rename"])
+        XCTAssertEqual(system.role("button.inRow")?.title, "Row button")
+        XCTAssertEqual(commits.last, "Components: Rename")
+        system = try client.changeComponents(project: "echo", action: "restore",
+                                             body: ["system": .string(String(decoding: try before.encoded(), as: UTF8.self)), "label": "Rename"])
+        XCTAssertEqual(system, before)
+        XCTAssertEqual(commits.last, "Components: undo Rename")
+        var other = before; other.name = "Somebody else"
+        XCTAssertThrowsError(try client.changeComponents(project: "echo", action: "replace",
+                                                         body: ["system": .string(String(decoding: try other.encoded(), as: UTF8.self))]))
+    }
+
+    /// CD46 and CD47: save a project's system as a template, mark it for new projects, remove it.
+    func testTemplates() throws {
+        let client = StageClient(paths: paths)
+        var lib = try client.componentTemplates()
+        XCTAssertNil(lib.defaultId)
+        XCTAssertTrue(lib.saved.isEmpty)
+        lib = try client.changeTemplates("save", body: ["project": "echo", "title": "Echo Look", "summary": "Echo's own."])
+        XCTAssertEqual(lib.saved.map(\.id), ["echo-look"])
+        XCTAssertEqual(lib.saved.first?.from, "Echo")
+        lib = try client.changeTemplates("default", body: ["id": "echo-look"])
+        XCTAssertEqual(lib.defaultId, "echo-look")
+        XCTAssertThrowsError(try client.changeTemplates("save", body: ["project": "echo", "title": "Glass"]), "a shipped name")
+        lib = try client.changeTemplates("remove", body: ["id": "echo-look"])
+        XCTAssertTrue(lib.saved.isEmpty)
+        XCTAssertNil(lib.defaultId)
+    }
 }

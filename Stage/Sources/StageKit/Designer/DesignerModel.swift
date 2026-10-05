@@ -15,6 +15,10 @@ protocol ComponentsSource {
     func change(_ action: String, _ body: JSONValue) throws -> ComponentSystem
     /// True when changes are kept only in this window (a demo, or a notebook opened without Hatch).
     var isLocal: Bool { get }
+    /// The owner's templates and the one marked for new projects (CD46, CD47).
+    func templates() throws -> (defaultId: String?, saved: [SavedTemplate])
+    /// save, default, remove: through Hatch only.
+    func changeTemplates(_ action: String, _ body: JSONValue) throws -> (defaultId: String?, saved: [SavedTemplate])
 }
 
 /// Changes kept in memory: the demo, tests, and a notebook opened read-only.
@@ -24,6 +28,15 @@ final class LocalComponentsSource: ComponentsSource {
     init(system: ComponentSystem) { self.system = system }
     var isLocal: Bool { true }
     func load() throws -> ComponentSystem { system }
+
+    /// Read from Hatch's library; saving needs Hatch (rule 2: Hatch is the only writer).
+    func templates() throws -> (defaultId: String?, saved: [SavedTemplate]) {
+        let lib = ComponentTemplateLibrary(folder: HatchPaths.current().templatesFolder)
+        return (lib.defaultId, lib.saved())
+    }
+    func changeTemplates(_ action: String, _ body: JSONValue) throws -> (defaultId: String?, saved: [SavedTemplate]) {
+        throw StoreError.invalid("Templates are saved through Hatch: open the Designer from Hatch's Components page.")
+    }
 
     func change(_ action: String, _ body: JSONValue) throws -> ComponentSystem {
         func recipe() -> [String: String] { body["recipe"]?.objectValue?.compactMapValues(\.stringValue) ?? [:] }
@@ -75,6 +88,10 @@ final class HatchComponentsSource: ComponentsSource {
     }
     var isLocal: Bool { false }
     func load() throws -> ComponentSystem { try client.components(project: project) }
+    func templates() throws -> (defaultId: String?, saved: [SavedTemplate]) { try client.componentTemplates() }
+    func changeTemplates(_ action: String, _ body: JSONValue) throws -> (defaultId: String?, saved: [SavedTemplate]) {
+        try client.changeTemplates(action, body: body)
+    }
     func change(_ action: String, _ body: JSONValue) throws -> ComponentSystem {
         try client.changeComponents(project: project, action: action, body: body)
     }
@@ -133,6 +150,8 @@ struct DesignerBatch: Equatable {
 enum DesignerSelection: Hashable {
     /// Every element in every place, as one drawn matrix (CD33).
     case all
+    /// Templates compared with each other and with this app (CD47).
+    case templates
     /// One place with every element in it (CD9).
     case place(String)
     case foundations(ComponentFoundation.Kind)
@@ -179,6 +198,9 @@ final class DesignerModel: ObservableObject {
 
     let source: ComponentsSource
     let appName: String
+    /// The owner's saved templates and the one marked for new projects (CD46, CD47).
+    @Published private(set) var savedTemplates: [SavedTemplate] = []
+    @Published private(set) var defaultTemplateId: String?
     /// The live window's state, and how to open it (the app delegate sets it).
     let live = LiveState()
     var openLiveWindow: (() -> Void)?
@@ -192,6 +214,7 @@ final class DesignerModel: ObservableObject {
         let scheme: ColorScheme = NSApp?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
         systemScheme = scheme
         appearance = scheme == .dark ? .dark : .light
+        if let lib = try? source.templates() { savedTemplates = lib.saved; defaultTemplateId = lib.defaultId }
         selection = s.elementsUsed.first.map { .element($0) }
         selectedRole = s.elementsUsed.first.flatMap { s.roles(of: $0).first?.id }
     }
@@ -202,7 +225,7 @@ final class DesignerModel: ObservableObject {
     var selectedPlace: String? { if case .place(let p) = selection { return p }; return nil }
     /// The selection draws looks on the canvas (an element, a place or all), so hard cases and roles apply.
     var showsCanvas: Bool {
-        switch selection { case .element?, .place?, .all?: true; default: false }
+        switch selection { case .element?, .place?, .all?, .templates?: true; default: false }
     }
 
     /// Open questions about roles that sit in a place.
@@ -267,7 +290,7 @@ final class DesignerModel: ObservableObject {
         add("Current", role.draft ?? role.recipe, follow: role.followsMacOS)
         let behaviour = role.recipe.filter { element.parameter($0.key)?.isLook == false }
         add("macOS default", behaviour, follow: true)
-        for t in ComponentTemplates.all {
+        for t in templates {
             let ref = t.system(name: "ref").roles(of: role.element)
                 .filter { $0.importance == role.importance && !Set($0.places).isDisjoint(with: role.places) }.first
             if let ref { add(t.title, ref.recipe, follow: ref.followsMacOS) }
@@ -393,6 +416,28 @@ final class DesignerModel: ObservableObject {
     /// Drops the preview: the role is drawn as it is again (Esc).
     func discard() { previews = [:]; batch = nil }
 
+    // MARK: Templates (CD4, CD46, CD47)
+
+    /// Hatch's templates, then the owner's.
+    var templates: [ComponentTemplate] { ComponentTemplates.all + savedTemplates.map(\.template) }
+    func template(_ id: String) -> ComponentTemplate? { templates.first { $0.id == id } }
+    /// The one new projects start from: the marked one, else macOS Native.
+    var recommendedTemplate: ComponentTemplate { defaultTemplateId.flatMap(template) ?? ComponentTemplates.native }
+
+    func saveTemplate(title: String, summary: String) { changeTemplates("save", ["project": .string(projectKey), "title": .string(title), "summary": .string(summary)]) }
+    func setDefaultTemplate(_ id: String?) { changeTemplates("default", ["id": id.map { .string($0) } ?? .null]) }
+    func removeTemplate(_ id: String) { changeTemplates("remove", ["id": .string(id)]) }
+
+    private var projectKey: String { (source as? HatchComponentsSource)?.project ?? appName }
+
+    private func changeTemplates(_ action: String, _ body: JSONValue) {
+        do {
+            let lib = try source.changeTemplates(action, body)
+            savedTemplates = lib.saved; defaultTemplateId = lib.defaultId
+            notice = nil
+        } catch { notice = "\(error)" }
+    }
+
     // MARK: Batch changes (CD24 to CD26)
 
     /// Previews a batch change everywhere: every role it changes, at once.
@@ -504,7 +549,7 @@ final class DesignerModel: ObservableObject {
     /// The batch a request starts with.
     func batch(for request: BatchRequest) -> DesignerBatch? {
         switch request {
-        case .template(let id, let e, let p): return ComponentTemplates.named(id).map { batchTemplate($0, element: e, place: p) }
+        case .template(let id, let e, let p): return template(id).map { batchTemplate($0, element: e, place: p) }
         case .follow(let e, let p): return batchFollow(element: e, place: p)
         case .setting(let e, let p):
             guard let param = ComponentElement.named(e)?.parameters.first(where: { $0.isLook }) else { return nil }

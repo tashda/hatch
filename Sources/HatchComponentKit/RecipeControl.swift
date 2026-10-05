@@ -156,7 +156,7 @@ private struct RecipeButton: View {
             default: Text(sample.shownTitle)  // what Button("Save") draws when the role says nothing
             }
         }
-        .recipeButtonStyle(recipe["style"] ?? (looksDefault ? "borderedProminent" : nil))
+        .recipeButtonStyle(recipe["style"].flatMap { $0 == "automatic" ? nil : $0 } ?? (looksDefault ? "borderedProminent" : nil))
         .controlSize(ControlSize(recipe: recipe["size"]))
         .recipeShape(recipe["shape"])
         .recipeTint(recipe["tint"])

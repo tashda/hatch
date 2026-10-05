@@ -174,7 +174,7 @@ struct ComponentsView: View {
                     if let system = loaded.system {
                         section(project, loaded, system)
                     } else {
-                        ComponentsStartCard(project: project, loaded: loaded, start: { startSystem(project, template: $0) })
+                        ComponentsStartCard(project: project, loaded: loaded, start: { startSystem(project, template: $0, compare: $1) })
                         ComponentsOldScan(project: project, loaded: loaded, message: $message, reload: { Task { await load() } })
                     }
                 }
@@ -324,7 +324,9 @@ struct ComponentsView: View {
     }
 
     /// Writes a new system into the notebook and commits it there (Hatch is the only writer, DS2).
-    private func startSystem(_ project: Project, template: ComponentTemplate?) {
+    /// With `compare`, the app's own controls are read and compared with the template (CD46): its looks are used where
+    /// they match, the rest become questions recommended by Apple's guidance, then the template, then use counts.
+    private func startSystem(_ project: Project, template: ComponentTemplate, compare: Bool) {
         guard let notebook = loaded?.notebook else { return }
         let config = project.config
         message = "Reading \(project.name)'s controls…"
@@ -332,17 +334,17 @@ struct ComponentsView: View {
             let result = await Task.detached { () -> Result<ComponentSystem, Error> in
                 Result {
                     let system: ComponentSystem
-                    if let template {
+                    if !compare {
                         system = template.system(name: project.name)
                     } else {
                         guard let app = config?.repo(.app)?.localPath else { throw StoreError.invalid("No clone of the app.") }
                         let files = ComponentInventoryScanner.appFiles(appRoot: app, excluding: [config?.components?.path].compactMap { $0 })
-                        system = ComponentDraft.fromApp(name: project.name, inventory: ComponentInventoryScanner.inventory(files: files),
+                        system = ComponentDraft.fromApp(name: project.name, inventory: ComponentInventoryScanner.inventory(files: files), template: template,
                                                         minimumMacOS: ComponentInventoryScanner.minimumMacOS(appRoot: app) ?? ComponentSystem.referenceMacOS,
                                                         shell: ComponentShell.detect(files: files))
                     }
                     try system.write(notebook: notebook)
-                    _ = try NotebookWriter.commit("Components: start the design system" + (template.map { " from the \($0.title) template" } ?? " from the app"), in: notebook)
+                    _ = try NotebookWriter.commit("Components: start the design system from the \(template.title) template" + (compare ? ", compared with the app" : ""), in: notebook)
                     return system
                 }
             }.value
@@ -385,6 +387,8 @@ struct ComponentsView: View {
             case "rules"?: section = .rules
             case "foundations"?: section = .foundations
             case "health"?: section = .health
+            // No design system yet: the start gallery (CD3, CD46).
+            case "start"?: loaded?.system = nil
             default: break
             }
             return
