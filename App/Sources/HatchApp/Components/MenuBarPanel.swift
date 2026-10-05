@@ -7,7 +7,8 @@ import HatchAgent
 // Hatch is in the background. Running agents, the status line, the latest activity, what waits for you, and a few
 // actions. Clicking an agent or Open Desk brings the main window forward on that page.
 
-/// The item in the menu bar: Hatch's arch with its dot, as in the app icon, and a small badge dot when tickets wait.
+/// The item in the menu bar (decision AI5): a soft tile with Hatch's sun only peeking over its bottom edge when nothing waits,
+/// and a smaller orange sun glowing in the middle when tickets wait for you (the sun is the signal, no badge).
 struct MenuBarLabel: View {
     let waiting: Bool
 
@@ -16,24 +17,33 @@ struct MenuBarLabel: View {
             .accessibilityLabel(waiting ? "Hatch, tickets wait for you" : "Hatch")
     }
 
-    /// Hatch's own arch and dot from the asset catalog (`MenuBarIcon`, drawn by design-page/app-icon/menubar_glyph.swift
-    /// on whole pixels), with a badge dot cut in when tickets wait. A template image: the menu bar tints it.
+    /// Drawn in code at 18 pt, so it stays sharp at 1x and 2x. At rest it is a template image and the menu bar tints it.
+    /// Waiting it carries colour, so it is not a template: the tile is drawn in the label colour of the appearance it is
+    /// drawn in (the drawing runs at draw time), so it still suits a light or a dark menu bar.
     static func glyph(waiting: Bool) -> NSImage {
-        guard let base = NSImage(named: "MenuBarIcon") else { return NSImage() }
-        guard waiting else { return base }
-        let size = NSSize(width: 18, height: 18)
-        let image = NSImage(size: size, flipped: false) { rect in
-            base.draw(in: rect)
-            // A gap around the badge keeps it apart from the arch at menu bar size.
-            let badge = NSRect(x: 12.6, y: 12.6, width: 5, height: 5)
-            NSColor.black.setFill()
-            NSGraphicsContext.current?.compositingOperation = .clear
-            NSBezierPath(ovalIn: badge.insetBy(dx: -1.2, dy: -1.2)).fill()
-            NSGraphicsContext.current?.compositingOperation = .sourceOver
-            NSBezierPath(ovalIn: badge).fill()
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+            let tile = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 1.5, width: 15, height: 15), xRadius: 4.2, yRadius: 4.2)
+            (waiting ? NSColor.labelColor : NSColor.black).withAlphaComponent(0.32).setFill()
+            tile.fill()
+            NSGraphicsContext.saveGraphicsState()
+            tile.addClip()
+            if waiting {
+                let centre = NSPoint(x: 9, y: 9)
+                let glow = NSColor(srgbRed: 1, green: 0.706, blue: 0.235, alpha: 1)
+                NSGradient(colors: [glow.withAlphaComponent(0.75), glow.withAlphaComponent(0)])?
+                    .draw(fromCenter: centre, radius: 3.8, toCenter: centre, radius: 7.2, options: .drawsBeforeStartingLocation)
+                let sun = NSBezierPath(ovalIn: NSRect(x: 9 - 3.8, y: 9 - 3.8, width: 7.6, height: 7.6))
+                sun.addClip()
+                NSGradient(colors: [NSColor(srgbRed: 1, green: 0.824, blue: 0.478, alpha: 1), NSColor(srgbRed: 1, green: 0.604, blue: 0.063, alpha: 1)])?
+                    .draw(fromCenter: NSPoint(x: 9, y: 7.86), radius: 0, toCenter: NSPoint(x: 9, y: 7.86), radius: 4.56, options: .drawsAfterEndingLocation)
+            } else {
+                NSColor.black.setFill()
+                NSBezierPath(ovalIn: NSRect(x: 9 - 5.4, y: 18.6 - 5.4, width: 10.8, height: 10.8)).fill()
+            }
+            NSGraphicsContext.restoreGraphicsState()
             return true
         }
-        image.isTemplate = true
+        image.isTemplate = !waiting
         return image
     }
 }

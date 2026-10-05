@@ -5,7 +5,7 @@
 #   tools/build-stage.sh [--dest DIR] [--config debug|release] [--round PRODUCT] [--sign IDENTITY]
 #
 # Defaults: DIR=Stage/.build/app, debug, the toast round. Hatch's Xcode build runs this and puts the result in
-# Hatch.app/Contents/Helpers/. The icons are drawn by the Stage itself (`--render-icon`), so there are no separate art files.
+# Hatch.app/Contents/Helpers/. The icons are drawn by the Stage itself (`--render-icon`) and compiled from Icon Composer files, so there are no art files.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/Stage/.build/app"; CONFIG=debug; ROUND=HatchStageToast; SIGN=""
@@ -31,25 +31,17 @@ if [ -d "$STAGE" ] && [ -d "$DESIGNER" ] && cmp -s "$BIN" "$STAMP" 2>/dev/null; 
 
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 
-# make_app BUNDLE EXECUTABLE ID NAME [--designer]: one bundle around a copy of the program (a copy, not a symlink, which
+# make_app BUNDLE EXECUTABLE ID NAME KIND (stage or designer): one bundle around a copy of the program (a copy, not a symlink, which
 # signing rejects), with its own name, icon and Info.plist. The arguments choose the mode, the bundle only names it (AI3).
 make_app() {
   APP="$1"; EXE="$2"; ID="$3"; NAME="$4"; KIND="$5"
   rm -rf "$APP"
   mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
   cp -f "$BIN" "$APP/Contents/MacOS/$EXE"
-  # 16 and 32 px come from the small drawing (no hairlines), the rest from the full one.
-  "$BIN" --render-icon "$WORK/icon.png" $KIND
-  "$BIN" --render-icon "$WORK/small.png" $KIND --small
-  rm -rf "$WORK/icon.iconset"; mkdir "$WORK/icon.iconset"
-  for s in 16 32; do sips -z $s $s "$WORK/small.png" --out "$WORK/icon.iconset/icon_${s}x${s}.png" >/dev/null; done
-  sips -z 32 32 "$WORK/small.png" --out "$WORK/icon.iconset/icon_16x16@2x.png" >/dev/null
-  sips -z 64 64 "$WORK/icon.png" --out "$WORK/icon.iconset/icon_32x32@2x.png" >/dev/null
-  for s in 128 256 512; do
-    sips -z $s $s "$WORK/icon.png" --out "$WORK/icon.iconset/icon_${s}x${s}.png" >/dev/null
-    sips -z $((s*2)) $((s*2)) "$WORK/icon.png" --out "$WORK/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null
-  done
-  iconutil -c icns "$WORK/icon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
+  # The icon: an Icon Composer file with the light and dark colourings (AI4), compiled the way Xcode does it.
+  "$ROOT/tools/make-icon-file.sh" "$BIN" "$KIND" "$WORK/AppIcon.icon"
+  xcrun actool "$WORK/AppIcon.icon" --compile "$APP/Contents/Resources" --platform macosx --minimum-deployment-target 26.0 \
+    --app-icon AppIcon --output-partial-info-plist "$WORK/icon.plist" >/dev/null
 
   cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -61,6 +53,7 @@ make_app() {
 	<key>CFBundleName</key><string>$NAME</string>
 	<key>CFBundleDisplayName</key><string>$NAME</string>
 	<key>CFBundleIconFile</key><string>AppIcon</string>
+	<key>CFBundleIconName</key><string>AppIcon</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 	<key>CFBundleShortVersionString</key><string>0.1.0</string>
@@ -76,7 +69,7 @@ PLIST
   fi
 }
 
-make_app "$STAGE" Stage app.hatch.Stage Stage ""
-make_app "$DESIGNER" ComponentsDesigner app.hatch.ComponentsDesigner "Components Designer" --designer
+make_app "$STAGE" Stage app.hatch.Stage Stage stage
+make_app "$DESIGNER" ComponentsDesigner app.hatch.ComponentsDesigner "Components Designer" designer
 cp -f "$BIN" "$STAMP"
 echo "Built $STAGE and $DESIGNER"

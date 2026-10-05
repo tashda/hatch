@@ -8,9 +8,10 @@ import StageCore
 ///     HatchStageToast --ticket 151                 talks to Hatch's local API (HatchAPIStageDataSource)
 ///     HatchStageToast --manifest /path/m.json      uses that manifest instead of the one compiled into the round
 ///     HatchStageToast --home /path/to/Hatch        Hatch's support directory (token and port), as the launching app passes it
-///     HatchStageToast --render-icon out.png [--ticket 151] [--designer] [--small]
-///                                                  writes the Stage icon (with the number when given), or the Components
-///                                                  Designer's, at 1024 pt (`--small`: the variant for 16 and 32 px) and exits
+///     HatchStageToast --render-icon out.png [--hatch | --designer] [--dark] [--full] [--ticket 151]
+///                                                  writes the Stage's icon (with the number when given), Hatch's or the
+///                                                  Components Designer's at 1024 px and exits; `--full` is full-bleed
+///                                                  artwork for an Icon Composer file, `--dark` the dark colouring
 ///     HatchStageToast --check                      headless: draws every specimen in every scenario, prints JSON, exits 0 or 1
 public struct StageLaunchOptions: Equatable {
     public var demo: Bool = false
@@ -20,10 +21,12 @@ public struct StageLaunchOptions: Equatable {
     public var check: Bool = false
     public var snapshotDirectory: URL? = nil
     public var renderIconPath: String? = nil
-    /// With `--render-icon`: the Components Designer's icon instead of the Stage's.
-    public var renderDesignerIcon = false
-    /// With `--render-icon`: the variant drawn for 16 and 32 px.
-    public var renderSmallIcon = false
+    /// With `--render-icon`: which app's icon (`--hatch`, `--designer`; the Stage's by default).
+    public var renderIconKind = "stage"
+    /// With `--render-icon`: the dark colouring.
+    public var renderDarkIcon = false
+    /// With `--render-icon`: full-bleed artwork for an Icon Composer layer instead of the tile.
+    public var renderFullIcon = false
 
     public init() {}
 
@@ -46,10 +49,12 @@ public struct StageLaunchOptions: Equatable {
             } else if a == "--render-icon", i + 1 < arguments.count {
                 o.renderIconPath = arguments[i + 1]
                 i += 1
-            } else if a == "--designer" {
-                o.renderDesignerIcon = true
-            } else if a == "--small" {
-                o.renderSmallIcon = true
+            } else if a == "--designer" || a == "--hatch" {
+                o.renderIconKind = String(a.dropFirst(2))
+            } else if a == "--dark" {
+                o.renderDarkIcon = true
+            } else if a == "--full" {
+                o.renderFullIcon = true
             } else if a == "--check" {
                 o.check = true
             } else if a == "--snapshots", i + 1 < arguments.count {
@@ -81,8 +86,8 @@ public enum StageApp {
         if designer.isDesigner { DesignerApp.run(designer) }
         let options = StageLaunchOptions.parse(Array(arguments.dropFirst()))
         if let path = options.renderIconPath {
-            let ok = StageIcon.writePNG(to: URL(fileURLWithPath: path), kind: options.renderDesignerIcon ? .designer : .stage,
-                                        number: StageIcon.digits(from: options.ticket), small: options.renderSmallIcon)
+            let ok = StageIcon.writePNG(to: URL(fileURLWithPath: path), kind: AppIconKind(rawValue: options.renderIconKind) ?? .stage,
+                                        number: StageIcon.digits(from: options.ticket), dark: options.renderDarkIcon, full: options.renderFullIcon)
             exit(ok ? 0 : 1)
         }
         // The arguments choose the mode, not the bundle (decision AI3). Components Designer.app opened from Finder has no
