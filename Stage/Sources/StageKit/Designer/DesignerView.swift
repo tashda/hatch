@@ -41,6 +41,7 @@ struct DesignerView: View {
         switch model.selection {
         case .element(let e)?: ComponentElement.named(e)?.plural ?? e
         case .foundations(let kind)?: kind.title
+        case .rules?: "Rules"
         case nil: model.appName
         }
     }
@@ -82,6 +83,8 @@ struct DesignerView: View {
         switch model.selection {
         case .foundations(let kind)?:
             FoundationsView(model: model, kind: kind)
+        case .rules?:
+            RulesView(model: model)
         case .element(let e)?:
             switch model.mode {
             case .inPlace: RoleInPlaceView(model: model, element: e)
@@ -117,6 +120,9 @@ struct DesignerSidebar: View {
                     }
                     .tag(DesignerSelection.element(e))
                 }
+            }
+            Section("Rules") {
+                Label("Rules", systemImage: "checklist").badge(model.system.rules.filter { !$0.isOff }.count).tag(DesignerSelection.rules)
             }
             Section("Foundations") {
                 ForEach(ComponentFoundation.Kind.allCases, id: \.self) { kind in
@@ -326,7 +332,9 @@ struct RoleInspector: View {
             Form {
                 Section {
                     LabeledContent("Role") { Text(role.id).font(.callout.monospaced()) }
-                    LabeledContent("Status") { HStack { StatusDot(status: role.status); Text(role.status.title) } }
+                    LabeledContent("Status") {
+                        HStack { StatusDot(status: role.status); Text(role.status.title + (role.followsMacOS ? ", follows macOS" : "")) }
+                    }
                     LabeledContent("Code") { Text(role.codeName).font(.caption.monospaced()).textSelection(.enabled) }
                 } header: { Text(role.title) }
                 Section("Use when") {
@@ -361,6 +369,28 @@ struct RoleInspector: View {
                         }
                     }
                 }
+                let advice = model.advice(for: role)
+                if !advice.isEmpty {
+                    Section("Against Apple's guidance") {
+                        ForEach(Array(advice.enumerated()), id: \.offset) { _, a in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(a.message).font(.callout)
+                                if let ref = ComponentNative.reference(a.source), let url = URL(string: ref.url) { Link(ref.title, destination: url).font(.caption) }
+                            }
+                        }
+                    }
+                }
+                if !role.sources.isEmpty {
+                    Section("Why, from Apple") {
+                        ForEach(role.sources.compactMap { ComponentNative.reference($0) }) { ref in
+                            if let url = URL(string: ref.url) {
+                                LabeledContent { Text("read \(ref.checked), macOS \(ref.sdk)").font(.caption).foregroundStyle(.secondary) } label: {
+                                    Link(ref.title, destination: url)
+                                }
+                            }
+                        }
+                    }
+                }
                 if model.inventory != nil {
                     Section("In the app today") {
                         let looks = model.looksToday(role)
@@ -381,6 +411,18 @@ struct RoleInspector: View {
 
     /// One prominent action, the rest quiet.
     @ViewBuilder private func actions(_ role: ComponentRole) -> some View {
+        HStack {
+            if !role.followsMacOS {
+                Button("Follow macOS") { model.follow(role) }.buttonStyle(.glass)
+                    .help("No look of its own: macOS decides, now and in later versions")
+            }
+            if !role.configurable {
+                Button("Make It a Setting") { model.makeSetting(role.id) }.buttonStyle(.glass)
+                    .help("Keep this look as the default and draft a ticket for a setting in the app")
+            } else {
+                Text("Will become a setting").font(.caption).foregroundStyle(.secondary)
+            }
+        }
         switch role.status {
         case .provisional:
             Button("Agree to This Role") { model.agree(role) }.buttonStyle(.glassProminent).controlSize(.large)
@@ -403,6 +445,7 @@ struct QuestionBar: View {
     let element: String
     @State private var index = 0
     @State private var choice: Int?
+    @State private var asSetting = false
 
     var body: some View {
         let questions = model.questions(for: element)
@@ -430,9 +473,11 @@ struct QuestionBar: View {
             HStack {
                 Text(q.reason).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 Spacer()
+                Toggle("and make it a setting", isOn: $asSetting).toggleStyle(.checkbox)
+                    .help("Keep this choice as the default and draft a ticket for a setting in the app")
                 Button("Answer") {
-                    model.answer(q, option: choice ?? q.recommended)
-                    choice = nil; index = 0
+                    model.answer(q, option: choice ?? q.recommended, setting: asSetting)
+                    choice = nil; index = 0; asSetting = false
                 }
                 .buttonStyle(.glassProminent)
                 .controlSize(.large)
@@ -480,5 +525,69 @@ struct OptionCard: View {
         .background(.background, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: selected ? 2 : 1))
         .contentShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - Rules
+
+/// The rules beyond roles (NF4): each with Apple's choice marked, its pages, and whether Hatch checks it.
+struct RulesView: View {
+    @ObservedObject var model: DesignerModel
+    @State private var note = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("What roles cannot say: how menus are grouped, how titles are written, where commands live, which colours and spacing. Hatch checks the ones marked; notes are read by agents and Iris.")
+                .font(.callout).foregroundStyle(.secondary)
+            ForEach(ComponentRuleKind.catalog.filter { $0.id != "note" }) { kind in
+                let rule = model.system.rules.first { $0.kind == kind.id }
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(kind.title).font(.headline)
+                        if kind.checked { Text("checked").font(.caption2).foregroundStyle(.secondary) }
+                        if rule?.configurable == true { Text("will become a setting").font(.caption2).foregroundStyle(.orange) }
+                        Spacer()
+                        Picker(kind.title, selection: Binding(get: { rule?.value ?? "off" }, set: { model.setRule(kind.id, $0) })) {
+                            ForEach(kind.values, id: \.id) { v in
+                                Text(v.id == kind.appleDefault ? "\(v.id) (Apple)" : v.id).tag(v.id)
+                            }
+                            if !kind.values.contains(where: { $0.id == "off" }) { Text("off").tag("off") }
+                        }
+                        .labelsHidden().fixedSize()
+                        if rule?.configurable != true, rule.map({ !$0.isOff }) == true {
+                            Button("Make It a Setting") { model.makeSetting(kind.id) }.controlSize(.small)
+                        }
+                    }
+                    Text(kind.says(rule?.value ?? kind.appleDefault ?? "off")).font(.callout)
+                    if let caveat = kind.caveat { Text(caveat).font(.caption).foregroundStyle(.orange) }
+                    HStack(spacing: 10) {
+                        ForEach(kind.sources.compactMap { ComponentNative.reference($0) }) { ref in
+                            if let url = URL(string: ref.url) { Link(ref.title, destination: url).font(.caption) }
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Notes").font(.headline)
+                ForEach(model.system.rules.filter { $0.kind == "note" }) { r in
+                    HStack { Text(r.text); Spacer(); Button("Remove") { model.removeRule(r.id) }.controlSize(.small) }
+                }
+                HStack {
+                    TextField("A rule in words, for agents and Iris", text: $note)
+                    Button("Add") { model.addNote(note); note = "" }.disabled(note.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            if !model.system.follows.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Following macOS").font(.headline)
+                    ForEach(model.system.follows) { f in
+                        HStack { Text(f.title); Spacer(); Button("Stop Following") { model.unfollow(f) }.controlSize(.small) }
+                    }
+                }
+            }
+        }
     }
 }

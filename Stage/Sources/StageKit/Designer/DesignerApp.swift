@@ -122,6 +122,9 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                     save(window, "\(element)-\(mode.rawValue)-\(dark ? "dark" : "light")", dir)
                 }
             }
+            model.selection = .rules
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            save(window, "rules-\(dark ? "dark" : "light")", dir)
             for kind in ComponentFoundation.Kind.allCases where model.system.foundations.contains(where: { $0.kind == kind }) {
                 model.selection = .foundations(kind)
                 try? await Task.sleep(nanoseconds: 350_000_000)

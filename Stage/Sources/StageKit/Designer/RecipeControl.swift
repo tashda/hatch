@@ -136,8 +136,8 @@ private struct RecipeButton: View {
         Button(role: importance == .destructive ? .destructive : (importance == .quiet && recipe["key"] == "cancelAction" ? .cancel : nil)) {} label: {
             switch recipe["label"] {
             case "iconOnly": Label(sample.shownTitle, systemImage: sample.symbol).labelStyle(.iconOnly)
-            case "titleOnly": Text(sample.shownTitle)
-            default: Label(sample.shownTitle, systemImage: sample.symbol)
+            case "titleAndIcon": Label(sample.shownTitle, systemImage: sample.symbol)
+            default: Text(sample.shownTitle)  // what Button("Save") draws when the role says nothing
             }
         }
         .recipeButtonStyle(recipe["style"])
@@ -278,6 +278,14 @@ private struct RecipeSwitcher: View {
         case "menu":
             Picker("Section", selection: $section) { Text("Overview").tag(0); Text("Work").tag(1); Text("Files").tag(2) }
                 .pickerStyle(.menu).labelsHidden().fixedSize()
+        case "tabs":
+            // The native view switcher for the main area on macOS: a real tab view.
+            TabView(selection: $section) {
+                Text("Overview").tabItem { Text("Overview") }.tag(0)
+                Text("Work").tabItem { Text("Work") }.tag(1)
+                Text("Files").tabItem { Text("Files") }.tag(2)
+            }
+            .frame(width: 280, height: 110)
         default:
             Picker("Section", selection: $section) { Text("Overview").tag(0); Text("Work").tag(1); Text("Files").tag(2) }
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
@@ -288,30 +296,24 @@ private struct RecipeSwitcher: View {
 
 private struct RecipeRow: View {
     let recipe: [String: String]
-    @State private var hovering = false
 
     var body: some View {
-        let pad: CGFloat = ["compact": 2, "airy": 8][recipe["density"] ?? "regular"] ?? 4
-        HStack(spacing: 8) {
-            Image(systemName: "circle.lefthalf.filled").foregroundStyle(.teal)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Fix the login sheet")
-                Text("#142 · Building").font(.caption).foregroundStyle(.secondary)
+        // A real List draws the rows: their height, padding and selection are the list's, as in the app.
+        List {
+            ForEach(Array(["Fix the login sheet", "Toast feels cramped", "Sync stalls after sleep"].enumerated()), id: \.offset) { i, title in
+                HStack(spacing: 8) {
+                    Image(systemName: "circle.lefthalf.filled").foregroundStyle(.teal)
+                    Text(title)
+                    Spacer()
+                    if recipe["actions"] == "always" { Button("Open") {}.controlSize(.small) }
+                    if recipe["accessory"] == "chevron" { Image(systemName: "chevron.right").foregroundStyle(.tertiary) }
+                }
+                .badge(recipe["accessory"] == "badge" ? 3 - i : 0)
+                .listRowSeparator(recipe["separators"] == "hidden" ? .hidden : .automatic)
             }
-            Spacer()
-            if recipe["accessory"] == "count" { Text("3").font(.caption).monospacedDigit().foregroundStyle(.secondary) }
-            if recipe["actions"] == "always" || (recipe["actions"] == "onHover" && hovering) {
-                Button("Open") {}.buttonStyle(.bordered).controlSize(.small)
-            }
-            if recipe["accessory"] == "chevron" { Image(systemName: "chevron.right").foregroundStyle(.tertiary) }
         }
-        .padding(.vertical, pad)
-        .padding(.horizontal, 8)
-        .background {
-            if recipe["selection"] == "fill" && hovering { RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.12)) }
-        }
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
+        .frame(width: 300, height: 110)
+        .scrollDisabled(true)
     }
 }
 
@@ -319,16 +321,33 @@ private struct RecipeCard: View {
     let recipe: [String: String]
     let system: ComponentSystem?
 
-    var body: some View {
-        let radius = RecipeColor.points(recipe["radius"], system: system, fallback: 12)
-        let pad = RecipeColor.points(recipe["padding"], system: system, fallback: 16)
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+    private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Details").font(.headline)
             LabeledContent("Status", value: "Building")
             LabeledContent("Area", value: "Desk")
         }
-        .padding(pad)
+    }
+
+    var body: some View {
+        switch recipe["container"] {
+        case "groupBox":
+            GroupBox("Details") { content }.frame(width: 240)
+        case "formSection":
+            Form { Section("Details") { content } }.formStyle(.grouped).frame(width: 260, height: 130).scrollDisabled(true)
+        default:
+            custom
+        }
+    }
+
+    /// Only a custom card draws its own surface (NF1: GroupBox and Form sections are native).
+    private var custom: some View {
+        let radius = RecipeColor.points(recipe["radius"], system: system, fallback: 12)
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Details").font(.headline)
+            content
+        }
+        .padding(recipe["padding"].flatMap { $0 == "system" ? nil : RecipeColor.points($0, system: system, fallback: 16) } ?? 16)
         .frame(width: 240, alignment: .leading)
         .background {
             switch recipe["surface"] {
@@ -356,14 +375,13 @@ private struct RecipeSheet: View {
     let recipe: [String: String]
 
     var body: some View {
-        let width: CGFloat = ["small": 220, "large": 360][recipe["width"] ?? "medium"] ?? 290
+        // macOS sizes sheets (presentationSizing); the live window shows a real one.
+        let width: CGFloat = ["page": 360, "fitted": 220][recipe["sizing"] ?? "automatic"] ?? 290
         VStack(alignment: .leading, spacing: 10) {
             if recipe["title"] != "none" { Text("Rename Area").font(recipe["title"] == "large" ? .title2.bold() : .headline) }
-            TextField("Name", text: .constant("Desk")).textFieldStyle(.roundedBorder)
-            HStack {
-                if recipe["footer"] == "spread" { Button("Cancel") {}; Spacer() } else { Spacer(); Button("Cancel") {} }
-                Button("Rename") {}.buttonStyle(.borderedProminent)
-            }
+            TextField("Name", text: .constant("Desk"))
+            HStack { Spacer(); Button("Cancel", role: .cancel) {}; Button("Rename") {}.keyboardShortcut(.defaultAction) }
+            Text("Sizing: \(recipe["sizing"] ?? "automatic")").font(.caption2).foregroundStyle(.secondary)
         }
         .padding(16)
         .frame(width: width)
@@ -378,10 +396,13 @@ private struct RecipeBadge: View {
         let text = Text("3").font(.caption2.weight(.semibold)).monospacedDigit()
         switch recipe["style"] {
         case "plain": text.foregroundStyle(.secondary)
-        default:
+        case "capsule":
             text.foregroundStyle(.white)
                 .padding(.horizontal, 5).padding(.vertical, 1)
                 .background(recipe["tint"] == "accent" ? Color.accentColor : Color.red, in: Capsule())
+        default:
+            // The system badge, on a real list row.
+            List { Text("Waiting for me").badge(3) }.frame(width: 220, height: 44).scrollDisabled(true)
         }
     }
 }

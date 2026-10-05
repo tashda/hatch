@@ -19,6 +19,7 @@ protocol ComponentsSource {
 /// Changes kept in memory: the demo, tests, and a notebook opened read-only.
 final class LocalComponentsSource: ComponentsSource {
     private var system: ComponentSystem
+
     init(system: ComponentSystem) { self.system = system }
     var isLocal: Bool { true }
     func load() throws -> ComponentSystem { system }
@@ -27,14 +28,35 @@ final class LocalComponentsSource: ComponentsSource {
         func recipe() -> [String: String] { body["recipe"]?.objectValue?.compactMapValues(\.stringValue) ?? [:] }
         let role = body["role"]?.stringValue
         switch action {
-        case "answer": try system.answer(body["question"]?.stringValue ?? "", option: body["option"]?.intValue ?? -1)
+        case "answer":
+            let id = body["question"]?.stringValue ?? ""
+            let role = system.questions.first { $0.id == id }?.role
+            try system.answer(id, option: body["option"]?.intValue ?? -1)
+            if body["setting"]?.boolValue == true, let role { try system.makeConfigurable(role) }
+            return system
         case "agree": try system.agree(role)
         case "look": try system.setLook(role ?? "", recipe: recipe())
         case "apply": try system.applyDrafts(role)
         case "discard": try system.discardDraft(role ?? "")
         case "variant": try system.addVariant(to: role ?? "", id: body["id"]?.stringValue ?? "variant", use: body["use"]?.stringValue ?? "", recipe: recipe())
+        case "follow":
+            if let role { try system.followMacOS(role: role) }
+            else { try system.followMacOS(ComponentFollow(element: body["element"]?.stringValue, place: body["place"]?.stringValue, area: body["area"]?.stringValue)) }
+        case "unfollow": system.stopFollowing(body["scope"]?.stringValue ?? "")
+        case "setting": try system.makeConfigurable(body["id"]?.stringValue ?? "")
+        case "rule":
+            let kind = body["kind"]?.stringValue ?? ""
+            if kind == "note" {
+                system.rules.append(ComponentRule(id: "note-\(system.rules.filter { $0.kind == "note" }.count + 1)", kind: "note", value: "text",
+                                                  text: body["text"]?.stringValue ?? "", status: .agreed))
+            } else if let info = ComponentRuleKind.named(kind), let value = body["value"]?.stringValue {
+                system.rules.removeAll { $0.kind == kind }
+                system.rules.append(ComponentRule(id: kind, kind: kind, value: value, text: info.says(value), status: .agreed))
+            }
+        case "removeRule": system.rules.removeAll { $0.id == body["id"]?.stringValue }
         default: break
         }
+
         return system
     }
 }
@@ -67,6 +89,7 @@ enum DesignerMode: String, CaseIterable, Identifiable {
 enum DesignerSelection: Hashable {
     case foundations(ComponentFoundation.Kind)
     case element(String)
+    case rules
 }
 
 @MainActor
@@ -135,7 +158,21 @@ final class DesignerModel: ObservableObject {
 
     // MARK: Changing (always through the source: Hatch writes)
 
-    func answer(_ q: ComponentQuestion, option: Int) { run("answer", ["question": .string(q.id), "option": .int(option)]) }
+    func answer(_ q: ComponentQuestion, option: Int, setting: Bool = false) {
+        run("answer", ["question": .string(q.id), "option": .int(option), "setting": .bool(setting)])
+    }
+    /// Follow macOS (NF3): one role, or every role of an element in a place.
+    func follow(_ role: ComponentRole) { run("follow", ["role": .string(role.id)]) }
+    func follow(element: String, place: String) { run("follow", ["element": .string(element), "place": .string(place)]) }
+    func unfollow(_ scope: ComponentFollow) { run("unfollow", ["scope": .string(scope.id)]) }
+    /// "Make it a setting" (NF5) for a role or a rule; Hatch drafts the ticket.
+    func makeSetting(_ id: String) { run("setting", ["id": .string(id)]) }
+    func setRule(_ kind: String, _ value: String) { run("rule", ["kind": .string(kind), "value": .string(value)]) }
+    func addNote(_ text: String) { run("rule", ["kind": "note", "text": .string(text)]) }
+    func removeRule(_ id: String) { run("removeRule", ["id": .string(id)]) }
+
+    /// Native advice (NF1) for a role.
+    func advice(for role: ComponentRole) -> [ComponentAdvice] { system.advice().filter { $0.role == role.id } }
     func agree(_ role: ComponentRole) { run("agree", ["role": .string(role.id)]) }
     func agreeAll() { run("agree", [:]) }
     func discard(_ role: ComponentRole) { run("discard", ["role": .string(role.id)]) }

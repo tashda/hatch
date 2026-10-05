@@ -39,6 +39,16 @@ struct PlaceFrame: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(place.title).font(.headline)
                 Text(cells.map(\.id).joined(separator: " · ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Spacer()
+                if cells.allSatisfy(\.followsMacOS) {
+                    Text("follows macOS").font(.caption2).foregroundStyle(.secondary)
+                } else {
+                    Menu {
+                        Button("Follow macOS for \((ComponentElement.named(element)?.plural ?? element).lowercased()) here") { model.follow(element: element, place: place.id) }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                    .menuStyle(.button).buttonStyle(.borderless).menuIndicator(.hidden).fixedSize()
+                    .help("Let macOS decide this place")
+                }
             }
             Text(place.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             mock
