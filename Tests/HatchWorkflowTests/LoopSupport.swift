@@ -50,11 +50,11 @@ class LoopCase: XCTestCase {
         return path
     }
 
-    func makeLauncher(program: String) {
+    func makeLauncher(program: String, maxSeconds: TimeInterval? = nil) {
         var settings = AgentSettings.initial(detect: false)
         settings.providers[0].executable = program
         let frozen = settings
-        launcher = AgentLauncher(store: world.store, configuration: .init(home: world.home, hatchPath: hatch, context: AgentContext()),
+        launcher = AgentLauncher(store: world.store, configuration: .init(home: world.home, hatchPath: hatch, context: AgentContext(), maxSeconds: maxSeconds),
                                  settings: { frozen }, onChange: {})
     }
 

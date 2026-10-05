@@ -116,8 +116,10 @@ public final class AgentLauncher: @unchecked Sendable {
         /// The `hatch` command agents call. Without it no agent is started.
         public var hatchPath: String?
         public var context: AgentContext
-        public init(home: URL, hatchPath: String?, context: AgentContext) {
-            self.home = home; self.hatchPath = hatchPath; self.context = context
+        /// Replaces the role's time limit (tests only).
+        public var maxSeconds: TimeInterval?
+        public init(home: URL, hatchPath: String?, context: AgentContext, maxSeconds: TimeInterval? = nil) {
+            self.home = home; self.hatchPath = hatchPath; self.context = context; self.maxSeconds = maxSeconds
         }
     }
 
@@ -136,6 +138,10 @@ public final class AgentLauncher: @unchecked Sendable {
 
     /// Paused: no new agent starts; running ones finish.
     public static let pausedSetting = "agents_paused"
+    /// The most tokens one run may use, input and output, not counting the cache the agent re-reads. A runaway agent is stopped
+    /// at this and its ticket is Blocked; 0 means no limit. The default is about fifty times what a small change takes.
+    public static let tokenBudgetSetting = "agent_token_budget"
+    public static let defaultTokenBudget = 1_500_000
     /// How many times a run that stopped early is started again before the owner is asked.
     public static let retries = 1
 
@@ -149,6 +155,8 @@ public final class AgentLauncher: @unchecked Sendable {
     private var processes: [Int: Process] = [:]
     private var runs: [Int: AgentRunInfo] = [:]
     private var stopping: Set<Int> = []
+    /// Why a run was stopped by Hatch (budget, time), as opposed to by the owner.
+    private var limitStops: [Int: String] = [:]
     private var lastError: [Int: String] = [:]
 
     public init(store: HatchStore, configuration: Configuration, settings: @escaping @Sendable () -> AgentSettings,
@@ -163,6 +171,9 @@ public final class AgentLauncher: @unchecked Sendable {
 
     /// Why the last start of a ticket's agent failed, if it did.
     public func problem(ticketId: Int) -> String? { lock.withLock { lastError[ticketId] } }
+
+    public var tokenBudget: Int { ((try? store.setting(Self.tokenBudgetSetting)) ?? nil).flatMap(Int.init) ?? Self.defaultTokenBudget }
+    public func setTokenBudget(_ tokens: Int) throws { try store.setSetting(Self.tokenBudgetSetting, String(tokens)) }
 
     public var isPaused: Bool { ((try? store.setting(Self.pausedSetting)) ?? nil) == "1" }
 
@@ -207,6 +218,28 @@ public final class AgentLauncher: @unchecked Sendable {
             try? store.release(ticketId, reason: "could not start: \(error)")
             throw error
         }
+    }
+
+    /// Stops a run that has used more tokens than the budget allows.
+    private func enforceBudget(_ ticketId: Int) {
+        let budget = tokenBudget
+        guard budget > 0 else { return }
+        let used = lock.withLock { runs[ticketId].map { $0.tokensIn + $0.tokensOut } ?? 0 }
+        if used > budget {
+            stopForLimit(ticketId, "It used \(used.formatted()) tokens, over the limit of \(budget.formatted()) a run (Settings, Agents). Nothing is lost: its work is in the workspace.")
+        }
+    }
+
+    /// Stops a run for Hatch's own reason. The ticket is Blocked with the reason and is not started again by itself.
+    private func stopForLimit(_ ticketId: Int, _ reason: String) {
+        let process = lock.withLock { () -> Process? in
+            guard limitStops[ticketId] == nil else { return nil }
+            limitStops[ticketId] = reason
+            stopping.insert(ticketId)
+            return processes[ticketId]
+        }
+        process?.interrupt()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5) { if process?.isRunning == true { process?.terminate() } }
     }
 
     /// Stops a running agent. The ticket waits, blocked, until the owner resumes it.
@@ -348,6 +381,7 @@ public final class AgentLauncher: @unchecked Sendable {
                     else { r.tokensIn += e.tokensIn ?? 0; r.tokensOut += e.tokensOut ?? 0 }
                     self.runs[plan.ticketId] = r
                 }
+                self.enforceBudget(plan.ticketId)
                 self.onChange()
             }
         }
@@ -358,16 +392,22 @@ public final class AgentLauncher: @unchecked Sendable {
         }
         lock.withLock { runs[plan.ticketId] = info; processes[plan.ticketId] = p; lastError[plan.ticketId] = nil }
         try p.run()
+        // A run that goes on past the role's time limit is stopped the same way as one that spends too much.
+        let limit = lock.withLock { config.maxSeconds } ?? plan.role.timeout
+        DispatchQueue.global().asyncAfter(deadline: .now() + limit) { [weak self, weak p] in
+            guard let self, let p, p.isRunning, self.lock.withLock({ self.processes[plan.ticketId] === p }) else { return }
+            self.stopForLimit(plan.ticketId, "It ran for more than \(Int(limit / 60)) minutes without handing in.")
+        }
         input.fileHandleForWriting.write(Data(plan.brief.utf8))
         try? input.fileHandleForWriting.close()
         onChange()
     }
 
     private func finished(_ plan: Plan, attempt: Int, exitCode: Int32) {
-        let (info, stopped) = lock.withLock { () -> (AgentRunInfo?, Bool) in
+        let (info, stopped, limitReason) = lock.withLock { () -> (AgentRunInfo?, Bool, String?) in
             let r = runs.removeValue(forKey: plan.ticketId)
             processes[plan.ticketId] = nil
-            return (r, stopping.remove(plan.ticketId) != nil)
+            return (r, stopping.remove(plan.ticketId) != nil, limitStops.removeValue(forKey: plan.ticketId))
         }
         let now = (try? store.ticket(id: plan.ticketId))?.status
         let done = now.map { Self.handedIn(statusAtStart: plan.statusAtStart, now: $0) } ?? true
@@ -377,6 +417,12 @@ public final class AgentLauncher: @unchecked Sendable {
         defer { onChange() }
         if done { return }
         let tail = Self.tail(of: plan.logPath)
+        if let limitReason {
+            try? store.release(plan.ticketId, reason: "stopped at a limit")
+            _ = try? store.addNote(plan.ticketId, kind: .system, author: "hatch", body: "Hatch stopped the agent. \(limitReason)\n\n\(tail)")
+            _ = try? store.move(plan.ticketId, to: .blocked, actor: .hatch, reason: "Stopped at a limit: \(limitReason) Resume to start the agent again.")
+            return
+        }
         if stopped {
             try? store.release(plan.ticketId, reason: "stopped by the owner")
             _ = try? store.move(plan.ticketId, to: .blocked, actor: .hatch, reason: "Stopped by you. Resume to start the agent again.")

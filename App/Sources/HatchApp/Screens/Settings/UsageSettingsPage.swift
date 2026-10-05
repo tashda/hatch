@@ -10,6 +10,7 @@ struct UsageSettingsPage: View {
     @State private var provider = ""
     @State private var runs: [RunRecord] = []
     @State private var limits = UsageLimits()
+    @State private var runBudget = AgentLauncher.defaultTokenBudget
 
     private var chosen: String? { provider.isEmpty ? nil : provider }
     private var fortnight: UsageSummary { UsageSummary(runs: runs, provider: chosen) }
@@ -75,10 +76,15 @@ struct UsageSettingsPage: View {
                     Divider()
                     ForEach(Self.amounts, id: \.self) { Text("\(hxTokens($0)) tokens a day").tag($0) }
                 }
+                Picker("Stop one run above", selection: runBudgetBinding) {
+                    Text("Never").tag(0)
+                    Divider()
+                    ForEach(Self.runAmounts, id: \.self) { Text("\(hxTokens($0)) tokens").tag($0) }
+                }
             } header: {
                 Text("Limits")
             } footer: {
-                Text("Usage is counted from what each program reports. Plans have their own limits; Hatch only warns, or stops starting new work until tomorrow.")
+                Text("Usage is counted from what each program reports. Plans have their own limits; Hatch only warns, or stops starting new work until tomorrow. A coding agent that goes past the limit for one run is stopped and its ticket is Blocked; its work stays in the workspace.")
             }
         }
         .formStyle(.grouped)
@@ -88,6 +94,7 @@ struct UsageSettingsPage: View {
     }
 
     static let amounts = [500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000, 20_000_000]
+    static let runAmounts = [500_000, 1_000_000, 1_500_000, 3_000_000, 5_000_000]
 
     /// Fourteen bars, today last. Stacked by provider, or by model when one provider is chosen.
     private var chart: some View {
@@ -126,6 +133,13 @@ struct UsageSettingsPage: View {
         AgentRole(rawValue: key)?.taskTitle ?? "Other"
     }
 
+    private var runBudgetBinding: Binding<Int> {
+        Binding(get: { runBudget }, set: { value in
+            runBudget = value
+            state.perform("Save the limit") { try state.store.setSetting(AgentLauncher.tokenBudgetSetting, String(value)) }
+        })
+    }
+
     private func limitBinding(_ path: WritableKeyPath<UsageLimits, Int>, _ setting: String) -> Binding<Int> {
         Binding(get: { limits[keyPath: path] }, set: { value in
             limits[keyPath: path] = value
@@ -138,6 +152,7 @@ struct UsageSettingsPage: View {
         let start = Calendar.current.date(byAdding: .day, value: -13, to: Calendar.current.startOfDay(for: Date()))!
         runs = (try? state.store.runRecords(since: start)) ?? []
         limits = UsageLimits.load(from: state.store)
+        runBudget = Int((try? state.store.setting(AgentLauncher.tokenBudgetSetting)) ?? nil ?? "") ?? AgentLauncher.defaultTokenBudget
         if !provider.isEmpty && !providers.contains(provider) { provider = "" }
     }
 }
