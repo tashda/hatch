@@ -326,6 +326,41 @@ public extension ComponentSystem {
         }
     }
 
+    /// "Like this, and make it a setting" (NF5): the role or rule keeps its current choice as the default and becomes
+    /// configurable; the check accepts other looks until the app has the setting. Returns the draft ticket that asks for it.
+    @discardableResult
+    mutating func makeConfigurable(_ id: String, alternatives: [String] = []) throws -> ComponentsSetup.Draft {
+        if let i = roles.firstIndex(where: { $0.id == id }) {
+            roles[i].configurable = true
+            let r = roles[i]
+            let others = alternatives.isEmpty ? "" : "\n\nThe other looks people may pick:\n" + alternatives.map { "- \($0)" }.joined(separator: "\n")
+            return ComponentsSetup.Draft(type: .tweak, title: "Make \(r.title.lowercased()) a setting",
+                body: """
+                    \(name)'s design system keeps \(r.id) (\(r.lookSummary)) as the default and wants it to be a setting people can change.
+
+                    Add a setting in the app's Settings for how \(r.title.lowercased()) look, with the current look as the default\(r.followsMacOS ? " (following macOS)" : ""). The generated `\(r.codeName)` reads the setting; screens keep using the role. Until this is built, Hatch's check accepts the other looks for \(r.id).\(others)
+
+                    """)
+        }
+        if let i = rules.firstIndex(where: { $0.id == id }) {
+            rules[i].configurable = true
+            let r = rules[i]
+            let kind = r.info
+            let values = kind?.values.filter { $0.id != "off" }.map { "- \($0.says)" }.joined(separator: "\n") ?? ""
+            return ComponentsSetup.Draft(type: .tweak, title: "Make \((kind?.title ?? r.kind).lowercased()) a setting",
+                body: """
+                    \(name)'s design system keeps the rule "\(r.text)" as the default and wants it to be a setting people can change.
+
+                    Add a setting in the app's Settings with these choices, the current one as the default:
+                    \(values)
+
+                    Until this is built, Hatch's check does not hold the app to the rule.
+
+                    """)
+        }
+        throw ComponentAnswerError.noRole(id)
+    }
+
     /// Makes a role follow macOS (NF3): its look settings go, behaviour (key, tooltip, confirmation) stays, and it is agreed.
     mutating func followMacOS(role roleId: String, decision: String? = nil) throws {
         guard let i = roles.firstIndex(where: { $0.id == roleId }), let element = ComponentElement.named(roles[i].element) else {

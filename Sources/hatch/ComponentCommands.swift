@@ -85,6 +85,13 @@ extension CoreCommands {
         var (system, notebook) = try loadSystem(c)
         let question = system.questions.first { $0.id == id }
         try system.answer(id, option: n - 1, decision: c.args.option("decision"))
+        // "Like this, and make it a setting" (NF5): a draft ticket asks for the app setting.
+        if c.args.flag("setting"), let role = question?.role {
+            let draft = try system.makeConfigurable(role, alternatives: question?.options.compactMap { $0.recipe.map(ComponentRole.summary) } ?? [])
+            let project = try c.project()
+            let t = try c.store.createTicket(projectId: project.id, type: draft.type, title: draft.title, body: draft.body, area: draft.area)
+            c.out.emit(["ticket": .string(t.displayNumber)], text: "Draft \(t.displayNumber): \(draft.title).")
+        }
         try save(system, notebook: notebook, message: "Components: \(question?.title ?? id) — \(question?.options[n - 1].title ?? "")")
         c.out.emit(["answered": .string(id), "left": .int(system.questions.count)], text: "Answered. \(system.questions.count) question\(system.questions.count == 1 ? "" : "s") left.")
     }
@@ -131,6 +138,17 @@ extension CoreCommands {
         try save(system, notebook: notebook, message: "Components: rules")
         c.out.emit(["rules": .array(system.rules.map { .string("\($0.kind)=\($0.value)") })],
                    text: system.rules.map { "  \($0.info?.title ?? $0.kind): \($0.text)" }.joined(separator: "\n"))
+    }
+
+    /// hatch components setting <role or rule>: "make it a setting" (NF5), with a draft ticket for the app setting.
+    static func componentSetting(_ c: Context) throws {
+        guard let id = c.args.pos(2) else { throw CLIError("Usage: hatch components setting <role or rule id>") }
+        var (system, notebook) = try loadSystem(c)
+        let draft = try system.makeConfigurable(id)
+        try save(system, notebook: notebook, message: "Components: \(id) becomes a setting")
+        let project = try c.project()
+        let t = try c.store.createTicket(projectId: project.id, type: draft.type, title: draft.title, body: draft.body, area: draft.area)
+        c.out.emit(["ticket": .string(t.displayNumber)], text: "\(id) is configurable. Draft \(t.displayNumber): \(draft.title).")
     }
 
     /// hatch components agree [<role>]

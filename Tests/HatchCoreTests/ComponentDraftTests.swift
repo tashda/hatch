@@ -324,6 +324,18 @@ final class ComponentRuleTests: XCTestCase {
         XCTAssertTrue(s.problems().contains { $0.contains("sometimes is not a value") })
     }
 
+    func testConfigurableRulesAndRolesAreNotHeldToIt() throws {
+        var s = ComponentTemplates.glass.system(name: "Acme")
+        try s.makeConfigurable("titleCase")
+        try s.makeConfigurable("button.inRow")
+        let inv = ComponentInventoryScanner.inventory(files: [("V.swift", source)])
+        XCTAssertFalse(ComponentRuleCheck.findings(files: [("V.swift", source)], uses: inv.uses, system: s).contains { $0.role == "titleCase" })
+        let use = ComponentInventory.Use(element: "button", place: "listRow", recipe: ["style": "glass"], importance: .other, role: nil, file: "A.swift", line: 1, view: "V")
+        XCTAssertTrue(ComponentCheck.findings([use], system: s).isEmpty, "other looks are fine until the setting exists")
+        XCTAssertTrue(s.readme().contains("Will become a setting"))
+        XCTAssertThrowsError(try s.makeConfigurable("nothing"))
+    }
+
     func testCapitalization() {
         XCTAssertNil(ComponentRuleCheck.capitalizationProblem("Open in New Window", rule: "titleCase"))
         XCTAssertNotNil(ComponentRuleCheck.capitalizationProblem("Open in new window", rule: "titleCase"))

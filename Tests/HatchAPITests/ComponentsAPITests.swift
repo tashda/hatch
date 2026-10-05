@@ -47,6 +47,20 @@ final class ComponentsAPITests: APITestCase {
         XCTAssertTrue(commits[2].contains("baseline v2"))
     }
 
+    func testLikeThisAndMakeItASetting() throws {
+        let client = StageClient(paths: paths)
+        let system = try client.changeComponents(project: "echo", action: "answer", body: ["question": "look.button.inRow", "option": 0, "setting": true])
+        XCTAssertTrue(system.role("button.inRow")!.configurable)
+        var filter = TicketFilter(); filter.projectId = projectId
+        let drafts = try store.tickets(filter).filter { $0.title.contains("a setting") }
+        XCTAssertEqual(drafts.count, 1)
+        XCTAssertEqual(drafts.first?.status, .draft)
+        XCTAssertTrue(drafts.first!.body.contains("button.inRow"))
+        _ = try client.changeComponents(project: "echo", action: "setting", body: ["id": "menuIcons"])
+        XCTAssertTrue(try ComponentSystem.load(notebook: notebook.path)!.rules.first { $0.kind == "menuIcons" }!.configurable)
+        XCTAssertTrue(commits.last!.contains("(draft "), commits.last!)
+    }
+
     func testRefusesWhatWouldBreakTheSystem() throws {
         let client = StageClient(paths: paths)
         XCTAssertThrowsError(try client.changeComponents(project: "echo", action: "look", body: ["role": "button.toolbar", "recipe": ["style": "huge"]]))

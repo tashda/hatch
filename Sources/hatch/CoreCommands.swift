@@ -71,6 +71,7 @@ enum CoreCommands {
         case "follow": try componentFollow(c); return
         case "refs": try componentRefs(c); return
         case "rule": try componentRule(c); return
+        case "setting": try componentSetting(c); return
         case "check": try componentCheck(c); return
         case "generate": try componentGenerate(c); return
         default: break

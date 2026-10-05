@@ -420,7 +420,8 @@ public final class StageServer: @unchecked Sendable {
             return o.compactMapValues(\.stringValue)
         }
         let decision = try body.optionalString("decision", max: 40)
-        let message: String
+        var message: String
+        var settingDraft: ComponentsSetup.Draft?
         do {
             switch action {
             case "answer":
@@ -428,6 +429,9 @@ public final class StageServer: @unchecked Sendable {
                 guard let option = try body.optionalInt("option") else { throw APIError(status: 400, code: "bad_request", message: "option is required.") }
                 let q = system.questions.first { $0.id == id }
                 try system.answer(id, option: option, decision: decision)
+                if body.object["setting"]?.boolValue == true, let role = q?.role {
+                    settingDraft = try system.makeConfigurable(role, alternatives: q?.options.compactMap { $0.recipe.map(ComponentRole.summary) } ?? [])
+                }
                 message = "Components: \(q?.title ?? id) — \(q.flatMap { $0.options.indices.contains(option) ? $0.options[option].title : nil } ?? "")"
             case "agree":
                 let role = try body.optionalString("role", max: 120)
@@ -451,6 +455,10 @@ public final class StageServer: @unchecked Sendable {
                     try system.followMacOS(scope)
                     message = "Components: \(scope.title) follow macOS"
                 }
+            case "setting":
+                let id = try body.string("id", max: 120)
+                settingDraft = try system.makeConfigurable(id)
+                message = "Components: \(id) becomes a setting"
             case "rule":
                 let kind = try body.string("kind", max: 60)
                 guard let info = ComponentRuleKind.named(kind) else { throw APIError(status: 400, code: "bad_request", message: "No rule kind \(kind).") }
@@ -486,6 +494,11 @@ public final class StageServer: @unchecked Sendable {
             throw APIError(status: 422, code: "invalid", message: e.description)
         }
         try system.write(notebook: folder)
+        // "Make it a setting" (NF5) drafts the ticket for the app setting, in the project the system belongs to.
+        if let draft = settingDraft, let project = try store.project(key: key) {
+            let t = try store.createTicket(projectId: project.id, type: draft.type, title: draft.title, body: draft.body, area: draft.area)
+            message += " (draft \(t.displayNumber))"
+        }
         commitNotebook?(folder, message)
         return (["system": JSONValue.parse(String(decoding: try system.encoded(), as: UTF8.self))], nil)
     }
