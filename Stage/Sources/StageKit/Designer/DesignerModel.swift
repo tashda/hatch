@@ -55,6 +55,7 @@ final class LocalComponentsSource: ComponentsSource {
                 system.rules.append(ComponentRule(id: kind, kind: kind, value: value, text: info.says(value), status: .agreed))
             }
         case "removeRule": system.rules.removeAll { $0.id == body["id"]?.stringValue }
+        case "rename": try system.rename(role ?? "", title: body["title"]?.stringValue ?? "")
         case "restore":
             if let json = body["system"]?.stringValue { system = try JSONDecoder().decode(ComponentSystem.self, from: Data(json.utf8)) }
         default: break
@@ -110,6 +111,10 @@ struct DesignerPreview: Equatable {
 
 /// What the sidebar selects.
 enum DesignerSelection: Hashable {
+    /// Every element in every place, as one drawn matrix (CD33).
+    case all
+    /// One place with every element in it (CD9).
+    case place(String)
     case foundations(ComponentFoundation.Kind)
     case element(String)
     case rules
@@ -170,6 +175,22 @@ final class DesignerModel: ObservableObject {
     // MARK: Reading
 
     var selectedElement: String? { if case .element(let e) = selection { return e }; return nil }
+    var selectedPlace: String? { if case .place(let p) = selection { return p }; return nil }
+    /// The selection draws looks on the canvas (an element, a place or all), so hard cases and roles apply.
+    var showsCanvas: Bool {
+        switch selection { case .element?, .place?, .all?: true; default: false }
+    }
+
+    /// Open questions about roles that sit in a place.
+    func questions(inPlace place: String) -> [ComponentQuestion] {
+        system.questions.filter { q in q.role.flatMap { system.role($0) }?.places.contains(place) ?? false }
+    }
+
+    /// The places any role sits in, in the catalog's order.
+    var placesUsed: [ComponentPlace] {
+        let ids = Set(system.roles.flatMap(\.places))
+        return system.allPlaces.filter { ids.contains($0.id) }
+    }
     var role: ComponentRole? { selectedRole.flatMap { system.role($0) } }
 
     /// The look a role is drawn with now: the preview, then its draft, then its look.
@@ -187,11 +208,12 @@ final class DesignerModel: ObservableObject {
         system.elementsUsed.flatMap { questions(for: $0) }
     }
 
-    /// Opens a role on its own level, closing any preview of another role.
+    /// Opens a role on its own level, closing any preview of another role. From a place or All it stays there, so
+    /// going back returns to where it was opened (CD9).
     func open(_ roleId: String) {
         if preview?.role != roleId { preview = nil }
         selectedRole = roleId
-        if let r = system.role(roleId), selectedElement != r.element { selection = .element(r.element) }
+        if let r = system.role(roleId), !showsCanvas || (selectedElement != nil && selectedElement != r.element) { selection = .element(r.element) }
         focused = true
     }
 
@@ -274,6 +296,8 @@ final class DesignerModel: ObservableObject {
     func makeSetting(_ id: String) { run("setting", ["id": .string(id)]) }
     /// Change… (CP3): Hatch files a Proposal for the role; the looks come back as a question.
     func change(_ role: ComponentRole, what: String) { run("change", ["role": .string(role.id), "what": .string(what)]) }
+    /// A new title for a role (CD2); the id stays.
+    func rename(_ role: ComponentRole, to title: String) { run("rename", ["role": .string(role.id), "title": .string(title)], label: "Rename \(role.title)") }
     func setRule(_ kind: String, _ value: String) { run("rule", ["kind": .string(kind), "value": .string(value)]) }
     func addNote(_ text: String) { run("rule", ["kind": "note", "text": .string(text)]) }
     func removeRule(_ id: String) { run("removeRule", ["id": .string(id)]) }

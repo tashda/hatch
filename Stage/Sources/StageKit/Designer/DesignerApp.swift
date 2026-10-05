@@ -174,6 +174,17 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                     model.back()
                 }
             }
+            // The whole app and one place (CD9, CD33).
+            model.selection = .all
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            save(window, "all-\(dark ? "dark" : "light")", dir)
+            for mode in DesignerMode.allCases {
+                model.selection = .place("inspector")
+                model.mode = mode
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                save(window, "place-inspector-\(mode.rawValue)-\(dark ? "dark" : "light")", dir)
+            }
+            model.mode = .inPlace
             model.selection = .rules
             try? await Task.sleep(nanoseconds: 450_000_000)
             save(window, "rules-\(dark ? "dark" : "light")", dir)

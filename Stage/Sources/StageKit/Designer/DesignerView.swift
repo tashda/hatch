@@ -21,7 +21,7 @@ struct DesignerView: View {
                         .padding(8).frame(maxWidth: .infinity, alignment: .leading)
                         .background(.yellow.opacity(0.15))
                 }
-                if model.selectedElement != nil {
+                if model.showsCanvas {
                     HardCasesBar(model: model)
                     Divider()
                 }
@@ -40,9 +40,21 @@ struct DesignerView: View {
     }
 
     @ViewBuilder private var inspector: some View {
+        if model.focused, model.showsCanvas, let role = model.role {
+            RoleInspector(model: model, role: role)
+        } else {
+            selectionInspector
+        }
+    }
+
+    @ViewBuilder private var selectionInspector: some View {
         switch model.selection {
         case .element(let e)?:
-            if model.focused, let role = model.role { RoleInspector(model: model, role: role) } else { ElementInspector(model: model, element: e) }
+            ElementInspector(model: model, element: e)
+        case .place(let p)?:
+            PlaceInspector(model: model, place: p)
+        case .all?:
+            AllInspector(model: model)
         case .rules?:
             ContentUnavailableView("Rules", systemImage: "checklist", description: Text("Choose a value beside a rule; Hatch checks the ones marked."))
         case .foundations(let kind)?:
@@ -55,6 +67,8 @@ struct DesignerView: View {
     private var title: String {
         switch model.selection {
         case .element(let e)?: ComponentElement.named(e)?.plural ?? e
+        case .place(let p)?: model.system.place(p)?.title ?? p
+        case .all?: "All Elements"
         case .foundations(let kind)?: kind.title
         case .rules?: "Rules"
         case nil: model.appName
@@ -74,7 +88,7 @@ struct DesignerView: View {
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         // The view switch only where it means something (B5, CD10): an element, not a role, rules or foundations.
-        if model.selectedElement != nil && !model.focused {
+        if (model.selectedElement != nil || model.selectedPlace != nil) && !model.focused {
             ToolbarItem(placement: .principal) {
                 Picker("View", selection: $model.mode) {
                     ForEach(DesignerMode.allCases) { Text($0.title).tag($0) }
@@ -116,19 +130,30 @@ struct DesignerView: View {
     }
 
     @ViewBuilder private var main: some View {
+        if model.focused, model.showsCanvas, let role = model.role {
+            RoleView(model: model, role: role)
+        } else {
+            canvas
+        }
+    }
+
+    @ViewBuilder private var canvas: some View {
         switch model.selection {
         case .foundations(let kind)?:
             FoundationsView(model: model, kind: kind)
         case .rules?:
             RulesView(model: model)
+        case .all?:
+            SystemMatrixView(model: model)
+        case .place(let p)?:
+            switch model.mode {
+            case .inPlace: PlaceOverview(model: model, place: p)
+            case .matrix: SystemMatrixView(model: model, only: p)
+            }
         case .element(let e)?:
-            if model.focused, let role = model.role, role.element == e {
-                RoleView(model: model, role: role)
-            } else {
-                switch model.mode {
-                case .inPlace: RoleInPlaceView(model: model, element: e)
-                case .matrix: RoleMatrixView(model: model, element: e)
-                }
+            switch model.mode {
+            case .inPlace: RoleInPlaceView(model: model, element: e)
+            case .matrix: RoleMatrixView(model: model, element: e)
             }
         case nil:
             ContentUnavailableView("Choose an element", systemImage: "square.grid.2x2", description: Text("Pick an element on the left to see its roles in their places."))
@@ -196,26 +221,50 @@ struct Appearances<Content: View>: View {
 
 struct DesignerSidebar: View {
     @ObservedObject var model: DesignerModel
+    @State private var filter = ""
+
+    /// Elements by kind (CD11), so the list stays readable as the catalog grows.
+    static let groups: [(title: String, elements: [String])] = [
+        ("Actions", ["button", "menu"]), ("Choices", ["picker", "toggle", "switcher"]), ("Text", ["field"]),
+        ("Lists and Containers", ["row", "card", "sheet"]), ("Feedback", ["badge", "toast", "emptyState"]),
+    ]
 
     var body: some View {
         List(selection: $model.selection) {
-            Section("Elements") {
-                ForEach(model.system.elementsUsed, id: \.self) { e in
-                    let open = model.openCount(e)
-                    HStack {
-                        Text(ComponentElement.named(e)?.plural ?? e)
-                        Spacer()
-                        // Only what differs is marked (CD41): a check when every role is agreed.
-                        if open == 0 && model.state(of: e) == .agreed { Image(systemName: "checkmark").font(.caption).foregroundStyle(.secondary) }
+            if !filter.isEmpty {
+                Section("Roles") {
+                    ForEach(matches) { r in
+                        Button { model.open(r.id) } label: {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(r.title)
+                                Text(ComponentElement.named(r.element)?.plural ?? r.element).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .badge(open)
-                    .tag(DesignerSelection.element(e))
                 }
             }
-            Section("Rules") {
-                Label("Rules", systemImage: "checklist").badge(model.system.rules.filter { !$0.isOff }.count).tag(DesignerSelection.rules)
+            Label("All Elements", systemImage: "square.grid.3x3").badge(model.system.questions.count).tag(DesignerSelection.all)
+            ForEach(Self.groups, id: \.title) { group in
+                let used = group.elements.filter { model.system.elementsUsed.contains($0) && shown(ComponentElement.named($0)?.plural ?? $0) }
+                if !used.isEmpty {
+                    Section(group.title) {
+                        ForEach(used, id: \.self) { e in element(e) }
+                    }
+                }
             }
-            Section("Foundations") {
+            let others = model.system.elementsUsed.filter { e in !Self.groups.contains { $0.elements.contains(e) } && shown(e) }
+            if !others.isEmpty { Section("Other") { ForEach(others, id: \.self) { e in element(e) } } }
+            let places = model.placesUsed.filter { shown($0.title) }
+            if !places.isEmpty {
+                Section("Places") {
+                    ForEach(places) { p in
+                        Text(p.title).badge(model.questions(inPlace: p.id).count).tag(DesignerSelection.place(p.id)).help(p.summary)
+                    }
+                }
+            }
+            Section("System") {
+                Label("Rules", systemImage: "checklist").badge(model.system.rules.filter { !$0.isOff }.count).tag(DesignerSelection.rules)
                 ForEach(ComponentFoundation.Kind.allCases, id: \.self) { kind in
                     let count = model.system.foundations.filter { $0.kind == kind }.count
                     if count > 0 {
@@ -224,10 +273,32 @@ struct DesignerSidebar: View {
                 }
             }
         }
+        .searchable(text: $filter, placement: .sidebar, prompt: "Filter")
         .onChange(of: model.selection) { _, new in
+            // Opening a role in another element changes the selection too; that keeps the role open.
+            if case .element(let e)? = new, model.focused, model.role?.element == e { return }
             model.back()
             if case .element(let e)? = new, model.role?.element != e { model.selectedRole = model.system.roles(of: e).first?.id }
         }
+    }
+
+    private func element(_ e: String) -> some View {
+        let open = model.openCount(e)
+        return HStack {
+            Text(ComponentElement.named(e)?.plural ?? e)
+            Spacer()
+            // Only what differs is marked (CD41): a check when every role is agreed.
+            if open == 0 && model.state(of: e) == .agreed { Image(systemName: "checkmark").font(.caption).foregroundStyle(.secondary) }
+        }
+        .badge(open)
+        .tag(DesignerSelection.element(e))
+    }
+
+    private func shown(_ name: String) -> Bool { filter.isEmpty || name.localizedCaseInsensitiveContains(filter) }
+
+    /// Roles whose title or id matches the filter (⌘F).
+    private var matches: [ComponentRole] {
+        model.system.roles.filter { $0.title.localizedCaseInsensitiveContains(filter) || $0.id.localizedCaseInsensitiveContains(filter) }
     }
 
     static func symbol(_ kind: ComponentFoundation.Kind) -> String {
@@ -263,10 +334,19 @@ struct RoleView: View {
     @ObservedObject var model: DesignerModel
     let role: ComponentRole
 
+    /// Where Esc goes back to: the element, the place or All it was opened from.
+    private var backTitle: String {
+        switch model.selection {
+        case .place(let p)?: model.system.place(p)?.title ?? p
+        case .all?: "All Elements"
+        default: ComponentElement.named(role.element)?.plural ?? role.element
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .firstTextBaseline) {
-                Button { model.back() } label: { Label(ComponentElement.named(role.element)?.plural ?? role.element, systemImage: "chevron.left") }
+                Button { model.back() } label: { Label(backTitle, systemImage: "chevron.left") }
                     .buttonStyle(.link)
                     .help("Back to every place (Esc)")
                 Text(role.title).font(.title3.weight(.semibold))
@@ -320,46 +400,225 @@ struct RoleView: View {
     }
 }
 
-// MARK: - Matrix
+// MARK: - Matrix (CD32, CD33)
 
+/// One cell of a drawn matrix: the role's control and its name. Pointing at it lights up every cell of the same role.
+struct MatrixCell: View {
+    @ObservedObject var model: DesignerModel
+    let role: ComponentRole
+    let place: String
+    @Binding var hovered: String?
+
+    var body: some View {
+        Button { model.open(role.id) } label: {
+            VStack(spacing: 5) {
+                RecipeControl(element: role.element, recipe: model.look(of: role), system: model.system, importance: role.importance,
+                              sample: SampleWords.content(role.importance, place: place, base: model.sample))
+                    .allowsHitTesting(false)
+                    .frame(minHeight: 28)
+                HStack(spacing: 4) {
+                    if model.question(for: role) != nil { Circle().fill(.orange).frame(width: 6, height: 6) }
+                    Text(role.title).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, minHeight: 64)
+            .background(.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(hovered == role.id ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: hovered == role.id ? 2 : 0.5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 ? role.id : (hovered == role.id ? nil : hovered) }
+        .help("\(role.title): \(role.use)")
+    }
+}
+
+/// An empty cell: nothing decided yet; the first ticket that needs it asks.
+struct EmptyCell: View {
+    var body: some View {
+        Text("Not decided").font(.caption2).foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity, minHeight: 64)
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(style: StrokeStyle(lineWidth: 0.5, dash: [4])).foregroundStyle(.tertiary))
+            .help("Not decided yet: the first ticket that needs it asks")
+    }
+}
+
+/// An element's matrix: places down, importance across, each cell drawn. A column with more than two looks is marked.
 struct RoleMatrixView: View {
     @ObservedObject var model: DesignerModel
     let element: String
+    @State private var hovered: String?
 
     var body: some View {
         let m = model.system.matrix(element: element)
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Which role where: places down, importance across. An empty cell is not decided yet; the first ticket that needs it asks.")
-                .font(.callout).foregroundStyle(.secondary)
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                GridRow {
-                    Text("Place").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach(m.importances, id: \.self) { Text($0.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary) }
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+            GridRow {
+                Text("")
+                ForEach(m.importances, id: \.self) { i in
+                    let looks = Set(model.system.roles(of: element).filter { $0.importance == i }.map { model.look(of: $0) }).count
+                    HStack(spacing: 6) {
+                        Text(i.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        if looks > 2 { Text("\(looks) looks").font(.caption2.weight(.semibold)).foregroundStyle(.orange).help("\(looks) different looks for \(i.title.lowercased()) \((ComponentElement.named(element)?.plural ?? element).lowercased())") }
+                    }
                 }
-                Divider()
-                ForEach(Array(m.places.enumerated()), id: \.offset) { row, place in
-                    GridRow {
-                        Text(place.title)
-                        ForEach(Array(m.cells[row].enumerated()), id: \.offset) { _, role in
-                            if let role {
-                                Button { model.open(role.id) } label: {
-                                    VStack(spacing: 4) {
-                                        RecipeControl(element: role.element, recipe: model.look(of: role), system: model.system, importance: role.importance,
-                                                      sample: SampleWords.content(role.importance, place: place.id, base: model.sample))
-                                            .allowsHitTesting(false)
-                                        Text(role.title).font(.caption2).foregroundStyle(.secondary)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .help("Open \(role.title)")
-                            } else {
-                                Text("not decided").font(.caption).foregroundStyle(.tertiary)
-                            }
-                        }
+            }
+            ForEach(Array(m.places.enumerated()), id: \.offset) { row, place in
+                GridRow {
+                    Text(place.title).font(.callout).frame(width: 110, alignment: .leading)
+                    ForEach(Array(m.cells[row].enumerated()), id: \.offset) { _, role in
+                        if let role { MatrixCell(model: model, role: role, place: place.id, hovered: $hovered) } else { EmptyCell() }
                     }
                 }
             }
         }
+    }
+}
+
+/// The whole app at a glance (CD33): places down, elements across, each cell the element's most important role there.
+/// With `only`, one place: importance down, elements across.
+struct SystemMatrixView: View {
+    @ObservedObject var model: DesignerModel
+    var only: String? = nil
+    @State private var hovered: String?
+
+    private var elements: [String] {
+        let order = DesignerSidebar.groups.flatMap(\.elements)
+        return model.system.elementsUsed.filter { e in only.map { p in model.system.roles(of: e).contains { $0.places.contains(p) } } ?? true }
+            .sorted { (order.firstIndex(of: $0) ?? 99) < (order.firstIndex(of: $1) ?? 99) }
+    }
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+                GridRow {
+                    Text("")
+                    ForEach(elements, id: \.self) { e in
+                        Text(ComponentElement.named(e)?.plural ?? e).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                }
+                if let only {
+                    ForEach(ComponentRole.Importance.allCases, id: \.self) { i in
+                        if elements.contains(where: { model.system.role(element: $0, place: only, importance: i) != nil }) {
+                            GridRow {
+                                Text(i.title).font(.callout).frame(width: 100, alignment: .leading)
+                                ForEach(elements, id: \.self) { e in cell(model.system.role(element: e, place: only, importance: i), only) }
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(model.placesUsed) { place in
+                        GridRow {
+                            Text(place.title).font(.callout).frame(width: 100, alignment: .leading).help(place.summary)
+                            ForEach(elements, id: \.self) { e in cell(main(e, place.id), place.id) }
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 8)
+        }
+    }
+
+    /// The element's role in a place that matters most: the main action before the others.
+    private func main(_ element: String, _ place: String) -> ComponentRole? {
+        ComponentRole.Importance.allCases.lazy.compactMap { model.system.role(element: element, place: place, importance: $0) }.first
+    }
+
+    @ViewBuilder private func cell(_ role: ComponentRole?, _ place: String) -> some View {
+        if let role { MatrixCell(model: model, role: role, place: place, hovered: $hovered).frame(minWidth: 120) } else { Color.clear.frame(minWidth: 120, minHeight: 64) }
+    }
+}
+
+// MARK: - A place (CD9)
+
+/// Every element in one place, each drawn as it sits there.
+struct PlaceOverview: View {
+    @ObservedObject var model: DesignerModel
+    let place: String
+
+    var body: some View {
+        let p = model.system.place(place) ?? ComponentPlace(place, place, "")
+        let elements = DesignerSidebar.groups.flatMap(\.elements).filter { e in model.system.roles(of: e).contains { $0.places.contains(place) } }
+        VStack(alignment: .leading, spacing: 14) {
+            Text(p.summary).foregroundStyle(.secondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: model.appearance == .both ? 560 : 340), spacing: 24, alignment: .top)], alignment: .leading, spacing: 28) {
+                ForEach(elements, id: \.self) { e in
+                    PlaceFrame(place: p, element: e, model: model, title: ComponentElement.named(e)?.plural ?? e)
+                }
+            }
+        }
+    }
+}
+
+struct PlaceInspector: View {
+    @ObservedObject var model: DesignerModel
+    let place: String
+
+    var body: some View {
+        let p = model.system.place(place) ?? ComponentPlace(place, place, "")
+        let roles = model.system.roles.filter { $0.places.contains(place) }
+        let elements = Array(Set(roles.map(\.element))).sorted()
+        ScrollView { VStack(alignment: .leading, spacing: 16) {
+            InspectorSection {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(p.title).font(.title3.weight(.semibold))
+                    Text(p.summary).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            InspectorSection(title: "Roles Here") {
+                ForEach(roles) { r in
+                    Button { model.open(r.id) } label: {
+                        HStack {
+                            Text(r.title)
+                            Spacer()
+                            Text(ComponentElement.named(r.element)?.title ?? r.element).font(.caption).foregroundStyle(.secondary)
+                            if model.question(for: r) != nil { Circle().fill(.orange).frame(width: 6, height: 6) }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            InspectorSection(title: "For the Whole Place", footer: "Roles that also sit in other places follow everywhere they sit.") {
+                ForEach(elements, id: \.self) { e in
+                    let all = roles.filter { $0.element == e }.allSatisfy(\.followsMacOS)
+                    Button("Follow macOS for \((ComponentElement.named(e)?.plural ?? e).lowercased()) here") { model.follow(element: e, place: place) }
+                        .disabled(all)
+                }
+            }
+        }
+        .padding(14) }
+    }
+}
+
+struct AllInspector: View {
+    @ObservedObject var model: DesignerModel
+
+    var body: some View {
+        let c = model.system.counts
+        ScrollView { VStack(alignment: .leading, spacing: 16) {
+            InspectorSection {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(model.appName).font(.title3.weight(.semibold))
+                    Text("Baseline v\(model.system.version) · \(model.system.roles.count) roles").foregroundStyle(.secondary)
+                    Text("\(c.agreed) agreed · \(c.provisional) provisional" + (c.inRedesign > 0 ? " · \(c.inRedesign) in redesign" : "")).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            InspectorSection(title: "To Decide") {
+                if model.system.questions.isEmpty { Text("Nothing waits.").foregroundStyle(.secondary) }
+                ForEach(model.system.elementsUsed.filter { model.openCount($0) > 0 }, id: \.self) { e in
+                    Button { model.selection = .element(e) } label: {
+                        HStack { Text(ComponentElement.named(e)?.plural ?? e); Spacer(); Text("\(model.openCount(e))").monospacedDigit().foregroundStyle(.secondary) }
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                if !model.system.questions.isEmpty { Button("Start with the First") { model.nextQuestion() } }
+            }
+            Text("Each cell is an element's most important role in a place. Read across a row to see if a place holds together; point at a cell to see where else its role sits.")
+                .font(.callout).foregroundStyle(.secondary).padding(.horizontal, 4)
+        }
+        .padding(14) }
     }
 }
 
@@ -389,14 +648,27 @@ struct RoleInspector: View {
     let role: ComponentRole
     @State private var asking = false
     @State private var what = ""
+    @State private var renaming = false
+    @State private var newTitle = ""
 
     private var element: ComponentElement? { ComponentElement.named(role.element) }
 
     var body: some View {
         ScrollView { VStack(alignment: .leading, spacing: 16) {
+            if let suggestion = model.system.suggestedTitle(role.id) {
+                InspectorSection(footer: "Made-up roles were named after their places. A name by its job is easier to read; the code name stays.") {
+                    HStack {
+                        Text("Rename to “\(suggestion)”?").font(.callout)
+                        Spacer()
+                        Button("Rename") { model.rename(role, to: suggestion) }
+                    }
+                }
+            }
             InspectorSection {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(role.title).font(.title3.weight(.semibold))
+                        .onTapGesture(count: 2) { newTitle = role.title; renaming = true }
+                        .help("Double-click to rename")
                     Text(statusLine).font(.callout).foregroundStyle(.secondary)
                     Text(role.places.map { model.system.place($0)?.title ?? $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                 }
@@ -444,6 +716,20 @@ struct RoleInspector: View {
         }
         .padding(14) }
         .popover(isPresented: $asking) { ask }
+        .popover(isPresented: $renaming) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Rename \(role.title)").font(.headline)
+                TextField("Title", text: $newTitle).frame(width: 260)
+                Text("The code name \(role.codeName) stays.").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Spacer()
+                    Button("Rename") { model.rename(role, to: newTitle); renaming = false }
+                        .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                        .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .padding(14)
+        }
     }
 
     private var statusLine: String {
@@ -485,6 +771,7 @@ struct RoleInspector: View {
                 if !role.followsMacOS {
                     Button("Follow macOS") { model.tryLook(DesignerPreview(role: role.id, recipe: behaviour, follow: true, label: "Follow macOS")) }
                 }
+                Button("Rename…") { newTitle = role.title; renaming = true }
                 if !model.source.isLocal { Button("Ask an Agent for New Looks…") { asking = true } }
                 Divider()
                 let advice = ComponentWords.settingAdvice(element: role.element)

@@ -501,6 +501,10 @@ public final class StageServer: @unchecked Sendable {
                 let role = try body.string("role", max: 120)
                 try system.addVariant(to: role, id: try body.string("id", max: 60), use: try body.string("use", max: 300), recipe: recipe())
                 message = "Components: variant of \(role)"
+            case "rename":
+                let role = try body.string("role", max: 120)
+                try system.rename(role, title: try body.string("title", max: 80))
+                message = "Components: rename \(role)"
             case "restore":
                 // Undo in the Designer (CD23): the system as it was before the last kept change, checked like any other.
                 let restored = try JSONDecoder().decode(ComponentSystem.self, from: Data(try body.string("system", max: 4_000_000).utf8))

@@ -144,6 +144,18 @@ final class ComponentDraftTests: XCTestCase {
         XCTAssertTrue(main.reason.contains("against Apple's guidance"), main.reason)
     }
 
+    /// CD2: a role named after its places gets a job name to rename to; the id stays.
+    func testRenameKeepsTheId() throws {
+        var s = ComponentTemplates.glass.system(name: "Acme")
+        let i = s.roles.firstIndex { $0.id == "button.inRow" }!
+        s.roles[i].title = "Button (other, list row, card)"
+        XCTAssertEqual(s.suggestedTitle("button.inRow"), "Other action in a row")
+        try s.rename("button.inRow", title: "Row action")
+        XCTAssertEqual(s.role("button.inRow")?.title, "Row action")
+        XCTAssertNil(s.suggestedTitle("button.inRow"), "a real name needs no suggestion")
+        XCTAssertThrowsError(try s.rename("button.inRow", title: "  "))
+    }
+
     func testNamesReadLikeTheTemplateAndLeftoversByFamily() {
         let inv = ComponentInventory(uses: [
             use("button", "listRow", ["style": "glassProminent"], .main),

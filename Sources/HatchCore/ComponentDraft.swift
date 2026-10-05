@@ -385,6 +385,21 @@ public extension ComponentSystem {
         questions.removeAll { $0.id == questionId }
     }
 
+    /// Gives a role a new title (CD2). The id stays, so code, questions and decisions that name it still find it.
+    mutating func rename(_ id: String, title: String) throws {
+        guard let i = roles.firstIndex(where: { $0.id == id }) else { throw ComponentAnswerError.noRole(id) }
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { throw StoreError.invalid("A role needs a title.") }
+        roles[i].title = t
+    }
+
+    /// A job name for a role whose title lists its places, as an older Hatch named made-up roles (CD2); nil when the
+    /// title is already a name.
+    func suggestedTitle(_ id: String) -> String? {
+        guard let r = role(id), r.title.contains("("), let element = ComponentElement.named(r.element) else { return nil }
+        return ComponentDraft.jobTitle(element: element, importance: r.importance, places: r.places)
+    }
+
     /// Marks a role agreed as it is (DS8), or every provisional role when `id` is nil.
     mutating func agree(_ id: String? = nil, decision: String? = nil) throws {
         if let id {

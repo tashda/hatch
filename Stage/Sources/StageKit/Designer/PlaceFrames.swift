@@ -18,6 +18,8 @@ struct PlaceFrame: View {
     var today = false
     /// Title above a frame (the element's level); the role's level puts the place's name in its own column.
     var framed = true
+    /// What the title says, when not the place's name (a place's overview names the element).
+    var title: String? = nil
     @State private var hovered: String?
 
     /// The roles in this place, quiet first and the main action last (macOS order).
@@ -30,7 +32,7 @@ struct PlaceFrame: View {
         if framed {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text(place.title).font(.headline)
+                    Text(title ?? place.title).font(.headline)
                     // Something to decide here (CD10): an orange dot, nothing more.
                     if cells.contains(where: { model.question(for: $0) != nil }) {
                         Circle().fill(.orange).frame(width: 7, height: 7).help("A look to decide here")
