@@ -51,6 +51,7 @@ When the module agents are done and CI is green: `git subtree split --prefix=Hat
 7. Import the existing Echo Labs rounds (`hatch import-labs`) once the owner has chosen whether the imported tickets should be pushed to GitHub.
 8. `CLAUDE.md` for the Hatch repo (the Echo one is gitignored; commit a trimmed one in the new repo).
 9. Later (SL1): make the Stage work like the Decide Lab: live drawing, switchable choices per part, hard cases, a copyable result. After Decide is settled.
+10. Components Designer, round two (`DECISIONS.md` section AH, CD1 to CD47; the page with real captures is `design-review/components-designer-round2.html`). Build in CD45's order: bugs B1 to B13 and the renderer fixes; preview and save, questions in the inspector, picks and fine-tune, the recommendation rule; the layout as Lab variants (CD44); batch changes, templates (CD46, CD47) and the Sweep after a decision (CD27); Matrix, Apple, settings, rules, foundations, keyboard, history in SQLite and the notebook (CD43). Then Hatch goes through it first, with its own look (not macOS Native).
 
 ## Rules that must not be lost
 
