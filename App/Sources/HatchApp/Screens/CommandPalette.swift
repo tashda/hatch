@@ -646,7 +646,7 @@ struct CommandPalette: View {
         if t.status == .draft, allowed(.checking) {
             out.append(move("Submit for check", "paperplane", to: .checking) { VettingBridge.start(ticketId: id, state: state) })
         }
-        if t.status == .yourCall, t.type == .proposal {
+        if t.status == .yourCall, t.type.isProposalLike {
             out.append(Hit(id: "stage", symbol: "rectangle.on.rectangle", title: "Open the Proposal") {
                 StageLauncher.shared.open(ticket: t, state: state)
             })

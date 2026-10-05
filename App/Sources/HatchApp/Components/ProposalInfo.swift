@@ -28,7 +28,7 @@ struct ProposalInfo {
         info.revision = ticket.revision
         // A Question's options, offered by an agent or prepared by Hatch (PS16, CO11), count as its options too.
         if ticket.type == .question { info.optionCount = ((try? store.questionOptions(ticketId: ticket.id)) ?? []).count }
-        guard ticket.type == .proposal else { return info }
+        guard ticket.type.isProposalLike else { return info }
         guard let json = try? store.proposalManifest(ticketId: ticket.id) else { return info }
         guard let manifest = try? ProposalManifest.parse(json: json) else { return info }
         info.manifest = manifest

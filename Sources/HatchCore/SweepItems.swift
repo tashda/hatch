@@ -96,6 +96,47 @@ public extension HatchStore {
         }
     }
 
+    /// The owner leaves an item out ("Leave out" on the item list): it is not built and does not count. Only what is not built yet.
+    @discardableResult
+    func dropSweepItem(ticketId: Int, key: String, by: String = "owner") throws -> SweepItem {
+        guard let item = try sweepItems(ticketId: ticketId).first(where: { $0.key == key }) else { throw StoreError.invalid("There is no item '\(key)'.") }
+        guard item.state == .todo || item.state == .building else {
+            throw StoreError.invalid("\(item.name) is already \(item.state.displayName.lowercased()); send it back instead of leaving it out.")
+        }
+        return try setSweepItem(ticketId: ticketId, key: key, to: .dropped, by: by)
+    }
+
+    /// Puts a left-out item back.
+    @discardableResult
+    func restoreSweepItem(ticketId: Int, key: String, by: String = "owner") throws -> SweepItem {
+        guard let item = try sweepItems(ticketId: ticketId).first(where: { $0.key == key }), item.state == .dropped else { throw StoreError.invalid("That item is not left out.") }
+        return try setSweepItem(ticketId: ticketId, key: key, to: .todo, by: by)
+    }
+
+    /// The owner has looked at a built item in the Preview and it is right.
+    @discardableResult
+    func verifySweepItem(ticketId: Int, key: String, by: String = "owner") throws -> SweepItem {
+        guard let item = try sweepItems(ticketId: ticketId).first(where: { $0.key == key }), item.state == .built else { throw StoreError.invalid("Only a built item can be verified.") }
+        return try setSweepItem(ticketId: ticketId, key: key, to: .verified, by: by)
+    }
+
+    /// One item is not right: it goes back to To do with the owner's note, and the ticket goes to Fixing so an agent takes it up.
+    /// The other items stay as they are.
+    @discardableResult
+    func sendBackSweepItem(ticketId: Int, key: String, note: String, by: String = "owner") throws -> Ticket {
+        let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw StoreError.invalid("Say what to change in this item.") }
+        return try db.transaction {
+            guard let item = try sweepItems(ticketId: ticketId).first(where: { $0.key == key }), item.state == .built || item.state == .verified else {
+                throw StoreError.invalid("Only a built item can be sent back.")
+            }
+            try setSweepItem(ticketId: ticketId, key: key, to: .todo, by: by)
+            let moved = try move(ticketId, to: .fixing, actor: .owner, reason: "item \(item.name) sent back")
+            try addNote(ticketId, kind: .instruction, author: by, body: "Item \(item.name) (\(key)) in \(item.file): \(text)", context: ["reason": .string("fix"), "item": .string(key)])
+            return moved
+        }
+    }
+
     /// Items settled out of all that count (dropped ones do not count), for "7 of 12".
     func sweepProgress(ticketId: Int) throws -> (settled: Int, total: Int) {
         let items = try sweepItems(ticketId: ticketId).filter { $0.state != .dropped }

@@ -74,7 +74,7 @@ struct DeskBriefPane: View {
     }
 
     @ViewBuilder private var facts: some View {
-        if ticket.type == .proposal && info.hasManifest {
+        if ticket.type.isProposalLike && info.hasManifest {
             VStack(alignment: .leading, spacing: 4) {
                 Text(factsLine)
                     .font(.callout)
@@ -171,7 +171,7 @@ struct DeskBriefPane: View {
     }
 
     private var canAccept: Bool {
-        if ticket.status == .yourCall && ticket.type == .proposal { return !info.recommendations.isEmpty }
+        if ticket.status == .yourCall && ticket.type.isProposalLike { return !info.recommendations.isEmpty }
         // Accept uses each question's first suggested answer, so a question with none cannot be accepted.
         return ticket.status == .needsAnswers && questions.contains { !$0.suggestions.isEmpty }
     }

@@ -7,6 +7,8 @@ public enum TicketType: String, CaseIterable, Codable, Sendable {
     /// A Theme only groups tickets that a setup made together (the old split too); the owner sees it as a Group (SW2).
     public var displayName: String { self == .theme ? "Group" : rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
     public var label: String { "type:\(rawValue)" }
+    /// Goes through the Proposal flow: a manifest, the Stage, accepted choices (a Sweep does, with items on top; SW4).
+    public var isProposalLike: Bool { self == .proposal || self == .sweep }
 }
 
 /// The sixteen statuses (decision A4). Raw values are the GitHub label suffixes (`status:your-call`).

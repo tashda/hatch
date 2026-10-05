@@ -43,6 +43,7 @@ struct TicketOverviewTab: View {
             // In the Desk the Iris inspector already shows this review; showing it twice only adds noise.
             if split || !state.showAskPanel { IrisReviewView(ticketId: ticket.id) }
             if ticket.type == .theme { themeSection }
+            if ticket.type == .sweep { SweepItemsSection(ticket: ticket) }
             descriptionSection
             attachmentSection
         }
@@ -355,7 +356,7 @@ struct TicketOverviewTab: View {
                     }
                 }
             }
-            if ticket.type == .proposal {
+            if ticket.type.isProposalLike {
                 MetaRow(label: "Revision") { Text("\(ticket.revision)") }
             }
             if let who = ticket.takenBy {
@@ -490,5 +491,149 @@ struct DescriptionBody: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+
+/// The several similar things a Sweep changes (decision SW5): one row each with where it stands, grouped by kind. The owner
+/// leaves items out before the build, and marks them verified or sends one back once they are built (SW8).
+struct SweepItemsSection: View {
+    let ticket: Ticket
+    @EnvironmentObject var state: AppState
+    @State private var items: [SweepItem] = []
+    @State private var progress: (settled: Int, total: Int) = (0, 0)
+    @State private var sendingBack: String?
+    @State private var note = ""
+
+    private var curating: Bool { [.yourCall, .revising, .accepted].contains(ticket.status) }
+    private var verifying: Bool { ticket.status == .toVerify }
+
+    var body: some View {
+        SectionCard("Items") {
+            VStack(alignment: .leading, spacing: 10) {
+                if items.isEmpty {
+                    Text("The survey has not listed the items yet. The agent preparing this finds them first.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    HStack {
+                        Text("\(progress.settled) of \(progress.total) done")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    ProgressView(value: Double(progress.settled), total: Double(max(progress.total, 1)))
+                        .tint(Theme.finished)
+                    ForEach(groups, id: \.kind) { group in
+                        VStack(alignment: .leading, spacing: 4) {
+                            if groups.count > 1 || group.kind != nil {
+                                Text(group.kind ?? "Other")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 4)
+                            }
+                            ForEach(group.items) { item in row(item) }
+                        }
+                    }
+                }
+            }
+        }
+        .autoReload(every: 4) { load() }
+    }
+
+    /// Kinds in the order the survey first named them; items without a kind last.
+    private var groups: [(kind: String?, items: [SweepItem])] {
+        var order: [String?] = []
+        for i in items where !order.contains(where: { $0 == i.kind }) { order.append(i.kind) }
+        order.sort { ($0 == nil ? 1 : 0) < ($1 == nil ? 1 : 0) }
+        return order.map { kind in (kind, items.filter { $0.kind == kind }) }
+    }
+
+    private func row(_ item: SweepItem) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: symbol(item.state))
+                .foregroundStyle(item.state == .verified ? Theme.finished : Color.secondary)
+                .frame(width: 18)
+                .help(item.state.displayName)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.callout.monospaced())
+                    .strikethrough(item.state == .dropped)
+                    .foregroundStyle(item.state == .dropped ? Color.secondary : Color.primary)
+                Text(item.file)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let n = item.note, !n.isEmpty {
+                    Text(n).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 8)
+            controls(item)
+        }
+    }
+
+    @ViewBuilder private func controls(_ item: SweepItem) -> some View {
+        if curating, item.state == .todo {
+            Button("Leave out") { act("Could not leave the item out") { try state.store.dropSweepItem(ticketId: ticket.id, key: item.key) } }
+                .buttonStyle(.borderless).controlSize(.small)
+        } else if curating, item.state == .dropped {
+            Button("Include") { act("Could not include the item") { try state.store.restoreSweepItem(ticketId: ticket.id, key: item.key) } }
+                .buttonStyle(.borderless).controlSize(.small)
+        } else if verifying, item.state == .built {
+            HStack(spacing: 8) {
+                Button("Verified") { act("Could not mark the item verified") { try state.store.verifySweepItem(ticketId: ticket.id, key: item.key) } }
+                Button("Send back\u{2026}") { note = ""; sendingBack = item.key }
+                    .popover(isPresented: Binding(get: { sendingBack == item.key }, set: { if !$0 { sendingBack = nil } }), arrowEdge: .bottom) { sendBackForm(item) }
+            }
+            .buttonStyle(.borderless).controlSize(.small)
+        } else if verifying, item.state == .verified {
+            Button("Send back\u{2026}") { note = ""; sendingBack = item.key }
+                .buttonStyle(.borderless).controlSize(.small)
+                .popover(isPresented: Binding(get: { sendingBack == item.key }, set: { if !$0 { sendingBack = nil } }), arrowEdge: .bottom) { sendBackForm(item) }
+        }
+    }
+
+    private func sendBackForm(_ item: SweepItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("What is wrong with \(item.name)?").font(.headline)
+            TextField("Say what to change", text: $note, axis: .vertical)
+                .lineLimit(3...6)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 300)
+            HStack {
+                Spacer()
+                Button("Cancel") { sendingBack = nil }
+                Button("Send back") {
+                    let text = note, key = item.key
+                    sendingBack = nil
+                    act("Could not send the item back") { try state.store.sendBackSweepItem(ticketId: ticket.id, key: key, note: text) }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(14)
+    }
+
+    private func act<T>(_ message: String, _ work: () throws -> T) {
+        _ = state.perform(message) { try work() }
+        load()
+    }
+
+    private func symbol(_ state: SweepItemState) -> String {
+        switch state {
+        case .todo: "circle"
+        case .building: "ellipsis.circle"
+        case .built: "checkmark.circle"
+        case .verified: "checkmark.circle.fill"
+        case .dropped: "minus.circle"
+        }
+    }
+
+    private func load() {
+        items = (try? state.store.sweepItems(ticketId: ticket.id)) ?? []
+        progress = (try? state.store.sweepProgress(ticketId: ticket.id)) ?? (0, 0)
     }
 }

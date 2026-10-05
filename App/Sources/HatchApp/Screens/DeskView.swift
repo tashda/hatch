@@ -253,7 +253,7 @@ struct DeskView: View {
 
     /// Full triage from the list (decision C5): only where Hatch has a recommendation or suggested answers.
     private func canAccept(_ ticket: Ticket) -> Bool {
-        if ticket.status == .yourCall && ticket.type == .proposal { return !(infos[ticket.id]?.recommendations.isEmpty ?? true) }
+        if ticket.status == .yourCall && ticket.type.isProposalLike { return !(infos[ticket.id]?.recommendations.isEmpty ?? true) }
         return ticket.status == .needsAnswers && (questions[ticket.id] ?? []).contains { !$0.suggestions.isEmpty }
     }
 
@@ -409,7 +409,7 @@ struct DeskView: View {
 
     private func prepareAccept(_ ticket: Ticket) {
         notice = nil
-        if ticket.status == .yourCall && ticket.type == .proposal {
+        if ticket.status == .yourCall && ticket.type.isProposalLike {
             let info = infos[ticket.id] ?? ProposalInfo()
             if info.recommendations.isEmpty {
                 notice = "This Proposal has no recommendation. Open it to choose."

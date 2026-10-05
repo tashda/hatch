@@ -377,7 +377,7 @@ public enum BriefBuilder {
                 "Work only in your own worktree on branch `\(branchName(t))`. Never touch the main checkout. Push only that branch.",
                 "Declare the files you will touch with `hatch plan` before you edit. If another ticket holds them you are queued.",
                 "A Bug, or a change over \(limit) files, waits for the owner to approve the plan; Hatch tells you.",
-                t.type == .proposal ? "Build the owner's accepted choices exactly (see Owner's choices). Update the Spec text for the Spec IDs you change." : "Make the smallest change that fixes it, and update the Spec text if behaviour changes.",
+                t.type.isProposalLike ? "Build the owner's accepted choices exactly (see Owner's choices). Update the Spec text for the Spec IDs you change." : "Make the smallest change that fixes it, and update the Spec text if behaviour changes.",
                 "Run only the tests mapped to this area, in your worktree. Do not run the full suite or a full build; CI does that.",
                 "Compile with `hatch check \(t.displayNumber) --build`, and pipe a test run through `hatch check -` (`<test command> 2>&1 | hatch check -`): they print only errors, warnings and failing tests.",
                 "When done run `hatch ready`. Hatch runs the build, tests and match check and moves the ticket to To verify.",

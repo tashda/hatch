@@ -455,6 +455,9 @@ struct TicketsView: View {
 struct TicketLine: View {
     let ticket: Ticket
     let projectName: String
+    @EnvironmentObject private var state: AppState
+    /// "7/12" for a Sweep: how many of its items are done.
+    @State private var sweep: (settled: Int, total: Int)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -464,11 +467,21 @@ struct TicketLine: View {
                 .foregroundStyle(.secondary)
             Text(ticket.title).lineLimit(1)
             Spacer(minLength: 8)
+            if let sweep, sweep.total > 0 {
+                Text("\(sweep.settled)/\(sweep.total)")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .help("\(sweep.settled) of \(sweep.total) items done")
+            }
             StatusChip(status: ticket.status)
             Text(Format.relative(ticket.updatedAt))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 30, alignment: .trailing)
+        }
+        .task(id: ticket.updatedAt) {
+            sweep = ticket.type == .sweep ? try? state.store.sweepProgress(ticketId: ticket.id) : nil
         }
     }
 }

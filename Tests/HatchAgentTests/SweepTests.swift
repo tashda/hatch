@@ -123,4 +123,27 @@ final class SweepTests: XCTestCase {
         let ordinary = try BriefBuilder.brief(store: store, ticketId: try Fixture.preparing(store, project).id, agent: "Agent on #151", kind: .prepare)
         XCTAssertFalse(ordinary.contains("This is a Sweep"))
     }
+
+    func testTheOwnerLeavesItemsOutVerifiesThemAndSendsOneBack() throws {
+        let t = try Fixture.ticket(store, project, type: .sweep, title: "All cards", body: "x", status: .ready)
+        for (status, actor) in [(Status.preparing, Actor.agent), (.yourCall, .agent), (.accepted, .owner), (.building, .hatch), (.toVerify, .hatch)] {
+            try store.move(t.id, to: status, actor: actor)
+        }
+        try store.saveSweepItems(ticketId: t.id, items: items().map(\.input))
+        try store.setSweepItem(ticketId: t.id, key: "decide-card", to: .built, commit: "a1", by: "agent")
+        try store.setSweepItem(ticketId: t.id, key: "agent-card", to: .built, commit: "b2", by: "agent")
+        XCTAssertThrowsError(try store.dropSweepItem(ticketId: t.id, key: "decide-card"), "a built item is sent back, not left out")
+        XCTAssertEqual(try store.verifySweepItem(ticketId: t.id, key: "decide-card").state, .verified)
+        let moved = try store.sendBackSweepItem(ticketId: t.id, key: "agent-card", note: "The action row should sit under the text")
+        XCTAssertEqual(moved.status, .fixing)
+        let all = try store.sweepItems(ticketId: t.id)
+        XCTAssertEqual(all.map(\.state), [.verified, .todo], "the other items stay as they were")
+        let note = try XCTUnwrap(try store.notes(ticketId: t.id).last)
+        XCTAssertEqual(note.kind, .instruction)
+        XCTAssertTrue(note.body.contains("AgentCard") && note.body.contains("under the text"))
+        XCTAssertThrowsError(try store.sendBackSweepItem(ticketId: t.id, key: "decide-card", note: " "))
+        XCTAssertEqual(try store.dropSweepItem(ticketId: t.id, key: "agent-card").state, .dropped)
+        XCTAssertEqual(try store.restoreSweepItem(ticketId: t.id, key: "agent-card").state, .todo)
+        XCTAssertThrowsError(try store.restoreSweepItem(ticketId: t.id, key: "agent-card"), "it is not left out any more")
+    }
 }

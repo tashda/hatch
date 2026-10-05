@@ -17,7 +17,7 @@ struct TicketWorkTab: View {
     @State private var gate: [GateResult] = []
 
     private var showsBuildSteps: Bool {
-        ticket.type == .proposal || ticket.type == .tweak || ticket.type == .bug
+        ticket.type.isProposalLike || ticket.type == .tweak || ticket.type == .bug
     }
 
     var body: some View {

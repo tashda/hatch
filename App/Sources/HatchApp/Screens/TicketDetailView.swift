@@ -396,7 +396,7 @@ struct TicketDetailView: View {
 
     private func visibleTabs(_ t: Ticket) -> [TicketTab] {
         var tabs: [TicketTab] = [.overview]
-        if t.type == .sketch || t.type == .proposal { tabs.append(.options) }
+        if t.type == .sketch || t.type.isProposalLike { tabs.append(.options) }
         tabs.append(.thread)
         if t.type != .theme { tabs.append(.work) }
         tabs.append(.history)

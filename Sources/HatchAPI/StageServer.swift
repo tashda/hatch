@@ -553,7 +553,7 @@ public final class StageServer: @unchecked Sendable {
 
     /// Only a Proposal or Sketch that is open for judging takes picks, verdicts and pins.
     private func requireOpen(_ t: Ticket) throws {
-        guard t.type == .proposal || t.type == .sketch else { throw APIError(status: 409, code: "not_a_proposal", message: "\(t.displayNumber) is a \(t.type.displayName), not a Proposal.") }
+        guard t.type.isProposalLike || t.type == .sketch else { throw APIError(status: 409, code: "not_a_proposal", message: "\(t.displayNumber) is a \(t.type.displayName), not a Proposal.") }
         guard t.status == .yourCall || t.status == .revising else {
             throw APIError(status: 409, code: "not_open", message: "\(t.displayNumber) is \(t.status.displayName); it is not open for judging.")
         }
