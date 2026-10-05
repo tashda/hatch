@@ -169,6 +169,9 @@ struct DecideSessionView: View {
     @State private var queueSide: HorizontalEdge?
     @State private var overArrow = false
     @State private var overQueue = false
+    /// Opening waits for the pointer to rest on an arrow, so a quick click only navigates.
+    @State private var openTask: DispatchWorkItem?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let request: AppState.DecideRequest
 
     init(request: AppState.DecideRequest, store: HatchStore, projectId: Int?) {
@@ -193,7 +196,6 @@ struct DecideSessionView: View {
             .animation(.snappy(duration: 0.28), value: session.index)
             .overlay(alignment: .bottom) { toast.padding(.bottom, session.current == nil ? 18 : 82) }
             .overlay { if session.current != nil { sideArrows.padding(.bottom, 64) } }
-            .animation(.snappy(duration: 0.22), value: queueSide)
         }
         // One grey panel with the decision on a white card in it (DR8); the window footer stays visible under it.
         .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
@@ -304,17 +306,25 @@ struct DecideSessionView: View {
         .padding(.horizontal, 16)
         .overlay(alignment: queueSide == .leading ? .leading : .trailing) {
             if let side = queueSide {
-                DecideQueueCard(session: session) { id in session.go(to: id); queueSide = nil }
-                    .padding(side == .leading ? .leading : .trailing, 72)
+                // Hover is the card's own area, not its margin: the margin lies over the arrow, and taking the arrow's
+                // hover away would close the card while the pointer still rests on the arrow.
+                DecideQueueCard(session: session, side: side, reduceMotion: reduceMotion) { id in session.go(to: id); setQueue(nil) }
                     .onHover { overQueue = $0; hoverChanged(side) }
-                    .transition(.move(edge: side == .leading ? .leading : .trailing).combined(with: .opacity))
+                    .padding(side == .leading ? .leading : .trailing, 72)
+                    .transition(reduceMotion ? .opacity : .asymmetric(insertion: .modifier(active: CardUnfold(side: side, shown: false), identity: CardUnfold(side: side, shown: true)),
+                                                                      removal: .modifier(active: CardUnfold(side: side, shown: false, soft: true), identity: CardUnfold(side: side, shown: true))))
+                    .id(side)
             }
         }
     }
 
     private func arrow(_ side: HorizontalEdge) -> some View {
         let target = session.neighbour(side == .leading ? -1 : 1)
-        return Button { if let target { session.go(to: target) } } label: {
+        return Button {
+            // A click is navigation, not a peek: a card about to open stays closed.
+            openTask?.cancel()
+            if let target { session.go(to: target) }
+        } label: {
             Image(systemName: side == .leading ? "chevron.left" : "chevron.right").font(.title3.weight(.semibold)).frame(width: 22, height: 22)
         }
         .buttonStyle(.glass)
@@ -326,14 +336,29 @@ struct DecideSessionView: View {
         .onHover { overArrow = $0; hoverChanged(side) }
     }
 
-    /// Opens the card for the side the pointer is on; closes it a moment after the pointer leaves both the arrow and
-    /// the card, so moving from one to the other keeps it open.
+    /// The card opens when the pointer rests on an arrow for a moment (a quick click only navigates); once open it
+    /// moves to the other arrow at once, and it closes a moment after the pointer leaves both the arrow and the card.
     private func hoverChanged(_ side: HorizontalEdge) {
+        openTask?.cancel()
         if overArrow || overQueue {
-            if queueSide == nil || overArrow { queueSide = side }
+            if queueSide != nil {
+                if overArrow && queueSide != side { setQueue(side) }
+                return
+            }
+            guard overArrow else { return }
+            let task = DispatchWorkItem { if overArrow && queueSide == nil { setQueue(side) } }
+            openTask = task
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: task)
             return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { if !overArrow && !overQueue { queueSide = nil } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if !overArrow && !overQueue { setQueue(nil) } }
+    }
+
+    /// Opens with a soft spring, closes quicker; a plain fade with Reduce Motion.
+    private func setQueue(_ side: HorizontalEdge?) {
+        let animation: Animation = reduceMotion ? .easeInOut(duration: 0.15)
+            : (side == nil ? .easeOut(duration: 0.18) : .spring(response: 0.42, dampingFraction: 0.84))
+        withAnimation(animation) { queueSide = side }
     }
 
     /// The keys, in a popover from the ? button rather than always on screen.
@@ -985,7 +1010,10 @@ private struct DecidePill: View {
 /// decided, dimmed. Each row has a dot in its pill's colour.
 private struct DecideQueueCard: View {
     @ObservedObject var session: DecideSession
+    let side: HorizontalEdge
+    let reduceMotion: Bool
     let go: (String) -> Void
+    @State private var appeared = false
 
     var body: some View {
         let byId = Dictionary(session.items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -993,16 +1021,20 @@ private struct DecideQueueCard: View {
         let open = marks.filter { if case .handled = $0.mark { return false }; return $0.mark != .setAside }
         let done = marks.filter { if case .handled = $0.mark { return true }; return $0.mark == .setAside }
         VStack(alignment: .leading, spacing: 0) {
-            Text("\(session.openCount) left").font(.headline).padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(open, id: \.id) { m in if let item = byId[m.id] { row(m.mark, item, clickable: m.mark != .current) } }
+                    ForEach(Array(open.enumerated()), id: \.element.id) { i, m in
+                        if let item = byId[m.id] { row(m.mark, item, clickable: m.mark != .current).modifier(stagger(i)) }
+                    }
                     if !done.isEmpty {
                         Text("Decided").font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 2)
-                        ForEach(done, id: \.id) { m in if let item = byId[m.id] { row(m.mark, item, clickable: false).opacity(0.6) } }
+                            .modifier(stagger(open.count))
+                        ForEach(Array(done.enumerated()), id: \.element.id) { i, m in
+                            if let item = byId[m.id] { row(m.mark, item, clickable: false).opacity(0.6).modifier(stagger(open.count + 1 + i)) }
+                        }
                     }
                 }
-                .padding(.horizontal, 6).padding(.bottom, 10)
+                .padding(.horizontal, 6).padding(.vertical, 8)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
@@ -1011,6 +1043,13 @@ private struct DecideQueueCard: View {
         .fixedSize(horizontal: false, vertical: true)
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
         .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
+        .onAppear { appeared = true }
+    }
+
+    /// The rows follow the card in, one after another, sliding from the arrow's side; at once with Reduce Motion.
+    private func stagger(_ i: Int) -> RowStagger {
+        RowStagger(shown: appeared || reduceMotion, dx: side == .leading ? -10 : 10,
+                   animation: reduceMotion ? nil : .spring(response: 0.36, dampingFraction: 0.86).delay(0.05 + Double(min(i, 14)) * 0.018))
     }
 
     private func row(_ mark: DecideRun.Mark, _ item: PendingDecision, clickable: Bool) -> some View {
@@ -1049,6 +1088,31 @@ private struct DecideQueueCard: View {
         case .current: return kind + " · on screen"
         default: return kind + " · " + DecideSessionView.words(mark)
         }
+    }
+}
+
+/// The queue card unfolding from its arrow: a little smaller, blurred and transparent, settling sharp and full size.
+private struct CardUnfold: ViewModifier {
+    let side: HorizontalEdge
+    let shown: Bool
+    var soft = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(shown ? 1 : (soft ? 0.97 : 0.92), anchor: side == .leading ? .leading : .trailing)
+            .offset(x: shown ? 0 : (side == .leading ? -16 : 16))
+            .blur(radius: shown ? 0 : (soft ? 4 : 10))
+            .opacity(shown ? 1 : 0)
+    }
+}
+
+private struct RowStagger: ViewModifier {
+    let shown: Bool
+    let dx: CGFloat
+    let animation: Animation?
+
+    func body(content: Content) -> some View {
+        content.opacity(shown ? 1 : 0).offset(x: shown ? 0 : dx).animation(animation, value: shown)
     }
 }
 
