@@ -1,0 +1,77 @@
+folder	source_url	vendor	category	min_macos	swift_files	swiftui_files	apple_sample
+apple-accessible-views	https://docs-assets.developer.apple.com/published/ad686981be8a/CreatingAccessibleViews.zip	Apple	Apple sample: Creating accessible views	12.0	20	20	yes
+apple-card-game	https://docs-assets.developer.apple.com/published/97ac6f9aaef0/MakingACardGameWithDragDropAndReorderingInSwiftUI.zip	Apple	Apple sample: Card game with drag, drop and reordering	27.0	10	8	yes
+apple-document-app	https://docs-assets.developer.apple.com/published/c3cf22d725e5/BuildingADocumentBasedAppWithSwiftUI.zip	Apple	Apple sample: Building a document-based app with SwiftUI	27.0	6	5	yes
+apple-drag-drop	https://docs-assets.developer.apple.com/published/865816f9f1f5/AdoptingDragAndDropUsingSwiftUI.zip	Apple	Apple sample: Adopting drag and drop using SwiftUI	15.0	12	11	yes
+apple-focus-cookbook	https://docs-assets.developer.apple.com/published/363389b4b01c/FocusCookbook.zip	Apple	Apple sample: Focus Cookbook	14.0	20	20	yes
+apple-garden	https://docs-assets.developer.apple.com/published/bd66c5c88159/BuildingAGreatMacAppWithSwiftUI.zip	Apple	Apple sample: Building a great Mac app with SwiftUI (Garden)	12.0	72	50	yes
+apple-landmarks-glass	https://docs-assets.developer.apple.com/published/a88428e6793e/LandmarksBuildingAnAppWithLiquidGlass.zip	Apple	Apple sample: Landmarks with Liquid Glass	26.0	37	31	yes
+apple-multiple-windows	https://docs-assets.developer.apple.com/published/d58546b12087/BringingMultipleWindowsToYourSwiftUIApp.zip	Apple	Apple sample: Bringing multiple windows to your SwiftUI app	13.0	36	28	yes
+apple-robust-navigation	https://docs-assets.developer.apple.com/published/45511f40934b/BringingRobustNavigationStructureToYourSwiftUIApp.zip	Apple	Apple sample: Navigation Cookbook	14.0	21	21	yes
+apple-swiftdata-animals	https://docs-assets.developer.apple.com/published/f84bac78ac34/SwiftDataAnimals.zip	Apple	Apple sample: SwiftData adding/editing persistent data	14.0 (implied, SwiftData)	14	9	yes
+apple-swiftdata-documents	https://docs-assets.developer.apple.com/published/a378001f6c52/BuildingADocumentBasedAppUsingSwiftData.zip	Apple	Apple sample: Document-based app using SwiftData	14.0	32	24	yes
+apple-window-styles	https://docs-assets.developer.apple.com/published/08bd3c5ea0b3/DestinationVideo.zip	Apple	Apple sample: Customizing window styles and state restoration (Destination Video macOS)	15.0	46	32	yes
+Applite	https://github.com/milanvarady/Applite	milanvarady	system utility (Homebrew cask app store)	14.0	114	71	no
+boring.notch	https://github.com/TheBoredTeam/boring.notch	TheBoredTeam	menu bar/notch utility (media)	14.0	123	71	no
+CalendarX	https://github.com/ZzzM/CalendarX	ZzzM	calendars (menu bar)	11.0	56	45	no
+Changes	https://github.com/maoyama/Changes	maoyama	developer tools (git client)	26.0	146	56	no
+Clop	https://github.com/FuzzyIdeas/Clop	FuzzyIdeas (Alin Panaitiu)	media/photo (image/video optimizer)	13.0	75	26	no
+CodeEdit	https://github.com/CodeEditApp/CodeEdit	CodeEditApp	developer tools (code editor)	14.0	676	343	no
+ControlRoom	https://github.com/twostraws/ControlRoom	twostraws (Paul Hudson)	developer tools (simulator control)	13.0	82	41	no
+CopilotForXcode	https://github.com/github/CopilotForXcode	GitHub	developer tools / AI	13.0	535	203	no
+Cork	https://github.com/buresdv/Cork	buresdv	developer tools (Homebrew GUI)	14.0	387	246	no
+CotEditor	https://github.com/coteditor/CotEditor	coteditor (1024jp)	writing/text editor (MAS)	26.0	626	119	no
+DockDoor	https://github.com/ejbills/DockDoor	ejbills	window manager / dock	13.0	205	152	no
+EdgeMark	https://github.com/Ender-Wang/EdgeMark	Ender-Wang	notes/writing	15.7	74	47	no
+enchanted	https://github.com/gluonfield/enchanted	gluonfield	AI chat client (multiplatform, MAS)	14.0	87	64	no
+ExcalidrawZ	https://github.com/chocoford/ExcalidrawZ	chocoford	design/drawing (multiplatform)	13.0	711	402	no
+FileFluss	https://github.com/rana-gmbh/FileFluss	rana-gmbh	file manager (cloud)	14.0	187	44	no
+FineTune	https://github.com/ronitsingh10/FineTune	ronitsingh10	audio (menu bar volume mixer)	15.4	205	68	no
+Flashcards-macOS	https://github.com/david-swift/Flashcards-macOS	david-swift	education (flashcards)	13.3	25	18	no
+Gifski	https://github.com/sindresorhus/Gifski	sindresorhus	media/video (MAS)	15.3	40	24	no
+HiPixel	https://github.com/okooo5km/HiPixel	okooo5km	photo (AI upscaling)	13.0	49	32	no
+Holeberry	https://github.com/pedrovieira/Holeberry	pedrovieira	networking (Pi-hole client, menu bar)	14.0	167	16	no
+Ice	https://github.com/jordanbaird/Ice	jordanbaird	menu bar utility	14.0	116	55	no
+kaset	https://github.com/sozercan/kaset	sozercan	music player (YouTube Music)	15.4	681	143	no
+KeyboardCowboy	https://github.com/zenangst/KeyboardCowboy	zenangst	productivity/automation	14.0	678	311	no
+kiwix-apple	https://github.com/kiwix/kiwix-apple	Kiwix	education/reference (offline Wikipedia, multiplatform, MAS)	14.6	226	124	no
+LaunchNext	https://github.com/RoversX/LaunchNext	RoversX	launcher (Launchpad replacement)	26.0	103	22	no
+LeaderKey	https://github.com/mikker/LeaderKey	mikker	launcher	13.0	38	18	no
+linearmouse	https://github.com/linearmouse/linearmouse	linearmouse	system utility (mouse/trackpad)	12.0	332	75	no
+Loop	https://github.com/MrKai77/Loop	MrKai77	window manager	13.0	179	104	no
+LyricFever	https://github.com/aviwad/LyricFever	aviwad	music (lyrics, menu bar)	15.0	89	36	no
+Maccy	https://github.com/p0deje/Maccy	p0deje	clipboard/productivity (MAS)	14.0	122	52	no
+MeetingBar	https://github.com/leits/MeetingBar	leits	calendars (menu bar, MAS)	12.0	122	22	no
+MochiDiffusion	https://github.com/MochiDiffusion/MochiDiffusion	MochiDiffusion	AI image generation	15.6	133	52	no
+Mythic	https://github.com/MythicApp/Mythic	MythicApp	games (launcher)	14.0	108	68	no
+NetNewsWire	https://github.com/Ranchero-Software/NetNewsWire	Ranchero Software	RSS/news (mostly AppKit, MAS)	15.0	714	40	no
+Ollamac	https://github.com/kevinhermawan/Ollamac	kevinhermawan	AI chat client (MAS)	14.0	36	27	no
+onit	https://github.com/synth-inc/onit	synth-inc	AI chat client	14.0	537	262	no
+OnlySwitch	https://github.com/jacklandrin/OnlySwitch	jacklandrin	menu bar utility (toggles)	14.0	546	144	no
+PaperRss	https://github.com/ohmyangboy/PaperRss	ohmyangboy	RSS/news	14.0	189	31	no
+pareto-mac	https://github.com/ParetoSecurity/pareto-mac	ParetoSecurity (Niteo)	security	13.0	141	38	no
+Pearcleaner	https://github.com/alienator88/Pearcleaner	alienator88	system utility (uninstaller)	13.0	109	72	no
+Petrichor	https://github.com/kushalpandya/Petrichor	kushalpandya	music player	14.0	204	93	no
+Pika	https://github.com/superhighfives/Pika	superhighfives	design/color tool	14.0	89	57	no
+PlayCover	https://github.com/PlayCover/PlayCover	PlayCover	games (iOS apps on Mac)	12.0	73	33	no
+postgresgui	https://github.com/PostgresGUI/postgresgui	PostgresGUI	database/SQL client	26.0	155	54	no
+Pulse	https://github.com/kean/Pulse	kean	developer tools (network logger, multiplatform)	12.0	212	139	no
+QuickRecorder	https://github.com/lihaoyun6/QuickRecorder	lihaoyun6	video (screen recorder)	12.3	27	23	no
+redis-pro	https://github.com/cmushroom/redis-pro	cmushroom	database (Redis client)	11.0	169	75	no
+reminders-menubar	https://github.com/DamascenoRafael/reminders-menubar	DamascenoRafael	calendars/reminders (menu bar)	12.0	128	78	no
+Rockxy	https://github.com/RockxyApp/Rockxy	RockxyApp	networking/API (HTTP debugging proxy)	14.0	1025	186	no
+sample-backyard-birds	https://github.com/apple/sample-backyard-birds	Apple	Apple sample (multiplatform, SwiftData)	14.0	114	77	yes
+sample-food-truck	https://github.com/apple/sample-food-truck	Apple	Apple sample (multiplatform)	13.3	82	67	yes
+secretive	https://github.com/maxgoedjen/secretive	maxgoedjen	security/password (SSH keys)	15.0	115	33	no
+Sidekick	https://github.com/johnbean393/Sidekick	johnbean393	AI chat (local LLM)	15.0	279	171	no
+simplelogin-mac	https://github.com/simple-login/mac-app	SimpleLogin (Proton)	mail/privacy (email aliases)	12.0	41	10	no
+Stockbar	https://github.com/VGEAREN/Stockbar	VGEAREN	finance (stock ticker, menu bar)	13.5	37	10	no
+SwiftBar	https://github.com/swiftbar/SwiftBar	swiftbar	menu bar utility (plugins)	12.0	71	22	no
+TablePro	https://github.com/TableProApp/TablePro	TableProApp (datlechin)	database/SQL client	13.0	7003	778	no
+textream	https://github.com/f/textream	f (Fatih Kadir Akin)	productivity (teleprompter)	15.0	41	20	no
+TomoBar	https://github.com/ArtemYurov/TomoBar	ArtemYurov	health/productivity (pomodoro, menu bar)	12.0	30	17	no
+VirtualBuddy	https://github.com/insidegui/VirtualBuddy	insidegui (Guilherme Rambo)	system utility (virtual machines)	14.0	282	123	no
+VoiceInk	https://github.com/Beingpax/VoiceInk	Beingpax	productivity (AI dictation)	15.0	374	169	no
+vvterm	https://github.com/vivy-company/vvterm	vivy-company	terminal/SSH (multiplatform)	13.3	1302	255	no
+Whisky	https://github.com/Whisky-App/Whisky	Whisky-App	games (Wine wrapper)	14.0	64	30	no
+XcodesApp	https://github.com/XcodesOrg/XcodesApp	XcodesOrg	developer tools	14.6	103	59	no

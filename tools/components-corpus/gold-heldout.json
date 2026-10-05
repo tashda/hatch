@@ -1,0 +1,1550 @@
+[
+ {
+  "app": "Applite",
+  "file": "Applite/Features/Settings/GeneralSettingsView.swift",
+  "line": 39,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-37",
+  "note": "Form toggle"
+ },
+ {
+  "app": "CalendarX",
+  "file": "CalendarXWidget/LargeWidget/LargeWidget+EntryView.swift",
+  "line": 159,
+  "element": "button",
+  "place": "page",
+  "id": "3-97",
+  "note": "month title button in a widget's header (widget content); actionRow arguable"
+ },
+ {
+  "app": "Changes",
+  "file": "GitClient/Views/Commit/CommitDetailBottomBar.swift",
+  "line": 41,
+  "element": "button",
+  "place": "bottomBar",
+  "id": "3-115",
+  "note": "expand/collapse in commit detail bottom bar (safeAreaBar)"
+ },
+ {
+  "app": "Clop",
+  "file": "Clop/ActionButtons.swift",
+  "line": 2539,
+  "element": "button",
+  "place": "card",
+  "id": "3-130",
+  "note": "SaveAsButton is never used (dead code); its siblings are the small icon actions on Clop's floating result cards, so card, not page"
+ },
+ {
+  "app": "Clop",
+  "file": "Clop/ActionButtons.swift",
+  "line": 2745,
+  "element": "button",
+  "place": "card",
+  "id": "3-47",
+  "note": "Clop action button shown on each floating result card or in compact rows (inFloatingCard flag); listRow vs card both defensible"
+ },
+ {
+  "app": "Clop",
+  "file": "Clop/FloatingResult.swift",
+  "line": 619,
+  "element": "button",
+  "place": "card",
+  "id": "3-114",
+  "note": "format buttons on a Clop floating result card (FormatSelectorView in FloatingResult); not a settings form"
+ },
+ {
+  "app": "CodeEdit",
+  "file": "CodeEdit/Features/InspectorArea/InternalDevelopmentInspector/InternalDevelopmentNotificationsView.swift",
+  "line": 121,
+  "element": "field",
+  "place": "form",
+  "id": "3-19",
+  "note": "TextField in Form"
+ },
+ {
+  "app": "CodeEdit",
+  "file": "CodeEdit/Features/WindowCommands/EditorCommands.swift",
+  "line": 21,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-66",
+  "note": "CommandMenu submenu item"
+ },
+ {
+  "app": "ControlRoom",
+  "file": "ControlRoom/Simulator UI/ControlScreens/AppView/NotificationEditorView.swift",
+  "line": 264,
+  "element": "field",
+  "place": "form",
+  "id": "3-168",
+  "note": "labeled localized-key fields in a notification editor"
+ },
+ {
+  "app": "ControlRoom",
+  "file": "ControlRoom/Simulator UI/ControlScreens/ColorsView.swift",
+  "line": 26,
+  "element": "button",
+  "place": "page",
+  "id": "3-122",
+  "note": "Pick Color at the top of a control-screen tab"
+ },
+ {
+  "app": "CopilotForXcode",
+  "file": "Core/Sources/ConversationTab/Views/CheckPoint.swift",
+  "line": 177,
+  "element": "button",
+  "place": "listRow",
+  "id": "3-128",
+  "note": "Restore on a checkpoint divider between chat turns (repeated transcript row); not a form"
+ },
+ {
+  "app": "CopilotForXcode",
+  "file": "Core/Sources/HostApp/ToolsSettings/MCPRegistry/ServerInstallationOptionView.swift",
+  "line": 82,
+  "element": "button",
+  "place": "card",
+  "id": "3-46",
+  "note": "Install in the header of an install-option card with rounded background"
+ },
+ {
+  "app": "CotEditor",
+  "file": "CotEditor/Sources/Panels/AboutView.swift",
+  "line": 90,
+  "element": "picker",
+  "place": "actionRow",
+  "id": "3-48",
+  "note": "pane switcher in safeAreaBar(top) over the credits pane: place OK; look missed .pickerStyle(.segmented)/.tabs applied inside a .modifier closure (reported automatic)"
+ },
+ {
+  "app": "CotEditor",
+  "file": "CotEditor/Sources/Settings Window/Panes/ModeSettingsView.swift",
+  "line": 204,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-111",
+  "note": "list row context menu"
+ },
+ {
+  "app": "CotEditor",
+  "file": "CotEditor/Sources/Settings Window/Panes/SnippetsSettingsView.swift",
+  "line": 230,
+  "element": "button",
+  "place": "bottomBar",
+  "id": "3-30",
+  "note": "Restore Defaults next to add/remove under a table in a settings pane; form also defensible"
+ },
+ {
+  "app": "DockDoor",
+  "file": "DockDoor/Views/Hover Window/AudioDevicePickerView.swift",
+  "line": 114,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-143",
+  "note": "device Menu content"
+ },
+ {
+  "app": "DockDoor",
+  "file": "DockDoor/Views/Settings/AdvancedSettingsView.swift",
+  "line": 186,
+  "element": "picker",
+  "place": "form",
+  "id": "3-129",
+  "note": "Picker inside DockDoor's SettingsGroup (rounded box of labeled settings); form vs card"
+ },
+ {
+  "app": "DockDoor",
+  "file": "DockDoor/Views/Settings/Shared Components/DockDoorProPromo.swift",
+  "line": 45,
+  "element": "button",
+  "place": "card",
+  "id": "3-55",
+  "note": "dismiss X on a promo banner drawn with its own rounded controlBackground; banner is a card inside a settings page"
+ },
+ {
+  "app": "ExcalidrawZ",
+  "file": "ExcalidrawZ/ContentView+/Detail/Home/FileHomeView.swift",
+  "line": 458,
+  "element": "menu",
+  "place": "actionRow",
+  "id": "3-57",
+  "note": "actions menu in the page header row; accessoryBar style applied at call site"
+ },
+ {
+  "app": "ExcalidrawZ",
+  "file": "ExcalidrawZ/ExcalidrawView/Editor/LockedFileUnlockView.swift",
+  "line": 118,
+  "element": "button",
+  "place": "alert",
+  "id": "3-96",
+  "note": "confirmationDialog destructive"
+ },
+ {
+  "app": "ExcalidrawZ",
+  "file": "ExcalidrawZ/Settings/AISettings/AISettingsView+MCP.swift",
+  "line": 708,
+  "element": "button",
+  "place": "toolbar",
+  "id": "3-101",
+  "note": "close X in the header bar of a help sheet presented with .sheet from AI Settings; the route through Settings made it form, but the sheet is its own screen"
+ },
+ {
+  "app": "ExcalidrawZ",
+  "file": "ExcalidrawZ/Sidebar/Local/LocalFoldersListView.swift",
+  "line": 149,
+  "element": "button",
+  "place": "emptyState",
+  "id": "3-53",
+  "note": "dismiss X on an empty-folder placeholder"
+ },
+ {
+  "app": "ExcalidrawZ",
+  "file": "ExcalidrawZ/Sidebar/components/GroupContextMenu.swift",
+  "line": 388,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-32",
+  "note": "group context menu item"
+ },
+ {
+  "app": "ExcalidrawZ",
+  "file": "ExcalidrawZ/Sidebar/components/GroupContextMenu.swift",
+  "line": 410,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-119",
+  "note": "group context menu item"
+ },
+ {
+  "app": "FileFluss",
+  "file": "FileFluss/App/FileCommands.swift",
+  "line": 261,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-100",
+  "note": "CommandMenu item"
+ },
+ {
+  "app": "FileFluss",
+  "file": "FileFluss/Views/ContentView.swift",
+  "line": 112,
+  "element": "button",
+  "place": "alert",
+  "id": "3-38",
+  "note": "confirmationDialog button"
+ },
+ {
+  "app": "FileFluss",
+  "file": "FileFluss/Views/FileManager/RenameField.swift",
+  "line": 94,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-142",
+  "note": "Cancel/Rename in a rename sheet"
+ },
+ {
+  "app": "FileFluss",
+  "file": "FileFluss/Views/FileManager/SearchPopupView.swift",
+  "line": 189,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-136",
+  "note": "search result .contextMenu"
+ },
+ {
+  "app": "FineTune",
+  "file": "FineTune/Views/Settings/Components/AboutLinkChip.swift",
+  "line": 50,
+  "element": "button",
+  "place": "page",
+  "id": "3-61",
+  "note": "link chip on the About tab of Settings; form also defensible"
+ },
+ {
+  "app": "Gifski",
+  "file": "Gifski/Utilities.swift",
+  "line": 5101,
+  "element": "button",
+  "place": "bottomBar",
+  "id": "3-25",
+  "note": "place right (controls in .safeAreaInset); look misses tooltip .help(\"Copy\") set at the call site in CompletedScreen"
+ },
+ {
+  "app": "HiPixel",
+  "file": "HiPixel/HiPixelApp.swift",
+  "line": 145,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-132",
+  "note": "MenuBarExtra in default menu style"
+ },
+ {
+  "app": "HiPixel",
+  "file": "HiPixel/Views/MonitorItemView.swift",
+  "line": 63,
+  "element": "button",
+  "place": "listRow",
+  "id": "3-153",
+  "note": "remove button on each monitored-folder row (ForEach in a settings group); the row is the nearer place, not form"
+ },
+ {
+  "app": "Holeberry",
+  "file": "Sources/Holeberry/Settings/ConnectionViews/ConnectionSheet.swift",
+  "line": 283,
+  "element": "button",
+  "place": "page",
+  "id": "3-99",
+  "note": "icon picker circle in the body of a connection sheet"
+ },
+ {
+  "app": "KeyboardCowboy",
+  "file": "App/Sources/UI/Views/EditGroup/EditConfigurationView.swift",
+  "line": 44,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-83",
+  "note": "Cancel/OK under a divider in an edit dialog"
+ },
+ {
+  "app": "KeyboardCowboy",
+  "file": "App/Sources/UI/Views/NewCommand/NewCommandAppFocusView.swift",
+  "line": 93,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-170",
+  "note": "UNKNOWN; settings toggles with labels in the new-command editor"
+ },
+ {
+  "app": "KeyboardCowboy",
+  "file": "App/Sources/UI/Views/NewCommandMenu/NewCommandMenu.swift",
+  "line": 491,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-110",
+  "note": "Menu content"
+ },
+ {
+  "app": "LaunchNext",
+  "file": "LaunchNext/SettingsView.swift",
+  "line": 1485,
+  "element": "button",
+  "place": "alert",
+  "id": "3-56",
+  "note": ".alert OK"
+ },
+ {
+  "app": "LaunchNext",
+  "file": "LaunchNext/SettingsView.swift",
+  "line": 3837,
+  "element": "button",
+  "place": "card",
+  "id": "3-127",
+  "note": "shortcut buttons in a settings card (rounded quaternary fill); trail is noisy but answer right"
+ },
+ {
+  "app": "LaunchNext",
+  "file": "LaunchNext/SettingsView.swift",
+  "line": 4346,
+  "element": "button",
+  "place": "form",
+  "id": "3-2",
+  "note": "custom selection tile in settings"
+ },
+ {
+  "app": "Loop",
+  "file": "Loop/Settings Window/Settings/Keybinds/Modal Views/CycleActionConfigurationView.swift",
+  "line": 86,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-15",
+  "note": "Close button that dismisses a modal; it sits last in the LuminareForm but acts as the sheet's footer"
+ },
+ {
+  "app": "Loop",
+  "file": "Loop/Settings Window/SettingsContentView.swift",
+  "line": 63,
+  "element": "button",
+  "place": "toolbar",
+  "id": "3-95",
+  "note": "inspector toggle in the settings pane header that mimics a toolbar button; it toggles the inspector but does not sit in it"
+ },
+ {
+  "app": "Maccy",
+  "file": "Maccy/Settings/GeneralSettingsPane.swift",
+  "line": 29,
+  "element": "button",
+  "place": "form",
+  "id": "3-81",
+  "note": "Check Now in a Settings.Container section (Settings pane); the Settings package's Pane/Container is not an inspector"
+ },
+ {
+  "app": "Maccy",
+  "file": "Maccy/Views/SearchFieldView.swift",
+  "line": 32,
+  "element": "button",
+  "place": "popover",
+  "id": "3-1",
+  "note": "clear button in search field of Maccy's menu-bar popup; SlideoutView wrapper is not an inspector"
+ },
+ {
+  "app": "MeetingBar",
+  "file": "MeetingBar/Onboarding/CalendarsScreen.swift",
+  "line": 100,
+  "element": "button",
+  "place": "emptyState",
+  "id": "3-118",
+  "note": "Refresh in the calendar list's emptyState property (icon, text, buttons); the property name was not used"
+ },
+ {
+  "app": "MeetingBar",
+  "file": "MeetingBar/Onboarding/Onboarding.swift",
+  "line": 190,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-126",
+  "note": "Back/Continue footer of an onboarding window; sheetFooter (dialog footer) and bottomBar both defensible"
+ },
+ {
+  "app": "Mythic",
+  "file": "Mythic/Views/Unified/Components/ContainerListView.swift",
+  "line": 527,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-80",
+  "note": "Open... is in the bottom button row (ending in a prominent Close) of a sheet below a grouped Form"
+ },
+ {
+  "app": "NetNewsWire",
+  "file": "Mac/Preferences/Accounts/AccountsDetailView.swift",
+  "line": 49,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-165",
+  "note": "Grid-based preferences form"
+ },
+ {
+  "app": "OnlySwitch",
+  "file": "Modules/Sources/OnlyAgent/Dialogue/PromptDialogueView.swift",
+  "line": 248,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-103",
+  "note": "model Menu content"
+ },
+ {
+  "app": "OnlySwitch",
+  "file": "OnlySwitchRemote/Features/Dashboard/ControlTileView.swift",
+  "line": 17,
+  "element": "button",
+  "place": "card",
+  "id": "3-144",
+  "note": "dashboard tile in a LazyVGrid; card vs listRow (repeated record). Note: OnlySwitchRemote looks like the iOS companion target (iphoneos SDK), so likely out of scope"
+ },
+ {
+  "app": "PaperRss",
+  "file": "PaperRss/Sources/App/RootView.swift",
+  "line": 3026,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-151",
+  "note": "list row .contextMenu"
+ },
+ {
+  "app": "PaperRss",
+  "file": "PaperRss/Sources/App/SettingsView.swift",
+  "line": 1221,
+  "element": "picker",
+  "place": "form",
+  "id": "3-106",
+  "note": "settingsRow picker in a settings group"
+ },
+ {
+  "app": "Pearcleaner",
+  "file": "Pearcleaner/Style/Theme.swift",
+  "line": 532,
+  "element": "button",
+  "place": "card",
+  "id": "3-26",
+  "note": "Save/Copy/Reset row inside PearGroupBox"
+ },
+ {
+  "app": "Pearcleaner",
+  "file": "Pearcleaner/Views/Brew/LogViewerSheet.swift",
+  "line": 31,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-5",
+  "note": "style bordered leaked from a sibling button in the file that builds the NSHostingController; StandardSheetView sets no style -> automatic"
+ },
+ {
+  "app": "Pearcleaner",
+  "file": "Pearcleaner/Views/Brew/TapManagementSection.swift",
+  "line": 155,
+  "element": "button",
+  "place": "listRow",
+  "id": "3-147",
+  "note": "See Packages in a tap row"
+ },
+ {
+  "app": "Pearcleaner",
+  "file": "Pearcleaner/Views/Components/TCCPermissionViewer.swift",
+  "line": 43,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-160",
+  "note": "StandardSheetView actionButtons"
+ },
+ {
+  "app": "Pearcleaner",
+  "file": "Pearcleaner/Views/FileSearchView.swift",
+  "line": 514,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-145",
+  "note": "submenu in a toolbar filter Menu"
+ },
+ {
+  "app": "Pearcleaner",
+  "file": "Pearcleaner/Views/Settings/Update.swift",
+  "line": 47,
+  "element": "button",
+  "place": "page",
+  "id": "3-148",
+  "note": "Refresh/Announcement row at the bottom of the Update settings page, below the group boxes; not under a title, so actionRow is a stretch; page or form"
+ },
+ {
+  "app": "Petrichor",
+  "file": "PetrichorApp.swift",
+  "line": 657,
+  "element": "toggle",
+  "place": "contextMenu",
+  "id": "3-39",
+  "note": "menu bar command toggle"
+ },
+ {
+  "app": "Petrichor",
+  "file": "Views/Playlists/Sheets/SmartPlaylistEditorSheet.swift",
+  "line": 433,
+  "element": "picker",
+  "place": "listRow",
+  "id": "3-104",
+  "note": "value picker in a smart-playlist rule row"
+ },
+ {
+  "app": "Petrichor",
+  "file": "Views/Settings/IntegrationsTabView.swift",
+  "line": 192,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-123",
+  "note": "Form toggle"
+ },
+ {
+  "app": "Pika",
+  "file": "Pika/Views/HelpRows.swift",
+  "line": 97,
+  "element": "button",
+  "place": "listRow",
+  "id": "3-84",
+  "note": "row button in the help link list"
+ },
+ {
+  "app": "Pika",
+  "file": "Pika/Views/NavigationMenuItems.swift",
+  "line": 144,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-8",
+  "note": "items inside a Menu"
+ },
+ {
+  "app": "PlayCover",
+  "file": "PlayCover/Views/Settings/IPASourceSettings.swift",
+  "line": 77,
+  "element": "button",
+  "place": "form",
+  "id": "3-88",
+  "note": "list side buttons inside a settings Form"
+ },
+ {
+  "app": "PlayCover",
+  "file": "PlayCover/Views/Sidebar Views/AppLibraryView.swift",
+  "line": 80,
+  "element": "button",
+  "place": "toolbar",
+  "id": "3-54",
+  "note": "ToolbarItem"
+ },
+ {
+  "app": "Pulse",
+  "file": "Sources/PulseUI/Features/Console/Views/ConsoleToolbarView.swift",
+  "line": 207,
+  "element": "button",
+  "place": "actionRow",
+  "id": "3-71",
+  "note": "filter pill in the console's pill bar over the list (ConsoleToolbarView is placed only in the iOS/visionOS List); scanner treated ConsoleToolbarView as a root view -> page"
+ },
+ {
+  "app": "Pulse",
+  "file": "Sources/PulseUI/Features/Filters/Cells/ConsoleSearchDurationCell.swift",
+  "line": 16,
+  "element": "picker",
+  "place": "form",
+  "id": "3-124",
+  "note": "Duration unit picker in the filters panel (labeled control in a ConsoleSection); \"named ...Cell\" made it a listRow"
+ },
+ {
+  "app": "Pulse",
+  "file": "Sources/PulseUI/Features/Filters/Cells/ConsoleSearchLogLevelsCell.swift",
+  "line": 44,
+  "element": "button",
+  "place": "form",
+  "id": "3-23",
+  "note": "Select All above level toggles in a filter Form"
+ },
+ {
+  "app": "QuickRecorder",
+  "file": "QuickRecorder/ViewModel/PreviewView.swift",
+  "line": 112,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-14",
+  "note": ".contextMenu item"
+ },
+ {
+  "app": "QuickRecorder",
+  "file": "QuickRecorder/ViewModel/ScreenSelector.swift",
+  "line": 132,
+  "element": "button",
+  "place": "bottomBar",
+  "id": "3-171",
+  "note": "Record button in the bottom row of the Screen Selector window (opened with createNewWindow, a normal window); scanner followed \"used in 3 places\" into the caller's popover context"
+ },
+ {
+  "app": "Rockxy",
+  "file": "Rockxy/Views/Breakpoint/BreakpointRuleEditorWindowView.swift",
+  "line": 336,
+  "element": "menu",
+  "place": "form",
+  "id": "3-75",
+  "note": "HTTP method menu in a labeled field group of a rule editor window; the fields sit in a rounded bordered box, so card is also defensible"
+ },
+ {
+  "app": "Rockxy",
+  "file": "Rockxy/Views/Insights/TrafficInsightsReportView.swift",
+  "line": 54,
+  "element": "button",
+  "place": "alert",
+  "id": "3-16",
+  "note": ".alert OK"
+ },
+ {
+  "app": "Rockxy",
+  "file": "Rockxy/Views/Inspector/ContextDetailsView.swift",
+  "line": 169,
+  "element": "button",
+  "place": "bottomBar",
+  "id": "3-94",
+  "note": "WorkspaceFooterBar of the inspector pane"
+ },
+ {
+  "app": "Rockxy",
+  "file": "Rockxy/Views/Rules/ProtobufSchemaListWindowView.swift",
+  "line": 382,
+  "element": "button",
+  "place": "page",
+  "id": "3-60",
+  "note": "Retry in an inline availability notice shown above a non-empty schema table; the case name .storageUnavailable is not an empty state"
+ },
+ {
+  "app": "Rockxy",
+  "file": "Rockxy/Views/Settings/AdvancedProxySettingsView.swift",
+  "line": 677,
+  "element": "button",
+  "place": "form",
+  "id": "3-68",
+  "note": "helper-tool buttons in a settings pane"
+ },
+ {
+  "app": "Rockxy",
+  "file": "Rockxy/Views/Settings/ExternalProxySettingsView.swift",
+  "line": 492,
+  "element": "button",
+  "place": "form",
+  "id": "3-121",
+  "note": "Keep Editing/Reload in a conflict notice at the top of a settings pane; page (banner) also arguable"
+ },
+ {
+  "app": "Rockxy",
+  "file": "Rockxy/Views/Settings/PluginsSettingsTab.swift",
+  "line": 63,
+  "element": "field",
+  "place": "page",
+  "id": "3-11",
+  "note": "search field over the plugin list (leading pane of an HSplitView in Settings), not a trailing inspector; scanner took HSplitView as inspector"
+ },
+ {
+  "app": "Rockxy",
+  "file": "Rockxy/Views/Settings/ToolsSettingsTab.swift",
+  "line": 28,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-6",
+  "note": "settings checkbox"
+ },
+ {
+  "app": "Rockxy",
+  "file": "Rockxy/Views/Sidebar/SidebarView.swift",
+  "line": 1027,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-4",
+  "note": "Menu content in sidebar"
+ },
+ {
+  "app": "Rockxy",
+  "file": "Rockxy/Views/Toolbar/ActiveFilterSummaryBar.swift",
+  "line": 103,
+  "element": "button",
+  "place": "actionRow",
+  "id": "3-36",
+  "note": "Clear All in a filter-chip bar stacked at the top of the content in a glass shelf (VStack, not an overlay); floating or actionRow both defensible"
+ },
+ {
+  "app": "Sidekick",
+  "file": "Sidekick/Views/Chat/Conversation/Controls/Temporary Resource/TemporaryResourceView.swift",
+  "line": 21,
+  "element": "button",
+  "place": "bottomBar",
+  "id": "3-108",
+  "note": "attachment chip in the chat composer's resource strip (ConversationControlsView); not a page control"
+ },
+ {
+  "app": "Sidekick",
+  "file": "Sidekick/Views/Settings/Arguments/ArgumentSliderView.swift",
+  "line": 63,
+  "element": "field",
+  "place": "form",
+  "id": "3-141",
+  "note": "value field next to a settings slider"
+ },
+ {
+  "app": "Sidekick",
+  "file": "Sidekick/Views/Settings/Model/ModelNameMenu.swift",
+  "line": 154,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-133",
+  "note": "Menu content"
+ },
+ {
+  "app": "Sidekick",
+  "file": "Sidekick/Views/Settings/Model/ServerArgumentsEditor.swift",
+  "line": 95,
+  "element": "toggle",
+  "place": "listRow",
+  "id": "3-12",
+  "note": "checkbox in a Table column"
+ },
+ {
+  "app": "Sidekick",
+  "file": "Sidekick/Views/Settings/SystemPromptEditor.swift",
+  "line": 49,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-22",
+  "note": "Cancel/Use Default/Save row at the bottom of SystemPromptEditor, which is presented with .sheet from InferenceSettingsView; root-view HStack after a Divider at the end is a sheet footer"
+ },
+ {
+  "app": "Stockbar",
+  "file": "StockMonitor/Views/SettingsView.swift",
+  "line": 327,
+  "element": "button",
+  "place": "listRow",
+  "id": "3-116",
+  "note": "edit pencil in a stock row inside the menu bar extra settings; listRow is nearer, popover is the container"
+ },
+ {
+  "app": "TablePro",
+  "file": "Plugins/JSONImportPlugin/JSONImportOptionsView.swift",
+  "line": 22,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-10",
+  "note": "import options group of labeled controls"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/Compare/CompareDataPlansView.swift",
+  "line": 182,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-76",
+  "note": "Select menu content"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/Components/AddRemoveControlGroup.swift",
+  "line": 27,
+  "element": "button",
+  "place": "bottomBar",
+  "id": "3-28",
+  "note": "+/- control group under a list"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/Editor/History/HistoryPanelToolbar.swift",
+  "line": 133,
+  "element": "button",
+  "place": "actionRow",
+  "id": "3-45",
+  "note": "pause button in a filter/search bar pinned at the top of the history pane (safeAreaInset top); no better place exists"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/Export/ExportRowScopeEditor.swift",
+  "line": 72,
+  "element": "button",
+  "place": "popover",
+  "id": "3-105",
+  "note": "Select All inside the export scope popover"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/Filter/FilterRowView.swift",
+  "line": 270,
+  "element": "menu",
+  "place": "listRow",
+  "id": "3-164",
+  "note": "operator menu inside one filter row (ForEach of filter rows); not an inspector"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/Filter/SQLPreviewSheet.swift",
+  "line": 49,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-162",
+  "note": "Copy/Close row in SQL preview sheet"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/Integrations/IntegrationsConnectedClientsPane.swift",
+  "line": 52,
+  "element": "button",
+  "place": "toolbar",
+  "id": "3-134",
+  "note": "ToolbarItem"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/ObjectCopy/CopyObjectsListView.swift",
+  "line": 43,
+  "element": "button",
+  "place": "actionRow",
+  "id": "3-152",
+  "note": "UNKNOWN; search + Select All bar at the top of the objects list (pane header bar)"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/RowInspector/RowInspectorView.swift",
+  "line": 205,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-67",
+  "note": "items in the pane header's ellipsis menu"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/Settings/Profiles/CredentialProfileEditorSheet.swift",
+  "line": 83,
+  "element": "field",
+  "place": "form",
+  "id": "3-98",
+  "note": "TextField in a sheet Form"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/Sidebar/ObjectCommentSheet.swift",
+  "line": 77,
+  "element": "button",
+  "place": "emptyState",
+  "id": "3-21",
+  "note": "UnavailableStateView actions"
+ },
+ {
+  "app": "TablePro",
+  "file": "TablePro/Views/Structure/CreateTableFormFieldRow.swift",
+  "line": 49,
+  "element": "field",
+  "place": "form",
+  "id": "3-120",
+  "note": "field row in a create-table form Section"
+ },
+ {
+  "app": "VirtualBuddy",
+  "file": "VirtualBuddy/Bootstrap/VirtualBuddyApp.swift",
+  "line": 78,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-139",
+  "note": "CommandGroup item"
+ },
+ {
+  "app": "VirtualBuddy",
+  "file": "VirtualUI/Source/Components/LogConsole.swift",
+  "line": 79,
+  "element": "field",
+  "place": "bottomBar",
+  "id": "3-166",
+  "note": "search field in the log console's bottom bar (.virtualBuddyBottomBar with a glass container); floating is also defensible"
+ },
+ {
+  "app": "VirtualBuddy",
+  "file": "VirtualUI/Source/VM Configuration/Sections/USBDevicesConfigurationView.swift",
+  "line": 143,
+  "element": "menu",
+  "place": "emptyState",
+  "id": "3-44",
+  "note": "Add... menu in GroupedList's emptyOverlay (shown when no USB devices); look right (GroupedList applies .link and small)"
+ },
+ {
+  "app": "VoiceInk",
+  "file": "VoiceInk/Features/Enhancement/Views/FillerWordsSettingsView.swift",
+  "line": 101,
+  "element": "button",
+  "place": "popover",
+  "id": "3-78",
+  "note": "Cancel/Add inside a popover"
+ },
+ {
+  "app": "VoiceInk",
+  "file": "VoiceInk/Features/ModelLibrary/Components/WhisperModelCardView.swift",
+  "line": 191,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-50",
+  "note": "item in a model card's Menu"
+ },
+ {
+  "app": "VoiceInk",
+  "file": "VoiceInk/Features/Modes/Components/TriggerSelectionItems.swift",
+  "line": 141,
+  "element": "button",
+  "place": "form",
+  "id": "3-102",
+  "note": "remove X on a trigger chip inside a Form Section"
+ },
+ {
+  "app": "VoiceInk",
+  "file": "VoiceInk/Features/Modes/Views/ModeSettingsQuickSwitchTip.swift",
+  "line": 23,
+  "element": "button",
+  "place": "card",
+  "id": "3-109",
+  "note": "dismiss X on a tip banner inside the Modes settings side panel; inspector (side panel) or card both defensible"
+ },
+ {
+  "app": "apple-garden",
+  "file": "Session1/Part1-End/GardenApp/Navigation/GardenDetail.swift",
+  "line": 60,
+  "element": "field",
+  "place": "toolbar",
+  "id": "3-41",
+  "note": ".searchable with a .toolbar on macOS sits in the toolbar"
+ },
+ {
+  "app": "apple-window-styles",
+  "file": "DestinationVideo/Views/DetailView.swift",
+  "line": 49,
+  "element": "button",
+  "place": "actionRow",
+  "id": "3-42",
+  "note": "UNKNOWN; Play Movie under title and synopsis on a detail page"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/ConnectionVault/Views/ManageConnections/Projects/ManageConnectionsView+ProjectComponents.swift",
+  "line": 75,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-77",
+  "note": "Cancel/Done footer of an icon picker sheet"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/Maintenance/Views/Postgres/PgBackupSidebarSheet+Output.swift",
+  "line": 68,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-62",
+  "note": "Cancel/Close in the sheet footer helper"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/ObjectBrowser/Views/ObjectBrowserSidebar/Sheets/AgentJobs/NewAgentJobSheet.swift",
+  "line": 145,
+  "element": "field",
+  "place": "form",
+  "id": "3-146",
+  "note": "TextField in a sheet Form"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/ObjectBrowser/Views/ObjectBrowserSidebar/Sheets/Database/NewDatabaseSheet+MSSQLPages.swift",
+  "line": 47,
+  "element": "field",
+  "place": "form",
+  "id": "3-107",
+  "note": "PropertyRow field in a Section of the New Database sheet's form (helper page called from the sheet); a sibling page helper (3-31) got form"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/ObjectBrowser/Views/ObjectBrowserSidebar/Sheets/Database/NewDatabaseSheet+MSSQLPages.swift",
+  "line": 91,
+  "element": "picker",
+  "place": "form",
+  "id": "3-31",
+  "note": "PropertyRow picker in a grouped form"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/ObjectBrowser/Views/ObjectBrowserSidebar/Sheets/Security/PermissionManager/PermissionManagerSecurablesPage.swift",
+  "line": 134,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-149",
+  "note": "permission checkbox grid in a Form section (listRow also arguable)"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/ObjectBrowser/Views/ObjectBrowserSidebar/Sheets/SequenceEditor/SequenceEditorGeneralPage.swift",
+  "line": 37,
+  "element": "field",
+  "place": "form",
+  "id": "3-117",
+  "note": "PropertyRow field in a Form"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/QueryStore/Views/QueryStoreView+Sections.swift",
+  "line": 26,
+  "element": "picker",
+  "place": "actionRow",
+  "id": "3-163",
+  "note": "time-range picker in a filter bar above the Query Store results; not plain page"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/QueryWorkspace/Views/Query/Find/EditorFindBar.swift",
+  "line": 97,
+  "element": "button",
+  "place": "floating",
+  "id": "3-140",
+  "note": "circle button in the glass find bar over the editor"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/QueryWorkspace/Views/TableStructure/TablePropertiesView+Storage.swift",
+  "line": 48,
+  "element": "field",
+  "place": "form",
+  "id": "3-161",
+  "note": "PropertyRow field in a Section of the table properties form (Form is in the caller); the trail lost the Form when it followed the page helper up to the WindowGroup"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/SchemaDiagram/Views/DiagramAnnotationView.swift",
+  "line": 28,
+  "element": "button",
+  "place": "card",
+  "id": "3-20",
+  "note": "UNKNOWN; Done/Cancel on an editable diagram annotation note (card-like panel on canvas)"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/SchemaDiagram/Views/DiagramCreateRelationshipSheet.swift",
+  "line": 54,
+  "element": "picker",
+  "place": "form",
+  "id": "3-89",
+  "note": "Picker in a sheet Form section"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/Security/Views/MSSQL/AdvancedObjects/MSSQLFullTextSection.swift",
+  "line": 175,
+  "element": "button",
+  "place": "card",
+  "id": "3-159",
+  "note": "New Index in a GroupBox label"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/Security/Views/MSSQL/MSSQLSecurityAlwaysEncryptedSection.swift",
+  "line": 34,
+  "element": "button",
+  "place": "alert",
+  "id": "3-154",
+  "note": ".alert destructive"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/Security/Views/Postgres/AdvancedObjects/PostgresFDWSection.swift",
+  "line": 205,
+  "element": "menu",
+  "place": "contextMenu",
+  "id": "3-63",
+  "note": "submenu inside .contextMenu"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/Security/Views/Postgres/AdvancedObjects/PostgresRulesSection.swift",
+  "line": 112,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-34",
+  "note": ".contextMenu item"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/Security/Views/Postgres/PostgresPoliciesSection.swift",
+  "line": 121,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-157",
+  "note": "table selection context menu"
+ },
+ {
+  "app": "echo",
+  "file": "Echo/Sources/Features/TuningAdvisor/Views/ResourceGovernorView.swift",
+  "line": 109,
+  "element": "button",
+  "place": "emptyState",
+  "id": "3-72",
+  "note": "TabContentUnavailableView action"
+ },
+ {
+  "app": "echo",
+  "file": "EchoLab/Sources/EchoLab/Blueprint/RoundControls.swift",
+  "line": 18,
+  "element": "menu",
+  "place": "form",
+  "id": "3-167",
+  "note": "labeled control menu in a grid of round controls (a panel of labeled settings); a grid of controls is not a list row"
+ },
+ {
+  "app": "echo",
+  "file": "EchoLab/Sources/EchoLab/Decided/Library/Round12/LabRound12TwoLineTabs.swift",
+  "line": 151,
+  "element": "button",
+  "place": "floating",
+  "id": "3-51",
+  "note": "close button on a tab in a glass-capsule tab strip (lab mock); floating or toolbar/tab bar"
+ },
+ {
+  "app": "echo",
+  "file": "EchoLab/Sources/EchoLab/Ongoing/ConnectMenu/LabCMList.swift",
+  "line": 159,
+  "element": "button",
+  "place": "popover",
+  "id": "3-24",
+  "note": "folding section heading inside the connect-menu popover"
+ },
+ {
+  "app": "echo",
+  "file": "EchoLab/Sources/EchoLab/Ongoing/ResultsErrorPage/ResultsErrorPageRound.swift",
+  "line": 201,
+  "element": "button",
+  "place": "card",
+  "id": "3-125",
+  "note": "lab mock of a results-error banner; buttons inside the error message box (card) vs bottomBar for the footer variant"
+ },
+ {
+  "app": "echo",
+  "file": "EchoLab/Sources/EchoLab/Test/Scenarios/ScenarioExpectationEditor.swift",
+  "line": 45,
+  "element": "button",
+  "place": "card",
+  "id": "3-156",
+  "note": "inside LabReadingCard"
+ },
+ {
+  "app": "echo",
+  "file": "EchoLab/Sources/EchoLab/Test/Scenarios/ScenarioPlaygroundPage.swift",
+  "line": 34,
+  "element": "field",
+  "place": "actionRow",
+  "id": "3-29",
+  "note": "UNKNOWN; header row of a lab page with picker, group field and Save (actionRow)"
+ },
+ {
+  "app": "echo",
+  "file": "EchoLab/Sources/EchoLab/Test/Scenarios/ScenarioRuleEditor.swift",
+  "line": 62,
+  "element": "button",
+  "place": "listRow",
+  "id": "3-150",
+  "note": "Remove X on each row of a reorderable kinds list in a sheet; repeated record row, not page"
+ },
+ {
+  "app": "enchanted",
+  "file": "Enchanted/UI/Shared/Chat/Components/SelectedImageView.swift",
+  "line": 21,
+  "element": "button",
+  "place": "bottomBar",
+  "id": "3-64",
+  "note": "thumbnail remove button; only used in the iOS chat composer bar (unused on macOS); scanner called it a root view and fell back to page"
+ },
+ {
+  "app": "hatch-app",
+  "file": "Sources/HatchApp/RootView.swift",
+  "line": 165,
+  "element": "button",
+  "place": "toolbar",
+  "id": "3-13",
+  "note": "ToolbarActions inside ToolbarItemGroup"
+ },
+ {
+  "app": "hatch-app",
+  "file": "Sources/HatchApp/Screens/DecideLab.swift",
+  "line": 684,
+  "element": "button",
+  "place": "form",
+  "id": "3-169",
+  "note": "Reset in a grouped Form section"
+ },
+ {
+  "app": "hatch-app",
+  "file": "Sources/HatchApp/Screens/DecideLab.swift",
+  "line": 1084,
+  "element": "button",
+  "place": "bottomBar",
+  "id": "3-17",
+  "note": "LabActionButtons is used in 4 places (header bar, bottom bar, floating bar, inline in card); card is one of them"
+ },
+ {
+  "app": "hatch-app",
+  "file": "Sources/HatchApp/Screens/Settings/ShortcutsSettingsPage.swift",
+  "line": 47,
+  "element": "button",
+  "place": "alert",
+  "id": "3-112",
+  "note": "confirmationDialog Cancel"
+ },
+ {
+  "app": "hatch-app",
+  "file": "Sources/HatchApp/Screens/Settings/ToolsSettingsPage.swift",
+  "line": 71,
+  "element": "menu",
+  "place": "form",
+  "id": "3-92",
+  "note": "Choose... menu in a Form section header"
+ },
+ {
+  "app": "hatch-app",
+  "file": "Sources/HatchApp/Screens/SketchBoard.swift",
+  "line": 360,
+  "element": "button",
+  "place": "card",
+  "id": "3-158",
+  "note": "inside HXCard"
+ },
+ {
+  "app": "hatch-app",
+  "file": "Sources/HatchApp/Screens/TicketDetailView.swift",
+  "line": 567,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-7",
+  "note": "Cancel/Send Back row in sheet"
+ },
+ {
+  "app": "hatch-app",
+  "file": "Sources/HatchApp/Screens/TicketWindowView.swift",
+  "line": 28,
+  "element": "button",
+  "place": "toolbar",
+  "id": "3-113",
+  "note": "Back/Forward ControlGroup in ToolbarItem"
+ },
+ {
+  "app": "hatch-app",
+  "file": "Sources/HatchApp/Screens/TicketsView.swift",
+  "line": 156,
+  "element": "picker",
+  "place": "card",
+  "id": "3-91",
+  "note": "sort picker in the filter bar inside the .floatingCard() search box at the top of the Tickets page; actionRow also defensible, page is not"
+ },
+ {
+  "app": "kaset",
+  "file": "Sources/Kaset/Views/ArtistDetailView.swift",
+  "line": 186,
+  "element": "button",
+  "place": "actionRow",
+  "id": "3-93",
+  "note": "Shuffle in the artist header under name and description; actions under a page title"
+ },
+ {
+  "app": "kaset",
+  "file": "Sources/Kaset/Views/MiniPlayerViews.swift",
+  "line": 448,
+  "element": "button",
+  "place": "popover",
+  "id": "3-27",
+  "note": "custom traffic-light buttons on the mini player window chrome (small floating window), not a card; \"rounded background\" heuristic fired on the window's own shape"
+ },
+ {
+  "app": "kaset",
+  "file": "Sources/Kaset/Views/QueueView.swift",
+  "line": 46,
+  "element": "button",
+  "place": "floating",
+  "id": "3-65",
+  "note": "Clear in the header of the glass Up Next panel floating over the player; inspector also arguable"
+ },
+ {
+  "app": "kaset",
+  "file": "Sources/Kaset/Views/SharedViews/ItemContextMenus.swift",
+  "line": 128,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-135",
+  "note": "song .contextMenu item"
+ },
+ {
+  "app": "kaset",
+  "file": "Sources/Kaset/Views/SharedViews/ShareContextMenu.swift",
+  "line": 75,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-138",
+  "note": "UNKNOWN; static share menuItem helper used inside context menus"
+ },
+ {
+  "app": "kaset",
+  "file": "Sources/Kaset/Views/YouTube/YouTubeAskPanelView.swift",
+  "line": 304,
+  "element": "field",
+  "place": "floating",
+  "id": "3-85",
+  "note": "input row of a glass Ask panel floating over the video"
+ },
+ {
+  "app": "kaset",
+  "file": "Sources/Kaset/Views/YouTubeSettingsView.swift",
+  "line": 43,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-49",
+  "note": "Form toggle"
+ },
+ {
+  "app": "kiwix-apple",
+  "file": "Views/Library/ZimFileContextMenu.swift",
+  "line": 27,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-70",
+  "note": "ZimFileContextMenu content"
+ },
+ {
+  "app": "linearmouse",
+  "file": "LinearMouse/UI/ButtonsSettings/ClickDebouncingSection.swift",
+  "line": 115,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-79",
+  "note": "checkbox in a settings Form"
+ },
+ {
+  "app": "linearmouse",
+  "file": "LinearMouse/UI/Header/DeviceIndicator/DevicePickerSheet/DevicePickerSheet.swift",
+  "line": 57,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-18",
+  "note": "labeled switch row in a settings-like sheet; page also defensible"
+ },
+ {
+  "app": "linearmouse",
+  "file": "LinearMouse/UI/Header/DisplayIndicator/DisplayPickerSheet/DisplayPickerSheet.swift",
+  "line": 36,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-86",
+  "note": "place right; look misses sheetSecondaryActionStyle() (a modifier that applies .bordered and sizing) and .asCancelAction(); reported style automatic"
+ },
+ {
+  "app": "linearmouse",
+  "file": "LinearMouse/UI/PointerSettings/PointerSettings.swift",
+  "line": 166,
+  "element": "toggle",
+  "place": "form",
+  "id": "3-137",
+  "note": "Form toggle"
+ },
+ {
+  "app": "onit",
+  "file": "macos/OnitSideKick/Settings/Models/CustomProvider/CustomProviderRow.swift",
+  "line": 107,
+  "element": "field",
+  "place": "card",
+  "id": "3-69",
+  "note": "API key field inside a provider box with rounded background in settings"
+ },
+ {
+  "app": "onit",
+  "file": "macos/OnitSideKick/Settings/Pages/SettingsSidekickDebug.swift",
+  "line": 541,
+  "element": "button",
+  "place": "listRow",
+  "id": "3-87",
+  "note": "export buttons inside an expanded result row"
+ },
+ {
+  "app": "onit",
+  "file": "macos/OnitSideKick/UI/Prompt/Files/PaperclipButton.swift",
+  "line": 57,
+  "element": "button",
+  "place": "bottomBar",
+  "id": "3-73",
+  "note": "Add context next to the paperclip in the prompt composer's attachment row; \"named FileRow\" made it a listRow"
+ },
+ {
+  "app": "pareto-mac",
+  "file": "Pareto/Views/Settings/Checks/CheckDetailView.swift",
+  "line": 60,
+  "element": "button",
+  "place": "sheetFooter",
+  "id": "3-131",
+  "note": "Cancel (escape) / Done (default) row of a sheet, drawn as a header bar at the top; it is the sheet's dismiss row, not page content"
+ },
+ {
+  "app": "pareto-mac",
+  "file": "Pareto/Views/Settings/Checks/IgnoredUsersSettingsView.swift",
+  "line": 118,
+  "element": "button",
+  "place": "form",
+  "id": "3-35",
+  "note": "Add next to picker in a settings Form"
+ },
+ {
+  "app": "redis-pro",
+  "file": "redis-pro/Views/Sidebar/RedisKeysListView.swift",
+  "line": 49,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-9",
+  "note": "Menu content"
+ },
+ {
+  "app": "reminders-menubar",
+  "file": "reminders-menubar/Views/Helpers/ReminderExternalLinksView.swift",
+  "line": 84,
+  "element": "button",
+  "place": "listRow",
+  "id": "3-82",
+  "note": "copy-link button inside a reminder's row in the menu bar popover; popover is the container, listRow the nearer place"
+ },
+ {
+  "app": "reminders-menubar",
+  "file": "reminders-menubar/Views/SettingsView/AboutSettingsTab.swift",
+  "line": 42,
+  "element": "button",
+  "place": "page",
+  "id": "3-52",
+  "note": "See on GitHub / Check for Updates on an About tab of Settings; not a form of labeled controls but in the settings window"
+ },
+ {
+  "app": "simplelogin-mac",
+  "file": "SimpleLogin/SimpleLogin/Screens/Logged in/IAPView.swift",
+  "line": 122,
+  "element": "button",
+  "place": "page",
+  "id": "3-155",
+  "note": "main subscribe button in the body of a paywall sheet"
+ },
+ {
+  "app": "simplelogin-mac",
+  "file": "SimpleLogin/SimpleLogin/Screens/Logged in/PremiumPerksView.swift",
+  "line": 64,
+  "element": "button",
+  "place": "alert",
+  "id": "3-33",
+  "note": ".alert action"
+ },
+ {
+  "app": "textream",
+  "file": "Textream/Textream/TextreamApp.swift",
+  "line": 184,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-40",
+  "note": "CommandGroup button"
+ },
+ {
+  "app": "textream",
+  "file": "Textream/Textream/TextreamApp.swift",
+  "line": 196,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-74",
+  "note": "CommandGroup item"
+ },
+ {
+  "app": "vvterm",
+  "file": "VVTerm/Core/UI/EmptyStateViews.swift",
+  "line": 35,
+  "element": "button",
+  "place": "emptyState",
+  "id": "3-59",
+  "note": "Connect on a not-connected placeholder"
+ },
+ {
+  "app": "vvterm",
+  "file": "VVTerm/Features/RemoteFiles/UI/Components/RemoteFileTabChrome+macOS.swift",
+  "line": 58,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-0",
+  "note": "tab right-click menu"
+ },
+ {
+  "app": "vvterm",
+  "file": "VVTerm/Features/RemoteFiles/UI/Preview/RemoteFilePreviewViews.swift",
+  "line": 92,
+  "element": "button",
+  "place": "alert",
+  "id": "3-90",
+  "note": ".alert OK"
+ },
+ {
+  "app": "vvterm",
+  "file": "VVTerm/Features/RemoteFiles/UI/RemoteFileBrowserScreen.swift",
+  "line": 672,
+  "element": "button",
+  "place": "contextMenu",
+  "id": "3-43",
+  "note": "Move... is a menu item in renameAndMoveMenuActions -> entryActionMenu/inspectorActionMenu, which are only called from the iOS file (inside Menu); on macOS it is unused, never a page button"
+ },
+ {
+  "app": "vvterm",
+  "file": "VVTerm/Features/Settings/UI/SyncSettingsView.swift",
+  "line": 16,
+  "element": "button",
+  "place": "form",
+  "id": "3-3",
+  "note": "Form section button"
+ },
+ {
+  "app": "vvterm",
+  "file": "VVTerm/Features/TerminalSessions/UI/Terminal/TerminalEmptyStateView.swift",
+  "line": 27,
+  "element": "button",
+  "place": "emptyState",
+  "id": "3-58",
+  "note": "New Terminal on a no-terminals placeholder"
+ }
+]
