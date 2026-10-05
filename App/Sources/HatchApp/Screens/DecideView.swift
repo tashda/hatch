@@ -1055,7 +1055,7 @@ private struct DecideQueueCard: View {
     }
 
     private func row(_ mark: DecideRun.Mark, _ item: PendingDecision, clickable: Bool) -> some View {
-        Button { if clickable { go(item.id) } } label: {
+        QueueRow(current: mark == .current, clickable: clickable, action: { go(item.id) }) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 DecideSessionView.pill(mark).frame(width: 28).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
                 Text(item.ticket.displayNumber).font(.caption.monospaced()).foregroundStyle(.secondary).frame(width: 40, alignment: .leading)
@@ -1065,12 +1065,7 @@ private struct DecideQueueCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(mark == .current ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 9))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .allowsHitTesting(clickable || mark == .current)
     }
 
     /// What kind of decision it is, and where it stands when that is not just "waiting".
@@ -1090,6 +1085,33 @@ private struct DecideQueueCard: View {
         case .current: return kind + " · on screen"
         default: return kind + " · " + DecideSessionView.words(mark)
         }
+    }
+}
+
+/// One row of the queue card: tinted when it is on screen, and a soft highlight under the pointer when it can be
+/// gone to, like a menu or a sidebar row.
+private struct QueueRow<Label: View>: View {
+    let current: Bool
+    let clickable: Bool
+    let action: () -> Void
+    @ViewBuilder let label: () -> Label
+    @State private var hovering = false
+
+    var body: some View {
+        Button { if clickable { action() } } label: {
+            label()
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(fill, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .allowsHitTesting(clickable || current)
+        .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hovering = h && clickable } }
+    }
+
+    private var fill: Color {
+        if current { return Color.accentColor.opacity(hovering ? 0.18 : 0.14) }
+        return hovering ? Color.primary.opacity(0.08) : .clear
     }
 }
 
