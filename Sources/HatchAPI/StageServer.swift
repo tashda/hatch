@@ -38,6 +38,9 @@ public final class StageServer: @unchecked Sendable {
     public let paths: HatchPaths?
     /// Set before `start()`; the Hatch app uses it to refresh the UI.
     public var events: StageEvents?
+    /// Commits a notebook after the Components Designer changed the design system (the app sets it with HatchGit);
+    /// nil leaves the files written but uncommitted.
+    public var commitNotebook: ((_ folder: String, _ message: String) -> Void)?
 
     private let requestedPort: UInt16
     private let rememberedKeys: Int
@@ -345,6 +348,17 @@ public final class StageServer: @unchecked Sendable {
             try need("GET")
             return (200, try stageInfo(ref: rest[1], revision: req.query["revision"]), false)
         }
+        // The Components Designer (decision DS1): read the design system, and change it only through Hatch (DS2).
+        if rest.count == 3, rest[0] == "projects", rest[2] == "components" {
+            try need("GET")
+            let (system, folder) = try componentSystem(rest[1])
+            return (200, ["system": JSONValue.parse(String(decoding: try system.encoded(), as: UTF8.self)), "notebook": .string(folder)], false)
+        }
+        if rest.count == 4, rest[0] == "projects", rest[2] == "components" {
+            try need("POST")
+            let key = rest[1], action = rest[3]
+            return try mutate(req) { try self.changeComponents(key, action, Body(req)) }
+        }
         if rest.count == 3, rest[0] == "tickets" {
             let ref = rest[1]
             switch rest[2] {
@@ -386,6 +400,65 @@ public final class StageServer: @unchecked Sendable {
     }
 
     // MARK: Endpoints
+
+    private func componentSystem(_ key: String) throws -> (ComponentSystem, String) {
+        guard let project = try store.project(key: key) else { throw APIError(status: 404, code: "not_found", message: "No project \(key).") }
+        guard let folder = project.config?.repo(.notebook)?.localPath else {
+            throw APIError(status: 409, code: "no_notebook", message: "\(project.name) has no notebook on this Mac.")
+        }
+        guard let system = try ComponentSystem.load(notebook: folder) else {
+            throw APIError(status: 404, code: "no_system", message: "\(project.name) has no design system yet.")
+        }
+        return (system, folder)
+    }
+
+    /// answer {question, option} · agree {role?} · look {role, recipe} · apply {role?} · discard {role} · variant {role, id, use, recipe}
+    private func changeComponents(_ key: String, _ action: String, _ body: Body) throws -> (JSONValue, StageEvent?) {
+        var (system, folder) = try componentSystem(key)
+        func recipe() throws -> [String: String] {
+            guard let o = body.object["recipe"]?.objectValue else { throw APIError(status: 400, code: "bad_request", message: "recipe must be an object.") }
+            return o.compactMapValues(\.stringValue)
+        }
+        let decision = try body.optionalString("decision", max: 40)
+        let message: String
+        do {
+            switch action {
+            case "answer":
+                let id = try body.string("question", max: 200)
+                guard let option = try body.optionalInt("option") else { throw APIError(status: 400, code: "bad_request", message: "option is required.") }
+                let q = system.questions.first { $0.id == id }
+                try system.answer(id, option: option, decision: decision)
+                message = "Components: \(q?.title ?? id) — \(q.flatMap { $0.options.indices.contains(option) ? $0.options[option].title : nil } ?? "")"
+            case "agree":
+                let role = try body.optionalString("role", max: 120)
+                try system.agree(role, decision: decision)
+                message = "Components: agree " + (role ?? "every provisional role")
+            case "look":
+                let role = try body.string("role", max: 120)
+                try system.setLook(role, recipe: recipe())
+                message = "Components: new look for \(role)"
+            case "apply":
+                let role = try body.optionalString("role", max: 120)
+                let changed = try system.applyDrafts(role, decision: decision)
+                message = "Components: baseline v\(system.version), " + changed.joined(separator: ", ")
+            case "discard":
+                let role = try body.string("role", max: 120)
+                try system.discardDraft(role)
+                message = "Components: keep \(role) as it is"
+            case "variant":
+                let role = try body.string("role", max: 120)
+                try system.addVariant(to: role, id: try body.string("id", max: 60), use: try body.string("use", max: 300), recipe: recipe())
+                message = "Components: variant of \(role)"
+            default:
+                throw APIError(status: 404, code: "not_found", message: "Unknown components action \(action).")
+            }
+        } catch let e as ComponentAnswerError {
+            throw APIError(status: 422, code: "invalid", message: e.description)
+        }
+        try system.write(notebook: folder)
+        commitNotebook?(folder, message)
+        return (["system": JSONValue.parse(String(decoding: try system.encoded(), as: UTF8.self))], nil)
+    }
 
     private func ticket(_ ref: String) throws -> Ticket { try store.resolve(ref) }
 

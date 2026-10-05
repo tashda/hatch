@@ -70,6 +70,18 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         return try load(from: url)
     }
 
+    /// Writes the system file and its README into a notebook folder. Refuses a system with problems, so nothing
+    /// broken reaches the agents. Committing is the caller's (HatchGit), so the core stays free of git.
+    public func write(notebook folder: String) throws {
+        let problems = problems()
+        guard problems.isEmpty else { throw StoreError.invalid("The system would have problems: " + problems.joined(separator: " ")) }
+        let base = URL(fileURLWithPath: folder)
+        let file = base.appendingPathComponent(Self.notebookPath)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try encoded().write(to: file, options: .atomic)
+        try Data(readme().utf8).write(to: base.appendingPathComponent(Self.readmePath), options: .atomic)
+    }
+
     /// Sorted keys and a final newline, so the same system always writes the same bytes and diffs stay small.
     public func encoded() throws -> Data {
         let e = JSONEncoder()
@@ -428,6 +440,9 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
     public var status: Status
     /// The decision that set it, such as `#12` or `DS6`.
     public var decision: String?
+    /// A proposed new look for an agreed role, judged beside the current one (workflow E). Applying it makes the next
+    /// baseline version.
+    public var draft: [String: String]?
 
     public init(_ id: String, _ title: String, use: String, avoid: String = "", places: [String], importance: Importance,
                 perScreen: Int? = nil, recipe: [String: String] = [:], custom: String? = nil, variants: [ComponentVariant] = [],
@@ -438,7 +453,7 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, use, avoid, places, importance, perScreen, recipe, custom, variants, status, decision
+        case id, title, use, avoid, places, importance, perScreen, recipe, custom, variants, status, decision, draft
     }
 
     public init(from decoder: Decoder) throws {
@@ -455,6 +470,7 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
         variants = try c.decodeIfPresent([ComponentVariant].self, forKey: .variants) ?? []
         status = try c.decodeIfPresent(Status.self, forKey: .status) ?? .provisional
         decision = try c.decodeIfPresent(String.self, forKey: .decision)
+        draft = try c.decodeIfPresent([String: String].self, forKey: .draft)
     }
 
     public var element: String { id.split(separator: ".", maxSplits: 1).first.map(String.init) ?? id }

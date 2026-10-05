@@ -315,6 +315,42 @@ public extension ComponentSystem {
         }
     }
 
+    /// Changes a role's look. A provisional role takes it at once (it is still being decided); an agreed one gets it as
+    /// a draft beside its current look and goes into redesign, because changing it changes every screen that uses it.
+    mutating func setLook(_ roleId: String, recipe: [String: String]) throws {
+        guard let i = roles.firstIndex(where: { $0.id == roleId }) else { throw ComponentAnswerError.noRole(roleId) }
+        if roles[i].status == .provisional {
+            roles[i].recipe = recipe
+        } else {
+            roles[i].draft = recipe == roles[i].recipe ? nil : recipe
+            roles[i].status = roles[i].draft == nil ? .agreed : .inRedesign
+        }
+    }
+
+    /// Makes drafts the roles' looks (one role, or all with drafts) and starts the next baseline version. Returns the
+    /// roles that changed.
+    @discardableResult
+    mutating func applyDrafts(_ roleId: String? = nil, decision: String? = nil) throws -> [String] {
+        var changed: [String] = []
+        for i in roles.indices where roles[i].draft != nil && (roleId == nil || roles[i].id == roleId) {
+            roles[i].recipe = roles[i].draft!
+            roles[i].draft = nil
+            roles[i].status = .agreed
+            roles[i].decision = decision ?? roles[i].decision
+            changed.append(roles[i].id)
+        }
+        if let roleId, changed.isEmpty, role(roleId) == nil { throw ComponentAnswerError.noRole(roleId) }
+        if !changed.isEmpty { version += 1 }
+        return changed
+    }
+
+    /// Drops a draft: the role keeps its agreed look.
+    mutating func discardDraft(_ roleId: String) throws {
+        guard let i = roles.firstIndex(where: { $0.id == roleId }) else { throw ComponentAnswerError.noRole(roleId) }
+        roles[i].draft = nil
+        if roles[i].status == .inRedesign { roles[i].status = .agreed }
+    }
+
     /// Keeps a second look of a role as a variant, with its reason (DS4's "keep it as a variant").
     mutating func addVariant(to roleId: String, id: String, use: String, recipe: [String: String], places: [String]? = nil) throws {
         guard let i = roles.firstIndex(where: { $0.id == roleId }) else { throw ComponentAnswerError.noRole(roleId) }

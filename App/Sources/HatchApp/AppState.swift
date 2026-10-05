@@ -185,6 +185,10 @@ final class AppState: ObservableObject {
         server.events = { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
+        // The Components Designer's changes land in the notebook as commits, like every other notebook change.
+        server.commitNotebook = { folder, message in
+            _ = try? NotebookWriter.commit(message, in: folder)
+        }
         do {
             try server.start()
             stageServer = server

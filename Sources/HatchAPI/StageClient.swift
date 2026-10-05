@@ -58,6 +58,23 @@ public final class StageClient: @unchecked Sendable {
 
     public func health() throws -> JSONValue { try request("GET", "/v1/health", nil, key: nil) }
 
+    /// The project's design system, as the Components Designer reads it.
+    public func components(project: String) throws -> ComponentSystem {
+        let json = try request("GET", "/v1/projects/\(Self.enc(project))/components", nil, key: nil)
+        return try Self.system(json)
+    }
+
+    /// A change to the design system (answer, agree, look, apply, discard, variant); returns the system after it.
+    public func changeComponents(project: String, action: String, body: JSONValue) throws -> ComponentSystem {
+        let json = try request("POST", "/v1/projects/\(Self.enc(project))/components/\(action)", body, key: UUID().uuidString)
+        return try Self.system(json)
+    }
+
+    static func system(_ json: JSONValue) throws -> ComponentSystem {
+        guard let s = json["system"] else { throw StoreError.invalid("No system in the reply.") }
+        return try JSONDecoder().decode(ComponentSystem.self, from: Data(s.jsonString().utf8))
+    }
+
     /// The Proposal as Hatch has it: ticket, manifest string, revision, picks, verdicts, pins, revisions, status.
     public func proposal(ref: String) throws -> JSONValue { try request("GET", "/v1/tickets/\(Self.enc(ref))/proposal", nil, key: nil) }
 
