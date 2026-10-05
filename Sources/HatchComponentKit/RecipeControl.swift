@@ -493,7 +493,7 @@ private struct RecipeCard: View {
         .frame(maxWidth: 240, alignment: .leading)
         .background {
             switch recipe["surface"] {
-            case "grouped": shape.fill(.fill.quaternary)
+            case "grouped": shape.fill(Color.secondary.opacity(0.14))
             case "material": shape.fill(.regularMaterial)
             case "bordered": shape.strokeBorder(.separator)
             default: EmptyView()
@@ -550,7 +550,14 @@ private struct RecipeBadge: View {
         case "capsule": capsule(text, color: recipe["tint"] == "accent" ? Color.accentColor : Color.red)
         default:
             // The system badge: a red capsule on a toolbar item (like the Dock's), the count in grey at the end of a row.
-            if place == "toolbar" { capsule(text, color: .red) } else { Text("3").monospacedDigit().foregroundStyle(.secondary) }
+            // Prominence: more draws it in the label colour and heavier, less in the tertiary colour.
+            if place == "toolbar" { capsule(text, color: .red) } else {
+                switch recipe["prominence"] {
+                case "increased": Text("3").monospacedDigit().fontWeight(.semibold).foregroundStyle(.primary)
+                case "decreased": Text("3").monospacedDigit().foregroundStyle(.tertiary)
+                default: Text("3").monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
         }
     }
 

@@ -702,6 +702,14 @@ public struct ComponentParameter: Equatable, Sendable {
     public var deprecated: Set<String>
     /// The macOS a foundation value needs here (a radius for a button's shape: 14).
     public var foundationSince: Double?
+    /// Values that macOS 27 draws exactly alike wherever they are used (measured on captures, 2026-10-05): the first of
+    /// each group is offered, the rest are not (CD21: a choice that changes nothing feels broken).
+    public var twins: [[String]] = []
+
+    /// The value offered for `value`: itself, or the first of its twins.
+    public func offered(_ value: String) -> String { twins.first { $0.contains(value) }?.first ?? value }
+    /// The values that draw like `value` (without itself).
+    public func twins(of value: String) -> [String] { (twins.first { $0.contains(value) } ?? []).filter { $0 != value } }
 
     public init(_ id: String, _ title: String, _ values: [String], foundation: ComponentFoundation.Kind? = nil, isLook: Bool = true,
                 systemDefault: String? = nil, source: String? = nil, requires: [String: [String]] = [:],
@@ -794,7 +802,26 @@ public struct ComponentElement: Equatable, Sendable, Identifiable {
     // The catalog (CD52): every look option SwiftUI offers on macOS for these controls, checked against the macOS 27 SDK
     // (2026-10-05). `since` says the macOS a value needs when newer than 13; `fallback` what an older macOS draws instead.
     // Values Apple deprecated are kept so an app's code is still read, and marked so they are not offered.
-    public static let catalog: [ComponentElement] = [
+    public static let catalog: [ComponentElement] = withTwins(baseCatalog)
+
+    /// Twins measured on macOS 27 (see `ComponentParameter.twins`); only those alike in every place.
+    static let measuredTwins: [String: [[String]]] = [
+        "menu.style": [["automatic", "button"]], "menu.look": [["automatic", "bordered", "glass"], ["borderedProminent", "glassProminent"]],
+        "picker.style": [["automatic", "menu"], ["radioGroup", "inline"], ["segmented", "palette"]],
+        "picker.look": [["automatic", "bordered", "glass", "glassProminent"]],
+        "field.style": [["automatic", "bordered", "roundedBorder", "squareBorder"]], "field.shape": [["automatic", "roundedRectangle"]],
+        "gauge.style": [["automatic", "linearCapacity"]], "table.style": [["automatic", "inset"]],
+    ]
+
+    static func withTwins(_ list: [ComponentElement]) -> [ComponentElement] {
+        list.map { e in
+            var e = e
+            for i in e.parameters.indices { e.parameters[i].twins = measuredTwins["\(e.id).\(e.parameters[i].id)"] ?? [] }
+            return e
+        }
+    }
+
+    static let baseCatalog: [ComponentElement] = [
         ComponentElement(id: "button", title: "Button", plural: "Buttons", parameters: [
             ComponentParameter("style", "Style", ["automatic", "bordered", "borderedProminent", "borderless", "plain", "link", "accessoryBar",
                                                   "accessoryBarAction", "glass", "glassProminent", "glassClear"],

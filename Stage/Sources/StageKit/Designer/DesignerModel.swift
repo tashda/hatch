@@ -431,7 +431,11 @@ final class DesignerModel: ObservableObject {
     func choices(of p: ComponentParameter, for role: ComponentRole? = nil) -> [String?] {
         // Deprecated values are not offered (CD52), unless the role uses one now.
         let current = role.flatMap { look(of: $0)[p.id] }
-        let all: [String?] = [nil] + values(of: p).filter { $0 != p.systemDefault && (!p.deprecated.contains($0) || $0 == current) }.map { Optional($0) }
+        // Twins (values macOS 27 draws alike) are offered once, as the first of them (CD21).
+        let all: [String?] = [nil] + values(of: p).filter { v in
+            v != p.systemDefault && (!p.deprecated.contains(v) || v == current) && (p.offered(v) == v || v == current)
+                && !(p.systemDefault.map { p.offered(v) == p.offered($0) } ?? false)
+        }.map { Optional($0) }
         guard let role else { return all }
         // Only looks of the role's own kind (CD51): a setting toggle is never offered as a toggle button.
         return all.filter { v in
@@ -637,6 +641,29 @@ final class DesignerModel: ObservableObject {
     private func scopeTitle(element: String?, place: String?) -> String {
         let what = element.flatMap { ComponentElement.named($0)?.plural.lowercased() } ?? "everything"
         return place.map { "\(what) in \(ComponentPlace.title($0))" } ?? "all \(what)"
+    }
+
+    /// The batch changes worth offering for an element or a place: only those that would change something, each with
+    /// what it changes (the owner: only relevant buttons).
+    func actions(element: String?, place: String?) -> [DesignerAction] {
+        var out: [DesignerAction] = []
+        func count(_ b: DesignerBatch) -> Int { b.items.filter { item in
+            guard let r = system.role(item.role) else { return false }
+            return item.follow != r.followsMacOS || drawn(r.element, item.recipe) != drawn(r.element, r.draft ?? r.recipe)
+        }.count }
+        func roles(_ n: Int) -> String { "\(n) role\(n == 1 ? "" : "s") change" }
+        if place == nil, let element, ["button", "menu"].contains(element) {
+            let n = count(batchGlass(element: element))
+            if n > 0 { out.append(DesignerAction(title: "Use glass where it fits", detail: roles(n) + ", only in bottom bars, floating bars and action rows",
+                                                 symbol: "drop.halffull", request: .glass(element: element))) }
+        }
+        for t in templates {
+            let n = count(batchTemplate(t, element: element, place: place))
+            if n > 0 { out.append(DesignerAction(title: "Match \(t.title)", detail: roles(n), symbol: "square.on.square", request: .template(t.id, element: element, place: place))) }
+        }
+        let f = count(batchFollow(element: element, place: place))
+        if f > 0 { out.append(DesignerAction(title: "Follow macOS", detail: roles(f) + " to macOS's own look", symbol: "apple.logo", request: .follow(element: element, place: place))) }
+        return out
     }
 
     /// Agrees every provisional role of an element as it is, in one change.

@@ -478,6 +478,61 @@ struct RoleView: View {
     }
 }
 
+// MARK: - Actions (only the ones that change something)
+
+/// A change offered in an inspector or a context menu: what it is, what it changes, and the sheet it opens.
+struct DesignerAction: Identifiable {
+    var title: String
+    var detail: String
+    var symbol: String
+    var request: DesignerModel.BatchRequest
+    var id: String { request.id }
+}
+
+/// One action as a row: an icon in a tinted square, the title, what it changes, and a chevron (like System Settings).
+struct ActionRow: View {
+    let title: String
+    let detail: String
+    let symbol: String
+    var tint: Color = .accentColor
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(tint.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.callout)
+                    if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 5).padding(.horizontal, 6)
+            .background(hovered ? Color.primary.opacity(0.06) : .clear, in: RoundedRectangle(cornerRadius: 7))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+    }
+}
+
+struct ActionRows: View {
+    @ObservedObject var model: DesignerModel
+    let actions: [DesignerAction]
+    var body: some View {
+        ForEach(Array(actions.enumerated()), id: \.element.id) { i, a in
+            if i > 0 { Divider().padding(.leading, 40) }
+            ActionRow(title: a.title, detail: a.detail, symbol: a.symbol) { model.request = a.request }
+        }
+    }
+}
+
 // MARK: - To decide
 
 /// Everything waiting for a decision, grouped by control: what each role is for, where it is, and its options drawn.
@@ -804,15 +859,17 @@ struct PlaceInspector: View {
                     .buttonStyle(.plain)
                 }
             }
-            InspectorSection(title: "For the Whole Place", footer: "Each opens a list of every role it changes; a role that also sits elsewhere can change everywhere or only here.") {
-                ForEach(model.templates) { t in
-                    Button("Match \(t.title) Here…") { model.request = .template(t.id, element: nil, place: place) }
+            let actions = model.actions(element: nil, place: place)
+            if !actions.isEmpty {
+                InspectorSection(title: "For the Whole Place", footer: "Each shows every role it changes first; a role that also sits elsewhere can change everywhere or only here.") {
+                    ActionRows(model: model, actions: actions)
                 }
-                Button("Follow macOS Here…") { model.request = .follow(element: nil, place: place) }
-                Divider()
-                ForEach(elements, id: \.self) { e in
-                    Button("One Look for Every \(ComponentElement.named(e)?.title ?? e) Here…") { model.request = .setting(element: e, place: place) }
-                }
+            }
+            InspectorSection(title: "One Look Here") {
+                ActionRows(model: model, actions: elements.map { e in
+                    DesignerAction(title: "Every \(ComponentElement.named(e)?.title.lowercased() ?? e) here", detail: "Choose a setting and its value",
+                                   symbol: "slider.horizontal.3", request: .setting(element: e, place: place))
+                })
             }
         }
         .padding(14) }
@@ -1307,6 +1364,12 @@ struct LookChoices: View {
         }
     }
 
+    /// "Also draws like: Glass, Bordered" for a value with twins.
+    private func twinsNote(_ p: ComponentParameter, _ value: String?) -> String {
+        let twins = p.twins(of: value ?? p.systemDefault ?? "")
+        return twins.isEmpty ? "" : "\nOn macOS 27 these draw the same: " + twins.map { ComponentWords.value(element: element.id, parameter: p.id, value: $0) }.joined(separator: ", ") + "."
+    }
+
     /// One value of a setting, drawn on the role.
     private func chip(_ p: ComponentParameter, _ value: String?, _ recipe: [String: String]) -> some View {
         var tried = recipe
@@ -1341,7 +1404,7 @@ struct LookChoices: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help((value ?? "macOS default") + (need.map { "\nmacOS \(Int($0)) and later. On macOS \(model.oldestMacOSTitle): \(fallback)." } ?? ""))
+        .help((value ?? "macOS default") + twinsNote(p, value) + (need.map { "\nmacOS \(Int($0)) and later. On macOS \(model.oldestMacOSTitle): \(fallback)." } ?? ""))
     }
 }
 
@@ -1494,23 +1557,16 @@ struct ElementInspector: View {
                 }
             }
             if let el = ComponentElement.named(element), !el.keyParameters.isEmpty { ElementChoices(model: model, element: el) }
-            InspectorSection(title: "For All \(ComponentElement.named(element)?.plural ?? element)") {
-                if ["button", "menu"].contains(element) {
-                    Button("Use Glass Where It Fits…") { model.request = .glass(element: element) }
-                        .help("Only the style, only where Liquid Glass belongs: bottom bars, floating bars and action rows")
-                }
-                ForEach(model.templates) { t in
-                    Button("Match \(t.title)…") { model.request = .template(t.id, element: element, place: nil) }
-                        .help("Every role takes \(t.title)'s look for it; the list shows each change. " + t.summary)
-                }
-                Button("Follow macOS…") { model.request = .follow(element: element, place: nil) }
-                Button("One Look for All…") { model.request = .setting(element: element, place: nil) }
-            }
+            let actions = model.actions(element: element, place: nil)
             let clear = model.clearQuestions(element)
-            if !clear.isEmpty {
-                InspectorSection(footer: "Each takes its recommendation: the template's look, or the look 80% of uses already have. The roles stay provisional.") {
-                    Text(clear.compactMap { $0.role.flatMap { model.system.role($0)?.title } }.joined(separator: ", ")).font(.callout)
-                    Button("Accept the Clear Ones (\(clear.count))") { model.acceptClear(element) }
+            if !actions.isEmpty || !clear.isEmpty {
+                InspectorSection(title: "For All \(ComponentElement.named(element)?.plural ?? element)",
+                                 footer: "Each shows every role it changes before anything is saved.") {
+                    if !clear.isEmpty {
+                        ActionRow(title: "Accept the clear ones", detail: clear.compactMap { $0.role.flatMap { model.system.role($0)?.title } }.joined(separator: ", "),
+                                  symbol: "checkmark.circle", tint: .green) { model.acceptClear(element) }
+                    }
+                    ActionRows(model: model, actions: actions)
                 }
             }
             Text("Click a control on the canvas, or a role above, to open it in every place it sits.").font(.callout).foregroundStyle(.secondary)

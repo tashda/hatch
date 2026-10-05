@@ -154,22 +154,17 @@ struct BatchBanner: View {
     }
 }
 
-/// The scope menu items for an element, a place, or an element in a place (CD4, CD24).
+/// The scope menu items for an element, a place, or an element in a place (CD4, CD24): only the changes that would change
+/// something, each saying how many roles.
 struct BatchMenuItems: View {
     @ObservedObject var model: DesignerModel
     let element: String?
     let place: String?
 
     var body: some View {
-        let what = element.flatMap { ComponentElement.named($0)?.plural } ?? "Everything"
-        let scope = place.map { " in \(ComponentPlace.title($0))" } ?? ""
-        if place == nil, let element, ["button", "menu"].contains(element) {
-            Button("Use Glass Where It Fits…") { model.request = .glass(element: element) }
+        ForEach(model.actions(element: element, place: place)) { a in
+            Button("\(a.title)… (\(a.detail))") { model.request = a.request }
         }
-        ForEach(model.templates) { t in
-            Button("Match \(t.title) for \(place == nil ? "All " : "")\(what)\(scope)…") { model.request = .template(t.id, element: element, place: place) }
-        }
-        Button("Follow macOS for \(place == nil ? "All " : "")\(what)\(scope)") { model.request = .follow(element: element, place: place) }
         if let element {
             Button("One Look for Every \(ComponentElement.named(element)?.title ?? element)\(place == nil ? "" : " Here")…") {
                 model.request = .setting(element: element, place: place)
