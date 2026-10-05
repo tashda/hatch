@@ -221,4 +221,14 @@ final class BriefTests: XCTestCase {
         let lines = try BriefBuilder.screenshotLines(store, t).joined(separator: "\n")
         XCTAssertTrue(lines.contains("- /tmp/hatch/attachments/1/shot-1.png (toast.png)"))
     }
+
+    func testTheReadyCommandCarriesTheSpecFlagWhenTheProjectHasANotebook() throws {
+        let (store, p) = try Fixture.store()
+        _ = try store.upsertProject(key: "echo", name: "Echo", config: ProjectConfig(name: "Echo", ticketsRepo: "acme/tickets",
+            repos: Fixture.config.repos + [RepoConfig(role: .notebook, remote: "acme/notebook", branch: "main")], areas: Fixture.config.areas, docs: []))
+        let t = try Fixture.ticket(store, p, type: .tweak, status: .ready)
+        try store.take(t.id, agent: "A")
+        let b = try BriefBuilder.brief(store: store, ticketId: t.id, agent: "A")
+        XCTAssertTrue(b.contains("hatch ready \(t.displayNumber) --spec <IDs or unchanged>"), "without it hatch ready fails on its Spec step and the agent pays a turn to find out")
+    }
 }

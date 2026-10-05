@@ -75,7 +75,7 @@ public enum BriefBuilder {
         out.append("\n## Rules for this task")
         out.append(rules(kind: kind, ticket: t, config: config).enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n"))
         out.append("\n## Next")
-        out.append(nextCommands(kind: kind, ticket: t).joined(separator: "\n"))
+        out.append(nextCommands(kind: kind, ticket: t, hasNotebook: config?.repo(.notebook) != nil).joined(separator: "\n"))
         return out.joined(separator: "\n") + "\n"
     }
 
@@ -396,7 +396,7 @@ public enum BriefBuilder {
         }
     }
 
-    static func nextCommands(kind: AgentTaskKind?, ticket t: Ticket) -> [String] {
+    static func nextCommands(kind: AgentTaskKind?, ticket t: Ticket, hasNotebook: Bool = false) -> [String] {
         let n = t.displayNumber
         switch kind {
         case nil, .vet?: return ["(nothing for you to run)"]
@@ -410,7 +410,7 @@ public enum BriefBuilder {
             return (kind == .build ? ["hatch plan \(n) --files <paths>   # before you edit"] : [])
                 + (t.type == .sweep ? ["hatch item list \(n)   # the items and where each stands", "hatch item built \(n) <key>   # after committing that item"] : [])
                 + ["hatch check \(n) --build   # compile; only errors and warnings",
-                   "hatch ready \(n)     # when the work is done",
+                   "hatch ready \(n)\(hasNotebook ? " --spec <IDs or unchanged>" : "")     # when the work is done",
                    "hatch ask \(n) \"...\" --suggest \"your recommendation\" --suggest \"another answer\"     # only if you are blocked",
                    "hatch note \(n) \"...\"    # progress for the owner"]
         }
