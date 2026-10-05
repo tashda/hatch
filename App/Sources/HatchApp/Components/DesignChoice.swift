@@ -19,8 +19,11 @@ struct DesignChoice {
         var cost: String? = nil
         var recommended = false
         var isToday = false
-        /// The option where it lives, large; `allPlaces` false draws only its main place.
-        var large: (_ allPlaces: Bool) -> AnyView
+        /// The picture is a whole window or screen (a Stage specimen), so it is its own frame: no card around it.
+        var framesItself = false
+        /// The option where it lives, large; `allPlaces` false draws only its main place. A picture that scales (a
+        /// specimen) fits `width`; a drawn control keeps its real size.
+        var large: (_ allPlaces: Bool, _ width: CGFloat) -> AnyView
         /// The option on its own, small, for a filmstrip.
         var small: () -> AnyView
     }
@@ -95,6 +98,13 @@ struct DesignChoiceStyle: Codable, Equatable {
         var title: String { ["filmstrip": "First in the filmstrip", "toggle": "Hold to see Today", "beside": "Beside the pick", "hidden": "Not shown"][rawValue]! }
         var about: String { "Where the look as it is today appears, when the decision has one." }
     }
+    enum Size: String, Codable, CaseIterable, Identifiable {
+        case small, medium, large
+        var id: String { rawValue }
+        var title: String { ["small": "Small", "medium": "Medium", "large": "Large"][rawValue]! }
+        var about: String { "How wide a picture that scales (a Stage specimen) is drawn. Controls drawn by Hatch keep their real size." }
+        var width: CGFloat { ["small": 240, "medium": 320, "large": 480][rawValue]! }
+    }
     enum Places: String, Codable, CaseIterable, Identifiable {
         case main, all
         var id: String { rawValue }
@@ -102,11 +112,27 @@ struct DesignChoiceStyle: Codable, Equatable {
         var about: String { "A design system answer in one place, or in each place its role is used." }
     }
 
-    var layout = Layout.hero
-    var frame = Frame.none
+    // The owner's pick in the Decide Lab (2026-10-05), replacing DR8's "large with a filmstrip".
+    var layout = Layout.gallery
+    var frame = Frame.card
     var canvas = Canvas.grey
     var today = Today.filmstrip
     var places = Places.all
+    var size = Size.medium
+
+    init() {}
+
+    /// Settings saved before a new one existed keep their values; the new one takes its default.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = DesignChoiceStyle()
+        layout = try c.decodeIfPresent(Layout.self, forKey: .layout) ?? d.layout
+        frame = try c.decodeIfPresent(Frame.self, forKey: .frame) ?? d.frame
+        canvas = try c.decodeIfPresent(Canvas.self, forKey: .canvas) ?? d.canvas
+        today = try c.decodeIfPresent(Today.self, forKey: .today) ?? d.today
+        places = try c.decodeIfPresent(Places.self, forKey: .places) ?? d.places
+        size = try c.decodeIfPresent(Size.self, forKey: .size) ?? d.size
+    }
 
     static let key = "lab.decide.designChoice"
 
@@ -281,8 +307,9 @@ struct DesignChoiceView: View {
     }
 
     @ViewBuilder private func picture(_ o: DesignChoice.Option) -> some View {
-        let drawing = o.large(style.places == .all)
-        switch style.frame {
+        let single = style.layout == .hero || style.layout == .carousel || style.layout == .split
+        let drawing = o.large(style.places == .all, single ? min(style.size.width * 1.5, 620) : style.size.width)
+        switch o.framesItself ? .none : style.frame {
         case .none:
             drawing
         case .hairline:
@@ -312,7 +339,7 @@ extension DesignChoice {
 
         func option(_ id: String, name: String, recipe: [String: String]?, recommended: Bool = false, isToday: Bool = false) -> Option {
             Option(id: id, name: name, recommended: recommended, isToday: isToday,
-                   large: { all in
+                   large: { all, _ in
                        AnyView(FlowLayout(spacing: 16) {
                            ForEach(all ? places : Array(places.prefix(1)), id: \.self) { place in
                                VStack(alignment: .leading, spacing: 4) {
@@ -367,17 +394,24 @@ extension DesignChoice {
 
 // MARK: - A look for snapshot runs
 
-/// `--only design-choice`: the demo's design system question in every layout, in a window of its own, so the look can be
-/// checked without opening Decide.
+/// `--only design-choice-<layout>[-toast]`: the demo's design system question (or the Lab's toast sample) in one layout,
+/// with the default settings, in a window of its own, so the look can be checked without opening Decide.
 enum DesignChoiceHarness {
     @MainActor
-    static func window(state: AppState, layout: DesignChoiceStyle.Layout) -> NSWindow? {
-        guard let ticket = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.area == ComponentsSetup.area && $0.type == .question
-                && ComponentsSetup.componentQuestionId(inBody: $0.body) != nil }),
-              let choice = DesignChoice.component(ticket: ticket, state: state) else { return nil }
-        var style = DesignChoiceStyle.current
+    static func window(state: AppState, layout: DesignChoiceStyle.Layout, toast: Bool = false) -> NSWindow? {
+        let title: String, choice: DesignChoice
+        if toast, let card = LabCards.sample(.design).first, let design = card.labDesign {
+            // The Lab's toast sample: Stage-like specimens that scale.
+            title = card.title; choice = design
+        } else {
+            guard let ticket = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.area == ComponentsSetup.area && $0.type == .question
+                    && ComponentsSetup.componentQuestionId(inBody: $0.body) != nil }),
+                  let design = DesignChoice.component(ticket: ticket, state: state) else { return nil }
+            title = ticket.title; choice = design
+        }
+        var style = DesignChoiceStyle()
         style.layout = layout
-        let view = Harness(title: ticket.title, choice: choice, style: style)
+        let view = Harness(title: title, choice: choice, style: style)
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 720), styleMask: [.titled], backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
         w.contentView = NSHostingView(rootView: view)
@@ -412,3 +446,4 @@ extension DesignChoiceStyle.Frame: LabChoice {}
 extension DesignChoiceStyle.Canvas: LabChoice {}
 extension DesignChoiceStyle.Today: LabChoice {}
 extension DesignChoiceStyle.Places: LabChoice {}
+extension DesignChoiceStyle.Size: LabChoice {}

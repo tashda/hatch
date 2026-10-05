@@ -715,7 +715,7 @@ struct DecideLabView: View {
             Section("Two or more questions") { row("Show", \.multi) }
             Section {
                 designRow("Show", \.layout); designRow("Frame", \.frame); designRow("Canvas", \.canvas)
-                designRow("Today", \.today); designRow("Places", \.places); row("Choose", \.designChoice)
+                designRow("Today", \.today); designRow("Places", \.places); designRow("Size", \.size); row("Choose", \.designChoice)
             } header: { Text("When a design is shown") } footer: { Text("Every decision about a look uses these: design system questions, changes, and later Sweeps and Proposals.") }
             Section("Actions") {
                 row("Where", \.actions); row("Main button", \.mainButton); row("Size", \.buttonSize); row("Later and Note", \.secondary)
@@ -792,7 +792,7 @@ struct DecideLabView: View {
             ("Picture", s.avatar.title), ("Line above", s.byline.title), ("Long message", s.longAsk.title), ("Answers", s.answers.title),
             ("Recommended", s.recommended.title), ("Selected", s.indicator.title), ("Long answers", s.longAnswer.title), ("Keys", s.keys.title),
             ("Own answer", s.own.title), ("Two questions", s.multi.title), ("Design", model.designStyle.layout.title), ("Frame", model.designStyle.frame.title), ("Canvas", model.designStyle.canvas.title),
-            ("Today", model.designStyle.today.title), ("Places", model.designStyle.places.title),
+            ("Today", model.designStyle.today.title), ("Places", model.designStyle.places.title), ("Size", model.designStyle.size.title),
             ("Choose design", s.designChoice.title), ("Actions", s.actions.title), ("Main button", s.mainButton.title), ("Button size", s.buttonSize.title),
             ("Later and Note", s.secondary.title), ("Order", s.order.title), ("Hint", s.hint.title), ("Key", s.returnKey.title), ("Progress", s.progress.title), ("What is left", s.queue.title)]
         return parts.map { "\($0.0) \($0.1)" }.joined(separator: " · ")
@@ -1941,9 +1941,9 @@ extension LabCard {
         if let design { return design }
         guard !specimens.isEmpty else { return nil }
         return DesignChoice(options: specimens.map { spec in
-            DesignChoice.Option(id: spec.id, name: spec.name, note: spec.note, recommended: spec.recommended, isToday: spec.isToday,
-                                large: { _ in AnyView(LabSpecimenView(spec: spec, width: 520)) },
-                                small: { AnyView(LabSpecimenView(spec: spec, width: 96)) })
+            DesignChoice.Option(id: spec.id, name: spec.name, note: spec.note, recommended: spec.recommended, isToday: spec.isToday, framesItself: true,
+                                large: { _, width in AnyView(LabSpecimenView(spec: spec, width: width, bordered: false)) },
+                                small: { AnyView(LabSpecimenView(spec: spec, width: 96, bordered: false)) })
         }, openTitle: "Open the Stage", open: {})
     }
 }
@@ -1952,6 +1952,8 @@ extension LabCard {
 struct LabSpecimenView: View {
     let spec: LabSpecimen
     var width: CGFloat
+    /// Off when the picture sits in a frame of its own (the shared design view's card or hairline).
+    var bordered = true
 
     var body: some View {
         let base: CGFloat = 320, scale = width / base
@@ -1960,7 +1962,7 @@ struct LabSpecimenView: View {
             .scaleEffect(scale, anchor: .topLeading)
             .frame(width: width, height: width * 0.625, alignment: .topLeading)
             .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor), lineWidth: bordered ? 0.5 : 0))
     }
 
     private var drawing: some View {

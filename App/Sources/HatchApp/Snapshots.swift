@@ -356,7 +356,9 @@ enum Snapshots {
         if let w = NSApp.windows.first(where: { $0.isVisible }) { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             NSApp.appearance = NSAppearance(named: appearance)
-            if name.hasPrefix("design-choice"), let w = DesignChoiceHarness.window(state: state, layout: DesignChoiceStyle.Layout(rawValue: String(name.dropFirst("design-choice-".count))) ?? .hero) {
+            if name.hasPrefix("design-choice"),
+               let w = DesignChoiceHarness.window(state: state, layout: DesignChoiceStyle.Layout(rawValue: String(name.dropFirst("design-choice-".count).split(separator: "-").first ?? "")) ?? .gallery,
+                                                  toast: name.hasSuffix("-toast")) {
                 // design-choice-<layout>: the shared view for decisions about a look, in a window of its own.
                 try? await Task.sleep(nanoseconds: 900_000_000)
                 save(w, name: name, mode: mode, into: folder)
