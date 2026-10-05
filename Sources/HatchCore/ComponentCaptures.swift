@@ -214,7 +214,8 @@ public enum ComponentMarks {
         return views.filter { v in
             let path = v.file.hasPrefix("/") ? v.file : (root as NSString).appendingPathComponent(v.file)
             if texts[path] == nil { texts[path] = (try? String(contentsOfFile: path, encoding: .utf8)) ?? "" }
-            return !(texts[path] ?? "").contains(".hatchMark(\"\(v.id)\")")
+            // `.hatchMark("Name")` or `.hatchMark("Name", layered: true)`.
+            return !(texts[path] ?? "").contains(".hatchMark(\"\(v.id)\"")
         }.map(\.id)
     }
 

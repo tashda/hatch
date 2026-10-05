@@ -396,7 +396,7 @@ private struct BundleCard: View {
 }
 
 /// Failed is the one coloured state (a real problem, LK5); the rest are neutral glyphs.
-private struct TestStatusGlyph: View {
+struct TestStatusGlyph: View {
     let status: TestStatus?
 
     var body: some View {

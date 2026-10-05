@@ -18,6 +18,8 @@ public struct DesignerLaunchOptions: Equatable {
     public var snapshotDirectory: URL?
     /// With --snapshots: only the live window.
     public var liveOnly = false
+    /// With --snapshots: only measure the canvas against macOS (CanvasTruth, CM25) into the snapshot folder.
+    public var canvasTruth = false
     /// The folder with the pictures the app drew of its own components (`components/captures` in the notebook).
     public var captures: String?
 
@@ -37,6 +39,7 @@ public struct DesignerLaunchOptions: Equatable {
             case "--home": o.home = value(); if o.home != nil { i += 1 }
             case "--snapshots": if let v = value() { o.snapshotDirectory = URL(fileURLWithPath: v, isDirectory: true); i += 1 }
             case "--live-only": o.liveOnly = true
+            case "--canvas-truth": o.canvasTruth = true
             default: break
             }
             i += 1
@@ -85,6 +88,7 @@ enum DesignerApp {
                                           capturesFolder: capturesFolder.map { URL(fileURLWithPath: $0, isDirectory: true) })
             let d = DesignerDelegate(model: model, snapshotDirectory: options.snapshotDirectory)
             d.liveOnly = options.liveOnly
+            d.canvasTruth = options.canvasTruth
             delegate = d
             let app = NSApplication.shared
             app.setActivationPolicy(.regular)
@@ -109,6 +113,7 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow?
     var liveWindow: NSWindow?
     var liveOnly = false
+    var canvasTruth = false
 
     /// The live window (NF2): the app's shell with the roles in it.
     func openLiveWindow() {
@@ -174,6 +179,12 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
         guard let dir = snapshotDirectory, let window else { return }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? await Task.sleep(nanoseconds: 800_000_000)
+        if canvasTruth {
+            let found = await CanvasTruth.run(model: model, into: dir)
+            print(found.isEmpty ? "The canvas draws every measured role as macOS does." : found.map { ($0.problem ? "problem  " : "note     ") + $0.words }.joined(separator: "\n"))
+            NSApp.terminate(nil)
+            return
+        }
         for dark in [false, true] where !liveOnly {
             model.dark = dark
             for element in model.system.elementsUsed {
@@ -272,6 +283,13 @@ final class DesignerDelegate: NSObject, NSApplicationDelegate {
                 model.appearance = .dark
                 model.ownPick = .group(first.id); await shot("own-7-dark")
                 model.appearance = .light
+            }
+            // What the measured checks found (CM23, CM25), with the first one's picture.
+            if !model.findings.isEmpty {
+                model.selection = .checks
+                model.checkPick = model.findings.first
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                save(window, "checks-light", dir)
             }
             if !model.ownQuestions.isEmpty {
                 model.selection = .ownQuestions

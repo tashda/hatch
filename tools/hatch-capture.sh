@@ -8,7 +8,8 @@
 set -e
 OUT="${HATCH_CAPTURES:?set HATCH_CAPTURES to the folder to write into}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DERIVED="${TMPDIR:-/tmp}/hatch-capture-build"
+# One build folder per checkout, so two tickets can be drawn at once.
+DERIVED="${TMPDIR:-/tmp}/hatch-capture-build-$(printf %s "$ROOT" | shasum | cut -c1-8)"
 mkdir -p "$OUT"
 
 # The app: every main screen, sheet and step, and the gallery of views no screen shows.
@@ -24,7 +25,10 @@ for part in stage designer; do
   if [ "$part" = stage ]; then
     "$BIN" --snapshots "$TMP"
   else
-    HATCH_DESIGNER_SIZE=1500x1000 "$BIN" --components-demo native --app "$ROOT" --snapshots "$TMP"
+    # The project's own system and pictures when Hatch passes its notebook (role pages, its own components, checks).
+    if [ -n "$HATCH_NOTEBOOK" ]; then SOURCE="--notebook $HATCH_NOTEBOOK"; else SOURCE="--components-demo native"; fi
+    # shellcheck disable=SC2086
+    HATCH_DESIGNER_SIZE=1500x1000 "$BIN" $SOURCE --app "$ROOT" --snapshots "$TMP"
   fi
   for f in "$TMP"/*; do
     [ -e "$f" ] || continue
@@ -33,3 +37,13 @@ for part in stage designer; do
   done
   rm -rf "$TMP"
 done
+
+# The Designer's canvas measured against the same roles in real macOS containers (CM25), with the project's own system
+# when Hatch passes its notebook.
+TMP="$OUT/.truth"; rm -rf "$TMP"; mkdir -p "$TMP"
+if [ -n "$HATCH_NOTEBOOK" ]; then SYSTEM="--notebook $HATCH_NOTEBOOK"; else SYSTEM="--components-demo native"; fi
+# shellcheck disable=SC2086
+"$BIN" $SYSTEM --snapshots "$TMP" --canvas-truth >/dev/null
+for f in "$TMP"/*-light.png "$TMP"/*-light.json; do [ -e "$f" ] && mv "$f" "$OUT/$(basename "$f")"; done
+[ -e "$TMP/canvas-truth.json" ] && mv "$TMP/canvas-truth.json" "$OUT/canvas-truth.json"
+rm -rf "$TMP"

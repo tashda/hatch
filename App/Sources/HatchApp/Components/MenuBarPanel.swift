@@ -279,7 +279,7 @@ private struct MenuBarAgentRow: View {
 }
 
 /// An action row, as a menu item looks: symbol, title, and the shortcut on the right.
-private struct MenuBarActionLabel: View {
+struct MenuBarActionLabel: View {
     let title: String
     let symbol: String
     var shortcut: String?

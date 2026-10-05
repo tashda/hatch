@@ -554,7 +554,7 @@ private struct PermissionRow: View {
 }
 
 /// A repository's name with a lock when it is private.
-private struct RepoName: View {
+struct RepoName: View {
     let name: String
     let isPrivate: Bool?
 
@@ -570,7 +570,7 @@ private struct RepoName: View {
 }
 
 /// A row's second line: secondary, red for a problem, with a small spinner while something is asked.
-private struct Subtitle: View {
+struct Subtitle: View {
     let text: String
     var critical = false
     var busy = false
@@ -587,7 +587,7 @@ private struct Subtitle: View {
 }
 
 /// GitHub's picture for the account, round; initials until it loads or when there is none.
-private struct GitHubAvatar: View {
+struct GitHubAvatar: View {
     let user: GitHubUser?
     var size: CGFloat = 54
 

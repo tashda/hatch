@@ -70,7 +70,7 @@ extension ComponentCapturesTests {
         let app = try folder()
         try """
         struct HXChip: View { let text: String; var body: some View { Text(text).font(.caption).padding(.horizontal, 7).background(.blue, in: Capsule()).hatchMark("HXChip") } }
-        struct PlainChip: View { let text: String; var body: some View { Text(text).font(.caption).padding(.horizontal, 7).background(.gray, in: Capsule()).hatchMark("PlainChip") } }
+        struct PlainChip: View { let text: String; var body: some View { Text(text).font(.caption).padding(.horizontal, 7).background(.gray, in: Capsule()).hatchMark("PlainChip", layered: true) } }
         struct BadgeDot: View { var body: some View { Circle().fill(.red).padding(2).background(.white, in: Circle()) } }
         """.write(to: app.appendingPathComponent("Chips.swift"), atomically: true, encoding: .utf8)
         let shots = try folder()

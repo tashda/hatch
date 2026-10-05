@@ -1206,7 +1206,7 @@ private struct AddProviderSheet: View {
 }
 
 /// A choice in a list, drawn as a native row: an icon, a title with one line under it, and a checkmark when chosen.
-private struct ChoiceRow: View {
+struct ChoiceRow: View {
     let selected: Bool
     let title: String
     let detail: String

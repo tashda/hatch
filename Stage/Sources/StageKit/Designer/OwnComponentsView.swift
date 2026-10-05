@@ -77,11 +77,14 @@ struct OwnPicturesFooter: View {
             }
         }
         .font(.callout).foregroundStyle(.secondary)
+        .hatchMark("OwnPicturesFooter")
     }
 
     private var capturedWhen: String {
-        guard let screens = model.captures?.screens, let first = screens.first,
-              let date = try? first.picture.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { return "No pictures of the app yet." }
+        // When Hatch kept them: the screens folder's marker is written by each capture.
+        guard let screens = model.captures?.screens, !screens.isEmpty, let folder = model.capturesFolder,
+              let date = try? folder.appendingPathComponent("\(ComponentCaptures.screensFolder)/.gitignore").resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        else { return "No pictures of the app yet." }
         let n = Set(screens.filter { !$0.isGallery }.map(\.name)).count
         return "Pictures from \(n) screens of the app, drawn \(date.formatted(date: .abbreviated, time: .shortened))."
     }
@@ -466,6 +469,22 @@ struct OwnViewInspector: View {
                 Text(view.shows.map { "“\($0)”" }.joined(separator: ", ")).fixedSize(horizontal: false, vertical: true)
             }
             OwnPlacesList(model: model, id: view.id)
+            // What was measured about it on the app's screens (CM23); a click shows it on Checks on Screen.
+            let found = model.findings.filter { $0.views.contains(view.id) }
+            if !found.isEmpty {
+                InspectorHeading("Measured")
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(found.prefix(6).enumerated()), id: \.offset) { _, f in
+                        Button { model.selection = .checks; model.checkPick = f } label: {
+                            Text((f.problem ? "Problem: " : "Note: ") + f.words).frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(f.problem ? Color.primary : Color.secondary)
+                    }
+                    if found.count > 6 { Text("And \(found.count - 6) more on Checks on Screen.").foregroundStyle(.secondary) }
+                }
+            }
             InspectorHeading("In the code")
             if view.usedOn.isEmpty {
                 Text("Not used outside its file.").foregroundStyle(.secondary)
@@ -501,27 +520,30 @@ struct OwnPlacesList: View {
     var body: some View {
         let places = model.captures?.places(of: id, dark: scheme == .dark).filter { !$0.screen.isGallery } ?? []
         let byScreen = Dictionary(grouping: places, by: \.screen.name).sorted { ($1.value.count, $0.key) < ($0.value.count, $1.key) }
-        InspectorHeading("On screen")
-        if byScreen.isEmpty {
-            Text(model.ownPicture(id, dark: scheme == .dark) == nil ? "The app doesn't draw it yet." : "Only in the app's gallery: no screen it draws shows it.")
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        } else {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(byScreen.prefix(8), id: \.key) { name, ps in
-                    Button { shown = ps[0].screen } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            OwnPlaceThumb(model: model, place: ps.first(where: \.whole) ?? ps[0])
-                            Text(ps[0].screen.title + (ps.count > 1 ? " · \(ps.count) times" : "")).font(.callout).foregroundStyle(.secondary)
+        Group {
+            InspectorHeading("On screen")
+            if byScreen.isEmpty {
+                Text(model.ownPicture(id, dark: scheme == .dark) == nil ? "The app doesn't draw it yet." : "Only in the app's gallery: no screen it draws shows it.")
+                    .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(byScreen.prefix(8), id: \.key) { name, ps in
+                        Button { shown = ps[0].screen } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                OwnPlaceThumb(model: model, place: ps.first(where: \.whole) ?? ps[0])
+                                Text(ps[0].screen.title + (ps.count > 1 ? " · \(ps.count) times" : "")).font(.callout).foregroundStyle(.secondary)
+                            }
+                            .contentShape(Rectangle())
                         }
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
+                        .help("Show the whole screen")
                     }
-                    .buttonStyle(.plain)
-                    .help("Show the whole screen")
+                    if byScreen.count > 8 { Text("And \(byScreen.count - 8) more screens.").font(.callout).foregroundStyle(.secondary) }
                 }
-                if byScreen.count > 8 { Text("And \(byScreen.count - 8) more screens.").font(.callout).foregroundStyle(.secondary) }
+                .sheet(item: $shown) { screen in OwnScreenSheet(model: model, screen: screen, id: id) { shown = nil } }
             }
-            .sheet(item: $shown) { screen in OwnScreenSheet(model: model, screen: screen, id: id) { shown = nil } }
         }
+        .hatchMark("OwnPlacesList")
     }
 }
 
@@ -534,24 +556,28 @@ struct OwnPlaceThumb: View {
     var height: CGFloat = 96
 
     var body: some View {
+        // Wider than high, so the cut fills the inspector's width and shows what is beside the view.
         let f = place.frame, b = place.screen.bounds
-        let margin = max(24, max(f.width, f.height) * 0.4)
-        let x0 = max(b.x, f.x - margin), y0 = max(b.y, f.y - margin)
-        let around = CaptureRect(x: x0, y: y0, width: min(b.maxX, f.maxX + margin) - x0, height: min(b.maxY, f.maxY + margin) - y0)
-        if let image = model.crop(place.screen, around) {
-            Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
-                .overlay {
-                    GeometryReader { g in
-                        let k = g.size.width / around.width
-                        RoundedRectangle(cornerRadius: 3).strokeBorder(Color.accentColor, lineWidth: 2)
-                            .frame(width: f.width * k + 6, height: f.height * k + 6)
-                            .offset(x: (f.x - around.x) * k - 3, y: (f.y - around.y) * k - 3)
+        let mx = max(80, f.width * 0.6), my = max(24, f.height * 0.4)
+        let x0 = max(b.x, f.x - mx), y0 = max(b.y, f.y - my)
+        let around = CaptureRect(x: x0, y: y0, width: min(b.maxX, f.maxX + mx) - x0, height: min(b.maxY, f.maxY + my) - y0)
+        Group {
+            if let image = model.crop(place.screen, around) {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+                    .overlay {
+                        GeometryReader { g in
+                            let k = g.size.width / around.width
+                            RoundedRectangle(cornerRadius: 3).strokeBorder(Color.accentColor, lineWidth: 2)
+                                .frame(width: f.width * k + 6, height: f.height * k + 6)
+                                .offset(x: (f.x - around.x) * k - 3, y: (f.y - around.y) * k - 3)
+                        }
                     }
-                }
-                .frame(maxHeight: height, alignment: .leading)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
+                    .frame(maxHeight: height, alignment: .leading)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay { RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(.separator, lineWidth: 0.5) }
+            }
         }
+        .hatchMark("OwnPlaceThumb")
     }
 }
 

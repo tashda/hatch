@@ -86,6 +86,8 @@ struct DesignerView: View {
             OwnInspector(model: model, family: id)
         case .ownQuestions?:
             ContentUnavailableView("Not Sure Yet", systemImage: "questionmark.circle", description: Text("Views Hatch can't place from their code."))
+        case .checks?:
+            CheckInspector(model: model)
         case .foundations(let kind)?:
             ContentUnavailableView(kind.title, systemImage: DesignerSidebar.symbol(kind), description: Text("Named values the roles use."))
         case nil:
@@ -104,6 +106,7 @@ struct DesignerView: View {
         case .rules?: "Rules"
         case .own(let id)?: DesignerModel.familyTitle(id)
         case .ownQuestions?: "Not Sure Yet"
+        case .checks?: "Checks on Screen"
         case nil: model.appName
         }
     }
@@ -182,6 +185,8 @@ struct DesignerView: View {
             OwnFamilyView(model: model, family: id)
         case .ownQuestions?:
             OwnQuestionsView(model: model)
+        case .checks?:
+            ChecksView(model: model)
         case .all?:
             SystemMatrixView(model: model)
         case .templates?:
@@ -320,7 +325,7 @@ struct DesignerSidebar: View {
             if !others.isEmpty { Section("Other") { ForEach(others, id: \.self) { e in element(e) } } }
             // The app's own components, as much part of the system as SwiftUI's (CM9).
             let own = model.ownFamilies.filter { shown($0.title) }
-            if !own.isEmpty || !model.ownQuestions.isEmpty {
+            if !own.isEmpty || !model.ownQuestions.isEmpty || !model.findings.isEmpty {
                 Section("Your Own Components") {
                     ForEach(own, id: \.id) { f in
                         Label(f.title, systemImage: f.toDecide == 0 ? "square.on.square" : "square.on.square.dashed")
@@ -331,6 +336,11 @@ struct DesignerSidebar: View {
                         Label("Not Sure Yet", systemImage: "questionmark.circle")
                             .badge(model.ownQuestions.count).tag(DesignerSelection.ownQuestions)
                             .help("Views Hatch can't place from their code: questions, never guesses")
+                    }
+                    if !model.findings.isEmpty {
+                        Label("Checks on Screen", systemImage: "ruler")
+                            .badge(model.findings.filter(\.problem).count).tag(DesignerSelection.checks)
+                            .help("What Hatch measured on the app's screens and on this canvas")
                     }
                 }
             }

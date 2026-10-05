@@ -187,6 +187,8 @@ enum DesignerSelection: Hashable {
     case own(String)
     /// The app's own views Hatch could not place: questions, never guesses (CM8).
     case ownQuestions
+    /// What the measured checks found on the app's screens and on the canvas (CM23, CM25).
+    case checks
 }
 
 @MainActor
@@ -247,6 +249,9 @@ final class DesignerModel: ObservableObject {
     let capturesFolder: URL?
     /// A capture Hatch is running, or how the last one ended.
     @Published var captureState: (running: Bool, message: String)?
+    /// The measured checks of the last capture (kept beside it by `hatch components capture`), problems first.
+    @Published private(set) var findings: [TruthFinding] = []
+    @Published var checkPick: TruthFinding?
     private var pictures: [String: NSImage] = [:]
 
     init(source: ComponentsSource, inventory: ComponentInventory? = nil, appRoot: String? = nil, captures: ComponentCaptures? = nil, capturesFolder: URL? = nil) throws {
@@ -254,6 +259,7 @@ final class DesignerModel: ObservableObject {
         (source as? LocalComponentsSource)?.proposals = appViews?.proposals ?? []
         self.captures = captures
         self.capturesFolder = capturesFolder ?? captures?.folder
+        self.findings = Self.sorted(self.capturesFolder.map(ComponentTruth.kept) ?? [])
         self.source = source
         self.appRoot = appRoot
         let s = try source.load()
@@ -455,7 +461,23 @@ final class DesignerModel: ObservableObject {
     func reloadCaptures() {
         guard let capturesFolder else { return }
         captures = ComponentCaptures.load(from: capturesFolder)
+        findings = Self.sorted(ComponentTruth.kept(in: capturesFolder))
         pictures = [:]; screenCache = []; coverageCache = nil
+    }
+
+    static func sorted(_ f: [TruthFinding]) -> [TruthFinding] {
+        f.sorted { ($0.problem ? 0 : 1, $0.kind.rawValue, $0.screen) < ($1.problem ? 0 : 1, $1.kind.rawValue, $1.screen) }
+    }
+
+    /// The screen a finding is on, in its appearance.
+    func screen(of f: TruthFinding) -> CapturedScreen? { captures?.screens.first { $0.name == f.screen && $0.dark == f.dark } }
+
+    /// For a canvas finding: the same role in the real container, to show beside the canvas.
+    func realCounterpart(of f: TruthFinding) -> (CapturedScreen, CaptureRect)? {
+        guard f.kind == .canvas, let role = f.views.first,
+              let real = captures?.screens.first(where: { $0.name == f.screen.replacingOccurrences(of: "-canvas-", with: "-real-") && !$0.dark }),
+              let i = real.file.marks.firstIndex(where: { $0.name == "role:" + role }), let frame = real.frame(i) else { return nil }
+        return (real, frame)
     }
 
     /// Which of the app's own views are drawn, unmarked, or on no screen yet; read once per capture.

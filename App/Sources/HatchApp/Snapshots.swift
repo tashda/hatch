@@ -268,7 +268,10 @@ enum Snapshots {
         let sketchID = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Sidebar density options" })?.id
         let questionID = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Should tabs restore after a crash?" })?.id
         if let sketchID { routes.append(("sketch-options", .ticket(sketchID), .options)) }
-        if let questionID { routes.append(("question-overview", .ticket(questionID), .overview)) }
+        if let questionID {
+            routes.append(("question-overview", .ticket(questionID), .overview))
+            routes.append(("question-thread", .ticket(questionID), .thread))
+        }
         if let ticket = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Connection test hangs on bad host" }) {
             routes.append(("building-work", .ticket(ticket.id), .work))
         }
@@ -344,6 +347,14 @@ enum Snapshots {
             }
             state.snapshotPresentation = nil
             try? await Task.sleep(nanoseconds: 250_000_000)
+            // Screens the steps above don't reach, drawn as `--only` draws them, so their views are pictured too (CM21).
+            for extra in ["decide", "agent-card", "markup", "menu-bar", "settings-github", "settings-tools", "settings-usage", "settings-storage"] {
+                await drawOne(extra, mode: mode, state: state, into: folder)
+                state.snapshotPresentation = nil
+                state.decideSession = nil
+                githubDisconnected = false
+                try? await Task.sleep(nanoseconds: 300_000_000)
+            }
             // The views no screen above shows, drawn on purpose with sample data.
             let gallery = ComponentGallery.window()
             try? await Task.sleep(nanoseconds: 900_000_000)
@@ -357,70 +368,75 @@ enum Snapshots {
     /// One screen in both appearances. Names match the full run's files: a route (desk, health, project…), "settings"
     /// or "settings-agents".
     @MainActor private static func runOne(_ name: String, state: AppState, into folder: URL) async {
-        let routes: [String: Route] = ["desk": .desk, "tickets": .tickets, "board": .board, "previews": .previews, "specs": .specs,
-                                       "decisions": .decisions, "components": .components, "agents": .agents, "tests": .tests, "reports": .reports, "health": .health, "log": .log, "project": .projects,
-                                       "new-ticket": .newTicket]
         if let w = shownWindow { w.setContentSize(NSSize(width: 1360, height: 860)); w.center() }
         for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             NSApp.appearance = NSAppearance(named: appearance)
-            if name == "component-gallery" {
-                // The app's own components, drawn by the app, grouped as `hatch components views` proposes (CM5).
-                let w = ComponentGallery.window()
-                try? await Task.sleep(nanoseconds: 900_000_000)
-                save(w, name: name, mode: mode, into: folder)
-                w.close()
-                continue
-            }
-            if name.hasPrefix("design-choice"),
-               let w = DesignChoiceHarness.window(state: state, layout: DesignChoiceStyle.Layout(rawValue: String(name.dropFirst("design-choice-".count).split(separator: "-").first ?? "")) ?? .gallery,
-                                                  toast: name.hasSuffix("-toast")) {
-                // design-choice-<layout>: the shared view for decisions about a look, in a window of its own.
-                try? await Task.sleep(nanoseconds: 900_000_000)
-                save(w, name: name, mode: mode, into: folder)
-                w.close()
-                continue
-            }
-            if let route = routes[name] {
-                state.route = route
-            } else if name.hasPrefix("ticket-"), let tab = TicketTab.allCases.first(where: { "ticket-\($0)" == name }),
-                      let first = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Toast spacing and corner radius" }) {
-                // ticket-overview, ticket-thread…: the first Proposal on that tab, as in the full run.
-                state.route = .ticket(first.id)
-                state.snapshotTicketTab = tab
-            } else if name == "markup" {
-                state.snapshotPresentation = .markup
-                // The saved image too, to check that the marks land in the file at full size.
-                let marks = [ShotMark(kind: .box, from: CGPoint(x: 0.08, y: 0.30), to: CGPoint(x: 0.55, y: 0.52)),
-                             ShotMark(kind: .note("Focus jumps here"), from: CGPoint(x: 0.78, y: 0.86), to: CGPoint(x: 0.78, y: 0.86))]
-                if let png = ScreenshotMarkupSheet.flatten(sampleScreenshot(), marks: marks) {
-                    try? png.write(to: folder.appendingPathComponent("markup-export.png"))
-                }
-            } else if name == "decide" || name == "decide-components" || name == "decide-iris" {
-                state.decideSession = AppState.DecideRequest(area: ["decide-components": "Components", "decide-iris": "Notices"][name])
-            } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count)) {
-                state.snapshotSetupStep = n - 1
-                state.snapshotPresentation = .addProject
-            } else if name == "agent-card" {
-                state.snapshotPresentation = .agentCard
-            } else if name == "menu-bar" {                // The menu bar item's panel with two sample agents and the demo's waiting tickets.
-                state.agentRuns = [sampleRun, sampleRun2]
-                state.updateWaitingCount()
-                state.snapshotPresentation = .menuBar
-            } else if name.hasPrefix("settings") {
-                state.snapshotPresentation = .settings
-                // settings-<page>, by the page's title: settings-github, settings-general, settings-storage…
-                var page = String(name.dropFirst("settings-".count))
-                githubDisconnected = page == "github-disconnected"
-                if githubDisconnected { page = "github" }
-                state.settingsPage = SettingsPage.allCases.first { $0.title.lowercased() == page } ?? .general
-            } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count).prefix { $0.isNumber }) {
-                // add-project-5: one step of the setup assistant, numbered as in the full run.
-                state.snapshotPresentation = .addProject
-                state.snapshotSetupStep = n - 1
-            }
-            try? await Task.sleep(nanoseconds: 900_000_000)
-            if let window = shownWindow { save(window, name: name, mode: mode, into: folder) }
+            await drawOne(name, mode: mode, state: state, into: folder)
         }
+    }
+
+    /// One screen in the current appearance (see `runOne`); the full run uses it for the screens it has no step of its own for.
+    @MainActor private static func drawOne(_ name: String, mode: String, state: AppState, into folder: URL) async {
+        let routes: [String: Route] = ["desk": .desk, "tickets": .tickets, "board": .board, "previews": .previews, "specs": .specs,
+                                       "decisions": .decisions, "components": .components, "agents": .agents, "tests": .tests, "reports": .reports, "health": .health, "log": .log, "project": .projects,
+                                       "new-ticket": .newTicket]
+        if name == "component-gallery" {
+            // The app's own components, drawn by the app, grouped as `hatch components views` proposes (CM5).
+            let w = ComponentGallery.window()
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            save(w, name: name, mode: mode, into: folder)
+            w.close()
+            return
+        }
+        if name.hasPrefix("design-choice"),
+           let w = DesignChoiceHarness.window(state: state, layout: DesignChoiceStyle.Layout(rawValue: String(name.dropFirst("design-choice-".count).split(separator: "-").first ?? "")) ?? .gallery,
+                                              toast: name.hasSuffix("-toast")) {
+            // design-choice-<layout>: the shared view for decisions about a look, in a window of its own.
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            save(w, name: name, mode: mode, into: folder)
+            w.close()
+            return
+        }
+        if let route = routes[name] {
+            state.route = route
+        } else if name.hasPrefix("ticket-"), let tab = TicketTab.allCases.first(where: { "ticket-\($0)" == name }),
+                  let first = (try? state.store.tickets(TicketFilter()))?.first(where: { $0.title == "Toast spacing and corner radius" }) {
+            // ticket-overview, ticket-thread…: the first Proposal on that tab, as in the full run.
+            state.route = .ticket(first.id)
+            state.snapshotTicketTab = tab
+        } else if name == "markup" {
+            state.snapshotPresentation = .markup
+            // The saved image too, to check that the marks land in the file at full size.
+            let marks = [ShotMark(kind: .box, from: CGPoint(x: 0.08, y: 0.30), to: CGPoint(x: 0.55, y: 0.52)),
+                         ShotMark(kind: .note("Focus jumps here"), from: CGPoint(x: 0.78, y: 0.86), to: CGPoint(x: 0.78, y: 0.86))]
+            if let png = ScreenshotMarkupSheet.flatten(sampleScreenshot(), marks: marks) {
+                try? png.write(to: folder.appendingPathComponent("markup-export.png"))
+            }
+        } else if name == "decide" || name == "decide-components" || name == "decide-iris" {
+            state.decideSession = AppState.DecideRequest(area: ["decide-components": "Components", "decide-iris": "Notices"][name])
+        } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count)) {
+            state.snapshotSetupStep = n - 1
+            state.snapshotPresentation = .addProject
+        } else if name == "agent-card" {
+            state.snapshotPresentation = .agentCard
+        } else if name == "menu-bar" {                // The menu bar item's panel with two sample agents and the demo's waiting tickets.
+            state.agentRuns = [sampleRun, sampleRun2]
+            state.updateWaitingCount()
+            state.snapshotPresentation = .menuBar
+        } else if name.hasPrefix("settings") {
+            state.snapshotPresentation = .settings
+            // settings-<page>, by the page's title: settings-github, settings-general, settings-storage…
+            var page = String(name.dropFirst("settings-".count))
+            githubDisconnected = page == "github-disconnected"
+            if githubDisconnected { page = "github" }
+            state.settingsPage = SettingsPage.allCases.first { $0.title.lowercased() == page } ?? .general
+        } else if name.hasPrefix("add-project-"), let n = Int(name.dropFirst("add-project-".count).prefix { $0.isNumber }) {
+            // add-project-5: one step of the setup assistant, numbered as in the full run.
+            state.snapshotPresentation = .addProject
+            state.snapshotSetupStep = n - 1
+        }
+        try? await Task.sleep(nanoseconds: 900_000_000)
+        if let window = shownWindow { save(window, name: name, mode: mode, into: folder) }
     }
 
     /// A running agent for the agent-card snapshot.

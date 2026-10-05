@@ -34,6 +34,6 @@ struct PanelResizer: View {
                     .onEnded { _ in startWidth = nil }
             )
             .help("Drag to resize")
-            .hatchMark("PanelResizer")
+            .hatchMark("PanelResizer", layered: true)
     }
 }

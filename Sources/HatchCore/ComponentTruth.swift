@@ -135,7 +135,8 @@ public enum ComponentTruth {
             for (a, i) in group.enumerated() {
                 for j in group[(a + 1)...] where marks[i].scroll == marks[j].scroll {
                     let fi = frames[i], fj = frames[j]
-                    guard !fi.contains(fj), !fj.contains(fi), let both = fi.intersection(fj), both.width > 2, both.height > 2,
+                    // A view a few points past the edge of one around it sits in it (a chip on a card's edge), not over it.
+                    guard !fi.contains(fj, slack: 3), !fj.contains(fi, slack: 3), let both = fi.intersection(fj), both.width > 2, both.height > 2,
                           both.area > 0.15 * min(fi.area, fj.area) else { continue }
                     let names = [marks[i].name, marks[j].name]
                     out.append(TruthFinding(kind: .overlap, screen: screen.name, dark: screen.dark, views: names, frame: both,
@@ -212,7 +213,8 @@ public extension ComponentTruth {
     /// `centered`: the container draws chrome around the control (a toolbar's glass), so the real view's frame is smaller
     /// than what is seen; sizes are not compared, and the look is compared in a box the canvas control's size centred on
     /// the real one.
-    static func compareCanvas(place: String, canvas: CapturedScreen, real: CapturedScreen, centered: Bool = false,
+    /// `fills`: roles that take their row's width (a toggle in a form), so only their height is compared.
+    static func compareCanvas(place: String, canvas: CapturedScreen, real: CapturedScreen, centered: Bool = false, inset: Double = 0, fills: Set<String> = [],
                               pixels: ((CapturedScreen, CaptureRect, CapturedScreen, CaptureRect) -> Double?)? = nil) -> [TruthFinding] {
         func roles(_ s: CapturedScreen) -> [String: CaptureRect] {
             var out: [String: CaptureRect] = [:]
@@ -228,13 +230,19 @@ public extension ComponentTruth {
                                         words: "In the \(place), macOS draws \(role) but the canvas doesn't.", problem: false))
                 continue
             }
-            let w = abs(cf.width - rf.width) > max(4, 0.15 * rf.width), h = abs(cf.height - rf.height) > max(3, 0.15 * rf.height)
+            // Past the canvas's own edges (its tiles sit `inset` points in from the window's sides): cut off on screen.
+            if inset > 0, cf.x < inset - 6 || cf.maxX > canvas.bounds.width - inset + 6 {
+                out.append(TruthFinding(kind: .canvas, screen: canvas.name, dark: canvas.dark, views: [role], frame: cf,
+                                        words: "In the \(place), the canvas draws \(role) past the edge of its tile, so it is cut off.", problem: true))
+                continue
+            }
+            let w = !fills.contains(role) && abs(cf.width - rf.width) > max(4, 0.15 * rf.width), h = abs(cf.height - rf.height) > max(3, 0.15 * rf.height)
             let seen = centered ? CaptureRect(x: rf.x + rf.width / 2 - cf.width / 2, y: rf.y + rf.height / 2 - cf.height / 2, width: cf.width, height: cf.height) : rf
             if !centered && (w || h) {
                 out.append(TruthFinding(kind: .canvas, screen: canvas.name, dark: canvas.dark, views: [role], frame: cf,
                                         words: "In the \(place), the canvas draws \(role) \(Int(cf.width.rounded()))×\(Int(cf.height.rounded())) pt; macOS draws it \(Int(rf.width.rounded()))×\(Int(rf.height.rounded())) pt.",
                                         problem: true))
-            } else if let d = pixels?(canvas, cf, real, seen), d > 0.12 {
+            } else if !fills.contains(role), let d = pixels?(canvas, cf, real, seen), d > 0.12 {
                 out.append(TruthFinding(kind: .canvas, screen: canvas.name, dark: canvas.dark, views: [role], frame: cf,
                                         words: "In the \(place), the canvas draws \(role) the right size but it looks different from macOS (\(Int((d * 100).rounded()))% apart).",
                                         problem: true))

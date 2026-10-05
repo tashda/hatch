@@ -29,6 +29,31 @@ struct ComponentGallery: View {
             item("MetaRow") { MetaRow(label: "Area") { Text("Editor") }.frame(width: 220) }
             item("HXSetupRow") { HXSetupRow("Branch") { Text("main") }.frame(width: 220) }
             item("ShortcutKeyCaps") { ShortcutKeyCaps(symbols: ["⌘", "K"]) }
+            // Quick capture's own buttons, the footer's hover card, Settings' parts and the menu bar's: in panels and
+            // hover cards no snapshot screen shows.
+            item("QuietIconButton") { HStack(spacing: 8) { QuietIconButton(symbol: "camera") {}; QuietIconButton(symbol: "paperclip") {} } }
+            item("SendButton") { HStack(spacing: 8) { SendButton(enabled: true) {}; SendButton(enabled: false) {} } }
+            item("DoneButton") { DoneButton {} }
+            item("RemoveBadge") { RemoveBadge {} }
+            item("FooterCard") {
+                FooterCard(title: "Acme") {
+                    CardRow(label: "App", value: "acme/app · main")
+                    CardRow(label: "Notebook", value: "Not on this Mac", tint: Theme.critical)
+                }
+            }
+            item("TestStatusGlyph") { HStack(spacing: 8) { TestStatusGlyph(status: .passed); TestStatusGlyph(status: .failed); TestStatusGlyph(status: nil) } }
+            item("ChoiceRow") {
+                VStack(spacing: 4) {
+                    ChoiceRow(selected: true, title: "Claude Code", detail: "Your Claude subscription", symbol: "terminal") {}
+                    ChoiceRow(selected: false, title: "API key", detail: "Pay per token", symbol: "key") {}
+                }
+                .frame(width: 320)
+            }
+            item("GitHubAvatar") { GitHubAvatar(user: nil, size: 40) }
+            item("Subtitle") { Subtitle(text: "Signed in as tashda").frame(width: 220, alignment: .leading) }
+            item("RepoName") { HStack(spacing: 12) { RepoName(name: "acme/app", isPrivate: true); RepoName(name: "acme/docs", isPrivate: false) } }
+            item("MenuBarActionLabel") { MenuBarActionLabel(title: "New Ticket", symbol: "plus", shortcut: "⌘N").frame(width: 220) }
+            item("MenuBarLabel") { HStack(spacing: 10) { MenuBarLabel(waiting: false); MenuBarLabel(waiting: true) } }
             item("HXEmpty") { HXEmpty(symbol: "tray", title: "No tickets", detail: "New tickets you write appear here.").frame(width: 300, height: 150) }
         }
         .padding(24)

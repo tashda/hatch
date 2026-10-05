@@ -39,7 +39,7 @@ extension View {
 }
 
 /// The inside of every footer card: a title, then rows.
-private struct FooterCard<Content: View>: View {
+struct FooterCard<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
     var body: some View {
@@ -53,7 +53,7 @@ private struct FooterCard<Content: View>: View {
     }
 }
 
-private struct CardRow: View {
+struct CardRow: View {
     let label: String
     let value: String
     var tint: Color = .secondary

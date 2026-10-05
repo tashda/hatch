@@ -17,6 +17,10 @@ public struct SampleContent: Equatable {
     public var liveKeys = false
     /// The place it is drawn in, when a control looks different by place (a badge on a toolbar item or in a row).
     public var place: String?
+    /// A row of a Form: a control with its own label (toggle, date picker, stepper) fits the row instead of keeping its
+    /// ideal width, which is wider than a narrow form (measured, CM25).
+    public var inForm = false
+    var fillsRow: Bool { inForm || ["form", "inspector", "card", "popover", "sheetFooter"].contains(place ?? "") }
 
     /// With Long Label, each title its own longer words (a Delete still reads as Delete), so wrapping is judged on
     /// real buttons, not the same sentence everywhere.
@@ -61,7 +65,7 @@ public struct RecipeControl: View {
         case "button": RecipeButton(recipe: recipe, importance: importance, sample: sample)
         case "menu": RecipeMenu(recipe: recipe, sample: sample)
         case "picker": RecipePicker(recipe: recipe)
-        case "toggle": RecipeToggle(recipe: recipe, title: sample.longLabel ? "Sync the whole library in the background" : "Sync")
+        case "toggle": RecipeToggle(recipe: recipe, title: sample.longLabel ? "Sync the whole library in the background" : "Sync", fills: sample.fillsRow)
         case "field": RecipeField(recipe: recipe)
         case "switcher": RecipeSwitcher(recipe: recipe)
         case "row": RecipeRow(recipe: recipe)
@@ -72,10 +76,10 @@ public struct RecipeControl: View {
         case "emptyState": RecipeEmptyState(recipe: recipe)
         case "table": RecipeTable(recipe: recipe)
         case "form": RecipeForm(recipe: recipe)
-        case "datePicker": RecipeDatePicker(recipe: recipe)
+        case "datePicker": RecipeDatePicker(recipe: recipe, fills: sample.fillsRow)
         case "progress": RecipeProgress(recipe: recipe)
         case "slider": RecipeSlider(recipe: recipe)
-        case "stepper": Stepper("Copies: 2", value: .constant(2)).controlSize(ControlSize(recipe: recipe["size"])).fixedSize()
+        case "stepper": Stepper("Copies: 2", value: .constant(2)).controlSize(ControlSize(recipe: recipe["size"])).fixedSize(horizontal: !sample.fillsRow, vertical: true)
         case "gauge": RecipeGauge(recipe: recipe)
         case "controlGroup": RecipeControlGroup(recipe: recipe)
         case "textEditor": RecipeTextEditor(recipe: recipe)
@@ -296,6 +300,7 @@ private struct LabelsHidden: ViewModifier {
 private struct RecipeToggle: View {
     let recipe: [String: String]
     let title: String
+    var fills = false
     @State private var on = true
 
     var body: some View {
@@ -310,7 +315,7 @@ private struct RecipeToggle: View {
         }
         .controlSize(ControlSize(recipe: recipe["size"]))
         .recipeTint(recipe["tint"])
-        .fixedSize()
+        .fixedSize(horizontal: !fills, vertical: true)
     }
 }
 
@@ -677,6 +682,7 @@ private struct RecipeForm: View {
 @available(macOS 26.0, *)
 private struct RecipeDatePicker: View {
     let recipe: [String: String]
+    var fills = false
     var body: some View {
         let picker = DatePicker("Due", selection: .constant(Date(timeIntervalSinceReferenceDate: 813_000_000)), displayedComponents: .date)
         Group {
@@ -689,7 +695,7 @@ private struct RecipeDatePicker: View {
             }
         }
         .controlSize(ControlSize(recipe: recipe["size"]))
-        .fixedSize()
+        .fixedSize(horizontal: !fills, vertical: true)
     }
 }
 

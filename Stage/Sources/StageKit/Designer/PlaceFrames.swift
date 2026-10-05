@@ -102,6 +102,8 @@ struct PlaceFrame: View {
         RecipeControl(element: element, recipe: recipe(role), system: model.system, importance: role.importance,
                       sample: SampleWords.content(role.importance, place: place.id, base: model.sample))
             .allowsHitTesting(false)
+            // Measured against the same role in the real container (CanvasTruth, CM25).
+            .hatchMark("role:" + role.id)
             .padding(padded ? 3 : 0)
             .opacity(emphasis(role))
             .overlay {

@@ -74,6 +74,17 @@ final class ComponentTruthTests: XCTestCase {
         XCTAssertEqual(asked, CaptureRect(x: 392, y: 53, width: 80, height: 22), "the canvas item's box, centred on the real one")
     }
 
+    /// The case the frames alone missed on 2026-10-06: a date picker row wider than its tile, cut at both edges.
+    func testARolePastItsTilesEdgeIsCutOff() {
+        let canvas = screen([.init(name: "role:datePicker.setting", frame: [0, 160, 430, 19])], name: "designer-canvas-form")
+        let real = screen([.init(name: "role:datePicker.setting", frame: [10, 160, 430, 19])], name: "designer-real-form")
+        let found = ComponentTruth.compareCanvas(place: "form", canvas: canvas, real: real, inset: 20)
+        XCTAssertEqual(found.map(\.problem), [true])
+        XCTAssertTrue(found[0].words.contains("past the edge of its tile"))
+        XCTAssertEqual(ComponentTruth.compareCanvas(place: "form", canvas: screen([.init(name: "role:datePicker.setting", frame: [30, 160, 400, 19])]),
+                                                    real: real, inset: 20).filter(\.problem), [])
+    }
+
     func testOnlyTheTicketsViewsCount() {
         let captures = ComponentCaptures(folder: URL(fileURLWithPath: "/tmp"), screens: [screen([
             .init(name: "Tile", frame: [20, 20, 300, 200]), .init(name: "Tile", frame: [250, 20, 300, 200]),

@@ -67,9 +67,15 @@ public enum HatchMarks {
             let y = root.isFlipped ? r.minY : root.bounds.height - r.maxY
             return [r.minX, y, r.width, r.height].map { (Double($0) * 100).rounded() / 100 }
         }
+        // SwiftUI's opacity reaches the probe's own view: a view faded out (a card waiting to slide in) isn't drawn.
+        func opacity(_ v: NSView) -> CGFloat {
+            var a: CGFloat = 1, x: NSView? = v
+            while let c = x, c !== root.superview { a *= c.alphaValue * CGFloat(c.layer?.opacity ?? 1); x = c.superview }
+            return a
+        }
         func walk(_ view: NSView, parent: Int?) {
             var inside = parent
-            if let mark = view as? HatchMarkView, !mark.isHiddenOrHasHiddenAncestor, !mark.visibleRect.isEmpty {
+            if let mark = view as? HatchMarkView, !mark.isHiddenOrHasHiddenAncestor, !mark.visibleRect.isEmpty, opacity(mark) > 0.05 {
                 var entry: [String: Any] = ["name": mark.name, "instance": mark.instance, "frame": rect(mark.convert(mark.bounds, to: root)),
                                             "visible": rect(mark.convert(mark.visibleRect, to: root))]
                 if let parent { entry["parent"] = parent }
