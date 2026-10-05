@@ -201,4 +201,31 @@ final class SweepTests: XCTestCase {
         let json = try? sweepManifest(items()).jsonString()
         XCTAssertNotNil(json)
     }
+
+    func testHatchCanPrepareASweepThatArrivesWaitingForTheOwnersCall() throws {
+        let goal = try Fixture.ticket(store, project, type: .theme, title: "Components for the app", body: "x", status: .draft)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("sweep-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("Views"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "struct DecideCard {}".write(to: root.appendingPathComponent("Views/DecideCard.swift"), atomically: true, encoding: .utf8)
+        try "struct AgentCard {}".write(to: root.appendingPathComponent("Views/AgentCard.swift"), atomically: true, encoding: .utf8)
+        let service = PreparedSweepService(store: store)
+        let sweep = PreparedSweep(title: "How cards look", body: "One look for the card role.", parentId: goal.id, manifest: sweepManifest(items()), note: "Made from the code check.")
+        guard case .created(let ticket) = try service.create(projectId: project.id, sweep, appRoot: root.path) else { return XCTFail("should be created") }
+        XCTAssertEqual(ticket.type, .sweep)
+        XCTAssertEqual(ticket.status, .yourCall, "waiting for the owner, with no agent and no model call")
+        XCTAssertEqual(ticket.parentId, goal.id)
+        XCTAssertEqual(try store.sweepItems(ticketId: ticket.id).count, 2)
+        XCTAssertNotNil(try store.proposalManifest(ticketId: ticket.id))
+        XCTAssertTrue(try store.notes(ticketId: ticket.id).contains { $0.body == "Made from the code check." })
+        XCTAssertEqual(try store.events(ticketId: ticket.id, kinds: ["offer"]).count, 1)
+        XCTAssertNil(ticket.takenBy)
+        // The owner can accept it like any Proposal.
+        XCTAssertEqual(try store.acceptProposal(ticketId: ticket.id).ticket.status, .accepted)
+
+        let ghost = PreparedSweep(title: "Ghost", body: "x", manifest: sweepManifest(items() + [ManifestItem(id: "g", title: "G", name: "GhostCard", file: "Views/GhostCard.swift", kind: "with actions")]))
+        guard case .rejected(let issues) = try service.create(projectId: project.id, ghost, appRoot: root.path) else { return XCTFail("a card that does not exist must be refused") }
+        XCTAssertTrue(codes(issues).contains("items.file-missing"))
+        XCTAssertEqual(try store.tickets(TicketFilter(types: [.sweep])).count, 1, "nothing was made for the refused one")
+    }
 }
