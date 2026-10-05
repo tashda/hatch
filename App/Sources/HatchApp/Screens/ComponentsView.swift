@@ -429,7 +429,7 @@ struct ComponentsView: View {
     nonisolated static func usesByRole(_ uses: [ComponentInventory.Use], system: ComponentSystem) -> [String: Int] {
         var out: [String: Int] = [:]
         for u in uses {
-            guard let id = u.role ?? u.place.flatMap({ system.role(element: u.element, place: $0, importance: u.importance)?.id }) else { continue }
+            guard let id = u.role ?? u.place.flatMap({ system.role(element: u.element, place: $0, importance: u.importance, kind: ComponentDraft.kind(u.element, u.recipe))?.id }) else { continue }
             out[id, default: 0] += 1
         }
         return out

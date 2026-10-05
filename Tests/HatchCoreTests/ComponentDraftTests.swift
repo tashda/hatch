@@ -121,7 +121,7 @@ final class ComponentDraftTests: XCTestCase {
             use("button", "listRow", ["style": "plain"]), use("button", "listRow", ["style": "plain"], line: 2),
             use("button", "listRow", ["style": "bordered", "size": "small", "label": "titleOnly"], line: 3),
             // Toggles: the app never uses Glass's mini switch.
-            use("toggle", "form", ["style": "checkbox"], line: 4), use("toggle", "form", ["style": "button"], line: 5),
+            use("toggle", "form", ["style": "checkbox"], line: 4), use("toggle", "form", ["style": "checkbox", "size": "small"], line: 5),
             // Main actions in rows: glass in content is most used, which Apple argues against.
             use("button", "listRow", ["style": "glassProminent"], .main, line: 6), use("button", "listRow", ["style": "glassProminent"], .main, line: 7),
             use("button", "card", ["style": "borderedProminent"], .main, line: 8),
@@ -168,6 +168,25 @@ final class ComponentDraftTests: XCTestCase {
         XCTAssertEqual(s.problems(), [])
     }
 
+    /// CD51: a checkbox and a toggle button are different controls: two roles, and no question mixes them.
+    func testKindsOfControlAreNeverOneRole() {
+        let inv = ComponentInventory(uses: [
+            use("toggle", "form", ["style": "checkbox"]), use("toggle", "form", ["style": "checkbox"], line: 2),
+            use("toggle", "form", ["style": "button"], line: 3), use("toggle", "form", ["style": "button"], line: 4),
+            use("picker", "form", ["style": "segmented"], line: 5), use("picker", "form", ["style": "menu"], line: 6),
+        ], swiftFiles: 1)
+        let s = ComponentDraft.fromApp(name: "Acme", inventory: inv)
+        let toggles = s.roles(of: "toggle").filter { $0.places.contains("form") }
+        XCTAssertEqual(Set(toggles.map { ComponentDraft.kind("toggle", $0.recipe) }), ["check", "button"])
+        XCTAssertTrue(s.roles(of: "toggle").contains { $0.title.hasPrefix("Toggle button") })
+        for q in s.questions {
+            let kinds = Set(q.options.compactMap(\.recipe).map { ComponentDraft.kind(s.role(q.role!)!.element, $0) })
+            XCTAssertLessThanOrEqual(kinds.count, 1, "\(q.id) mixes kinds of control")
+        }
+        XCTAssertTrue(s.roles(of: "picker").contains { $0.title.hasPrefix("Segmented picker") })
+        XCTAssertEqual(s.problems(), [])
+    }
+
     func testNamesReadLikeTheTemplateAndLeftoversByFamily() {
         let inv = ComponentInventory(uses: [
             use("button", "listRow", ["style": "glassProminent"], .main),
@@ -178,7 +197,7 @@ final class ComponentDraftTests: XCTestCase {
         XCTAssertNotNil(s.role("button.primaryInRow"), "main actions in rows are their own role, one per row")
         XCTAssertNil(s.role("button.primaryInRow")?.perScreen)
         XCTAssertEqual(s.role("button.primaryInRow")?.title, "Main action in a row", "named by its job, not by its places (CD2)")
-        XCTAssertEqual(s.role("toggle.inToolbar")?.title, "Toggle in the toolbar")
+        XCTAssertEqual(s.role("toggle.inToolbar")?.title, "Setting toggle in the toolbar")
         XCTAssertEqual(s.problems(), [])
     }
 

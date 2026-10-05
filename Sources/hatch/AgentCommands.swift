@@ -221,7 +221,7 @@ enum AgentCommands {
                 let flagged = Set(all.map { "\($0.file):\($0.line)" })
                 var used = Set<String>()
                 for u in checked.inventory.uses where added[u.file]?.contains(u.line) == true && !flagged.contains(u.location(full: true)) {
-                    if let r = u.role ?? u.place.flatMap({ system.role(element: u.element, place: $0, importance: u.importance)?.id }) { used.insert(r) }
+                    if let r = u.role ?? u.place.flatMap({ system.role(element: u.element, place: $0, importance: u.importance, kind: ComponentDraft.kind(u.element, u.recipe))?.id }) { used.insert(r) }
                 }
                 var updated = system
                 let reached = updated.recordUse(roles: used, ticket: t.displayNumber)

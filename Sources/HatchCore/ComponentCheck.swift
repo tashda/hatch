@@ -83,8 +83,8 @@ public enum ComponentCheck {
                 return make(.unknownRole, used, "Uses \(used), which the system does not have. Use one of its roles, or ask for a new one.")
             }
             if let place = u.place, !role.places.contains(place), role.status != .inRedesign {
-                let better = system.role(element: u.element, place: place, importance: role.importance)
-                    ?? ComponentRole.Importance.allCases.lazy.compactMap { system.role(element: u.element, place: place, importance: $0) }.first
+                let better = system.role(element: u.element, place: place, importance: role.importance, kind: ComponentDraft.kind(u.element, u.recipe))
+                    ?? ComponentRole.Importance.allCases.lazy.compactMap { system.role(element: u.element, place: place, importance: $0, kind: ComponentDraft.kind(u.element, u.recipe)) }.first
                 return make(.wrongPlace, used, "\(used) is not meant for a \(placeTitle)"
                             + (better.map { "; use \($0.id) (\($0.codeName)) there." } ?? "; no role covers this place yet, so ask."))
             }
@@ -95,10 +95,10 @@ public enum ComponentCheck {
         if system.followsMacOS(element: u.element, place: place, importance: u.importance, area: area) {
             let set = element.look(u.recipe).filter { $0.value != defaultValue($0.key, element: element) && !($0.key == "label") }
             guard !set.isEmpty else { return nil }
-            return make(.mismatch, system.role(element: u.element, place: place, importance: u.importance)?.id,
+            return make(.mismatch, system.role(element: u.element, place: place, importance: u.importance, kind: ComponentDraft.kind(u.element, u.recipe))?.id,
                         "This follows macOS: remove \(set.keys.sorted().map { "\($0) \(set[$0]!)" }.joined(separator: ", ")) and let the system draw it.")
         }
-        guard let role = system.role(element: u.element, place: place, importance: u.importance) else {
+        guard let role = system.role(element: u.element, place: place, importance: u.importance, kind: ComponentDraft.kind(u.element, u.recipe)) else {
             return make(.noRole, nil, "No role for a \(element.title.lowercased()) at \(u.importance.title.lowercased()) importance in a \(placeTitle) yet. Ask with hatch ask (suggest the nearest role), do not invent a look.")
         }
         if role.status == .inRedesign { return nil }
@@ -151,7 +151,7 @@ public enum ComponentCheck {
         var groups: [String: [(ComponentInventory.Use, ComponentRole)]] = [:]
         for u in uses {
             guard let view = u.view, let place = u.place else { continue }
-            let role = u.role.flatMap { system.role($0) } ?? system.role(element: u.element, place: place, importance: u.importance)
+            let role = u.role.flatMap { system.role($0) } ?? system.role(element: u.element, place: place, importance: u.importance, kind: ComponentDraft.kind(u.element, u.recipe))
             guard let role, let limit = role.perScreen, limit > 0 else { continue }
             groups["\(u.file)|\(view)|\(role.id)", default: []].append((u, role))
         }

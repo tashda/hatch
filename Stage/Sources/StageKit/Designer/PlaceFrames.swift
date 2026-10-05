@@ -24,8 +24,10 @@ struct PlaceFrame: View {
 
     /// The roles in this place, quiet first and the main action last (macOS order).
     private var cells: [ComponentRole] {
+        // Every role here, a cell holding one per kind of control (CD51), quiet first and the main action last.
         let order: [ComponentRole.Importance] = [.quiet, .destructive, .other, .main]
-        return order.compactMap { model.system.role(element: element, place: place.id, importance: $0) }
+        return model.system.roles.filter { $0.element == element && $0.places.contains(place.id) }
+            .sorted { (order.firstIndex(of: $0.importance) ?? 0, $0.kind) < (order.firstIndex(of: $1.importance) ?? 0, $1.kind) }
     }
 
     var body: some View {

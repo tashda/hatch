@@ -405,8 +405,15 @@ final class DesignerModel: ObservableObject {
 
     /// The values to draw as choices for a setting: macOS's default first (nil), then the others, without the value that
     /// is macOS's default (it is the first).
-    func choices(of p: ComponentParameter) -> [String?] {
-        [nil] + values(of: p).filter { $0 != p.systemDefault }.map { Optional($0) }
+    func choices(of p: ComponentParameter, for role: ComponentRole? = nil) -> [String?] {
+        let all: [String?] = [nil] + values(of: p).filter { $0 != p.systemDefault }.map { Optional($0) }
+        guard let role else { return all }
+        // Only looks of the role's own kind (CD51): a setting toggle is never offered as a toggle button.
+        return all.filter { v in
+            var r = role.draft ?? role.recipe
+            r[p.id] = v
+            return ComponentDraft.kind(role.element, r) == role.kind
+        }
     }
 
     /// The values a setting can take for this system: its own and the system's foundations of its kind.
@@ -580,7 +587,11 @@ final class DesignerModel: ObservableObject {
     func batchSetting(_ parameter: ComponentParameter, _ value: String?, element: String, place: String?) -> DesignerBatch {
         let words = value.map { ComponentWords.value(element: element, parameter: parameter.id, value: $0) } ?? "macOS default"
         let fits = roles(element: element, place: place).filter { r in
-            parameter.applies(to: r.draft ?? r.recipe) && !r.places.allSatisfy { ComponentNative.systemPlaces[$0]?.allowed.isEmpty == true }
+            var tried = r.draft ?? r.recipe
+            tried[parameter.id] = value
+            // Only where it applies, not where macOS draws, and never turning a role into another kind of control.
+            return parameter.applies(to: r.draft ?? r.recipe) && !r.places.allSatisfy { ComponentNative.systemPlaces[$0]?.allowed.isEmpty == true }
+                && ComponentDraft.kind(r.element, tried) == r.kind
         }
         let items = fits.compactMap { r -> DesignerBatch.Item? in
             var recipe = r.draft ?? r.recipe

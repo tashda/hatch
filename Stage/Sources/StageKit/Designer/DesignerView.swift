@@ -1140,7 +1140,7 @@ struct LookChoices: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(p.title).font(.callout.weight(.semibold))
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: ChoiceTile.width(element.id)), spacing: 6, alignment: .top)], alignment: .leading, spacing: 6) {
-                        ForEach(model.choices(of: p), id: \.self) { value in chip(p, value, recipe) }
+                        ForEach(model.choices(of: p, for: role), id: \.self) { value in chip(p, value, recipe) }
                     }
                 }
             }

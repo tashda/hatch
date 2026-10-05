@@ -85,9 +85,10 @@ public enum ComponentDraft {
         var assigned: [String: [ComponentInventory.Use]] = [:]
         var leftovers: [ComponentInventory.Use] = []
         for u in placed {
-            if let r = system.role(element: u.element, place: u.place!, importance: u.importance) { assigned[r.id, default: []].append(u); continue }
+            let k = kind(u.element, u.recipe)
+            if let r = system.role(element: u.element, place: u.place!, importance: u.importance, kind: k), r.kind == k { assigned[r.id, default: []].append(u); continue }
             let family = families.first { $0.contains(u.place!) } ?? [u.place!]
-            if let i = system.roles.firstIndex(where: { $0.element == u.element && $0.importance == u.importance && $0.places.contains(where: family.contains) }) {
+            if let i = system.roles.firstIndex(where: { $0.element == u.element && $0.importance == u.importance && kind($0.element, $0.recipe) == k && $0.places.contains(where: family.contains) }) {
                 system.roles[i].places.append(u.place!)
                 assigned[system.roles[i].id, default: []].append(u)
             } else { leftovers.append(u) }
@@ -95,7 +96,7 @@ public enum ComponentDraft {
         // 2. What is left: one role per element and importance.
         var groups: [String: [ComponentInventory.Use]] = [:], order: [String] = []
         for u in leftovers {
-            let key = "\(u.element)|\(u.importance.rawValue)"
+            let key = "\(u.element)|\(u.importance.rawValue)|\(kind(u.element, u.recipe))"
             if groups[key] == nil { order.append(key) }
             groups[key, default: []].append(u)
         }
@@ -125,6 +126,21 @@ public enum ComponentDraft {
             if found.count > 1 { system.questions.append(question(for: system.roles[i], looks: found, reference: reference)) }
         }
         return system
+    }
+
+    /// What kind of control a look makes (CD51): a checkbox and a toggle button, or a segmented picker and a pop-up, are
+    /// different controls for different jobs, so they are never one role and never options of one question.
+    public static func kind(_ element: String, _ recipe: [String: String]) -> String {
+        switch element {
+        case "toggle": return recipe["style"] == "button" ? "button" : "check"
+        case "picker":
+            switch recipe["style"] {
+            case "segmented", "palette": return "segmented"
+            case "radioGroup", "inline": return "radio"
+            default: return "menu"
+            }
+        default: return ""
+        }
     }
 
     /// Places that serve the same purpose for a control: a stray cell joins the role that holds one of its family.
@@ -210,7 +226,9 @@ public enum ComponentDraft {
             .filter { $0.importance == importance }
             .max { overlap($0.places, places) < overlap($1.places, places) }
             .flatMap { overlap($0.places, places) > 0 ? $0 : nil }
-        var name = match?.name ?? plainName(element: element.id, importance: importance, places: places, recipe: clean.recipe)
+        let k = kind(element.id, clean.recipe)
+        var name = match?.name ?? (["button": "toggleButton", "segmented": "segmented", "radio": "radio"][k].map { $0 + (mainFamily(places).map { ["InPage", "InRow", "InToolbar", "InMenu", "Floating"][$0] } ?? "") }
+                                   ?? plainName(element: element.id, importance: importance, places: places, recipe: clean.recipe))
         if taken.contains("\(element.id).\(name)") {
             let family = places.first.flatMap { p in families.firstIndex { $0.contains(p) } }
             let suffix = family.map { ["InPage", "InRow", "InToolbar", "InMenu"][$0] } ?? "Other"
@@ -221,7 +239,7 @@ public enum ComponentDraft {
         let where_ = places.map { ComponentPlace.title($0).lowercased() }.joined(separator: ", ")
         return ComponentRole(
             "\(element.id).\(name)",
-            match?.title ?? jobTitle(element: element, importance: importance, places: places),
+            match?.title ?? jobTitle(element: element, importance: importance, places: places, kind: k),
             use: match?.use ?? "\(element.plural) at \(importance.title.lowercased()) importance in: \(where_). The app's most used look there (\(count) uses).",
             avoid: match?.avoid ?? "",
             places: places, importance: importance,
@@ -268,12 +286,17 @@ public enum ComponentDraft {
     }
 
     /// A made-up role's title, by its job (CD2): "Main action in a row", "Menu button", never a list of places.
-    static func jobTitle(element: ComponentElement, importance: ComponentRole.Importance, places: [String]) -> String {
+    static func jobTitle(element: ComponentElement, importance: ComponentRole.Importance, places: [String], kind: String = "") -> String {
         let qualifier = mainFamily(places).map { ["", " in a row", " in the toolbar", " in a menu", ", floating"][$0] } ?? ""
         let base: String
-        switch element.id {
-        case "button": base = ["main": "Main action", "other": "Other action", "quiet": "Quiet action", "destructive": "Destructive action"][importance.rawValue] ?? "Action"
-        case "menu": base = "Menu button"
+        switch (element.id, kind) {
+        case ("toggle", "button"): base = "Toggle button"
+        case ("toggle", _): base = "Setting toggle"
+        case ("picker", "segmented"): base = "Segmented picker"
+        case ("picker", "radio"): base = "Radio buttons"
+        case ("picker", _): base = "Pop-up picker"
+        case ("button", _): base = ["main": "Main action", "other": "Other action", "quiet": "Quiet action", "destructive": "Destructive action"][importance.rawValue] ?? "Action"
+        case ("menu", _): base = "Menu button"
         default: base = element.title
         }
         return base + qualifier
@@ -402,7 +425,7 @@ public extension ComponentSystem {
     /// title is already a name.
     func suggestedTitle(_ id: String) -> String? {
         guard let r = role(id), r.title.contains("("), let element = ComponentElement.named(r.element) else { return nil }
-        return ComponentDraft.jobTitle(element: element, importance: r.importance, places: r.places)
+        return ComponentDraft.jobTitle(element: element, importance: r.importance, places: r.places, kind: ComponentDraft.kind(r.element, r.recipe))
     }
 
     /// Answers a look question with a look of the owner's own, not one of its options (CD50: a shape or style chosen
@@ -643,7 +666,18 @@ public extension ComponentsSetup {
             return QuestionOption(key: String(i), title: words(o), detail: o.recipe == nil ? o.effect : (o.examples.isEmpty ? nil : "e.g. " + o.examples.joined(separator: ", ")),
                                   recommended: i == q.recommended, why: i == q.recommended ? q.reason : nil, gain: gain, cost: cost)
         }
+        // What it is and where it is (CD49), so the question is about real screens, not abstract roles.
+        let examples = ComponentInventory.firstDistinct(q.options.flatMap(\.examples), 6)
+        let what = role.map { "**\($0.title)**: \($0.use)" } ?? ""
+        let whereText = role.map { r in
+            "It sits in " + r.places.map { ComponentPlace.title($0).lowercased() }.joined(separator: ", ")
+                + (total > 0 ? "; \(total) places in the app use it today" + (examples.isEmpty ? "." : ", for example " + examples.joined(separator: ", ") + ".") : ".")
+        } ?? ""
         let body = """
+            \(what)
+
+            \(whereText) Whatever you choose, all of them move to it when their screens are next changed.
+
             \(q.reason)
 
             Answering here changes \(system.name)'s design system (`\(ComponentSystem.notebookPath)` in the notebook). The Components Designer draws every option in its places.

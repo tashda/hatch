@@ -123,8 +123,12 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
 
     /// The role for an element in a place at an importance: one cell of the role table. Nil means not decided yet, which
     /// is a question for the owner, never a licence to invent a look.
-    public func role(element: String, place: String, importance: ComponentRole.Importance) -> ComponentRole? {
-        roles.first { $0.element == element && $0.importance == importance && $0.places.contains(place) }
+    /// The role for a cell of the table. With `kind` (CD51: a checkbox and a toggle button are different controls), the
+    /// role of that kind first, else the cell's first role.
+    public func role(element: String, place: String, importance: ComponentRole.Importance, kind: String? = nil) -> ComponentRole? {
+        let inCell = roles.filter { $0.element == element && $0.importance == importance && $0.places.contains(place) }
+        if let kind, let r = inCell.first(where: { $0.kind == kind }) { return r }
+        return inCell.first
     }
 
     /// The roles of one element, in the order the system lists them.
@@ -213,7 +217,7 @@ public struct ComponentSystem: Codable, Equatable, Sendable {
         var cells: [String: String] = [:]
         for r in roles {
             for p in r.places {
-                let key = "\(r.element)|\(p)|\(r.importance.rawValue)"
+                let key = "\(r.element)|\(p)|\(r.importance.rawValue)|\(r.kind)"
                 if let other = cells[key] {
                     out.append("Roles \(other) and \(r.id) both claim \(r.element) in \(p) at \(r.importance.title.lowercased()) importance.")
                 } else { cells[key] = r.id }
@@ -625,6 +629,9 @@ public struct ComponentRole: Codable, Equatable, Sendable, Identifiable {
     /// How code uses it. A recipe role gets a generated modifier named after its element (`.buttonRole(.primary)`); a
     /// custom role is its own view or modifier.
     public var codeName: String { custom ?? ".\(element)Role(.\(name))" }
+
+    /// What kind of control its look makes (CD51), part of the table's key: a role keeps its kind.
+    public var kind: String { ComponentDraft.kind(element, draft ?? recipe) }
 
     /// "glass prominent, large, title and icon, capsule".
     public var lookSummary: String {
