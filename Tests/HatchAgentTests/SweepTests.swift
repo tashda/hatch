@@ -128,6 +128,9 @@ final class SweepTests: XCTestCase {
         XCTAssertTrue(build.contains("- agent-card [To do] AgentCard in Views/AgentCard.swift"))
         XCTAssertTrue(build.contains("One commit per item"))
         XCTAssertTrue(build.contains("hatch item built"))
+        let fix = try BriefBuilder.brief(store: store, ticketId: t.id, agent: "Agent on #151", kind: .fix)
+        XCTAssertTrue(fix.contains("the owner sent back"), "a Sweep fix knows it must mark the item built again")
+        XCTAssertTrue(fix.contains("hatch item built"))
         let ordinary = try BriefBuilder.brief(store: store, ticketId: try Fixture.preparing(store, project).id, agent: "Agent on #151", kind: .prepare)
         XCTAssertFalse(ordinary.contains("This is a Sweep"))
     }

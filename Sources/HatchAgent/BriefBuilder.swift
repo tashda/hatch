@@ -383,7 +383,10 @@ public enum BriefBuilder {
                 "When done run `hatch ready`. Hatch runs the build, tests and match check and moves the ticket to To verify.",
             ] + common
         case .fix:
-            return [
+            let sweep = t.type == .sweep ? [
+                "This is a Sweep: the items still To do under Sweep items are the ones the owner sent back, and the owner's note names each. Change only those, one commit each, and run `hatch item built \(t.displayNumber) <key>` after each. `hatch ready` is refused while one is still To do.",
+            ] : []
+            return sweep + [
                 "Read the owner's notes under Since your last turn and fix exactly that, on the same branch `\(branchName(t))`.",
                 "Run only the tests mapped to this area. No full suite.",
                 "Compile with `hatch check \(t.displayNumber) --build`, and pipe a test run through `hatch check -`: only errors, warnings and failing tests.",
