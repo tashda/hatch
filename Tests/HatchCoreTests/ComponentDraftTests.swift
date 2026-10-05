@@ -145,6 +145,14 @@ final class ComponentCheckTests: XCTestCase {
         XCTAssertEqual(cov.total, 7)
     }
 
+    func testGuessedPlacesAreUnsure() {
+        var guessed = use("listRow", ["style": "glass"], line: 1)
+        guessed.evidence = "name"
+        let f = ComponentCheck.findings([guessed, use("listRow", ["style": "glass"], line: 2)], system: system)
+        XCTAssertEqual(f.map(\.certain), [false, true])
+        XCTAssertTrue(f[0].message.contains("Place guessed"))
+    }
+
     func testVariantsAndLabelsTheScannerCannotRead() {
         var s = system
         try? s.addVariant(to: "button.inRow", id: "icon", use: "Tight rows.", recipe: ["label": "iconOnly"])

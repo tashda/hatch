@@ -152,6 +152,7 @@ enum CoreCommands {
                                "uses": .array(inv.uses.map { u in
                                    ["element": .string(u.element), "place": u.place.map { .string($0) } ?? .null, "look": .string(u.signature),
                                     "importance": .string(u.importance.rawValue), "file": .string(u.file), "line": .int(u.line),
+                                    "evidence": .string(u.evidence),
                                     "trail": .array(u.trail.map { .string($0) })]
                                })]
         c.out.emit(json, text: lines.joined(separator: "\n"))

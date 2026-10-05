@@ -42,6 +42,9 @@ public struct ComponentFinding: Equatable, Sendable {
     public var look: String
     /// One plain sentence: what is wrong and what to do.
     public var message: String
+    /// True when the place came from the code's structure (about 80% right in audits); a place guessed from a name or the
+    /// page default is right far less often, so such findings are shown as unsure and never pressed on an agent.
+    public var certain: Bool = true
 
     public var location: String { "\(file):\(line)" }
 }
@@ -60,7 +63,10 @@ public enum ComponentCheck {
     static func finding(_ u: ComponentInventory.Use, system: ComponentSystem) -> ComponentFinding? {
         let look = u.signature
         func make(_ kind: ComponentFinding.Kind, _ role: String?, _ message: String) -> ComponentFinding {
-            ComponentFinding(kind: kind, element: u.element, place: u.place, role: role, file: u.file, line: u.line, look: look, message: message)
+            let certain = u.evidence == "structure" || kind == .unknownRole
+            return ComponentFinding(kind: kind, element: u.element, place: u.place, role: role, file: u.file, line: u.line, look: look,
+                                    message: certain ? message : message + " (Place guessed from \(u.evidence == "name" ? "a name" : "the screen"); check it first.)",
+                                    certain: certain)
         }
         let placeTitle = ComponentPlace.title(u.place).lowercased()
         if let used = u.role {

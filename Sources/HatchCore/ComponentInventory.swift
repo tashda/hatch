@@ -22,6 +22,9 @@ public struct ComponentInventory: Equatable, Sendable {
         public var line: Int
         /// The view type it is written in.
         public var view: String?
+        /// How sure the place is: `structure` (a List, a `.toolbar`, a Form around it, here or where the view is used),
+        /// `name` (a view's or helper's name), or `page` (the default for a window's content). Checks trust structure most.
+        public var evidence: String = "structure"
         /// The conditional branches it is in, outermost first (`if@120#140`, `case@300#2`): two uses in different
         /// branches of the same `if`/`else` or `switch` are never on screen together.
         public var branches: [String] = []
@@ -907,6 +910,7 @@ struct SwiftStructure {
         }
         return ComponentInventory.Use(element: element, place: context.place, recipe: recipe, importance: importance,
                                       role: env.role.map { "\(element).\($0)" }, file: file, line: line(of: start), view: context.view,
+                                      evidence: context.place == nil ? "none" : ["page", "name", "structure"][context.source.rawValue],
                                       branches: branches(of: start),
                                       trail: context.trail + (context.view.map { ["view \($0)"] } ?? []))
     }
@@ -1079,8 +1083,9 @@ struct SwiftStructure {
             case (false, "List"), (false, "Table"), (false, "TableColumn"), (false, "OutlineGroup"): ctx.set("listRow", .structure)
             case (false, "ForEach") where ["LazyVGrid", "LazyHGrid", "LazyVStack", "LazyHStack", "Grid"].contains(outer?.name ?? ""):
                 ctx.set("listRow", .structure)
-            case (false, "ForEach") where outer?.name == "Section" && (element == "button" || element == "menu"):
-                // Actions on records listed in a form's section are row actions; a form's own toggles stay form.
+            case (false, "ForEach") where (element == "button" || element == "menu") && (outer?.name == "Section" || inStack)
+                    && !levels.dropFirst(k + 1).contains(where: { l in l.owner.map { ["toolbar", "contextMenu", "Menu", "alert", "confirmationDialog", "ToolbarItem", "ToolbarItemGroup"].contains($0.name) } ?? false }):
+                // Actions on records repeated in rows (a stack per item) are row actions; a form's own toggles stay form.
                 ctx.set("listRow", .structure)
             case (false, "ContentUnavailableView"): ctx.set("emptyState", .structure)
             case (false, "GroupBox"): ctx.set("card", .structure)
@@ -1094,7 +1099,7 @@ struct SwiftStructure {
                     let inPopover = levels.dropFirst(k + 1).contains { $0.owner?.dotted == true && $0.owner?.name == "popover" }
                         || Self.words(view?.name ?? "").contains("popover")
                     ctx.set(inPopover ? "popover" : "sheetFooter", .structure)
-                } else if followsTitle(brace, within: levels.dropFirst(k + 1).first?.brace) {
+                } else if followsTitle(brace, within: levels.dropFirst(k + 1).first?.brace) || precedesList(brace) {
                     ctx.set("actionRow", .structure)
                 }
             case (false, "Section"): inSection = true
@@ -1224,6 +1229,15 @@ struct SwiftStructure {
         return next >= b.count || b[next] == UInt8(ascii: "}")
     }
 
+    /// A row of controls right above a list, table or scrolling content (a Divider between is fine): the pane's actions.
+    func precedesList(_ brace: Int) -> Bool {
+        guard partner[brace] > brace else { return false }
+        var p = skipSpace(chain(after: partner[brace] + 1).end, newlines: true)
+        if let id = identifier(startingAt: p), id.name == "Divider" { p = skipSpace(chain(after: id.end).end, newlines: true) }
+        guard let next = identifier(startingAt: p) else { return false }
+        return ["List", "Table", "ScrollView", "LazyVStack", "LazyVGrid", "OutlineGroup"].contains(next.name)
+    }
+
     /// A row right under a title (`Text(…).font(.largeTitle)` or `.title`): the page's actions.
     func followsTitle(_ brace: Int, within parent: Int?) -> Bool {
         let start = statementStart(before: brace)
@@ -1287,7 +1301,7 @@ struct SwiftStructure {
 
     /// Places told by a view's or helper's name, read as words: `TicketRow`, `DetailsCard`, `leadingToolbarItem`,
     /// `ScriptAsMenuContent`, `IdentityFormSections`. Chrome words come first, so `SettingsToolbar` is a toolbar.
-    static func place(forView raw: String, inStack: Bool) -> String? {
+    static func place(forView raw: String, inStack: Bool, rows: Bool = true) -> String? {
         // Names only break ties: toolbar, menu, popover and inspector come from real modifiers, never a name
         // (`TabSectionToolbar` is a strip in the pane, `CertificateStatusPanel` a block in Settings).
         var w = words(raw)
@@ -1300,10 +1314,10 @@ struct SwiftStructure {
         if has("alert") { return "alert" }
         if has("card") || pair("group", "box") { return "card" }
         if has("settings", "setup", "preferences", "options", "form") { return "form" }
-        if has("inspector", "panel", "pane") { return "inspector" }
+        if has("inspector") { return "inspector" }
         // `actionRow` is the actions under a title; `filterRow` or `headerRow` are strips, not list rows.
         if pair("action", "row") || pair("actions", "row") { return inStack && has("sheet", "dialog") ? "sheetFooter" : "actionRow" }
-        if let last = w.last, ["row", "cell"].contains(last) {
+        if rows, let last = w.last, ["row", "cell"].contains(last) {
             let strip = ["filter", "header", "title", "top", "bottom", "tool", "button", "buttons", "tab", "search", "status"]
             return w.dropLast().last.map(strip.contains) == true ? nil : "listRow"
         }

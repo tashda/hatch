@@ -236,8 +236,9 @@ final class ComponentInventoryTests: XCTestCase {
         XCTAssertNil(SwiftStructure.place(forView: "PlatformPicker", inStack: false), "platform is not form")
         XCTAssertEqual(SwiftStructure.place(forView: "UnavailableStateView", inStack: false), "emptyState")
         XCTAssertEqual(SwiftStructure.place(forView: "SettingsCard", inStack: false), "card")
-        // Kept because they were right three times in four in the audit: panels and panes beside the content, menu bar windows.
-        XCTAssertEqual(SwiftStructure.place(forView: "ProviderDetailPanel", inStack: false), "inspector")
+        // Panel and Pane names were wrong 5 times in 6 on a held-out sample; only Inspector names count.
+        XCTAssertNil(SwiftStructure.place(forView: "ProviderDetailPanel", inStack: false))
+        XCTAssertEqual(SwiftStructure.place(forView: "OutlineInspectorView", inStack: false), "inspector")
         XCTAssertEqual(SwiftStructure.place(forView: "MenuBarPanel", inStack: false), "popover")
         XCTAssertEqual(SwiftStructure.place(forView: "actionRow", inStack: false), "actionRow")
     }
