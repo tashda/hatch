@@ -144,9 +144,11 @@ public enum ShortcutCatalog {
         .init("page.tests", "Tests", .pages, .app, .init("t", [.control, .command])),
         .init("page.health", "Health", .pages, .app, .init("h", [.control, .command])),
         .init("page.reports", "Reports", .pages, .app, .init("r", [.control, .command])),
-        // A ticket from anywhere on the Mac (WF-C2). ⌃⌥H: H for Hatch, two modifiers no common app or macOS uses, and
-        // not ⌃Space or ⌃⌥Space, which switch input sources.
-        .init("capture.quick", "Quick Capture", .general, .system, .init("h", [.control, .option])),
+        // A ticket from anywhere on the Mac (WF-C2). ⌃⌘Z: two modifiers almost no app uses, and
+        // not ⌃Space or ⌃⌥Space, which switch input sources. Beside ⌃⌘X, the snap key.
+        .init("capture.quick", "Quick Capture", .general, .system, .init("z", [.control, .command])),
+        // Snap an area from any app and open Quick Capture with it attached, the cursor in the text. ⌃⌘X: X marks the spot.
+        .init("capture.snap", "Snap to Iris", .general, .system, .init("x", [.control, .command])),
         // Drag a rectangle over the screen for a screenshot (WF-C2). ⇧⌘A: A for area, and not a key a capture tool
         // such as Shottr or macOS's own ⇧⌘3 to ⇧⌘5 takes.
         .init("capture.area", "Capture Area", .general, .compose, .init("a", [.shift, .command])),
