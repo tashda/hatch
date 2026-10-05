@@ -88,7 +88,7 @@ blocker ticket. Order: priority, then oldest update.
    - Where the program starts: app → design system → notebook → specimens, first one that exists (the app's CLAUDE.md loads from there).
      A project without an app clone (docs) starts in the notebook. No clone at all → `noWorkspace`, the ticket is released.
    - Each worktree starts from the repo's base-branch tip (fetched when a remote exists), on `ticket/<n>-<slug>`, with the push guard installed.
-4. **Brief** (`BriefBuilder`, compact): ticket, project, owner's answers, open questions, links, related tickets, Spec lines, three
+4. **Brief** (`BriefBuilder`, compact; about 700 to 1100 tokens for a quiet ticket, capped for a busy one: the latest 8 of the owner's answers, the latest notes, 3 decisions): ticket, project, owner's answers, open questions, links, related tickets, Spec lines, three
    related decisions, area rules, component roles, repos with build/test commands and workspace paths, docs, the rules for the task, the
    `hatch` commands to run next.
 5. **Program arguments**: only the tools the work needs, no MCP, no slash commands, build and test commands from the repos plus
@@ -109,6 +109,10 @@ blocker ticket. Order: priority, then oldest update.
 - **Stops without handing in**: started once more; a second stop runs once on the "Second try" model; every run failing →
   released and **Blocked** with the log tail in the thread. *Resume* starts it again. This is never put to the owner as a question.
 - **Owner stops it** → released, **Blocked**.
+- **Hatch stops it at a limit** → a run that has used more than the token budget (input plus output, not the re-read cache; 1.5M by
+  default, Settings › Usage › "Stop one run above", 0 for none), or has run past the role's time limit (3 hours for coding agents), is
+  interrupted, released and **Blocked** with the reason and the log tail in the thread. It is not retried by itself; its work stays in
+  the workspace and *Resume* starts it again. This is the ceiling on what a runaway Claude agent can spend.
 - **Run ends but the status moved** (handed in, or someone else moved it) → left alone.
 
 ## 5. The owner's turn, and landing
@@ -134,6 +138,12 @@ blocker ticket. Order: priority, then oldest update.
 | Screens before To verify: marked, drawn, measured | `ComponentEvidenceTests`, `ComponentTruthTests` |
 | Launch, retry, stop, blocked, paused, no `hatch` command | `AgentLauncherTests` |
 | Which workspaces per kind of work, branch and base, main checkout untouched | `AgentWorkspaces` in `LauncherTests`, `WorkspaceTests` |
+| A stand-in agent drives the **real `hatch` command through the real launcher**: build and hand in, uncommitted work refused, an agent cannot move its own ticket, ask and resume with the answer in the next brief, a question needs a suggestion, crash then retry then Blocked, two agents in separate worktrees | `AgentLoopTests` (`Tests/HatchWorkflowTests`) |
+| A Proposal end to end: gate refusal, fix, offer, send back, revise (only adding options), accept, build | `ProposalLoopTests` |
+| Token budget and time limit, unlimited with 0, resume after a limit | `AgentLimitTests` |
+| Every `hatch` command in every brief exists, every program in it is allowed, a brief never tells an agent to change a status, size budgets | `BriefCommandsTests`, `BriefSizeTests` |
+| The whole transition table (golden file), an agent's allowed moves, a random walk over `move`, each ticket kind start to finish, the doc names every status and type | `WorkflowLifecycleTests` |
+| Corrupted and extreme Iris answers never crash and never break a rule (12,000 of each, several seeds) | `IrisFuzzTests` |
 | **Prompt to planned agent, 98 written prompts** (all paths, outcomes, three projects, odd inputs, other languages, text that tries to steer Iris, near-miss and closed-ticket repeats, a decision nearby but not contradicted, seven things in one prompt) | `IrisPipelineTests.testTheCorpusOfWrittenPrompts` |
 | **Prompt to planned agent, random prompts** from a seed | `IrisPipelineTests.testRandomPromptsFromASeed` |
 | **Iris's real judgment** on the same prompts | `tools/iris-eval.sh` (live model, costs tokens, builds nothing) |
@@ -162,6 +172,8 @@ prints its seed. Live: `tools/iris-eval.sh [--only id,id] [--limit n] [--random 
 
 ## When you change the workflow
 
+0. If a status move changes, `WorkflowLifecycleTests.testTheTransitionTableMatchesTheGoldenFile` fails and lists the difference: that is
+   your list of what this document must say differently. Regenerate the golden file only after this document is updated.
 1. Change `Workflow.swift` (or the applier, queue or launcher) and its tests.
 2. Find the step above that changed; update it and the "covered by" row in the same commit.
 3. Add or change a corpus case in `tools/iris-eval/corpus.json` for the new branch (gold answer = what a careful reader would
