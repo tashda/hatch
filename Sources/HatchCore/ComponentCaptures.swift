@@ -292,9 +292,12 @@ public enum ComponentMarks {
                 return [r.minX, y, r.width, r.height].map { (Double($0) * 100).rounded() / 100 }
             }
             // SwiftUI's opacity reaches the probe's own view: a view faded out (a card waiting to slide in) isn't drawn.
+            // And through the layers SwiftUI makes itself (a row faded in with a scale effect), which aren't views.
             func opacity(_ v: NSView) -> CGFloat {
                 var a: CGFloat = 1, x: NSView? = v
-                while let c = x, c !== root.superview { a *= c.alphaValue * CGFloat(c.layer?.opacity ?? 1); x = c.superview }
+                while let c = x, c !== root.superview { a *= c.alphaValue; x = c.superview }
+                var l = v.layer
+                while let layer = l { a *= layer.isHidden ? 0 : CGFloat(layer.opacity); l = layer.superlayer }
                 return a
             }
             // What is left of it inside every view that clips (a scroll view, a clipped frame): SwiftUI clips by layer,
@@ -368,6 +371,8 @@ public enum ComponentMarks {
         var name = ""
         var instance = 0
         var layered = false
+        override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
+        required init?(coder: NSCoder) { super.init(coder: coder); wantsLayer = true }
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
         override var isFlipped: Bool { true }
     }
@@ -382,6 +387,40 @@ public enum ComponentMarks {
 
     """#
 }
+
+#if canImport(ImageIO) && canImport(CoreGraphics)
+import ImageIO
+import CoreGraphics
+
+public extension ComponentCaptures {
+    /// The captures without marks where nothing is drawn: a view SwiftUI keeps laid out but hides inside its own
+    /// drawing (a queue row faded out) still has a probe, and only the picture shows it is empty (one flat colour).
+    func withoutBlank() -> ComponentCaptures {
+        var out = self
+        for (k, screen) in screens.enumerated() {
+            guard let src = CGImageSourceCreateWithURL(screen.picture as CFURL, nil), let image = CGImageSourceCreateImageAtIndex(src, 0, nil) else { continue }
+            let s = screen.file.scale
+            out.screens[k].file.marks = screen.file.marks.enumerated().filter { i, _ in
+                guard let v = screen.visible(i), v.width >= 4, v.height >= 4,
+                      let cut = image.cropping(to: CGRect(x: v.x * s, y: v.y * s, width: v.width * s, height: v.height * s)) else { return true }
+                return !Self.flat(cut)
+            }.map(\.element)
+        }
+        return out
+    }
+
+    /// One colour all over, at 16×16: the spread of brightness under 1.5 of 255.
+    static func flat(_ image: CGImage) -> Bool {
+        var data = [UInt8](repeating: 0, count: 16 * 16 * 4)
+        guard let ctx = CGContext(data: &data, width: 16, height: 16, bitsPerComponent: 8, bytesPerRow: 64, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: 16, height: 16))
+        let lum = stride(from: 0, to: data.count, by: 4).map { 0.299 * Double(data[$0]) + 0.587 * Double(data[$0 + 1]) + 0.114 * Double(data[$0 + 2]) }
+        let mean = lum.reduce(0, +) / Double(lum.count)
+        return (lum.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(lum.count)).squareRoot() < 1.5
+    }
+}
+#endif
 
 public extension ComponentCaptures {
     /// Replaces the notebook's captures with a capture run's (`folder`): the gallery beside the system, every other
@@ -401,11 +440,16 @@ public extension ComponentCaptures {
         for old in ((try? fm.contentsOfDirectory(atPath: target.path)) ?? []) where old.hasPrefix(galleryName) {
             try? fm.removeItem(at: target.appendingPathComponent(old))
         }
-        for s in run.screens {
+        #if canImport(ImageIO) && canImport(CoreGraphics)
+        let cleaned = run.withoutBlank()
+        #else
+        let cleaned = run
+        #endif
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        for s in cleaned.screens {
             let dir = s.isGallery ? target : screens
             let base = s.name + (s.dark ? "-dark" : "-light")
-            let json = s.picture.deletingLastPathComponent().appendingPathComponent(base + ".json")
-            if fm.fileExists(atPath: json.path) { try fm.copyItem(at: json, to: dir.appendingPathComponent(base + ".json")) }
+            try encoder.encode(s.file).write(to: dir.appendingPathComponent(base + ".json"))
             if fm.fileExists(atPath: s.picture.path) { try fm.copyItem(at: s.picture, to: dir.appendingPathComponent(base + ".png")) }
         }
         // The canvas measured against macOS (CM25), when the run made it.

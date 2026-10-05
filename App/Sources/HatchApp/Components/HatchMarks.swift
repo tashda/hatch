@@ -68,9 +68,12 @@ public enum HatchMarks {
             return [r.minX, y, r.width, r.height].map { (Double($0) * 100).rounded() / 100 }
         }
         // SwiftUI's opacity reaches the probe's own view: a view faded out (a card waiting to slide in) isn't drawn.
+        // And through the layers SwiftUI makes itself (a row faded in with a scale effect), which aren't views.
         func opacity(_ v: NSView) -> CGFloat {
             var a: CGFloat = 1, x: NSView? = v
-            while let c = x, c !== root.superview { a *= c.alphaValue * CGFloat(c.layer?.opacity ?? 1); x = c.superview }
+            while let c = x, c !== root.superview { a *= c.alphaValue; x = c.superview }
+            var l = v.layer
+            while let layer = l { a *= layer.isHidden ? 0 : CGFloat(layer.opacity); l = layer.superlayer }
             return a
         }
         // What is left of it inside every view that clips (a scroll view, a clipped frame): SwiftUI clips by layer,
@@ -144,6 +147,8 @@ final class HatchMarkView: NSView {
     var name = ""
     var instance = 0
     var layered = false
+    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
+    required init?(coder: NSCoder) { super.init(coder: coder); wantsLayer = true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override var isFlipped: Bool { true }
 }

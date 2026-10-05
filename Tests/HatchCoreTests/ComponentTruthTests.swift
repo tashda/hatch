@@ -93,6 +93,28 @@ final class ComponentTruthTests: XCTestCase {
         XCTAssertEqual(ComponentTruth.check(captures, only: ["HXChip"]), [])
     }
 
+    #if canImport(AppKit)
+    /// A view SwiftUI keeps laid out but hides inside its own drawing (Decide's queue rows, 2026-10-06) has a probe but
+    /// nothing in the picture: its mark is dropped, so it is neither pictured nor measured.
+    func testAMarkWhereNothingIsDrawnIsDropped() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("blank-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                   isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor.white.setFill(); NSRect(x: 0, y: 0, width: 400, height: 200).fill()
+        ("Building" as NSString).draw(at: NSPoint(x: 20, y: 160), withAttributes: [.font: NSFont.systemFont(ofSize: 22)])
+        NSGraphicsContext.restoreGraphicsState()
+        try rep.representation(using: .png, properties: [:])!.write(to: dir.appendingPathComponent("decide-light.png"))
+        try JSONEncoder().encode(CaptureFile(scale: 2, size: [200, 100], marks: [
+            .init(name: "StatusChip", frame: [8, 4, 60, 18]), .init(name: "StatusChip", frame: [100, 60, 60, 18]),
+        ])).write(to: dir.appendingPathComponent("decide-light.json"))
+        let kept = try XCTUnwrap(ComponentCaptures.load(from: dir)).withoutBlank()
+        XCTAssertEqual(kept.screens[0].file.marks.map(\.frame), [[8, 4, 60, 18]], "the second is over white only")
+    }
+    #endif
+
     #if canImport(Vision) && canImport(AppKit)
     /// Text cut to a word or less ("D…", the owner's case) is a problem; the app's own "Draw Them…" is not a cut.
     func testCutTextIsReadFromThePicture() throws {

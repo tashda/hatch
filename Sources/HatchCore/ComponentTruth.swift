@@ -67,7 +67,12 @@ public enum ComponentTruth {
     }
     /// Every measured check: the frames, and on a Mac the text, with the app's code read for the views' families and
     /// its own strings. `only`: a ticket's changed views.
-    public static func measure(_ captures: ComponentCaptures, appRoot: String?, excluding: [String] = [], only: Set<String>? = nil) -> [TruthFinding] {
+    public static func measure(_ given: ComponentCaptures, appRoot: String?, excluding: [String] = [], only: Set<String>? = nil) -> [TruthFinding] {
+        #if canImport(ImageIO) && canImport(CoreGraphics)
+        let captures = given.withoutBlank()
+        #else
+        let captures = given
+        #endif
         var families: [String: String] = [:], literals = Set<String>()
         if let appRoot {
             let files = ComponentInventoryScanner.appFiles(appRoot: appRoot, excluding: excluding)
