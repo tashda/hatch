@@ -1151,27 +1151,19 @@ private struct RowStagger: ViewModifier {
 
 // MARK: - Ways in
 
-/// The toolbar button (DC11): its own group, a badge with how many decisions wait, hidden when none do.
-struct DecideToolbarButton: View {
-    @EnvironmentObject var state: AppState
+/// The system's red badge with how many decisions wait, on the Iris toolbar icon (DC11, the exception in DESIGN.md
+/// rule 6). It sits inside the icon's frame, since the toolbar clips anything that hangs outside it.
+struct DecideCountBadge: View {
+    let count: Int
 
     var body: some View {
-        Button { state.openDecide() } label: {
-            Label("Decide", systemImage: "checklist")
-                .labelStyle(.iconOnly)
-                .overlay(alignment: .topTrailing) {
-                    // The system's red badge, as on the Dock icon (DC11, the exception in DESIGN.md rule 6).
-                    Text("\(state.decisionCount)")
-                        .font(.system(size: 10, weight: .bold)).monospacedDigit()
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4).frame(minWidth: 15, minHeight: 15)
-                        .background(Color(nsColor: .systemRed), in: Capsule())
-                        .offset(x: 9, y: -8)
-                        .accessibilityHidden(true)
-                }
-        }
-        .help("Decide: \(state.decisionCount) waiting (\u{21E7}\u{2318}D)")
-        .accessibilityLabel("Decide, \(state.decisionCount) waiting")
+        Text(count > 99 ? "99+" : "\(count)")
+            .font(.system(size: 9, weight: .bold)).monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 3).frame(minWidth: 13, minHeight: 13)
+            .background(Color(nsColor: .systemRed), in: Capsule())
+            .padding(.top, -2).padding(.trailing, -4)
+            .accessibilityHidden(true)
     }
 }
 

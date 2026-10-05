@@ -26,10 +26,11 @@ struct IrisPanel: View {
             } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    // First, whatever else is open: the way into Decide, whenever anything waits (DC10).
+                    if !decisions.isEmpty { DecideIrisCard(items: decisions).floatingCard() }
                     if state.route == .desk, let top = state.inspectorTop {
                         top.floatingCard().transition(.move(edge: .top).combined(with: .opacity))
                     }
-                    if !decisions.isEmpty { DecideIrisCard(items: decisions).floatingCard() }
                     // Review cards fold into the Decide card, except the one for the ticket on screen.
                     let shown = waiting.filter { $0.id == focusId }
                     if !shown.isEmpty { section("This ticket", count: shown.count) { ForEach(shown) { reviewCard($0) } } }

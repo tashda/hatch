@@ -171,13 +171,19 @@ private struct ToolbarActions: View {
                 .labelStyle(.iconOnly)
                 .help("New ticket (\u{2318}N)")
         }
-        // The icon takes the accent color while the panel is open; no pill behind it.
+        // The icon takes the accent color while the panel is open; no pill behind it. The count of decisions waiting
+        // sits on it, since Iris's panel is where Decide starts.
         Button { state.showAskPanel.toggle() } label: {
             Image("IrisIcon")
                 .foregroundStyle(state.showAskPanel ? Color.accentColor : Color.primary)
+                .overlay(alignment: .topTrailing) {
+                    if state.decisionCount > 0 { DecideCountBadge(count: state.decisionCount) }
+                }
         }
-            .help(state.showAskPanel ? "Hide Iris (\u{2325}\u{2318}A)" : "Show Iris (\u{2325}\u{2318}A)")
-            .accessibilityLabel(state.showAskPanel ? "Hide Iris" : "Show Iris")
+            .help((state.showAskPanel ? "Hide Iris (\u{2325}\u{2318}A)" : "Show Iris (\u{2325}\u{2318}A)")
+                  + (state.decisionCount > 0 ? ", \(state.decisionCount) decisions waiting" : ""))
+            .accessibilityLabel((state.showAskPanel ? "Hide Iris" : "Show Iris")
+                                + (state.decisionCount > 0 ? ", \(state.decisionCount) decisions waiting" : ""))
     }
 }
 
@@ -231,12 +237,6 @@ struct LiveToolbar: ToolbarContent {
 
         ToolbarItem(placement: .principal) {
             Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
-        }
-
-        // Decide in its own group, shown only while something waits (DC11).
-        if state.decisionCount > 0 {
-            ToolbarItem(placement: .primaryAction) { DecideToolbarButton() }
-            ToolbarSpacer(.fixed, placement: .primaryAction)
         }
 
         ToolbarItemGroup(placement: .primaryAction) { ToolbarActions() }

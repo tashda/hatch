@@ -31,7 +31,7 @@ final class NotificationCenterBridge: NSObject, UNUserNotificationCenterDelegate
         if Self.canNotify {
             let center = UNUserNotificationCenter.current()
             center.delegate = self
-            center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         }
         scan()
         state.$revision

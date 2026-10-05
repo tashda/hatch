@@ -9,7 +9,7 @@ Status: **accepted**. These rules reflect the owner's answers on the design page
 3. No glass on glass. Selection inside a glass control is a fill.
 4. Everything through tokens (`HX`): no literal sizes, radii or colours in views.
 5. Motion explains change. Reduce Motion, Reduce Transparency and Increase Contrast must look right.
-6. Colour means whose turn it is (amber you, teal agent, slate Hatch, green finished, grey paused) or a real problem (red). Types, areas and projects are neutral. Exceptions: the project tile colour in the project card, and the count badge on the Decide toolbar button, which is the system's red badge like the Dock icon's (DC11).
+6. Colour means whose turn it is (amber you, teal agent, slate Hatch, green finished, grey paused) or a real problem (red). Types, areas and projects are neutral. Exceptions: the project tile colour in the project card, and the count badge on the Iris toolbar icon, which is the system's red badge like the Dock icon's (DC11).
 7. One prominent action per screen.
 8. Text: system font and text styles only. Monospaced only for ticket numbers and code.
 9. Every suggestion shows one recommendation and its reason.
